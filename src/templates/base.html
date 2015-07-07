@@ -1,0 +1,46 @@
+{% load staticfiles %}
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>{% block head_title%}{% endblock%} | Timberline's Digital Hackerspace</title>
+
+    {% include 'head_css.html' %}
+
+    <style>
+      {% block css %}
+      {% endblock %}
+    </style>
+
+  </head>
+
+  <body>
+
+    {% include 'navbar-fixed.html' %}
+
+    {% block jumbotron %}
+    {% endblock %}
+
+    <div class="container">
+      {% block content_outer %}
+        {% block content %}
+        {% endblock %}
+      {% endblock %}
+
+      {% block extra_body %}
+      {% endblock %}
+    </div> <!-- /container -->
+
+    {% include 'javascript.html' %}
+
+  </body>
+</html>

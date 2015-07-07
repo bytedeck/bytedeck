@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+
+{% if title %}
+<div class="row">
+  <div class="col-sm-12">
+    <h1>{{ title }}</h1>
+  </div>
+</div>
+{% endif %}
+
+<div class="row">
+  <div class="col-md-6">
+
+
+    <form method='POST' action=''> {% csrf_token %}
+      {{ form|crispy }}
+      <input class="btn btn-default" type='submit' value='Create Quest' />
+
+    </form>
+
+  </div>
+</div>
+{% endblock %}

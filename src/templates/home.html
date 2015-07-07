@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+ {% block head_title%}Home{% endblock%}
+
+
+<style>
+{% block css %}
+.jumbotron {
+    /*position: relative;*/
+    background-color: white;
+    /*background-image: url("{% static 'img/banner.png' %}");*/
+    /*color: white;*/
+    /*width: 100%;*/
+    /*height: 100%;*/
+    /*background-size: cover;*/
+    /*overflow: hidden;*/
+
+    /*background: #22f url("{% static 'img/banner.jpg' %}") center center;*/
+}
+{% endblock %}
+</style>
+
+
+{% block jumbotron %}
+
+  <div class="jumbotron">
+    <div class="container">
+      <img class = "img-responsive banner1" src ="{% static 'img/banner.png' %}" alt="Timberline's Digital Hackerspace Landing Page" />
+       <!-- <h1>Timberline's Digital Hackerspace <small>Online</small></h1>
+      <p>This example is a quick exercise to illustrate how the default, static and fixed to top navbar work. It includes the responsive CSS and HTML, so it also adapts to your viewport and device.</p>
+      <p>To see the difference between static and fixed top navbars, just scroll.</p>
+      <p>
+        <a class="btn btn-lg btn-primary" href="../../components/#navbar" role="button">View navbar docs &raquo;</a>
+      </p> -->
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-sm-6">
+
+    <!-- <h1> {{title}}</h1> -->
+    <!-- {{user}} -->
+    <!-- {{request.user}}
+
+    <form method='POST' action=''> {% csrf_token %}
+      {{ form|crispy }}
+      <input class='btn btn-primary' type='submit' value='Create Quest' />
+    </form>-->
+
+  </div>
+</div>
+{% endblock %}

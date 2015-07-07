@@ -1,0 +1,19 @@
+.navbar-fixed-top {
+  margin-bottom: 0px !important;
+
+}
+
+/*#input-group-unified { width: 100%;}*/
+.input-group-unified input {width: 50% !important;}
+.input-group-unified input:last-of-type { border-left: 0;}
+
+/*.banner1 {
+  margin-left: -4%;
+  margin-right: 8%;
+}*/
+
+body {
+  /*padding to remove gap between navbar and jumbotron*/
+  padding-top: 50px;
+  min-height: 500px;
+}
