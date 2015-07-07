@@ -22,13 +22,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 SECRET_KEY = '8(@^b-s07o7a(*durcp#sx!-8=cnq2-shiq61!7nznn=h$az7n'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = []
 
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
-EMAIL_HOST_PASSWORD ="humansarelame"
+EMAIL_HOST_PASSWORD =""
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
