@@ -5,6 +5,8 @@ production_*.py
 # python manage.py collectstatic
 src/static_in_venv/
 
+*.sqlite3
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
