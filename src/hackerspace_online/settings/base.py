@@ -24,7 +24,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+#DEBUG set in local or production file
+#DEBUG = True
+
 
 ALLOWED_HOSTS = []
 
@@ -59,7 +61,7 @@ INSTALLED_APPS = (
     'crispy_forms',
 
     # https://github.com/summernote/django-summernote
-    'django_summernote', 
+    'django_summernote',
 
     #local apps
     'quest_manager',
@@ -136,21 +138,24 @@ USE_L10N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
+# Static files (CSS, JavaScript, Images) ####################
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
-
-STATIC_URL = '/static/'
-
-STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "static_root")
-
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static_in_project",  "our_static"),
-    # os.path.join(BASE_DIR, "static_in_venv"),
-    # '/var/www/static/',
-)
-
-MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "media_root")
+# Statics file settings are in the local and production files
+#
+# STATIC_URL = '/static/'
+#
+# STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "static_root")
+#
+# STATICFILES_DIRS = (
+#     os.path.join(BASE_DIR, "static_in_project",  "our_static"),
+#     # os.path.join(BASE_DIR, "static_in_venv"),
+#     # '/var/www/static/',
+# )
+#
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "media_root")
+#
+# # END STATIC #######################################
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
