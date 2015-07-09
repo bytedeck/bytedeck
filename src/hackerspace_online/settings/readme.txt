@@ -5,6 +5,8 @@ IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 keep "production_" at the beginning of the filename so
 it will be ignored by git (see .gitignore) to prevent publication of
 secret keys and email pw's etc.
+
+remove the initial underscore (this was added so the template is not ignored)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 *Add to __init__.py:

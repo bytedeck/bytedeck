@@ -5,10 +5,10 @@ try:
 except:
     pass
 
-try:
-    from .production_heroku import *
-except:
-    pass
+# try:
+#     from .production_heroku import *
+# except:
+#     pass
 
 # try:
 #     from .production_hope import *

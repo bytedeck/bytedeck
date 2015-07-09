@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 
 from .forms import QuestFormCustom, NewQuestForm
 
+
 def home(request):
     title = "Timberline's Digital Hackerspace - Online"
 

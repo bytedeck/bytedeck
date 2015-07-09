@@ -141,21 +141,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images) ####################
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
 # Statics file settings are in the local and production files
-#
-# STATIC_URL = '/static/'
-#
-# STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "static_root")
-#
-# STATICFILES_DIRS = (
-#     os.path.join(BASE_DIR, "static_in_project",  "our_static"),
-#     # os.path.join(BASE_DIR, "static_in_venv"),
-#     # '/var/www/static/',
-# )
-#
-# MEDIA_URL = "/media/"
-# MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "media_root")
-#
-# # END STATIC #######################################
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
@@ -171,3 +156,57 @@ LOGIN_REDIRECT_URL = '/'
 #     'signup': ''
 #
 # })
+
+SUMMERNOTE_CONFIG = {
+    # Using SummernoteWidget - iframe mode
+    'iframe': True,  # or set False to use SummernoteInplaceWidget - no iframe mode
+    #need iframe for embedding youtube
+
+    # Using Summernote Air-mode
+    'airMode': False,
+
+    # Use native HTML tags (`<b>`, `<i>`, ...) instead of style attributes
+    # (Firefox, Chrome only)
+    # 'styleWithTags': True,
+
+    # Set text direction : 'left to right' is default.
+    'direction': 'ltr',
+
+    # Change editor size
+    'width': '700',
+    'height': '480',
+
+    # Use proper language setting automatically (default)
+    'lang': None,
+
+    # Or, set editor language/locale forcely
+    # 'lang': 'ko-KR',
+
+    # Customize toolbar buttons
+    # 'toolbar': [
+    #     ['style', ['style']],
+    #     ['style', ['bold', 'italic', 'underline', 'clear']],
+    #     ['para', ['ul', 'ol', 'height']],
+    #     ['insert', ['link']],
+    # ],
+
+    # Need authentication while uploading attachments.
+    'attachment_require_authentication': True,
+
+    # Set `upload_to` function for attachments.
+    #'attachment_upload_to': my_custom_upload_to_func(),
+
+    # Set custom storage class for attachments.
+    #'attachment_storage_class': 'my.custom.storage.class.name',
+
+    # Set external media files for SummernoteInplaceWidget.
+    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
+    'inplacewidget_external_css': (
+        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
+        '//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css',
+    ),
+    'inplacewidget_external_js': (
+        '//code.jquery.com/jquery-1.9.1.min.js',
+        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
+    ),
+}

@@ -1,6 +1,7 @@
 from django import forms
 from django.db import models
 from .models import Quest
+from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 
 ## Us datepickers for all forms
 ## http://strattonbrazil.blogspot.ca/2011/03/using-jquery-uis-date-picker-on-all.html
@@ -21,11 +22,14 @@ class QuestFormCustom(forms.Form):
     xp = forms.IntegerField()
 ##
 
-class NewQuestForm(forms.ModelForm):
+class NewQuestForm(forms.Form):
     formfield_callback = make_custom_datefield
     class Meta:
         model = Quest
         # fields = ['name','xp']
+        widgets = {
+
+        }
         fields = '__all__'
 
 
