@@ -19,6 +19,8 @@ from django.conf.urls.static import static
 from django.contrib import admin
 
 urlpatterns = [
+    #summer_note
+    url(r'^summernote/', include('django_summernote.urls')),
     #allauth
     url(r'^accounts/', include('allauth.urls')),
     #hackerspace_online
@@ -38,8 +40,7 @@ urlpatterns = [
     url(r'^new_quest_custom/$', 'quest_manager.views.new_quest_custom',
         name='new_quest_custom'),
     #admin
-    url(r'^admin/', include(admin.site.urls),
-        name='django-admin'),
+    url(r'^admin/', include(admin.site.urls)),
 
 ]
 

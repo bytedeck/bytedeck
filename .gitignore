@@ -3,7 +3,10 @@ production_*.py
 
 #to fill this directory if needed run:
 # python manage.py collectstatic
-src/static_in_venv/
+static_in_venv/
+
+bin/
+include/
 
 *.sqlite3
 

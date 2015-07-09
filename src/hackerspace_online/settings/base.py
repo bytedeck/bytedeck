@@ -18,8 +18,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
+# Define secret key in local and production files
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '8(@^b-s07o7a(*durcp#sx!-8=cnq2-shiq61!7nznn=h$az7n'
+# SECRET_KEY = ''
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -55,8 +57,9 @@ INSTALLED_APPS = (
 
     #http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
-    # http://django-floppyforms.readthedocs.org/en/latest/
-    # 'floppyforms',
+
+    # https://github.com/summernote/django-summernote
+    'django_summernote', 
 
     #local apps
     'quest_manager',

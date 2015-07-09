@@ -36,33 +36,10 @@ EMAIL_USE_TLS = True
 
 # Application definition
 
-INSTALLED_APPS = (
-    #default apps
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.sites', #for allauth
-    'django.contrib.staticfiles',
-
-    #third party apps
-
-    # https://django-allauth.readthedocs.org/en/latest/installation.html
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    # 'allauth.socialaccount.providers.google',
-    # 'allauth.socialaccount.providers.facebook',
-
-    #http://django-crispy-forms.readthedocs.org/en/latest/install.html
-    'crispy_forms',
-    # http://django-floppyforms.readthedocs.org/en/latest/
-    # 'floppyforms',
-
-    #local apps
-    'quest_manager',
-)
+# see settings/base.[py]
+# INSTALLED_APPS += (
+#     'myLocalOnlyApp',
+# )
 
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
