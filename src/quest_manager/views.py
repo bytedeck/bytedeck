@@ -15,37 +15,37 @@ def quests(request):
 
     return render(request, "quests.html", context)
 
-
-def home(request):
-    title = "Timberline's Digital Hackerspace - Online"
-
-    form = NewQuestForm(request.POST or None)
-
-    context = {
-        "title": title,
-        "form": form,
-    }
-
-    if form.is_valid():
-        ## If not doing additional validation, just save it.
-        # form.save
-
-        ## If validating data, don't commit the data yet
-        instance = form.save(commit=False)
-
-        title = form.cleaned_data.get("title")
-        if not title:
-            title = "You didn't enter a title! How is that even possible the form should have forced you to!"
-
-        instance.title = title
-        instance.save()
-
-        context = {
-            "title": "Quest Successfully Added"
-        }
-
-
-    return render(request, "home.html", context)
+# 
+# def home(request):
+#     title = "Timberline's Digital Hackerspace - Online"
+#
+#     form = NewQuestForm(request.POST or None)
+#
+#     context = {
+#         "title": title,
+#         "form": form,
+#     }
+#
+#     if form.is_valid():
+#         ## If not doing additional validation, just save it.
+#         # form.save
+#
+#         ## If validating data, don't commit the data yet
+#         instance = form.save(commit=False)
+#
+#         title = form.cleaned_data.get("title")
+#         if not title:
+#             title = "You didn't enter a title! How is that even possible the form should have forced you to!"
+#
+#         instance.title = title
+#         instance.save()
+#
+#         context = {
+#             "title": "Quest Successfully Added"
+#         }
+#
+#
+#     return render(request, "home.html", context)
 
 ## Demo of how to create a form without using a model
 def new_quest_custom(request):

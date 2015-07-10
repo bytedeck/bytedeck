@@ -24,5 +24,5 @@ urlpatterns = [
     url(r'^$', 'quest_manager.views.quests', name='quests'),
     url(r'^email_demo/$', 'quest_manager.views.email_demo', name='email_demo'),
     url(r'^new_quest_custom/$', 'quest_manager.views.new_quest_custom', name='new_quest_custom'),
-    url(r'^quests/$', 'quest_manager.views.quests', name='quests'),
+    # url(r'^quests/$', 'quest_manager.views.quests', name='quests'),
 ]
