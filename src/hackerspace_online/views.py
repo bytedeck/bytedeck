@@ -13,4 +13,7 @@ def achievements(request):
     return render(request, "achievements.html", {})
 
 def profile(request):
-     return render(request, "profile", {})
+     return render(request, "profile.html", {})
+
+def home(request):
+     return render(request, "home.html", {})

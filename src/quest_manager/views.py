@@ -4,6 +4,17 @@ from django.core.mail import send_mail
 
 from .forms import QuestFormCustom, NewQuestForm
 
+def quests(request):
+    title = "Quests"
+    heading = "Quests"
+
+    context = {
+        "title": title,
+        "heading": heading,
+    }
+
+    return render(request, "quests.html", context)
+
 
 def home(request):
     title = "Timberline's Digital Hackerspace - Online"

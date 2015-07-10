@@ -1,6 +1,21 @@
 from django.db import models
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes import generic
 
-# Create your models here.
+from datetime import time, date
+from django.utils import timezone
+
+class Category(models.Model):
+    category = models.CharField(max_length=50, unique=True, blank=False)
+
+    class Meta:
+        verbose_name_plural = "Categories"
+
+    def __str__(self):
+        return self.category
+
+
+
 class XPItem(models.Model):
     name = models.CharField(max_length=50, unique=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -13,12 +28,13 @@ class XPItem(models.Model):
     max_repeats = models.IntegerField(default = 0, blank=True, null=False,
         help_text = '0 = not repeatable, -1 = unlimited')
     hours_between_repeats = models.PositiveIntegerField(default = 0, blank=True, null=False)
-    # category = models.CharField(max_length=250)
-    date_available = models.DateField(blank=True, null=True)
-    time_available = models.TimeField(blank=True, null=True)
+    date_available = models.DateField(blank=False, null=False, default=timezone.now)
+    time_available = models.TimeField(blank=False, null=False, default=time().min) # midnight
     date_expired = models.DateField(blank=True, null=True)
     time_expired = models.TimeField(blank=True, null=True)
-    # prerequisites = models.CharField(max_length=250)
+    minimum_XP = models.PositiveIntegerField(blank=True, null=True)
+    maximum_XP = models.PositiveIntegerField(blank=True, null=True)
+    # prerequisites = generic.GenericRelation(Prerequisite)
     # prerequisites_advanced = models.CharField(max_length=250)
     # icon = models.ImageField()
 
@@ -29,6 +45,32 @@ class XPItem(models.Model):
         return self.name
 
 class Quest(XPItem):
+    verification_required = models.BooleanField(default = True, null=False)
+    category = models.ForeignKey(Category, blank=False, null=False)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
-    verification_required = models.BooleanField(default = True, null=False)
+
+
+class Prerequisite(models.Model):
+    parent_quest = models.ForeignKey(Quest, blank=False, null=False)
+    # Generic relations:
+    # https://docs.djangoproject.com/en/1.4/ref/contrib/contenttypes/#generic-relations
+    # content_type = models.ForeignKey(ContentType)
+    # object_id = models.PositiveIntegerField()
+    # content_object = generic.GenericForeignKey('content_type', 'object_id')
+    prerequisite_item = models.ForeignKey(Quest, related_name='prerequisite_item')
+    invert_prerequisite = models.BooleanField(default = False, null=False,
+        help_text = 'item is available if user does NOT have this pre-requisite')
+    alternate_prerequisite_item_1 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_1',
+        help_text = 'user must have one of the prerequisite items', blank=True, null=True)
+    invert_alt_prerequisite_1 = models.BooleanField(default = False, null=False,
+        help_text = 'item is available if user does NOT have this pre-requisite')
+    alternate_prerequisite_item_2 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_2',
+        help_text = 'user must have one of the prerequisite items', blank=True, null=True)
+    invert_alt_prerequisite_2 = models.BooleanField(default = False, null=False,
+        help_text = 'item is available if user does NOT have this pre-requisite')
+    # minimum_rank =
+    # maximum_rank =
+
+    # def __str__(self):
+    #     return self.category

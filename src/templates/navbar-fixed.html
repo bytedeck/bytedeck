@@ -16,9 +16,9 @@
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <!-- <li class="active"><a href="{% url 'home' %}">Home</a></li> -->
-        <li><a href="{% url 'announcements' %}">Announcements <span class="badge">23</span></a></li>
-        <li><a href="{% url 'quests' %}">Quests</a></li>
-        <li><a href="{% url 'achievements' %}">Achievements</a></li>
+        <li><a href="{% url 'home' %}">Announcements <span class="badge">23</span></a></li>
+        <li><a href="{% url 'home' %}">Quests</a></li>
+        <li><a href="{% url 'home' %}">Achievements</a></li>
 
         {% if request.user.is_authenticated and request.user.is_staff %}
         <li class="dropdown">
