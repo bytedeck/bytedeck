@@ -1,21 +1,44 @@
 from django.conf import settings
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.core.mail import send_mail
-
+from django.template import RequestContext, loader
 from .forms import QuestFormCustom, NewQuestForm
+from .models import Quest
+from django.http import HttpResponse
 
 def quests(request):
     title = "Quests"
     heading = "Quests"
 
+    quest_list = Quest.objects.order_by('name')
+    output = ', '.join([p.name for p in quest_list])
+
+    # return HttpResponse(output)
+
     context = {
         "title": title,
         "heading": heading,
+        "quest_list": quest_list,
     }
 
-    return render(request, "quests.html", context)
+    return render(request, "quest_manager/quests.html", context)
 
-# 
+def detail(request, quest_id):
+    title = "Quests"
+    heading = "Quest Detail"
+
+    q = get_object_or_404(Quest, pk=quest_id)
+
+    context = {
+        "title": title,
+        "heading": ("Quest: %s" % q.name),
+        "q": q,
+    }
+    return render(request, 'quest_manager/detail.html', context)
+
+
+
+#
 # def home(request):
 #     title = "Timberline's Digital Hackerspace - Online"
 #

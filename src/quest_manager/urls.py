@@ -13,16 +13,16 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
-from django.conf import settings
-from django.conf.urls import include, url
-from django.conf.urls.static import static
-from django.contrib import admin
+from django.conf.urls import  url
+from quest_manager import views
 
 # Admin site customizations
 
 urlpatterns = [
-    url(r'^$', 'quest_manager.views.quests', name='quests'),
-    url(r'^email_demo/$', 'quest_manager.views.email_demo', name='email_demo'),
-    url(r'^new_quest_custom/$', 'quest_manager.views.new_quest_custom', name='new_quest_custom'),
+    url(r'^$', views.quests, name='quests'),
+    url(r'^email_demo/$', views.email_demo, name='email_demo'),
+    # url(r'^new_quest_custom/$', views.new_quest_custom, name='new_quest_custom'),
     # url(r'^quests/$', 'quest_manager.views.quests', name='quests'),
+     # ex: /quest/25/
+    url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='detail'),
 ]

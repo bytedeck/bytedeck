@@ -30,7 +30,7 @@ urlpatterns = [
     #allauth
     url(r'^accounts/', include('allauth.urls')),
     #quest_manager
-    url(r'^quests/', include('quest_manager.urls')),
+    url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     #admin
     url(r'^admin/', include(admin.site.urls)),
 

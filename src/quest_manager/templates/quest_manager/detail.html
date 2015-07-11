@@ -10,14 +10,13 @@
   <div class="col-sm-6">
     {% if heading %}<h1>{{ heading }}</h1>{% endif %}
 
-    <!-- <h1> {{title}}</h1> -->
-    <!-- {{user}} -->
-    <!-- {{request.user}}
-
-    <form method='POST' action=''> {% csrf_token %}
-      {{ form|crispy }}
-      <input class='btn btn-primary' type='submit' value='Create Quest' />
-    </form>-->
+    {% if q %}
+      <ul>
+        <li>{{ q }}</li>
+      </ul>
+    {% else %}
+      <p>Quest doesn't exist.</p>
+    {% endif %}
 
   </div>
 </div>
