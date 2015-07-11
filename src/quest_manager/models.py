@@ -18,12 +18,12 @@ class Category(models.Model):
 
 class XPItem(models.Model):
     name = models.CharField(max_length=50, unique=True, blank=False)
+    xp = models.PositiveIntegerField(default = 0, blank=True, null=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
     short_description = models.TextField(max_length=250, blank=True)
-    xp = models.PositiveIntegerField(default = 0, blank=True, null=False)
     visible_to_students = models.BooleanField(default = True, null=False)
     max_repeats = models.IntegerField(default = 0, blank=True, null=False,
         help_text = '0 = not repeatable, -1 = unlimited')
@@ -36,7 +36,7 @@ class XPItem(models.Model):
     maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
     # prerequisites_advanced = models.CharField(max_length=250)
-    # icon = models.ImageField()
+    icon = models.ImageField(upload_to='icons', null=True)
 
     class Meta:
         abstract = True
