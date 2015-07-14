@@ -3,6 +3,10 @@
 
 }
 
+a[role="tab"] {
+  outline=0;
+}
+
 /*#input-group-unified { width: 100%;}*/
 .input-group-unified input {width: 50% !important;}
 .input-group-unified input:last-of-type { border-left: 0;}
