@@ -12,6 +12,9 @@
 
     {% if q %}
       {{ q.instructions | safe }}
+      <ul>
+        <li>{{ q }}</li>
+      </ul>
     {% else %}
       <p>Quest doesn't exist.</p>
     {% endif %}
