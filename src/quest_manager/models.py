@@ -37,8 +37,8 @@ class XPItem(models.Model):
     maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
     # prerequisites_advanced = models.CharField(max_length=250)
-    icon = models.FileField(upload_to='icons/', null=True)
-    # icon = models.ImageField(upload_to='icons/', null=True) #needs Pillow for ImageField
+    #icon = models.FileField(upload_to='icons/', null=True)
+    icon = models.ImageField(upload_to='icons/', null=True) #needs Pillow for ImageField
 
     class Meta:
         abstract = True
