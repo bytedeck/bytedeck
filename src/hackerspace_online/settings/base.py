@@ -65,6 +65,7 @@ INSTALLED_APPS = (
 
     #local apps
     'quest_manager',
+    'profile_manager',
 )
 
 MIDDLEWARE_CLASSES = (
