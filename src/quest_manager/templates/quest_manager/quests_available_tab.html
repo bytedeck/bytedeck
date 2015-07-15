@@ -3,13 +3,16 @@
 
   <table data-toggle="table"
           data-classes="table table-no-bordered"
+          data-detail-view="true"
+          data-detail-formatter="detailFormatter"
           >
      <thead>
        <tr>
            <th data-sortable="true">Quest Name</th>
            <th data-halign="center" data-align="center" data-sortable="true">XP</th>
-           <th data-halign="center" data-align="center" data-sortable="true">Est. Time</th>
+           <th data-halign="center" data-align="center" data-sortable="true" data-formatter="%s min">Est. Time</th>
            <th data-halign="center" data-align="center" data-sortable="true">Category</th>
+           <th data-visible="false">Short Description</th>
        </tr>
      </thead>
      <tbody>
@@ -21,12 +24,30 @@
          <td data-field="xp" >{{q.xp}}</td>
          <td data-field="time" >{{q.id}}</td>
          <td data-field="category" >{{q.category}}</td>
+         <td data-field="short_description">
+           <div class="btn-group-vertical">
+             <a class="btn btn-info" href="{% url 'quests:detail' q.id %}" role="button">View Details</a>
+             <a class="btn btn-primary" href="#" role="button">Start Quest</a>
+           </div>
+           {{q.short_description}}
+         </td>
      </tr>
      {% endfor %}
      </tbody>
    </table>
 
-
+   <script>
+      // horrible hack!  Figure out a proper way to do this.
+       function detailFormatter(index, row) {
+           var html = [];
+           $.each(row, function (key, value) {
+             if(key == '4') {
+               html.push('<div class="container-fluid">' + value + ' </div>');
+             }
+           });
+           return html.join('');
+       }
+   </script>
 
     <!-- <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="false">
       {% for q in quest_list %}
