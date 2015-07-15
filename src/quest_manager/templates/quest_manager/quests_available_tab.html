@@ -8,23 +8,23 @@
           >
      <thead>
        <tr>
-           <th data-sortable="true">Quest Name</th>
-           <th data-halign="center" data-align="center" data-sortable="true">XP</th>
-           <th data-halign="center" data-align="center" data-sortable="true" data-formatter="%s min">Est. Time</th>
-           <th data-halign="center" data-align="center" data-sortable="true">Category</th>
-           <th data-visible="false">Short Description</th>
+          <th> </th>
+          <th data-sortable="true">Quest</th>
+          <th data-halign="center" data-align="center" data-sortable="true">XP</th>
+          <th data-halign="center" data-align="center" data-sortable="true" data-formatter="%s min">Est. Time</th>
+          <th data-halign="center" data-align="center" data-sortable="true">Category</th>
+          <th data-visible="false">Short Description</th>
        </tr>
-     </thead>
-     <tbody>
-     {% for q in quest_list %}
-     <!-- <tr id="tr-id-{{q.id}}" class="tr-class-{{q.id}}" data-title="bootstrap table"> -->
-         <!-- <td id="td-id-{{q.id}}" class="td-class-{{q.id}}" data-title="bootstrap table"> -->
-     <tr>
-         <td data-field="name">{{q.name}}</td>
-         <td data-field="xp" >{{q.xp}}</td>
-         <td data-field="time" >{{q.id}}</td>
-         <td data-field="category" >{{q.category}}</td>
-         <td data-field="short_description">
+      </thead>
+      <tbody>
+      {% for q in quest_list %}
+      <tr>
+        <td data-field="icon"><img class="media-object" src="{{q.icon.url}}" alt="icon" height="16px"/></td>
+        <td data-field="name">{{q.name}}</td>
+        <td data-field="xp" >{{q.xp}}</td>
+        <td data-field="time" >{{q.id}}</td>
+        <td data-field="category" >{{q.category}}</td>
+        <td data-field="short_description">
            <div class="btn-group-vertical">
              <a class="btn btn-info" href="{% url 'quests:detail' q.id %}" role="button">View Details</a>
              <a class="btn btn-primary" href="#" role="button">Start Quest</a>
@@ -38,10 +38,11 @@
 
    <script>
       // horrible hack!  Figure out a proper way to do this.
+      // it just needs to display the short_description
        function detailFormatter(index, row) {
            var html = [];
            $.each(row, function (key, value) {
-             if(key == '4') {
+             if(key == '5') {
                html.push('<div class="container-fluid">' + value + ' </div>');
              }
            });
