@@ -1,6 +1,34 @@
 
   {%if quest_list %}
-    <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="false">
+
+  <table data-toggle="table"
+          data-classes="table table-no-bordered"
+          >
+     <thead>
+       <tr>
+           <th data-sortable="true">Quest Name</th>
+           <th data-halign="center" data-align="center" data-sortable="true">XP</th>
+           <th data-halign="center" data-align="center" data-sortable="true">Est. Time</th>
+           <th data-halign="center" data-align="center" data-sortable="true">Category</th>
+       </tr>
+     </thead>
+     <tbody>
+     {% for q in quest_list %}
+     <!-- <tr id="tr-id-{{q.id}}" class="tr-class-{{q.id}}" data-title="bootstrap table"> -->
+         <!-- <td id="td-id-{{q.id}}" class="td-class-{{q.id}}" data-title="bootstrap table"> -->
+     <tr>
+         <td data-field="name">{{q.name}}</td>
+         <td data-field="xp" >{{q.xp}}</td>
+         <td data-field="time" >{{q.id}}</td>
+         <td data-field="category" >{{q.category}}</td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+
+
+
+    <!-- <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="false">
       {% for q in quest_list %}
       <div class="panel panel-default">
         <div class="panel-heading" role="tab" id="heading{{q.id}}">
@@ -25,7 +53,7 @@
           </div>
       </div>
       {% endfor %}
-    </div>
+    </div> -->
   {% else %}
     <p>No quests are available.</p>
   {% endif %}
