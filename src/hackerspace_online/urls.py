@@ -25,14 +25,16 @@ admin.site.site_title = "Hackerspace Admin"
 
 urlpatterns = [
     url(r'^$', 'hackerspace_online.views.home', name='home'),
+    #quest_manager
+    url(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    #profile_manager
+    url(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
+    #admin
+    url(r'^admin/', include(admin.site.urls)),
     #summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     #allauth
     url(r'^accounts/', include('allauth.urls')),
-    #quest_manager
-    url(r'^quests/', include('quest_manager.urls', namespace='quests')),
-    #admin
-    url(r'^admin/', include(admin.site.urls)),
 
 ]
 

@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes import generic
+# from django.contrib.contenttypes.models import ContentType
+# from django.contrib.contenttypes import generic
 
 from datetime import time, date
 from django.utils import timezone
