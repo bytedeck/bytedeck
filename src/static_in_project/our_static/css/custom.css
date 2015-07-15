@@ -3,8 +3,22 @@
 
 }
 
-a[role="tab"] {
-  outline=0;
+/*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
+already distinguished*/
+.nav-tabs > .active > a, .nav-tabs > .active > a:hover {
+  outline: 0;
+}
+
+.tab-content {
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    border-radius: 0px 0px 5px 5px;
+    padding: 10px;
+}
+
+.nav-tabs {
+    margin-bottom: 0;
 }
 
 /*#input-group-unified { width: 100%;}*/

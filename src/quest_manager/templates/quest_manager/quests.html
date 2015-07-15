@@ -6,29 +6,28 @@
 
 {% block content %}
 
-<ul class="nav nav-tabs" role="tablist">
+{% if heading %}<h3>{{ heading }}</h3>{% endif %}
+
+<ul class="nav nav-tabs nav-justified" role="tablist">
   <li role="presentation" class="active">
     <a href="#available" role="tab" data-toggle="tab">Available</a>
   </li>
   <li role="presentation">
-    <a href="#inpogress" role="tab" data-toggle="tab">In Progress</a>
+    <a href="#inprogress" role="tab" data-toggle="tab">In Progress</a>
   </li>
   <li role="presentation">
     <a href="#completed" role="tab" data-toggle="tab">Completed</a>
   </li>
 </ul>
-
-{% if heading %}<h1>{{ heading }}</h1>{% endif %}
-
 <!-- Tab panes -->
 <div class="tab-content">
-  <div role="tabpanel" class="tab-pane active" id="available">
+  <div role="tabpanel" class="tab-pane active fade in" id="available">
     {% include 'quest_manager/quests_available_tab.html' %}
   </div>
-  <div role="tabpanel" class="tab-pane" id="inprogress">
+  <div role="tabpanel" class="tab-pane fade" id="inprogress">
     {% include 'quest_manager/quests_inprogress_tab.html' %}
   </div>
-  <div role="tabpanel" class="tab-pane" id="completed">
+  <div role="tabpanel" class="tab-pane fade" id="completed">
     {% include 'quest_manager/quests_completed_tab.html' %}
   </div>
 </div>
