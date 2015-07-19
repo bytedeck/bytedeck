@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+
+{% block content %}
+<div class="row">
+  <div class="col-sm-12">
+    <h2>Profile <small>{{p.user}}</small></h2>
+  </div>
+<div>
+<div class="row">
+  <div class="col-md-6">
+    <form method='POST' action=''> {% csrf_token %}
+      {{ form|crispy }}
+      <input class="btn btn-default" type='submit' value='Save Profile' />
+    </form>
+  </div>
+</div>
+{% endblock %}

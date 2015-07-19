@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+
+{% block content %}
+<div class="row">
+  <div class="col-sm-12">
+    <form action="" method="post">{% csrf_token %}
+        {{ form|crispy }}
+        <input type="submit" value="Update" />
+    </form>
+  </div>
+</div>
+{% endblock %}

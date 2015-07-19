@@ -1,11 +1,22 @@
 from django import forms
+
 from .models import Profile
 
-class ProfileForm(forms.Form):
+class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
-        # fields = ['name','xp']
-        widgets = {
+        exclude = ['user']
 
-        }
-        fields = '__all__'
+# class ProfileForm(forms.Form):
+#     class Meta:
+#         model = Profile
+#         # fields = ['name','xp']
+#         widgets = {
+#
+#         }
+#         fields = '__all__'
+
+# class ProfileUpdateForm(forms.ModelForm):
+#     class Meta:
+#         model = Profile
+#         fields = '__all__'
