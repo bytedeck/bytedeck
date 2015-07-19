@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+
+{% block content %}
+<h1>Profiles</h1>
+{% for object in object_list %}
+<h3>User: {{object.user}}
+  <small>
+    <a href='{% url "profiles:profile_detail" object.pk %}'>view</a> |
+    <a href='{% url "profiles:profile_update" object.pk %}'>edit</a>
+  </small></h3>
+<p>Primary Key: {{object.pk}}</p>
+<p>Alias: {{object.alias}} </p>
+<p>First Name: {{object.first_name}} </p>
+<p>Last Name: {{object.last_name}} </p>
+{% endfor %}
+{% endblock %}

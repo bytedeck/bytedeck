@@ -9,5 +9,13 @@
 <p>Alias: {{object.alias}} </p>
 <p>First Name: {{object.first_name}} </p>
 <p>Last Name: {{object.last_name}} </p>
+<p>Preferred Name: {{ object.preferred_name}} </p>
+<p>Avatar: {% if object.avatar %}
+  <img src="{{object.avatar.url}}" alt="avatar" height="16px"/>
+  {% else %}None
+{% endif %}</p>
+<p>SN: {{ object.student_number}}</p>
+<p>Grad: {{ object.grad_year}}</p>
+<p>Created: {{ object.datetime_created}}</p>
 
 {% endblock %}

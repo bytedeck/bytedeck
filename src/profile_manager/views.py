@@ -3,12 +3,16 @@
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
-from django.views.generic import DetailView
+from django.views.generic import DetailView, ListView
 # from django.shortcuts import render, get_object_or_404
 
 from .forms import ProfileForm
 from .models import Profile
 # Create your views here.
+
+class ProfileList(ListView):
+    model = Profile
+    template_name = 'profile_manager/profile_list.html'
 
 class ProfileCreate(CreateView):
     model = Profile
