@@ -3,7 +3,9 @@ Django==1.8.2
 django-allauth==0.21.0
 django-crispy-forms==1.4.0
 django-postgrespool==0.3.0
+django-summernote==0.6.8
 oauthlib==0.7.2
+Pillow==2.9.0
 psycopg2==2.6.1
 python3-openid==3.0.5
 requests==2.7.0

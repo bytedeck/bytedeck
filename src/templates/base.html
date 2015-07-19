@@ -31,17 +31,20 @@
     {% endblock %}
 
     <div class="container">
-      {% block content_outer %}
-      <div class="row">
-        <div class="col-sm-10 col-sm-offset-1 col-md-8 col-md-offset-2 col-lg-6 col-lg-offset-3">
+      <div class="row row-offcanvas row-offcanvas-left">
+        <div class="column col-sm-2 col-xs-1 sidebar-offcanvas" id="sidebar">
+          {% include 'sidebar.html' %}
+          {% block content_outer %}
+        </div>
+        <div class="col-xs-11 col-sm-10" id="main"> <!-- These settings need to compliment the sidebar settings -->
           {% block content %}
           {% endblock %}
         </div>
-      </div>
-      {% endblock %}
+        {% endblock %}
 
-      {% block extra_body %}
-      {% endblock %}
+        {% block extra_body %}
+        {% endblock %}
+      </div> <!-- off canvass -->
     </div> <!-- /container -->
 
     {% include 'javascript.html' %}
