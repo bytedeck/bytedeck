@@ -3,6 +3,8 @@
 
 }
 
+
+
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
 already distinguished*/
 .nav-tabs > .active > a, .nav-tabs > .active > a:hover {
@@ -40,6 +42,23 @@ body {
  * off canvas sidebar
  * --------------------------------------------------
  */
+/*#logo {
+ padding-top: 10px;
+ padding-bottom: 10px;
+}*/
+
+#lg-menu a {
+  font-size: 125%;
+}
+
+.shrinktext {
+  letter-spacing: -1px;
+}
+.shrinktextmore {
+  letter-spacing: -2px;
+  /*display: inline !important;*/
+}
+
 @media screen and (max-width: 768px) {
   .row-offcanvas {
     position: relative;
@@ -49,18 +68,24 @@ body {
   }
 
   .row-offcanvas-left.active {
-    left: 33%;
+    left: 60%;
   }
 
   .row-offcanvas-left.active .sidebar-offcanvas {
-    left: -33%;
+    left: -60%;
     position: absolute;
     top: 0;
-    width: 33%;
+    width: 60%;
     margin-left: 5px;
   }
 
-  #sidebar, #sidebar a, #sidebar-footer a {
-    padding-left:3px;
+  #sidebar, /*#sidebar a,*/ #sidebar-footer a {
+    /*padding-left:3px;*/
+    padding-left: 5px;
   }
+
+  #sidebar a {
+    padding-left: 10px;
+  }
+
 }

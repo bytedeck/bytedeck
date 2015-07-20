@@ -4,16 +4,27 @@
 <!-- sidebar -->
 
 
-    <ul class="nav">
+  <ul class="nav">
     <li><a href="#" data-toggle="offcanvas" class="visible-xs text-center"><i class="glyphicon glyphicon-chevron-right"></i></a></li>
   </ul>
 
-    <ul class="nav hidden-xs" id="lg-menu">
-        <li class="active"><a href="#featured"><i class="glyphicon glyphicon-list-alt"></i> Featured</a></li>
-        <li><a href="#"><i class="glyphicon glyphicon-list"></i> Stories</a></li>
-        <li><a href="#"><i class="glyphicon glyphicon-paperclip"></i> Saved</a></li>
-        <li><a href="#"><i class="glyphicon glyphicon-refresh"></i> Refresh</a></li>
-    </ul>
+   <h3 class="hidden-xs"> <!--so logo margins align with main div headings-->
+    <img id="logo" src ="{% static 'img/banner.png' %}"  class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
+  </h3>
+  <div class="nav list-group hidden-xs" id="lg-menu">
+      <a class="list-group-item active" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
+      <a class="list-group-item" href="#"><i class="fa fa-trophy fa-fw"></i>&nbsp;
+        <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
+        <span class="hidden-sm hidden-xs">Achievements</span>
+        </a>
+      <a class="list-group-item" href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i>&nbsp; Group</a>
+      <a class="list-group-item" href="#"><i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
+        <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
+        <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
+        <span class="badge">8</span>
+      </a>
+  </div>
+
     <!-- <ul class="list-unstyled hidden-xs" id="sidebar-footer">
         <li>
           <a href="http://www.bootply.com"><h3>Bootstrap</h3> <i class="glyphicon glyphicon-heart-empty"></i> Bootply</a>
@@ -22,10 +33,10 @@
 
     <!-- tiny only nav-->
   <ul class="nav visible-xs" id="xs-menu">
-        <li><a href="#" class="text-center"><i class="glyphicon glyphicon-list-alt"></i></a></li>
-        <li><a href="#" class="text-center"><i class="glyphicon glyphicon-list"></i></a></li>
-        <li><a href="#" class="text-center"><i class="glyphicon glyphicon-paperclip"></i></a></li>
-        <li><a href="#" class="text-center"><i class="glyphicon glyphicon-refresh"></i></a></li>
+        <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
+        <li><a href="#" class="text-center"><i class="fa fa-trophy fa-fw"></i></a></li>
+        <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>
+        <li><a href="#" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>
     </ul>
 
 <!-- /sidebar -->
