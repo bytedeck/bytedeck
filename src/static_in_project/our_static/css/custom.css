@@ -49,6 +49,14 @@ body {
 
 #lg-menu a {
   font-size: 125%;
+  /*display:inline-block
+  .text-overflow();*/
+
+}
+
+/*this allows us to use contextual badges (-success, -primary, etc)*/
+.label-as-badge {
+    border-radius: 1em;
 }
 
 .shrinktext {
@@ -56,15 +64,15 @@ body {
 }
 .shrinktextmore {
   letter-spacing: -2px;
-  /*display: inline !important;*/
 }
 
 @media screen and (max-width: 768px) {
+
   .row-offcanvas {
     position: relative;
     -webkit-transition: all 0.25s ease-out;
     -moz-transition: all 0.25s ease-out;
-    transition: all 0.25s ease-out;
+    transition: all 0.25s ease-out;width:
   }
 
   .row-offcanvas-left.active {
@@ -79,12 +87,12 @@ body {
     margin-left: 5px;
   }
 
-  #sidebar, /*#sidebar a,*/ #sidebar-footer a {
+  #sidebar {
     /*padding-left:3px;*/
     padding-left: 5px;
   }
 
-  #sidebar a {
+  #sidebar a, #sidebar-footer a {
     padding-left: 10px;
   }
 
