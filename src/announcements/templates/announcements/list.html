@@ -5,8 +5,26 @@
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
 {% block content %}
-<h1>Announcements</h1>
+<h2><i class="fa fa-newspaper-o "></i> Announcements</h2>
+<div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
-<h3>{{object}}</h3>
+  <div class="panel panel-default">
+    <div class="panel-heading" role="tab" id="heading{{object.id}}">
+      <h4 class="panel-title">
+        <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{object.id}}" aria-expanded="true" aria-controls="collapse{{object.id}}">
+          {{object.title}}
+        </a>
+        <small class="pull-right">{{object.datetime_released.date}}</small>
+      </h4>
+    </div>
+    <div id="collapse{{object.id}}" class="panel-collapse collapse" role="tabpanel" aria-labelledby="heading{{object.id}}">
+      <div class="panel-body">
+        <i class="fa fa-quote-left fa-3x pull-left fa-border"></i>
+        {{object.content}}
+      </div>
+    </div>
+  </div>
 {% endfor %}
+</div>
+
 {% endblock %}

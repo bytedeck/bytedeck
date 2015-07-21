@@ -2,7 +2,7 @@
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top">
-  <div class="container">
+  <div class="container-fluid">
     <div class="navbar-header">
       <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
         <span class="sr-only">Toggle navigation</span>
@@ -16,9 +16,9 @@
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <!-- <li class="active"><a href="{% url 'home' %}">Home</a></li> -->
-        <li><a href="{% url 'home' %}">Announcements <span class="badge">23</span></a></li>
+        <!-- <li><a href="{% url 'home' %}">Announcements <span class="badge">23</span></a></li>
         <li><a class="active" href="{% url 'quests:quests' %}">Quests</a></li>
-        <li><a href="{% url 'home' %}">Achievements</a></li>
+        <li><a href="{% url 'home' %}">Achievements</a></li> -->
 
         {% if request.user.is_authenticated and request.user.is_staff %}
         <li class="dropdown">

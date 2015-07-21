@@ -4,21 +4,44 @@
 }
 
 /*Make the container act like container-fluid at small and medium sizes*/
-@media (min-width: 568px) {
-  .container {
-    width: auto;
-  }
+
+/*LESS to mimic Bootstrap without importing the less files.*/
+/*@screen-xs-max: 767px;
+@screen-sm-min: 768px;
+@screen-sm-max: 991px;
+@screen-md-min: 992px;
+@screen-md-max: 1199px;
+@screen-lg-min: 1200px;*/
+
+/*xs only*/
+@media (max-width: 767px) {
+
 }
+/*small and up*/
+@media (min-width: 768px) {
+
+}
+/*sm only*/
+@media (min-width: 768px) and (max-width: 991px) {
+
+}
+/*md and up*/
 @media (min-width: 992px) {
-  .container {
-    width: auto;
-  }
+
 }
+/*md only*/
+@media (min-width: 992px) and (max-width: 1199px) {
+
+}
+/*lg and up*/
 @media (min-width: 1200px) {
-  .container {
+  .container-fluid {
     width: 1170px;
   }
+
 }
+
+
 
 
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
