@@ -63,6 +63,9 @@ INSTALLED_APPS = (
     # https://github.com/summernote/django-summernote
     'django_summernote',
 
+    #http://haystacksearch.org/
+    'haystack',
+
     #local apps
     'quest_manager',
     'profile_manager',
@@ -158,6 +161,15 @@ LOGIN_REDIRECT_URL = '/'
 #     'signup': ''
 #
 # })
+
+#Haystack Search app
+HAYSTACK_CONNECTIONS = {
+    'default': {
+        'ENGINE': 'haystack.backends.elasticsearch_backend.ElasticsearchSearchEngine',
+        'URL': 'http://127.0.0.1:9200/',
+        'INDEX_NAME': 'haystack',
+    },
+}
 
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode
