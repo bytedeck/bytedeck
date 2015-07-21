@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+
+{% block content %}
+<h1>Announcements</h1>
+{% for object in object_list %}
+<h3>{{object}}</h3>
+{% endfor %}
+{% endblock %}

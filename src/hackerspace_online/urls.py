@@ -29,6 +29,7 @@ urlpatterns = [
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     #profile_manager
     url(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
+    url(r'^announcements/', include('announcements.urls', namespace='announcements')),
     #admin
     url(r'^admin/', include(admin.site.urls)),
     #summer_note
