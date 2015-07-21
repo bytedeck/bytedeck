@@ -3,6 +3,22 @@
 
 }
 
+/*Make the container act like container-fluid at small and medium sizes*/
+@media (min-width: 568px) {
+  .container {
+    width: auto;
+  }
+}
+@media (min-width: 992px) {
+  .container {
+    width: auto;
+  }
+}
+@media (min-width: 1200px) {
+  .container {
+    width: 1170px;
+  }
+}
 
 
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are

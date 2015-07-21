@@ -22,9 +22,7 @@
 {% endblock %}
 </style>
 
-
-{% block jumbotron %}
-
+  {% block jumbotron %}
   <div class="jumbotron">
     <div class="container">
       <img class = "img-responsive banner1" src ="{% static 'img/banner.png' %}" alt="Timberline's Digital Hackerspace Landing Page" />
@@ -38,19 +36,9 @@
   </div>
 {% endblock %}
 
-{% block content %}
-<div class="row">
-  <div class="col-sm-6">
 
-    <!-- <h1> {{title}}</h1> -->
-    <!-- {{user}} -->
-    <!-- {{request.user}}
 
-    <form method='POST' action=''> {% csrf_token %}
-      {{ form|crispy }}
-      <input class='btn btn-primary' type='submit' value='Create Quest' />
-    </form>-->
 
-  </div>
-</div>
+{% block content_outer %}
+
 {% endblock %}

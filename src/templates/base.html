@@ -31,20 +31,19 @@
     {% endblock %}
 
     <div class="container">
+      {% block content_outer %}
       <div class="row row-offcanvas row-offcanvas-left">
         <nav class="column col-sm-3 col-xs-1 sidebar-offcanvas" id="sidebar">
           {% include 'sidebar.html' %}
-          {% block content_outer %}
         </nav>
         <div class="col-xs-11 col-sm-9" id="main"> <!-- These settings need to compliment the sidebar settings -->
           {% block content %}
           {% endblock %}
         </div>
-        {% endblock %}
-
         {% block extra_body %}
         {% endblock %}
       </div> <!-- off canvass -->
+      {% endblock %}
     </div> <!-- /container -->
 
     {% include 'javascript.html' %}
