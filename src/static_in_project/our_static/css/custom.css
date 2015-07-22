@@ -3,6 +3,10 @@
 
 }
 
+.jumbotron {
+  background-color: white;
+}
+
 /*Make the container act like container-fluid at small and medium sizes*/
 
 /*LESS to mimic Bootstrap without importing the less files.*/

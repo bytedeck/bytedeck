@@ -1,11 +1,10 @@
-{% extends "base.html" %}
+{% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
 {% block head_title%}Announcements | {% endblock%}
-
+{% block heading %}Announcements <i class="fa fa-newspaper-o pull-right"></i>{% endblock %}
 {% block content %}
-<h2><i class="fa fa-newspaper-o "></i> Announcements</h2>
 <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div class="panel panel-default">

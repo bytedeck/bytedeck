@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load staticfiles %}
+
+{% block head_title%}{% endblock%}
+
+{% block css %}{% endblock %}
+
+{% block content_outer %}
+  <div class="row">
+    <div class="col-sm-3">
+      <h3 class="hidden-xs"> <!--so logo margins align with main div headings-->
+       <img id="logo" src ="{% static 'img/banner.png' %}"  class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
+      </h3>
+    </div>
+    <div class="col-sm-6">
+      <h1>{% block heading %}{% endblock %}</h1>
+      {% block content %}
+      {% endblock %}
+    </div>
+  </div>
+  {% block extra_body %}
+  {% endblock extra_body %}
+{% endblock content_outer %}

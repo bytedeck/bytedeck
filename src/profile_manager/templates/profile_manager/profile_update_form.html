@@ -1,8 +1,10 @@
-{% extends "base.html" %}
+{% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
-{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+{% block head_title%}{% if title %}{{ title }} <i class="fa fa-newspaper-o pull-right"></i>{% endif %}{% endblock%}
+
+{% block heading %}Group <i class="fa fa-users pull-right"></i>{% endblock %}
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}

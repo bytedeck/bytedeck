@@ -1,12 +1,13 @@
-{% extends "base.html" %}
+{% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
+{% if heading %}{% block heading %}{{ heading }}{% endblock %}{% endif %}
+
 {% block content %}
 
-    {% if heading %}<h1>{{ heading }}</h1>{% endif %}
 
     {% if q %}
       {{ q.instructions | safe }}

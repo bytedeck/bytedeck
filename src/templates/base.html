@@ -12,37 +12,21 @@
     <meta name="author" content="">
     <link rel="icon" href="../../favicon.ico">
 
-    <title>{% block head_title%}{% endblock%} | Timberline's Digital Hackerspace</title>
+    <title>{% block head_title%}{% endblock%} Timberline's Digital Hackerspace</title>
 
     {% include 'head_css.html' %}
 
-    <style>
-      {% block css %}
-      {% endblock %}
-    </style>
-
+    <style>{% block head_css %}{% endblock %}</style>
   </head>
 
   <body>
 
     {% include 'navbar-fixed.html' %}
 
-    {% block jumbotron %}
-    {% endblock %}
+    {% block jumbotron %}{% endblock %}
 
     <div class="container-fluid">
       {% block content_outer %}
-      <div class="row row-offcanvas row-offcanvas-left">
-        <nav class="column col-sm-3 col-xs-1 sidebar-offcanvas" id="sidebar">
-          {% include 'sidebar.html' %}
-        </nav>
-        <div class="col-xs-11 col-sm-9" id="main"> <!-- These settings need to compliment the sidebar settings -->
-          {% block content %}
-          {% endblock %}
-        </div>
-        {% block extra_body %}
-        {% endblock %}
-      </div> <!-- off canvass -->
       {% endblock %}
     </div> <!-- /container -->
 

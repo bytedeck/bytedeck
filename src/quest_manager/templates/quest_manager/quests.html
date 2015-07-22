@@ -1,12 +1,12 @@
-{% extends "base.html" %}
+{% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
-{% block content %}
+{% if heading %}{% block heading %}{{ heading }} <i class="fa fa-shield pull-right"></i>{% endblock %}{% endif %}
 
-{% if heading %}<h3>{{ heading }}</h3>{% endif %}
+{% block content %}
 
 <ul class="nav nav-tabs nav-justified" role="tablist">
   <li role="presentation" class="active">
