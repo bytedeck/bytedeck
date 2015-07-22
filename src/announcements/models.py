@@ -19,3 +19,6 @@ class Announcement(models.Model):
 
     def __str__(self):
         return str(self.id) + ": " + str(self.title)
+
+    def getTitle(self):
+        return 
