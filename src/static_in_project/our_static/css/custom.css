@@ -7,6 +7,12 @@
   background-color: white;
 }
 
+
+/*Make clickable accordian tabs change to pointer cursor*/
+.accordian-trigger {
+  cursor: pointer;
+}
+
 /*Make the container act like container-fluid at small and medium sizes*/
 
 /*LESS to mimic Bootstrap without importing the less files.*/

@@ -6,6 +6,9 @@ from .forms import QuestFormCustom, NewQuestForm
 from .models import Quest
 from django.http import HttpResponse
 
+from django.contrib.auth.decorators import login_required
+
+@login_required
 def quests(request):
     title = "Quests"
     heading = "Quests"
@@ -23,6 +26,7 @@ def quests(request):
 
     return render(request, "quest_manager/quests.html", context)
 
+@login_required
 def detail(request, quest_id):
     title = "Quests"
     heading = "Quest Detail"
@@ -71,6 +75,7 @@ def detail(request, quest_id):
 #     return render(request, "home.html", context)
 
 ## Demo of how to create a form without using a model
+@login_required
 def new_quest_custom(request):
 
     title = 'Creating a New Quest'
@@ -100,6 +105,7 @@ def new_quest_custom(request):
 ##
 
 ## Demo of sending email
+@login_required
 def email_demo(request):
     subject = "Test email from Hackerspace Online"
     from_email = ("Timberline's Digital Hackerspace <" +

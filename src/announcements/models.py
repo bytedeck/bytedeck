@@ -1,6 +1,8 @@
 from django.conf import settings
+from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils import timezone
+
 # Create your models here.
 
 class Announcement(models.Model):
@@ -20,5 +22,5 @@ class Announcement(models.Model):
     def __str__(self):
         return str(self.id) + ": " + str(self.title)
 
-    def getTitle(self):
-        return 
+    def get_absolute_url(self):
+        return reverse('announcements:list')

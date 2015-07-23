@@ -1,13 +1,14 @@
-{% extends "base_sidebar.html" %}
+{% extends "announcements/base.html" %}
 {% load crispy_forms_tags %}
-{% load staticfiles %}
 
-{% block head_title%}Announcements | {% endblock%}
+{% block heading_inner %} Create New Announcement{% endblock %}
 
 {% block content %}
-<h3>Create Announcement</h3>
 <form action="" method="post">{% csrf_token %}
   {{ form|crispy }}
-  <input type="submit" value="Publish/Queue" />
+  <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="Publish" class="btn btn-success" />
+
+
 </form>
 {% endblock %}
