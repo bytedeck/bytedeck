@@ -1,5 +1,9 @@
 {% load staticfiles %}
 
+{% if not request.user.is_authenticated %}
+  {% include 'account/signup_modal.html' %}
+{% endif %}
+
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top">
   <div class="container-fluid">
@@ -65,7 +69,10 @@
         <li><a href="{% url 'account_logout' %}">Sign Out</a></li>
         {% else %}
 
-        <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
+        <li><a href="{% url 'account_signup' %}" >Sign Up</a></li>
+
+
+        <!-- <li><a href="#" data-toggle="modal" data-target="#SignUpModal" >Sign Up</a></li> -->
         {% endif %}
       </ul>
       {% if not request.user.is_authenticated and not "/accounts/login" in request.get_full_path %}
