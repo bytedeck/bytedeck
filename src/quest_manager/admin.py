@@ -2,7 +2,7 @@ from django.contrib import admin
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
-from .models import Quest, Category, Prerequisite, Feedback
+from .models import Quest, Category, Prerequisite, Course
 
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')
@@ -26,4 +26,5 @@ class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
 
 admin.site.register(Quest, QuestAdmin)
 admin.site.register(Category)
-admin.site.register(Feedback, FeedbackAdmin)
+# admin.site.register(Feedback, FeedbackAdmin)
+admin.site.register(Course)

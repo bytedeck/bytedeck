@@ -13,10 +13,12 @@ def quests(request):
     title = "Quests"
     heading = "Quests"
 
-    quest_list = Quest.objects.order_by('name')
+    # quest_list = Quest.objects.order_by('name')
+    quest_list = Quest.objects.get_active()
     output = ', '.join([p.name for p in quest_list])
 
     # return HttpResponse(output)
+    print(quest_list[5].icon)
 
     context = {
         "title": title,

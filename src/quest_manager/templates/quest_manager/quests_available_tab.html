@@ -19,7 +19,7 @@
       <tbody>
       {% for q in quest_list %}
       <tr>
-        <td data-field="icon"><img class="media-object" src="{{q.icon.url}}" alt="icon" height="16px"/></td>
+        <td data-field="icon"><img class="media-object" src="{{ q.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
         <td data-field="name">{{q.name}}</td>
         <td data-field="xp" >{{q.xp}}</td>
         <td data-field="time" >{{q.id}}</td>
@@ -30,7 +30,14 @@
              <a class="btn btn-primary" href="#" role="button">Start Quest</a>
            </div>
            {{q.short_description}}
-         </td>
+           {% if request.user.is_authenticated and request.user.is_staff %}
+           <div>
+             <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
+             <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
+             <a class="btn btn-primary" href="" role="button">Copy</a>
+           </div>
+           {% endif %}
+        </td>
      </tr>
      {% endfor %}
      </tbody>
@@ -50,32 +57,6 @@
        }
    </script>
 
-    <!-- <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="false">
-      {% for q in quest_list %}
-      <div class="panel panel-default">
-        <div class="panel-heading" role="tab" id="heading{{q.id}}">
-          <div class="media">
-            <div class="media-left media-middle">
-              <img class="media-object" src="{{q.icon.url}}" alt="icon" height="16px"/>
-            </div>
-            <div class="media-body">
-              <h4 class="panel-title media-body">
-                <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{q.id}}" aria-expanded="true" aria-controls="collapse{{q.id}}">
-                {{ q.name }}
-                </a>
-              </h4>
-            </div>
-          </div>
-        </div>
-          <div id="collapse{{q.id}}" class="panel-collapse collapse in" role="tabpanel" aria-labelledby="heading{{q.id}}">
-            <div class="panel-body">
-              {{ q.short_description }}
-              <li><a href="{% url 'quests:detail' q.id %}">View Details</a></li>
-            </div>
-          </div>
-      </div>
-      {% endfor %}
-    </div> -->
   {% else %}
     <p>No quests are available.</p>
   {% endif %}

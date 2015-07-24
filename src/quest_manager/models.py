@@ -1,44 +1,57 @@
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import User
+
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
 
 from datetime import time, date
 from django.utils import timezone
 
+
+
+class Course(models.Model):
+    title = models.CharField(max_length=50, unique=True)
+    icon = models.ImageField(upload_to='icons/', null=True,blank=True)
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
+
 class Category(models.Model):
-    category = models.CharField(max_length=50, unique=True, blank=False)
+    title = models.CharField(max_length=50, unique=True)
+    icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+    active = models.BooleanField(default=True)
+    course = models.ForeignKey(Course, null=True)
 
     class Meta:
         verbose_name_plural = "Categories"
 
     def __str__(self):
-        return self.category
+        return self.title
 
 
 
 class XPItem(models.Model):
-    name = models.CharField(max_length=50, unique=True, blank=False)
-    xp = models.PositiveIntegerField(default = 0, blank=True, null=False)
+    name = models.CharField(max_length=50, unique=True)
+    xp = models.PositiveIntegerField(default = 0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
     short_description = models.TextField(max_length=250, blank=True)
-    visible_to_students = models.BooleanField(default = True, null=False)
-    max_repeats = models.IntegerField(default = 0, blank=True, null=False,
-        help_text = '0 = not repeatable, -1 = unlimited')
-    hours_between_repeats = models.PositiveIntegerField(default = 0, blank=True, null=False)
-    date_available = models.DateField(blank=False, null=False, default=timezone.now)
-    time_available = models.TimeField(blank=False, null=False, default=time().min) # midnight
+    visible_to_students = models.BooleanField(default = True)
+    max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, -1 = unlimited')
+    hours_between_repeats = models.PositiveIntegerField(default = 0)
+    date_available = models.DateField(default=timezone.now)
+    time_available = models.TimeField(default=time().min) # midnight
     date_expired = models.DateField(blank=True, null=True)
     time_expired = models.TimeField(blank=True, null=True)
     minimum_XP = models.PositiveIntegerField(blank=True, null=True)
     maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
     # prerequisites_advanced = models.CharField(max_length=250)
-    #icon = models.FileField(upload_to='icons/', null=True)
-    icon = models.ImageField(upload_to='icons/', null=True) #needs Pillow for ImageField
+    icon = models.ImageField(upload_to='icons/', blank=True, null=True) #needs Pillow for ImageField
 
     class Meta:
         abstract = True
@@ -46,46 +59,65 @@ class XPItem(models.Model):
     def __str__(self):
         return self.name
 
+    #allow us to handle iconless items.  Use with: <img src="{{ object.icon|default_if_none:'#' }}" />
+    def icon_url(self):
+        if(self.icon and hasattr(self.icon, 'url')):
+            return self.icon.url
+
+# Create your models here.
+class QuestQuerySet(models.query.QuerySet):
+    def available(self):
+        return self.filter(date_available__lte = timezone.now)
+
+    def not_expired(self):
+        return self.filter( Q(date_expired = None) | Q(date_expired__gt = timezone.now) )
+
+class QuestManager(models.Manager):
+    def get_queryset(self):
+        return QuestQuerySet(self.model, using=self._db)
+
+    def get_active(self):
+        return self.get_queryset().available().not_expired()
+
 class Quest(XPItem):
-    verification_required = models.BooleanField(default = True, null=False)
-    category = models.ForeignKey(Category, blank=False, null=False)
+    verification_required = models.BooleanField(default = True, )
+    categories = models.ManyToManyField(Category, blank=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
 
-class Feedback(models.Model):
-    user = models.ForeignKey(User, blank=False, null=False, related_name='feedback_user')
-    quest = models.ForeignKey(Quest, blank=False, null=False, related_name='feedback_quest')
-    time_to_complete = models.DurationField(blank=True, null=True)
-    time_to_complete_approved = models.NullBooleanField(blank = True, null=True)
-    feedback = models.TextField(blank=True,
-        help_text = 'Did you have a suggestion that could improve this quest')
-    feedback_approved = models.NullBooleanField(blank = True, null=True)
-    datetime_submitted = models.DateTimeField(auto_now_add=True, auto_now=False)
+    objects = QuestManager()
 
-    class Meta:
-        unique_together = ('user','quest',)
-
-    def __str__(self):
-        return str(self.id)
+# class Feedback(models.Model):
+#     user = models.ForeignKey(User, related_name='feedback_user')
+#     quest = models.ForeignKey(Quest, related_name='feedback_quest')
+#     time_to_complete = models.DurationField(blank=True, null=True)
+#     time_to_complete_approved = models.NullBooleanField(blank = True, null=True)
+#     feedback = models.TextField(blank=True,
+#         help_text = 'Did you have a suggestion that could improve this quest')
+#     feedback_approved = models.NullBooleanField(blank = True, null=True)
+#     datetime_submitted = models.DateTimeField(auto_now_add=True, auto_now=False)
+#
+#     class Meta:
+#         unique_together = ('user','quest',)
+#
+#     def __str__(self):
+#         return str(self.id)
 
 class Prerequisite(models.Model):
-    parent_quest = models.ForeignKey(Quest, blank=False, null=False)
+    parent_quest = models.ForeignKey(Quest)
     # Generic relations:
     # https://docs.djangoproject.com/en/1.4/ref/contrib/contenttypes/#generic-relations
     # content_type = models.ForeignKey(ContentType)
     # object_id = models.PositiveIntegerField()
     # content_object = generic.GenericForeignKey('content_type', 'object_id')
     prerequisite_item = models.ForeignKey(Quest, related_name='prerequisite_item')
-    invert_prerequisite = models.BooleanField(default = False, null=False,
-        help_text = 'item is available if user does NOT have this pre-requisite')
+    invert_prerequisite = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
     alternate_prerequisite_item_1 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_1',
-        help_text = 'user must have one of the prerequisite items', blank=True, null=True)
-    invert_alt_prerequisite_1 = models.BooleanField(default = False, null=False,
-        help_text = 'item is available if user does NOT have this pre-requisite')
+        help_text = 'user must have one of the prerequisite items',  blank=True, null=True)
+    invert_alt_prerequisite_1 = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
     alternate_prerequisite_item_2 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_2',
         help_text = 'user must have one of the prerequisite items', blank=True, null=True)
-    invert_alt_prerequisite_2 = models.BooleanField(default = False, null=False,
-        help_text = 'item is available if user does NOT have this pre-requisite')
+    invert_alt_prerequisite_2 = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
     # minimum_rank =
     # maximum_rank =
 
