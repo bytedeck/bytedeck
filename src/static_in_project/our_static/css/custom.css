@@ -7,6 +7,15 @@
   background-color: white;
 }
 
+.list-group-item .badge {
+  margin-top: 3px;
+  color: #FFF;
+  background-color: #D9534F;
+  border-color: #D43F3A;
+  /*font-size: 75%;*/
+  background-image: none;
+}
+
 
 /*Make clickable accordian tabs change to pointer cursor*/
 .accordian-trigger {
