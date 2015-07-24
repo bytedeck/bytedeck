@@ -12,18 +12,27 @@
     <img id="logo" src ="{% static 'img/banner.png' %}"  class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
   </h3>
   <div class="nav list-group hidden-xs" id="lg-menu">
-      <a class="list-group-item" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
-      <a class="list-group-item" href="#"><i class="fa fa-trophy fa-fw"></i>&nbsp;
-        <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
-        <span class="hidden-sm hidden-xs">Achievements</span>
+      <a class="list-group-item {% if '/quests/' in request.path_info %}active{% endif %}" href="{% url 'quests:quests' %}">
+        <i class="fa fa-shield fa-fw"></i>&nbsp; Quests
+      </a>
+      <a class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}" href="#">
+          <i class="fa fa-trophy fa-fw"></i>&nbsp;
+          <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
+          <span class="hidden-sm hidden-xs">Achievements</span>
         </a>
-      <a class="list-group-item" href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i>&nbsp; Group</a>
-      <a class="list-group-item" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
+      <a class="list-group-item {% if '/profiles/' in request.path_info %}active{% endif %}" href="{% url 'profiles:profile_list' %}">
+        <i class="fa fa-users fa-fw"></i>&nbsp; Group
+      </a>
+      <a class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}" href="{% url 'announcements:list' %}">
+        <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
         <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
         <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
         <span class="badge alert-danger">8</span>
       </a>
   </div>
+
+  {% url 'my_view' 'arg1' as my_view_url %}
+   <a href="{{ my_view_url }}" {% if request.path_info == my_view_url %}class="active"{% endif %}>Some link</a>
 
     <!-- <ul class="list-unstyled hidden-xs" id="sidebar-footer">
         <li>
