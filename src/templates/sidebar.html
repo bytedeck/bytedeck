@@ -31,9 +31,6 @@
       </a>
   </div>
 
-  {% url 'my_view' 'arg1' as my_view_url %}
-   <a href="{{ my_view_url }}" {% if request.path_info == my_view_url %}class="active"{% endif %}>Some link</a>
-
     <!-- <ul class="list-unstyled hidden-xs" id="sidebar-footer">
         <li>
           <a href="http://www.bootply.com"><h3>Bootstrap</h3> <i class="glyphicon glyphicon-heart-empty"></i> Bootply</a>

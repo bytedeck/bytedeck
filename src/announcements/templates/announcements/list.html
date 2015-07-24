@@ -3,6 +3,7 @@
 {% block heading_inner %}Announcements
 {% if request.user.is_authenticated and request.user.is_staff %}
   <a class="btn btn-primary" href="{% url 'announcements:create' %}" role="button">New</a>
+  
 {% endif %}
 {% endblock %}
 {% block content %}

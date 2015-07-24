@@ -53,6 +53,11 @@
           $('#btnShow').toggle();
         });
 
+        $('[data-toggle=collapse]').click(function() {
+            $('.collapsed').removeClass('active');
+            $(this).toggleClass('active');
+         });
+
         /* switch active elements when selected */
         // $('.list-group-item').on('click',function(e){
         //   var previous = $(this).closest(".list-group").children(".active");
