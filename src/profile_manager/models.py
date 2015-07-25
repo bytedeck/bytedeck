@@ -18,6 +18,8 @@ class Profile(models.Model):
     grad_year = models.PositiveIntegerField(choices=YEAR_CHOICES)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
 
+    
+
     def get_absolute_url(self):
         return reverse('profile_detail', kwargs={'pk': self.pk})
 

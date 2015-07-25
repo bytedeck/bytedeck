@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+
 {% load staticfiles %}
 
 {% block head_title%}{% endblock%}
+{% block head_css %}{% endblock %}
 
-{% block css %}{% endblock %}
+{% block content_first %}{% endblock %}
 
 {% block content_outer %}
   <div class="row">
@@ -14,10 +16,11 @@
     </div>
     <div class="col-sm-6">
       <h1>{% block heading %}{% endblock %}</h1>
-      {% block content %}
-      {% endblock %}
+      {% block content %}{% endblock %}
     </div>
   </div>
-  {% block extra_body %}
-  {% endblock extra_body %}
+  {% block extra_body %}{% endblock %}
 {% endblock content_outer %}
+{% block content_last %}{% endblock %}
+
+{% block js %}{% endblock %}

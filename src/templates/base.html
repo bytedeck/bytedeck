@@ -21,16 +21,17 @@
 
   <body>
 
+    {% block content_first %}{% endblock %}
     {% include 'navbar-fixed.html' %}
-
     {% block jumbotron %}{% endblock %}
-
     <div class="container-fluid">
-      {% block content_outer %}
-      {% endblock %}
+      {% block content_outer %}{% endblock %}
     </div> <!-- /container -->
 
+    {% block content_last %}{% endblock %}
+
     {% include 'javascript.html' %}
+    {% block js %}{% endblock %}
 
   </body>
 </html>

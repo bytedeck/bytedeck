@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 
 {% block head_title%}{% endblock%}
+{% block head_css %}{% endblock %}
 
-{% block css %}{% endblock %}
+{% block content_first %}{% endblock %}
 
 {% block content_outer %}
 <div class="row row-offcanvas row-offcanvas-left">
@@ -11,10 +12,11 @@
   </nav>
   <div class="col-xs-11 col-sm-9" id="main"> <!-- These settings need to compliment the sidebar settings -->
     <h1>{% block heading %}{% endblock %}</h1>
-    {% block content %}
-    {% endblock %}
+    {% block content %}{% endblock %}
   </div>
-  {% block extra_body %}
-  {% endblock %}
+  {% block extra_body %}{% endblock %}
 </div> <!-- off canvass -->
-{% endblock %}
+{% endblock content_outer %}
+{% block content_last %}{% endblock %}
+
+{% block js %}{% endblock %}

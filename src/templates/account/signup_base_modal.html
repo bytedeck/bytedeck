@@ -1,0 +1,19 @@
+{% extends "home.html" %}
+{% load crispy_forms_tags %}
+
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign up" %} | {% endblock %}
+
+{% block content_last %}
+{% include 'account/signup_modal.html' %}
+{% endblock %}
+
+
+{% block js %}
+<script>
+  $(document).ready(function() {
+    $('div#SignUpModal').addClass('modal');
+  });
+</script>
+{% endblock %}
