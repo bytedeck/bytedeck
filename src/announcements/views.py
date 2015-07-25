@@ -34,7 +34,7 @@ def list(request):
 #         "submit_btn_value": "Publish"
 #     }
 #
-#     return render(request, "announcements/form_templated.html", context)
+#     return render(request, "announcements/form.html", context)
 
 class Create(CreateView):
     model = Announcement
