@@ -17,6 +17,11 @@
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
 }
 
+
+.panel-default > .panel-heading.accordian-trigger:hover {
+  background-color: #FFF;
+}
+
 .panel-default > .panel-heading.accordian-trigger.active {
   background-color: #337AB7;
   color: #FFF;

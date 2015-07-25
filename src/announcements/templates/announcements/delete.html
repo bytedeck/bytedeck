@@ -11,10 +11,7 @@
     <p>Author: {{object.author}}</p>
     <p>Date Posted: {{object.datetime_released.date}}</p>
   </div>
-  <div class="btn-group">
-    <a href="{% url 'announcements:list' %}" role="button" class="btn btn-info">Cancel</a>
-    <input type="submit" value="Delete" class="btn btn-danger" />
-  </div>
-
+  <a href="{% url 'announcements:list' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
 {% endblock %}

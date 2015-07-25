@@ -1,14 +1,12 @@
 {% extends "announcements/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %} Create New Announcement{% endblock %}
+{% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
-<form action="" method="post">{% csrf_token %}
+<form action="{{ action_value }}" method="post">{% csrf_token %}
   {{ form|crispy }}
   <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
-  <input type="submit" value="Publish" class="btn btn-success" />
-
-
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
 {% endblock %}
