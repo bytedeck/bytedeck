@@ -6,11 +6,18 @@ from quest_manager.models import Course
 
 from datetime import datetime
 
-GRAD_YEAR_CHOICES = []
-for r in range(datetime.now().year, datetime.now().year+4):
-        GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
+# GRAD_YEAR_CHOICES = []
+# for r in range(datetime.now().year, datetime.now().year+4):
+#         GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
 
 class Profile(models.Model):
+
+    def get_grad_year_choices():
+        grad_year_choices = []
+        for r in range(datetime.now().year, datetime.now().year+4):
+                grad_year_choices.append((r,r)) #(actual value, human readable name) tuples
+        return grad_year_choices
+
     user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name="profile_user", null=False)
     alias = models.CharField(max_length=50, unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=50, null=False, blank=False)
@@ -18,10 +25,13 @@ class Profile(models.Model):
     preferred_name = models.CharField(max_length=50, null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=False)
-    grad_year = models.PositiveIntegerField(choices=GRAD_YEAR_CHOICES)
+    grad_year = models.PositiveIntegerField(choices=get_grad_year_choices())
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
 
-
+class Rank(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    xp_min = models.PositiveIntegerField(unique=True)
+    icon = models.ImageField(upload_to='icons/', null=True, blank=True)
 
 class UserCourse(models.Model):
 
@@ -35,7 +45,6 @@ class UserCourse(models.Model):
             year_first = year_first.replace(year = year_first.year + 1)
         year_second = year_first.replace(year = year_first.year + 1)
         return year_first.strftime("%Y/") + year_second.strftime("%y")
-
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
     school_year = models.CharField(max_length = 7, default = get_current_school_year())

@@ -17,9 +17,6 @@ def quests(request):
     quest_list = Quest.objects.get_active()
     output = ', '.join([p.name for p in quest_list])
 
-    # return HttpResponse(output)
-    print(quest_list[5].icon)
-
     context = {
         "title": title,
         "heading": heading,
