@@ -1,0 +1,15 @@
+{% extends "base_sidebar.html" %}
+{% load crispy_forms_tags %}
+{% load staticfiles %}
+
+{% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
+
+{% if heading %}{% block heading %}{{ heading }} <i class="fa fa-shield pull-right"></i>{% endblock %}{% endif %}
+
+{% block content %}
+<form action="{{ action_value }}" method="post">{% csrf_token %}
+  {{ form|crispy }}
+  <a href="{% url 'quests:quests' %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+</form>
+{% endblock %}

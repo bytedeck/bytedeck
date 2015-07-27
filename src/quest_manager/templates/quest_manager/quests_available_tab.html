@@ -26,7 +26,7 @@
         <td data-field="category" >{{q.category}}</td>
         <td data-field="short_description">
            <div class="btn-group-vertical">
-             <a class="btn btn-info" href="{% url 'quests:detail' q.id %}" role="button">View Details</a>
+             <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
              <a class="btn btn-primary" href="#" role="button">Start Quest</a>
            </div>
            {{q.short_description}}
@@ -34,7 +34,7 @@
            <div>
              <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
              <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
-             <a class="btn btn-primary" href="" role="button">Copy</a>
+             <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
            </div>
            {% endif %}
         </td>

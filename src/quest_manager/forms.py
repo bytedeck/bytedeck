@@ -16,21 +16,19 @@ def make_custom_datefield(f):
 
 
 
+
 ## Demo of how to create a form without using a model
-class QuestFormCustom(forms.Form):
-    quest = forms.CharField()  # default is required = True
-    xp = forms.IntegerField()
+# class QuestFormCustom(forms.Form):
+#     quest = forms.CharField()  # default is required = True
+#     xp = forms.IntegerField()
 ##
 
-class NewQuestForm(forms.Form):
+class QuestForm(forms.ModelForm):
     formfield_callback = make_custom_datefield
     class Meta:
         model = Quest
-        # fields = ['name','xp']
-        widgets = {
-
-        }
         fields = '__all__'
+        # exclude = None
 
 
     # def clean_name(self):
