@@ -2,9 +2,11 @@
   {% if quest_list %}
 
   <table data-toggle="table"
-          data-classes="table table-no-bordered"
+          data-classes="table table-hover"
           data-detail-view="true"
           data-detail-formatter="detailFormatter"
+          data-pagination="true"
+          data-sidePagination="left"
           >
      <thead>
        <tr>
@@ -25,18 +27,20 @@
         <td data-field="time" >{{q.id}}</td>
         <td data-field="category" >{{q.category}}</td>
         <td data-field="short_description">
-           <div class="btn-group-vertical">
-             <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
-             <a class="btn btn-primary" href="#" role="button">Start Quest</a>
-           </div>
-           {{q.short_description}}
-           {% if request.user.is_authenticated and request.user.is_staff %}
-           <div>
-             <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
-             <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
-             <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
-           </div>
-           {% endif %}
+          <div>
+             {{q.short_description}}
+          </div>
+          {% if request.user.is_authenticated and request.user.is_staff %}
+          <div class="pull-right">
+            <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
+            <a class="btn btn-primary" href="#" role="button">Start Quest</a>
+          </div>
+          <div>
+            <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
+            <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
+            <a class="btn btn-warning" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
+          </div>
+          {% endif %}
         </td>
      </tr>
      {% endfor %}
@@ -50,7 +54,7 @@
            var html = [];
            $.each(row, function (key, value) {
              if(key == '5') {
-               html.push('<div class="container-fluid">' + value + ' </div>');
+               html.push(value);
              }
            });
            return html.join('');

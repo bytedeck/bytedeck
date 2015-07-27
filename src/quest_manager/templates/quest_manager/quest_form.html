@@ -4,7 +4,7 @@
 
 {% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
 
-{% if heading %}{% block heading %}{{ heading }} <i class="fa fa-shield pull-right"></i>{% endblock %}{% endif %}
+{% if heading %}{% block heading %}{{ heading|safe }} <i class="fa fa-shield pull-right"></i>{% endblock %}{% endif %}
 
 {% block content %}
 <form action="{{ action_value }}" method="post">{% csrf_token %}
