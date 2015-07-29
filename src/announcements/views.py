@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse_lazy
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -18,6 +18,28 @@ def list(request):
         'object_list': object_list,
     }
     return render(request, 'announcements/list.html', context)
+
+@login_required
+def copy(request, id):
+    new_ann = get_object_or_404(Announcement, pk=id)
+    new_ann.pk = None # autogen a new primary key (quest_id by default)
+    new_ann.title = "Copy of " + new_ann.title
+    # print(quest_to_copy)
+    # print(new_quest)
+    # new_quest.save()
+
+    form = AnnouncementForm(request.POST or None, instance = new_ann)
+    if form.is_valid():
+        form.save()
+        return redirect('announcements:list')
+    context = {
+        "title": "",
+        "heading": "Copy an Announcement",
+        "form": form,
+        "submit_btn_value": "Create",
+    }
+    return render(request, "announcements/form.html", context)
+
 
 # class based views
 # class List(ListView):

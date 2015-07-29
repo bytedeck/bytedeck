@@ -10,4 +10,5 @@ urlpatterns = [
     # url(r'^(?P<pk>\d+)/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<pk>\d+)/delete/$', views.Delete.as_view(), name='delete'),
     url(r'^(?P<pk>\d+)/edit/$', views.Update.as_view(), name='update'),
+    url(r'^(?P<id>\d+)/copy/$', views.copy, name='copy'),
 ]
