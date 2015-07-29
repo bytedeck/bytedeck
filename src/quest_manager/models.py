@@ -72,12 +72,15 @@ class QuestQuerySet(models.query.QuerySet):
     def not_expired(self):
         return self.filter( Q(date_expired = None) | Q(date_expired__gt = timezone.now) )
 
+    def visible(self):
+        return self.filter(visible_to_students = True)
+
 class QuestManager(models.Manager):
     def get_queryset(self):
         return QuestQuerySet(self.model, using=self._db)
 
     def get_active(self):
-        return self.get_queryset().available().not_expired()
+        return self.get_queryset().available().not_expired().visible()
 
 class Quest(XPItem):
     verification_required = models.BooleanField(default = True, )

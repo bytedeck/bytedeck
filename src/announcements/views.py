@@ -41,7 +41,7 @@ class Create(CreateView):
     form_class = AnnouncementForm
     # template_name = 'announcements/form.html'
 
-    template_name = 'announcements/form_templated.html'
+    template_name = 'announcements/form.html'
 
     def form_valid(self, form):
         data = form.save(commit=False)
