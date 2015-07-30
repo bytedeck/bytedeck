@@ -18,12 +18,43 @@
 }
 
 /******** Tables ******************************/
-/* .table {
+table {
   border-collapse: separate !important;
-  border-spacing: 0px 10px !important;
-
+  border-spacing: 0px 10px;
 }
 
+.bootstrap-table .table thead > tr > th {
+  /*padding-right: 20px;*/
+  border-bottom-width: 1px;
+  border-left: none;
+}
+
+.bootstrap-table .table {
+  border-bottom: 0px;
+  /*border-collapse: separate !important;*/
+  /*border-spacing: 0px 10px !important;*/
+}
+
+.bootstrap-table .table td{
+  /*border-bottom: 0px;*/
+  border-collapse: separate !important;
+  border-spacing: 0px 10px !important;
+  border-left: 0px;
+}
+
+.fixed-table-container {
+  border: none;
+}
+
+.fixed-table-container tbody td {
+    border-left: none;
+}
+
+tr.detail-view{
+  background-color: #EEE;
+}
+
+/*
 td {
   border-left: 0px !important;
   border-bottom: 1px solid !important;
@@ -95,24 +126,38 @@ td {
 
 
 
-
+/************ TABS *****************************************/
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
 already distinguished*/
 .nav-tabs > .active > a, .nav-tabs > .active > a:hover {
   outline: 0;
 }
 
+.nav-tabs > .active > a {
+  background-color: #337AB7 !important;
+  border-color: #337AB7 !important;
+  color: #FFF !important;
+}
+
+.nav-tabs a {
+  border-color: #DDD !important;
+  color: #555;
+  font-size: 125%;
+}
+
 .tab-content {
-    border-left: 1px solid #ddd;
-    border-right: 1px solid #ddd;
-    border-bottom: 1px solid #ddd;
+    /*border-left: 1px solid #ddd;*/
+    /*border-right: 1px solid #ddd;*/
+    /*border-bottom: 1px solid #ddd;*/
     border-radius: 0px 0px 5px 5px;
-    padding: 10px;
+    padding-top: 10px;
 }
 
 .nav-tabs {
     margin-bottom: 0;
 }
+
+/*******************************************************/
 
 /*#input-group-unified { width: 100%;}*/
 .input-group-unified input {width: 50% !important;}

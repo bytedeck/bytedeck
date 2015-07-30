@@ -21,7 +21,7 @@
       <div class="panel-body">
         <i class="fa fa-quote-left fa-3x pull-left fa-border"></i>
         <div>
-          {{object.content}}
+          {{object.content|safe}}
         </div>
         {% if request.user.is_authenticated and request.user.is_staff %}
         <div class="pull-right">

@@ -1,0 +1,54 @@
+
+  {% if quest_list %}
+
+  <table data-toggle="table"
+          data-classes="table table-hover"
+          data-pagination="true"
+          data-sidePagination="left"
+          >
+          <!-- data-detail-formatter="detailFormatter"
+          data-detail-view="true" -->
+     <thead>
+       <tr>
+          <th> </th>
+          <th data-sortable="true">Quest</th>
+          <th data-halign="center" data-align="center" data-sortable="true">XP</th>
+          <th data-halign="center" data-align="center" data-sortable="true" data-formatter="%s min">Est. Time</th>
+          <th data-halign="center" data-align="center" data-sortable="true">Category</th>
+          <!-- <th data-visible="false">Short Description</th> -->
+       </tr>
+      </thead>
+      <tbody>
+      {% for q in quest_list %}
+      <tr data-toggle="collapse" data-target="#collapse{{q.id}}" class="accordian-toggle">
+        <td data-field="icon"><img class="media-object" src="{{ q.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
+        <td data-field="name">{{q.name}}</td>
+        <td data-field="xp" >{{q.xp}}</td>
+        <td data-field="time" >{{q.id}}</td>
+        <td data-field="category" >{{q.category}}</td>
+     </tr>
+     <tr>
+       <td colspan="6" class="accordian-body collapse" id="collapse{{q.id}}">
+         <div>
+            {{q.short_description}}
+         </div>
+         {% if request.user.is_authenticated and request.user.is_staff %}
+         <div class="pull-right">
+           <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
+           <a class="btn btn-primary" href="#" role="button">Start Quest</a>
+         </div>
+         <div>
+           <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
+           <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
+           <a class="btn btn-warning" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
+         </div>
+         {% endif %}
+      </td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+
+  {% else %}
+    <p>No quests are available.</p>
+  {% endif %}
