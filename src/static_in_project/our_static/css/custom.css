@@ -17,6 +17,23 @@
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
 }
 
+/******** Tables ******************************/
+/* .table {
+  border-collapse: separate !important;
+  border-spacing: 0px 10px !important;
+
+}
+
+td {
+  border-left: 0px !important;
+  border-bottom: 1px solid !important;
+}
+*/
+
+
+
+/******* Accordian ***********************/
+
 .panel-default > .panel-heading {
   background-color: #FFF;
 }
@@ -34,6 +51,9 @@
 .accordian-trigger {
   cursor: pointer;
 }
+
+/*************************************************************/
+
 
 /*Make the container act like container-fluid at small and medium sizes*/
 
