@@ -67,36 +67,6 @@ def quest_copy(request, quest_id):
     }
     return render(request, "quest_manager/quest_form.html", context)
 
-# @login_required
-# def copy(request, quest_id):
-#     title = "Quests"
-#
-#     q = get_object_or_404(Quest, pk=quest_id)
-#
-#
-#
-#     context = {
-#         "title": title,
-#         "heading": ("Copy: %s" % q.name),
-#         "q": q2,
-#     }
-#     return render(request, 'quest_manager/detail.html', context)
-
-# @login_required
-# def update(request, quest_id):
-#     title = "Quests"
-#     template_name = ""
-#     q = get_object_or_404(Quest, pk=quest_id)
-#
-#
-#
-#     context = {
-#         "title": title,
-#         "heading": ("Copy: %s" % q.name),
-#         "q": q,
-#     }
-#     return render(request, template_name, context)
-
 @login_required
 def detail(request, quest_id):
     title = "Quests"

@@ -8,12 +8,8 @@
 
 {% block content %}
 {% for object in object_list %}
-<h3>User: {{object.user}}
-  <small>
-    <a href='{% url "profiles:profile_detail" object.pk %}'>view</a> |
-    <a href='{% url "profiles:profile_update" object.pk %}'>edit</a>
-  </small></h3>
-<p>Primary Key: {{object.pk}}</p>
+<h3>User: {{object.user}}</h3>
+<p>Primary Key: {{object.pk}} </p>
 <p>Alias: {{object.alias}} </p>
 <p>First Name: {{object.first_name}} </p>
 <p>Last Name: {{object.last_name}} </p>

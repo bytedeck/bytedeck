@@ -1,12 +1,12 @@
-{% extends "base_sidebar.html" %}
+{% extends "profile_manager/base.html" %}
 {% load crispy_forms_tags %}
-{% load staticfiles %}
 
-{% block head_title%}{% if title %}{{ title }} <i class="fa fa-newspaper-o pull-right"></i>{% endif %}{% endblock%}
-{% block heading %}Group <i class="fa fa-users pull-right"></i>{% endblock %}
+{% block heading_inner %}{{ heading }}{% endblock %}
+
 {% block content %}
-<form action="" method="post">{% csrf_token %}
+<form action="{{ action_value }}" method="post">{% csrf_token %}
   {{ form|crispy }}
-  <input class= "btn" type="submit" value="Create Profile" />
+  <a href="{% url 'profiles:profile_detail' %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
 {% endblock %}

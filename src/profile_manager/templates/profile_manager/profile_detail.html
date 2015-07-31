@@ -1,22 +1,21 @@
-{% extends "base_sidebar.html" %}
-{% load crispy_forms_tags %}
-{% load staticfiles %}
+{% extends "profile_manager/base.html" %}
 
-{% block head_title%}{% if title %}{{ title }} <i class="fa fa-newspaper-o pull-right"></i>{% endif %}{% endblock%}
+{% block heading_inner %}{{ heading }}
+  <a class="btn btn-info" href="{% url 'profiles:profile_update' %}" role="button">Edit</a>
+{% endblock %}
 
-{% block heading %}Group <i class="fa fa-users pull-right"></i>{% endblock %}
 {% block content %}
-<h4>Profile for {{object.user}} </h4>
-<p>Alias: {{object.alias}} </p>
-<p>First Name: {{object.first_name}} </p>
-<p>Last Name: {{object.last_name}} </p>
-<p>Preferred Name: {{ object.preferred_name}} </p>
-<p>Avatar: {% if object.avatar %}
-  <img src="{{object.avatar.url}}" alt="avatar" height="16px"/>
-  {% else %}None
-{% endif %}</p>
-<p>SN: {{ object.student_number}}</p>
-<p>Grad: {{ object.grad_year}}</p>
-<p>Created: {{ object.datetime_created}}</p>
-
+  <p>User ID: {{object.user.id}}</p>
+  <p>Profile ID: {{object.id}}</p>
+  <p>Alias: {{object.alias}} </p>
+  <p>First Name: {{object.first_name}} </p>
+  <p>Last Name: {{object.last_name}} </p>
+  <p>Preferred Name: {{ object.preferred_name}} </p>
+  <p>Avatar: {% if object.avatar %}
+    <img src="{{object.avatar.url}}" alt="avatar" height="16px"/>
+    {% else %}None
+  {% endif %}</p>
+  <p>SN: {{ object.student_number}}</p>
+  <p>Grad: {{ object.grad_year}}</p>
+  <p>Created: {{ object.datetime_created}}</p>
 {% endblock %}
