@@ -1,14 +1,16 @@
-from django.db import models
 from django.conf import settings
 from django.core.urlresolvers import reverse
+from django.db import models
+from django.db.models.signals import post_save
 
+from django.contrib.auth.models import User
 from quest_manager.models import Course
 
 from datetime import datetime
 
-# GRAD_YEAR_CHOICES = []
-# for r in range(datetime.now().year, datetime.now().year+4):
-#         GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
+GRAD_YEAR_CHOICES = []
+for r in range(datetime.now().year, datetime.now().year+4):
+        GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
 
 class Profile(models.Model):
 
@@ -20,13 +22,26 @@ class Profile(models.Model):
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name="profile_user", null=False)
     alias = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    first_name = models.CharField(max_length=50, null=False, blank=False)
-    last_name = models.CharField(max_length=50, null=False, blank=False)
+    first_name = models.CharField(max_length=50, null=True, blank=False)
+    last_name = models.CharField(max_length=50, null=True, blank=False)
     preferred_name = models.CharField(max_length=50, null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
-    student_number = models.PositiveIntegerField(unique=True, blank=False, null=False)
-    grad_year = models.PositiveIntegerField(choices=get_grad_year_choices())
+    student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
+    grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
+
+    def __str__(self):
+        return self.user.username
+
+def create_profile(sender, **kwargs):
+    current_user = kwargs["instance"]
+    if kwargs["created"]:
+        new_profile = Profile(user=current_user)
+        print(kwargs)
+        print(new_profile)
+        new_profile.save()
+
+post_save.connect(create_profile, sender=User)
 
 class Rank(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -50,7 +65,7 @@ class UserCourse(models.Model):
     school_year = models.CharField(max_length = 7, default = get_current_school_year())
     semester = models.PositiveIntegerField(choices=SEMESTER_CHOICES)
     block = models.CharField(max_length=1, choices=BLOCK_CHOICES)
-    course_on_timetable = models.ForeignKey(Course, help_text = 'The course your are registered for in your timetable')
+    course_on_timetable = models.ForeignKey(Course, help_text = 'The course you are registered for in your timetable')
 
 
 
