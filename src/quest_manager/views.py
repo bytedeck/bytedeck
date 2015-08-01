@@ -8,6 +8,9 @@ from django.http import HttpResponse
 
 from django.contrib.auth.decorators import login_required
 
+from comments.models import Comment
+from comments.forms import CommentForm
+
 @login_required
 def quest_list(request):
     # quest_list = Quest.objects.order_by('name')
@@ -74,11 +77,36 @@ def detail(request, quest_id):
 
     q = get_object_or_404(Quest, pk=quest_id)
 
+    #comments = Comment.objects.filter(quest=q)
+    comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
+    comment_form = CommentForm(request.POST or None)
+
     context = {
         "title": title,
-        "heading": ("Quest: %s" % q.name),
+        "heading": q.name,
         "q": q,
+        "comments": comments,
+        "comment_form": comment_form
     }
+
+    if comment_form.is_valid():
+        comment_text = comment_form.cleaned_data['new_comment']
+        new_comment = Comment.objects.create_comment(
+            user = request.user,
+            path = request.get_full_path(),
+            quest = q,
+            text = comment_text)
+        return render(request, 'quest_manager/detail.html', context)
+
+    # #using the ModelForm
+    # if comment_form.is_valid():
+    #     obj_instance = comment_form.save(commit=False)
+    #     obj_instance.user = request.user
+    #     obj_instance.path = request.get_full_path()
+    #     obj_instance.quest = q
+    #     obj_instance.save()
+    #     return render(request, 'quest_manager/detail.html', context)
+
     return render(request, 'quest_manager/detail.html', context)
 
 ## Demo of sending email

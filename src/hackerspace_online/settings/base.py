@@ -70,6 +70,7 @@ INSTALLED_APPS = (
     'quest_manager',
     'profile_manager',
     'announcements',
+    'comments',
 )
 
 MIDDLEWARE_CLASSES = (

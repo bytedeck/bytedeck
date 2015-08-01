@@ -1,21 +1,25 @@
 {% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
-{% load staticfiles %}
 
-{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+{% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
 
 {% if heading %}{% block heading %}{{ heading }}{% endblock %}{% endif %}
 
 {% block content %}
 
+    {{ q.instructions | safe }}
+    <hr />
+    <h4>Comments</h4>
+    <form method="POST" action="">{% csrf_token %}
+      {{ comment_form | crispy }}
+      <input type='submit' class='btn btn-primary' value='Add comment' />
+    </form>
 
-    {% if q %}
-      {{ q.instructions | safe }}
-      <ul>
-        <li>{{ q }}</li>
-      </ul>
-    {% else %}
-      <p>Quest doesn't exist.</p>
-    {% endif %}
+    {% for comment in comments %}
+    <ul>
+      <li>"{{comment.text}}" -{{comment.user}}</li>
+    </ul>
+    {% endfor %}
+
 
 {% endblock %}
