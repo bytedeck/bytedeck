@@ -7,7 +7,10 @@ from quest_manager.models import Quest
 
 
 class CommentManager(models.Manager):
-    def create_comment(self, user=None, text=None, path=None, quest=None):
+    def all(self):
+        return super(CommentManager, self).filter(active=True).filter(parent=None)
+
+    def create_comment(self, user=None, text=None, path=None, quest=None, parent=None):
         if not path:
             raise ValueError("Must include a path when adding a comment")
         if not user:
@@ -21,11 +24,17 @@ class CommentManager(models.Manager):
         )
         if quest is not None:
             comment.quest = quest
+
+        if parent is not None:
+            comment.parent = parent
+
+
         comment.save(using=self._db)
         return user
 
 class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    parent = models.ForeignKey("self", null=True, blank=True)
     path = models.CharField(max_length=350)
     quest = models.ForeignKey(Quest, null=True, blank=True)
     text = models.TextField()
@@ -33,8 +42,22 @@ class Comment(models.Model):
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     active = models.BooleanField(default=True)
 
-
     objects = CommentManager()
+
+    class Meta:
+        ordering  = ['-timestamp']
 
     def __str__(self):
         return self.user.username
+
+    def is_child(self):
+        if self.parent is not None:
+            return True
+        else:
+            return False
+
+    def get_children(self):
+        if self.is_child():
+            return None
+        else:
+            return Comment.objects.filter(parent=self)

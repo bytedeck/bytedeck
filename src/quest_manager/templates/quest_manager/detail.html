@@ -3,23 +3,58 @@
 
 {% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
 
+{% block head_css %}
+.reply_comment {
+  display: none;
+}
+
+{% endblock %}
+
 {% if heading %}{% block heading %}{{ heading }}{% endblock %}{% endif %}
 
 {% block content %}
 
-    {{ q.instructions | safe }}
-    <hr />
-    <h4>Comments</h4>
-    <form method="POST" action="">{% csrf_token %}
-      {{ comment_form | crispy }}
-      <input type='submit' class='btn btn-primary' value='Add comment' />
-    </form>
-
+  {{ q.instructions | safe }}
+  <hr />
+  <h3>Comments</h3>
+  <form method="POST" action="">{% csrf_token %}
+    {{ comment_form | crispy }}
+    <input type='submit' class='btn btn-primary' value='Add comment' />
+  </form>
+  <p>
+    <ul class="list-group">
     {% for comment in comments %}
-    <ul>
-      <li>"{{comment.text}}" -{{comment.user}}</li>
-    </ul>
+      <li class="list-group-item">"{{comment.text}}" <small>-{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
+        {% if not comment.is_child %}
+          <a href='#' class='reply_btn btn btn-default btn-sm pull-right'>Reply</a>
+          <p><br />
+            <ul class="list-group">
+              {% for child in comment.get_children %}
+                <li class="list-group-item">"{{child.text}}" <small>-{{child.user}}</small></li>
+              {% endfor %}
+            </ul>
+          </p>
+          <div class='reply_comment'>
+            <form method="POST" action="">{% csrf_token %}
+              {{ comment_form | crispy }}
+              <input type='hidden' name='parent_id' value='{{comment.id}}'>
+              <input type='submit' class='btn btn-primary' value='Add reply' />
+            </form>
+          </div>
+        {% endif %}
+      </li>
     {% endfor %}
+    </ul>
+  </p>
 
 
+{% endblock %}
+
+{% block js %}
+<script>
+  $('.reply_btn').click(function(e){
+    e.preventDefault();
+    $(this).nextAll('.reply_comment').slideToggle();
+  })
+</script>
 {% endblock %}

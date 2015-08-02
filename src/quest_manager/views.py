@@ -4,7 +4,7 @@ from django.core.mail import send_mail
 from django.template import RequestContext, loader
 from .forms import QuestForm
 from .models import Quest
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 
 from django.contrib.auth.decorators import login_required
 
@@ -90,13 +90,23 @@ def detail(request, quest_id):
     }
 
     if comment_form.is_valid():
+        parent_id = request.POST.get('parent_id')
+        parent_comment = None
+        if parent_id is not None:
+            try:
+                parent_comment = Comment.objects.get(id=parent_id)
+            except:
+                parent_comment = None
+
         comment_text = comment_form.cleaned_data['new_comment']
         new_comment = Comment.objects.create_comment(
             user = request.user,
             path = request.get_full_path(),
             quest = q,
-            text = comment_text)
-        return render(request, 'quest_manager/detail.html', context)
+            text = comment_text,
+            parent=parent_comment)
+        #add comment thread and show that thread with a message
+        return HttpResponseRedirect(q.get_absolute_url())
 
     # #using the ModelForm
     # if comment_form.is_valid():

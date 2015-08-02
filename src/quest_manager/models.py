@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import Q
 from django.contrib.auth.models import User
+from django.core.urlresolvers import reverse
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
@@ -64,6 +65,9 @@ class XPItem(models.Model):
         if(self.icon and hasattr(self.icon, 'url')):
             return self.icon.url
 
+    def get_absolute_url(self):
+        return reverse('quests:quest_detail', kwargs={'quest_id': self.id})
+
 # Create your models here.
 class QuestQuerySet(models.query.QuerySet):
     def available(self):
@@ -89,6 +93,7 @@ class Quest(XPItem):
     submission_details = models.TextField(blank=True)
 
     objects = QuestManager()
+
 
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')
