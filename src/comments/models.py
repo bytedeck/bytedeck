@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.urlresolvers import reverse
 from django.db import models
 
 from quest_manager.models import Quest
@@ -28,9 +29,8 @@ class CommentManager(models.Manager):
         if parent is not None:
             comment.parent = parent
 
-
         comment.save(using=self._db)
-        return user
+        return comment
 
 class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
@@ -49,6 +49,12 @@ class Comment(models.Model):
 
     def __str__(self):
         return self.user.username
+
+    def get_absolute_url(self):
+        return reverse('comments:threads', kwargs={'id': self.id})
+
+    def get_origin(self):
+        return self.path
 
     def is_child(self):
         if self.parent is not None:

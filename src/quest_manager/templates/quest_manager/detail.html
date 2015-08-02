@@ -17,8 +17,10 @@
   {{ q.instructions | safe }}
   <hr />
   <h3>Comments</h3>
-  <form method="POST" action="">{% csrf_token %}
+  <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
     {{ comment_form | crispy }}
+    <input type='hidden' name = 'quest_id' value='{{q.id}}' />
+    <input type='hidden' name = 'origin_path' value='{{request.get_full_path}}' />
     <input type='submit' class='btn btn-primary' value='Add comment' />
   </form>
   <p>
@@ -26,7 +28,10 @@
     {% for comment in comments %}
       <li class="list-group-item">"{{comment.text}}" <small>-{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
         {% if not comment.is_child %}
-          <a href='#' class='reply_btn btn btn-default btn-sm pull-right'>Reply</a>
+        <div class="pull-right">
+          <a href='#' class='reply_btn btn btn-default btn-sm'>Reply</a>
+          <a href='{{comment.get_absolute_url}}' class='btn btn-default btn-sm'>View Thread</a>
+        </div>
           <p><br />
             <ul class="list-group">
               {% for child in comment.get_children %}
@@ -35,9 +40,11 @@
             </ul>
           </p>
           <div class='reply_comment'>
-            <form method="POST" action="">{% csrf_token %}
+            <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
               {{ comment_form | crispy }}
               <input type='hidden' name='parent_id' value='{{comment.id}}'>
+              <input type='hidden' name = 'quest_id' value='{{q.id}}' />
+              <input type='hidden' name = 'origin_path' value='{{comment.get_origin}}' />
               <input type='submit' class='btn btn-primary' value='Add reply' />
             </form>
           </div>
@@ -54,7 +61,7 @@
 <script>
   $('.reply_btn').click(function(e){
     e.preventDefault();
-    $(this).nextAll('.reply_comment').slideToggle();
+    $(this).parent().nextAll('.reply_comment').slideToggle();
   })
 </script>
 {% endblock %}

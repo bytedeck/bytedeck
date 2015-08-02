@@ -4,7 +4,7 @@ from django.contrib import admin
 from .models import Comment
 
 class CommentAdmin(admin.ModelAdmin):
-    list_display = ['__str__', 'text']
+    list_display = ['id', '__str__', 'text']
     class Meta:
         model = Comment
 
