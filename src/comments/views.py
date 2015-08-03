@@ -34,8 +34,6 @@ def comment_create(request):
         except:
             quest = None
 
-
-
         parent_comment = None
         if parent_id is not None:
             try:
@@ -45,11 +43,9 @@ def comment_create(request):
 
             if parent_comment is not None and parent_comment.quest is not None:
                 quest = parent_comment.quest
-        # print(request.user)
         form = CommentForm(request.POST)
         if form.is_valid():
             comment_text = form.cleaned_data['new_comment']
-            # print(comment_text)
             if parent_comment is not None:
                 comment_new = Comment.objects.create_comment(
                     user = request.user,
@@ -58,6 +54,7 @@ def comment_create(request):
                     quest = quest,
                     parent=parent_comment
                     )
+                messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 return HttpResponseRedirect(parent_comment.get_absolute_url())
             else:
                 comment_new = Comment.objects.create_comment(
@@ -66,7 +63,7 @@ def comment_create(request):
                     text = comment_text,
                     quest = quest
                     )
-                # print (comment_new.path)
+                messages.success(request, "Thanks for commenting!")
                 return HttpResponseRedirect(comment_new.get_absolute_url())
         else:
             messages.error(request, "There was an error with your comment.")

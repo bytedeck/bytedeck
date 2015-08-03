@@ -17,6 +17,11 @@
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
 }
 
+/************ALERTS *************************/
+.alert:first-child {
+  margin-top: 10px;
+}
+
 /******** Tables ******************************/
 table {
   border-collapse: separate !important;
