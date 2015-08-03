@@ -55,7 +55,7 @@ def comment_create(request):
                     quest = quest,
                     parent=parent_comment
                     )
-                notify.send(request.user, recipient='somernadomuser', action='Responded to user')
+                notify.send(request.user, recipient=parent_comment.user, action='Responded to user')
                 messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 return HttpResponseRedirect(parent_comment.get_absolute_url())
             else:
@@ -65,7 +65,7 @@ def comment_create(request):
                     text = comment_text,
                     quest = quest
                     )
-                notify.send(request.user, recipient=None, action='New comment added')
+                notify.send(request.user, recipient=request.user, action='New comment added')
                 messages.success(request, "Thanks for commenting!")
                 return HttpResponseRedirect(comment_new.get_absolute_url())
         else:
