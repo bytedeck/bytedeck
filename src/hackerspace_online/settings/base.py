@@ -71,6 +71,7 @@ INSTALLED_APPS = (
     'profile_manager',
     'announcements',
     'comments',
+    'notifications',
 )
 
 MIDDLEWARE_CLASSES = (
