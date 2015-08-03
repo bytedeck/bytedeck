@@ -15,6 +15,16 @@
 {% block content %}
 
   {{ q.instructions | safe }}
+  <!-- {% if q.tags.all %}
+  <div>
+    <ul>
+      {% for tag in q.tags.all %}
+      <li>{{tag}}</li>
+      {% endfor %}
+    <ul>
+  </div>
+  {% endif %} -->
+
   <hr />
   <h3>Comments</h3>
   <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}

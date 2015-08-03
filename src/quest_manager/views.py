@@ -1,15 +1,16 @@
 from django.conf import settings
-from django.shortcuts import render, get_object_or_404, redirect
-from django.core.mail import send_mail
-from django.template import RequestContext, loader
-from .forms import QuestForm
-from .models import Quest
-from django.http import HttpResponse, HttpResponseRedirect
-
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
+from django.core.mail import send_mail
+from django.http import HttpResponse, HttpResponseRedirect
+from django.shortcuts import render, get_object_or_404, redirect
+from django.template import RequestContext, loader
 
 from comments.models import Comment
 from comments.forms import CommentForm
+
+from .forms import QuestForm
+from .models import Quest, TaggedItem
 
 @login_required
 def quest_list(request):
@@ -79,6 +80,10 @@ def detail(request, quest_id):
 
     #comments = Comment.objects.filter(quest=q)
     comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
+    content_type = ContentType.objects.get_for_model(q)
+    tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
+
+
     comment_form = CommentForm(request.POST or None)
 
     context = {

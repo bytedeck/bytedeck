@@ -1,3 +1,5 @@
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import Q
 from django.contrib.auth.models import User
@@ -38,6 +40,7 @@ class XPItem(models.Model):
     xp = models.PositiveIntegerField(default = 0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
+    tags = GenericRelation("TaggedItem", null=True, blank=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
     short_description = models.TextField(max_length=250, blank=True)
@@ -131,3 +134,18 @@ class Prerequisite(models.Model):
 
     # def __str__(self):
     #     return self.category
+TAG_CHOICES = (
+("python","python"),
+("django","django"),
+)
+
+
+#Demo of ContentType foreign key.  Model not actually in use
+class TaggedItem(models.Model):
+    tag = models.SlugField(choices=TAG_CHOICES)
+    content_type = models.ForeignKey(ContentType)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey()
+
+    def __str__(self):
+        return self.tag
