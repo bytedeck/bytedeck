@@ -80,8 +80,8 @@ def detail(request, quest_id):
 
     #comments = Comment.objects.filter(quest=q)
     comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
-    content_type = ContentType.objects.get_for_model(q)
-    tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
+    # content_type = ContentType.objects.get_for_model(q)
+    # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
 
 
     comment_form = CommentForm(request.POST or None)

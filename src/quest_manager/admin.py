@@ -9,8 +9,8 @@ from .models import Quest, Category, Prerequisite, Course, TaggedItem
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')
 
-class TaggedItemInline(GenericTabularInline):
-    model = TaggedItem
+# class TaggedItemInline(GenericTabularInline):
+#     model = TaggedItem
 
 class PrerequisiteInline(admin.TabularInline):
     model = Prerequisite
@@ -23,7 +23,7 @@ class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
     search_fields = ['name']
     inlines = [
         PrerequisiteInline,
-        TaggedItemInline
+        # TaggedItemInline
     ]
 
     # fieldsets = [
