@@ -8,12 +8,13 @@
 {% block content %}
 <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
-  <div class="panel panel-default">
+  <div class="panel  {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
     <div class="panel-heading accordian-trigger" role="tab" id="heading{{object.id}}"
       aria-expanded="false" aria-controls="collapse{{object.id}}"
       data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{object.id}}">
       <h4 class="panel-title">
         <!-- <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{object.id}}" aria-expanded="true" aria-controls="collapse{{object.id}}"> -->
+          {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
           {{object.title}}
         <!-- </a> -->
         <small class="pull-right">{{object.datetime_released.date}}</small>
