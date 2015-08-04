@@ -22,11 +22,11 @@
   margin-top: 10px;
 }
 
-/******** Tables ******************************/
-table {
+/******** Bootstrap Tables ******************************/
+/*table {
   border-collapse: separate !important;
   border-spacing: 0px 10px;
-}
+}*/
 
 .bootstrap-table .table thead > tr > th {
   /*padding-right: 20px;*/

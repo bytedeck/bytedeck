@@ -66,6 +66,9 @@ INSTALLED_APPS = (
     #http://haystacksearch.org/
     'haystack',
 
+    # https://github.com/asaglimbeni/django-datetime-widget
+    'datetimewidget',
+
     #local apps
     'quest_manager',
     'profile_manager',
