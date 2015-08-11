@@ -3,7 +3,7 @@ from django.db import models
 from .models import Quest
 
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
-from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
+#from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 
 ## Us datepickers for all forms
 ## http://strattonbrazil.blogspot.ca/2011/03/using-jquery-uis-date-picker-on-all.html
@@ -19,17 +19,14 @@ from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 def make_custom_datetimefield(f):
     formfield = f.formfield()
     dateTimeOptions = {
-        'format': 'dd-mm-yyyy HH:ii P',
-        # 'autoclose': True,
         'showMeridian' : True,
         'todayHighlight': True,
         'minuteStep': 15,
         'pickerPosition': 'bottom-left',
-        # 'minView': '1',
     }
 
     if isinstance(f, models.DateTimeField):
-        formfield.widget = DateTimeWidget(usel10n = False, options = dateTimeOptions, bootstrap_version=3 )
+        formfield.widget = DateTimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3 )
     elif isinstance(f, models.DateField):
         formfield.widget = DateWidget(usel10n = True, bootstrap_version=3)
     elif isinstance(f, models.TimeField):

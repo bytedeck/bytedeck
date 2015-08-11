@@ -8,17 +8,16 @@ from .models import Announcement
 def make_custom_datetimefield(f):
     formfield = f.formfield()
     dateTimeOptions = {
-        'format': 'dd-mm-yyyy HH:ii P',
-        # 'autoclose': True,
+        #'format': 'dd-mm-yyyy HH:ii P',
         'showMeridian' : True,
         'todayHighlight': True,
         'minuteStep': 15,
         'pickerPosition': 'bottom-left',
-        # 'minView': '1',
+        #'minView': '1',
     }
 
     if isinstance(f, models.DateTimeField):
-        formfield.widget = DateTimeWidget(usel10n = False, options = dateTimeOptions, bootstrap_version=3 )
+        formfield.widget = DateTimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3 )
     elif isinstance(f, models.DateField):
         formfield.widget = DateWidget(usel10n = True, bootstrap_version=3)
     elif isinstance(f, models.TimeField):
