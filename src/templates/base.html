@@ -30,7 +30,7 @@
     <div class="container-fluid">
       {% if messages %}
         {% for message in messages %}
-        <div role="alert" class="alert alert-dismissible
+        <div role="alert" class="alert alert-dismissible fade in
           {% if 'error' in message.tags %}alert-danger
           {% elif 'warning' in message.tags %}alert-warning
           {% elif 'info' in message.tags %}alert-info
