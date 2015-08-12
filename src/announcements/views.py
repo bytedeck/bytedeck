@@ -61,8 +61,6 @@ def copy(request, id):
 class Create(CreateView):
     model = Announcement
     form_class = AnnouncementForm
-    # template_name = 'announcements/form.html'
-
     template_name = 'announcements/form.html'
 
     def form_valid(self, form):
@@ -88,7 +86,16 @@ class Create(CreateView):
 class Update(UpdateView):
     model = Announcement
     form_class = AnnouncementForm
-    template_name = 'announcements/form_update.html'
+    template_name = 'announcements/form.html'
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get a context
+        context = super(Update, self).get_context_data(**kwargs)
+        # Add in a QuerySet of all the books
+        context['heading'] = "Edit Announcement"
+        context['action_value']= ""
+        context['submit_btn_value']= "Update"
+        return context
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):

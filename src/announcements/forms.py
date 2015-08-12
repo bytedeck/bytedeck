@@ -19,9 +19,9 @@ def make_custom_datetimefield(f):
     if isinstance(f, models.DateTimeField):
         formfield.widget = DateTimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3 )
     elif isinstance(f, models.DateField):
-        formfield.widget = DateWidget(usel10n = True, bootstrap_version=3)
+        formfield.widget = DateWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3)
     elif isinstance(f, models.TimeField):
-        formfield.widget = TimeWidget(usel10n = True, bootstrap_version=3)
+        formfield.widget = TimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3)
 
     return formfield
 
