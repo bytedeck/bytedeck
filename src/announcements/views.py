@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
@@ -14,6 +15,18 @@ from .forms import AnnouncementForm
 @login_required
 def list(request):
     object_list = Announcement.objects.get_active()
+    paginator = Paginator(object_list, 2)
+    page = request.GET.get('page')
+
+    try:
+        object_list = paginator.page(page)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        object_list = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        object_list = paginator.page(paginator.num_pages)
+
     context = {
         'object_list': object_list,
     }

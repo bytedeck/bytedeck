@@ -39,4 +39,20 @@
 {% endfor %}
 </div>
 
+<ul class="pagination pagination-centered">
+    {% if object_list.has_previous %}
+        <li><a href="?page=1"><<</a></li>
+        <li><a href="?page={{ object_list.previous_page_number }}"><</a></li>
+    {% endif %}
+
+    {% for i in object_list.paginator.page_range %}
+        <li {% if object_list.number == i %} class="active" {% endif %}><a href="?page={{i}}">{{i}}</a></li>
+    {% endfor %}
+
+    {% if object_list.has_next %}
+        <li><a href="?page={{ object_list.next_page_number }}">></a></li>
+        <li><a href="?page={{ object_list.paginator.num_pages }}">>></a></li>
+    {% endif %}
+</ul>
+
 {% endblock %}
