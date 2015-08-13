@@ -1,6 +1,10 @@
 from django.contrib import admin
 from .models import Announcement
+from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
 
-admin.site.register(Announcement)
+class AnnouncementAdmin(SummernoteModelAdmin):
+    None
+
+admin.site.register(Announcement, AnnouncementAdmin)

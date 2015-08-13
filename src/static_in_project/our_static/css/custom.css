@@ -17,6 +17,16 @@
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
 }
 
+/************ SUMMERNOTE WIDGET **************/
+.summernotewidget {
+  padding: 0px;
+  border-top: none;
+  border-left: none;
+  border-bottom: none;
+}
+
+
+
 /************ALERTS *************************/
 .alert:first-child {
   margin-top: 10px;

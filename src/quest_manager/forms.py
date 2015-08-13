@@ -2,21 +2,10 @@ from django import forms
 from django.db import models
 from django.forms.extras.widgets import SelectDateWidget
 
-from .models import Quest
-
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
-#from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
+from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 
-## Us datepickers for all forms
-## http://strattonbrazil.blogspot.ca/2011/03/using-jquery-uis-date-picker-on-all.html
-# def make_custom_datefield(f):
-#     formfield = f.formfield()
-#     if isinstance(f, models.DateField):
-#         formfield.widget.format = '%m/%d/%Y'
-#         formfield.widget.attrs.update({'class':'datePicker',
-#                                         'readonly':'true',
-#                                         })
-#     return formfield
+from .models import Quest
 
 def make_custom_datetimefield(f):
     formfield = f.formfield()
@@ -35,9 +24,9 @@ def make_custom_datetimefield(f):
         # formfield.widget = SelectDateWidget()
     elif isinstance(f, models.TimeField):
         formfield.widget = TimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3)
+    elif isinstance(f, models.TextField):
+        formfield.widget = SummernoteWidget()
     return formfield
-
-
 
 ## Demo of how to create a form without using a model
 # class QuestFormCustom(forms.Form):

@@ -1,6 +1,7 @@
 from django import forms
 from django.db import models
 
+from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 
 from .models import Announcement
@@ -22,6 +23,8 @@ def make_custom_datetimefield(f):
         formfield.widget = DateWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3)
     elif isinstance(f, models.TimeField):
         formfield.widget = TimeWidget(usel10n = True, options = dateTimeOptions, bootstrap_version=3)
+    elif isinstance(f, models.TextField):
+        formfield.widget = SummernoteWidget()
 
     return formfield
 
