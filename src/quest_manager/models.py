@@ -43,7 +43,7 @@ class XPItem(models.Model):
     tags = GenericRelation("TaggedItem", null=True, blank=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
-    short_description = models.TextField(max_length=250, blank=True)
+    short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default = True)
     max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, -1 = unlimited')
     hours_between_repeats = models.PositiveIntegerField(default = 0)

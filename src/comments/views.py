@@ -1,7 +1,7 @@
 from django.shortcuts import render, HttpResponseRedirect
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 
 # Create your views here.
 from notifications.signals import notify
@@ -44,6 +44,7 @@ def comment_create(request):
 
             if parent_comment is not None and parent_comment.quest is not None:
                 quest = parent_comment.quest
+
         form = CommentForm(request.POST)
         if form.is_valid():
             comment_text = form.cleaned_data.get('new_comment')
@@ -72,13 +73,15 @@ def comment_create(request):
                     text = comment_text,
                     quest = quest
                     )
+                # Fix this to send to all staff
+                affected_users = [User.objects.get(username='90158'),]
                 notify.send(
                     request.user,
                     action=comment_new,
                     target= comment_new.quest,
                     recipient=request.user,
+                    affected_users=affected_users,
                     verb='commented on')
-                # notify.send(request.user, recipient=request.user, action='New comment added')
                 messages.success(request, "Thanks for commenting!")
                 return HttpResponseRedirect(comment_new.get_absolute_url())
         else:

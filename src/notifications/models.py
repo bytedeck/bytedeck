@@ -126,20 +126,31 @@ def new_notification(sender, **kwargs):
     verb = kwargs.pop('verb')
     affected_users = kwargs.pop('affected_users')
 
-    new_note = Notification(
-        recipient = recipient,
-        verb = verb,
-        sender_content_type = ContentType.objects.get_for_model(sender),
-        sender_object_id = sender.id,
-        )
+    if affected_users is None:
+        affected_users = [recipient,]
 
-    for option in ("target", "action"):
-        obj = kwargs.pop(option, None)
-        if obj is not None:
-            setattr(new_note, "%s_content_type" % option,  ContentType.objects.get_for_model(obj))
-            setattr(new_note, "%s_object_id" % option,  obj.id)
+    for u in affected_users:
+        print(u)
+        if u == sender:
+            pass
+        else:
+            new_note = Notification(
+                recipient = u,
+                verb = verb,
+                sender_content_type = ContentType.objects.get_for_model(sender),
+                sender_object_id = sender.id,
+                )
+            for option in ("target", "action"):
+                # obj = kwargs.pop(option, None) #don't want to remove option with pop
+                try:
+                    obj = kwargs[option]
+                    if obj is not None:
+                        setattr(new_note, "%s_content_type" % option,  ContentType.objects.get_for_model(obj))
+                        setattr(new_note, "%s_object_id" % option,  obj.id)
+                except:
+                    pass
+            new_note.save()
 
-    new_note.save()
 
 
 notify.connect(new_notification)
