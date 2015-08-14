@@ -26,6 +26,32 @@
     <script>
       $(document).ready(function() {
 
+        // notifications data
+        $(".notification-toggle").click(function(e){
+          e.preventDefault();
+          $.ajax({
+            type: "POST",
+            url: "{% url 'notifications:ajax' %}",
+            data: {
+              csrfmiddlewaretoken: "{{ csrf_token }}",
+            },
+            success: function(data){
+              $("#notificationsLoader").html('<h3>Notifications</h3>');
+              var count = data.count;
+              console.log(count);
+              $(data.notifications).each(function(){
+                $("#notificationsLoader").append(this + "<br />")
+              })
+              console.log(data.notifications);
+
+            },
+            error: function(rs, e) {
+              console.log(rs);
+              console.log(e);
+            }
+          });
+        });
+
         //Formatting datePicker inputs
         // $('.datePicker')
         //     //this rwap

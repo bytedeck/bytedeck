@@ -5,6 +5,7 @@ from django.db.models.signals import post_save
 
 from django.contrib.auth.models import User
 from quest_manager.models import Course
+from notifications.signals import notify
 
 from datetime import datetime
 
@@ -42,9 +43,12 @@ def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:
         new_profile = Profile(user=current_user)
-        print(kwargs)
-        print(new_profile)
         new_profile.save()
+
+        notify.send(
+            current_user,
+            recipient=User.objects.get(username='90158'), #admin user
+            verb='new user created')
 
 post_save.connect(create_profile, sender=User)
 

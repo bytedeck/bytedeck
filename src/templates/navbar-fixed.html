@@ -66,6 +66,7 @@
       <ul class="nav navbar-nav navbar-right">
 
         {% if request.user.is_authenticated %}
+        <li><a class="notification-toggle" href="#">Notifications</a></li>
         <li class="dropdown">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
@@ -81,6 +82,7 @@
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Profile</li>
             <li><a href="{% url 'profiles:profile_detail'%}">View Profile</a></li>
+            <li><a href="{% url 'notifications:list'%}">Notifications</a></li>
           </ul>
         </li>
 
@@ -91,7 +93,6 @@
         {% endif %}
       </ul>
       {% if not request.user.is_authenticated and not "/accounts/login" in request.get_full_path %}
-
           <form class="navbar-form navbar-right" method="POST" action="{% url 'account_login' %}"> {% csrf_token %}
             <div class="input-group input-group-unified input-group-sm">
               <input type="text" class="form-control" name="login" placeholder="Username" />
