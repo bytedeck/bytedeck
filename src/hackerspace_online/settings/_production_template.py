@@ -109,15 +109,17 @@ DATABASES = {
 
 STATIC_URL = '/static/'
 
-STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "static_root")
+#where static files are collected with the collect_static command
+STATIC_ROOT = "/var/www/somedir/static/"
 
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static_in_project",  "our_static"),
-    # os.path.join(BASE_DIR, "static_in_venv"),
-    # '/var/www/static/',
-)
+# STATICFILES_DIRS = (
+#     os.path.join(BASE_DIR, "static_in_project",  "our_static"),
+#     # os.path.join(BASE_DIR, "static_in_venv"),
+#     # '/var/www/static/',
+# )
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_venv",  "media_root")
+#where media files are saved, e.g. ImageField
+MEDIA_ROOT = "/var/www/somedir/media/"
 
 # END STATIC #######################################

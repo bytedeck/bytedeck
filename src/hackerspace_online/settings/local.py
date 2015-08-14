@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
 
-#root of project
+#root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -114,7 +114,9 @@ DATABASES = {
 
 STATIC_URL = '/static/'
 
-STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_project",  "static_root")
+# The absolute path to the directory where collectstatic will collect static files for deployment.
+# Set properly in production settings
+STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
 
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static_in_project",  "our_static"),
@@ -123,6 +125,10 @@ STATICFILES_DIRS = (
 )
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), "static_in_project",  "media_root")
+
+# The absolute path to the directory where collectstatic will collect static files for deployment.
+# Set properly in production settings
+MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project",  "media_root")
+
 
 # END STATIC #######################################

@@ -39,6 +39,9 @@ class Profile(models.Model):
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         #return u'/some_url/%d' % self.id
 
+    def get_avatar_url(self):
+        return reverse('')
+
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:
