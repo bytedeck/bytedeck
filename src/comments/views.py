@@ -46,7 +46,7 @@ def comment_create(request):
                 quest = parent_comment.quest
         form = CommentForm(request.POST)
         if form.is_valid():
-            comment_text = form.cleaned_data['new_comment']
+            comment_text = form.cleaned_data.get('new_comment')
             if parent_comment is not None:
                 comment_new = Comment.objects.create_comment(
                     user = request.user,
@@ -55,7 +55,12 @@ def comment_create(request):
                     quest = quest,
                     parent=parent_comment
                     )
-                notify.send(request.user, recipient=parent_comment.user, action='Responded to user')
+                notify.send(
+                    request.user,
+                    action=comment_new,
+                    target=parent_comment,
+                    recipient=parent_comment.user,
+                    verb='replied to')
                 messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 return HttpResponseRedirect(parent_comment.get_absolute_url())
             else:
@@ -65,7 +70,13 @@ def comment_create(request):
                     text = comment_text,
                     quest = quest
                     )
-                notify.send(request.user, recipient=request.user, action='New comment added')
+                notify.send(
+                    request.user,
+                    action=comment_new,
+                    target= comment_new.quest,
+                    recipient=request.user,
+                    verb='commented on')
+                # notify.send(request.user, recipient=request.user, action='New comment added')
                 messages.success(request, "Thanks for commenting!")
                 return HttpResponseRedirect(comment_new.get_absolute_url())
         else:

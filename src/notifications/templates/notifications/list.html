@@ -1,0 +1,12 @@
+{% extends "base_sidebar.html" %}
+
+
+{% block content %}
+
+<table class='table'>
+{% for note in notifications %}
+<tr><td>{{note}} </td><td>{% if not note.unread %}Read {% else %} Unread {% endif %}</td></tr>
+
+{% endfor %}
+</table>
+{% endblock %}

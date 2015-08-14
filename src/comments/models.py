@@ -48,7 +48,7 @@ class Comment(models.Model):
         ordering  = ['-timestamp']
 
     def __str__(self):
-        return self.user.username
+        return self.text
 
     def get_absolute_url(self):
         return reverse('comments:threads', kwargs={'id': self.id})
