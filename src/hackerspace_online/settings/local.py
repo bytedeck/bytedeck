@@ -115,19 +115,19 @@ DATABASES = {
 STATIC_URL = '/static/'
 
 # The absolute path to the directory where collectstatic will collect static files for deployment.
-# Set properly in production settings
-STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
+# Set in production settings for deployment
+#STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
 
 STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static_in_project",  "our_static"),
-    # os.path.join(BASE_DIR, "static_in_venv"),
+    os.path.join(BASE_DIR, "static_in_project",  "static_root"),
+    #os.path.join(BASE_DIR, "static_in_venv"),
     # '/var/www/static/',
 )
 
 MEDIA_URL = "/media/"
 
 # The absolute path to the directory where collectstatic will collect static files for deployment.
-# Set properly in production settings
+# Set properly in production settings for deployment
 MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project",  "media_root")
 
 
