@@ -4,7 +4,7 @@
 {% block heading_inner %}{{ heading }}{% endblock %}
 
 {% block content %}
-<form action="{{ action_value }}" method="post">{% csrf_token %}
+<form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
   {{ form|crispy }}
   <a href="{% url 'profiles:profile_detail' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
