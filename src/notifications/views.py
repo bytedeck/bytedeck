@@ -36,11 +36,11 @@ def read(request, id):
 @login_required
 def ajax(request):
     if request.is_ajax() and request.method == "POST":
-        notifications = Notification.objects.all_for_user(request.user).recent()
+        notifications = Notification.objects.all_unread(request.user)
         count = notifications.count()
         notes = []
         for note in notifications:
-            notes.append(str(note))
+            notes.append(str(note.get_link()))
 
         data = {
             "notifications":notes,

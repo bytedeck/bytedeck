@@ -66,14 +66,20 @@
       <ul class="nav navbar-nav navbar-right">
 
         {% if request.user.is_authenticated %}
-        <li><a class="notification-toggle" href="#">Notifications</a></li>
+        <li class="dropdown">
+          <a href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
+            role="button" aria-haspopup="true" aria-expanded="false">
+            <i class="fa fa-inbox"></i>&nbsp;
+            <span id="notification_badge" class="badge"></span></a>
+          <ul class="dropdown-menu" id="notification_dropdown">
+          </ul>
+        </li>
         <li class="dropdown">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
-
             <i class="fa fa-user{% if request.user.is_staff %}-secret{%endif%}"></i>
             &nbsp; {{ request.user }} <span class="caret"></span></a>
-          <ul class="dropdown-menu">
+          <ul class="dropdown-menu" role="menu">
             <li class="dropdown-header">Privileges</li>
             <li><a href="javascript:var%20KICKASSVERSION='2.0';var%20s%20=%20document.createElement('script');s.type='text/javascript';document.body.appendChild(s);s.src='//hi.kickassapp.com/kickass.js';void(0);">Destroy the Hackerspace</a></li>
             <li><a href="javascript:(function%20()%20{var%20s%20=%20document.createElement('script');s.setAttribute('src',%20'http://fontbomb.ilex.ca/js/main.js');document.body.appendChild(s);}());">Bomb the Hackerspace</a></li>

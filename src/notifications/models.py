@@ -32,13 +32,14 @@ class NotificationQuerySet(models.query.QuerySet):
         return self.filter(unread=False)
 
     def recent(self):
-        return self.unread()[:5]
+        return self.unread()[:5] #last five
 
 class NotificationManager(models.Manager):
     def get_queryset(self):
         return NotificationQuerySet(self.model, using=self._db)
 
     def all_unread(self, user):
+        self.get_queryset().mark_targetless(user)
         return self.get_queryset().get_user(user).unread()
 
     def all_read(self, user):
@@ -97,6 +98,28 @@ class Notification(models.Model):
                 return "%(sender)s %(verb)s %(target)s with %(action)s" % context
             return "%(sender)s %(verb)s %(target)s" % context
         return "%(sender)s %(verb)s" % context
+
+    def get_link(self):
+        try:
+            target_url = self.target_object.get_absolute_url()
+        except:
+            target_url = reverse('notifications:list')
+
+        act = str(self.action_object)[:30]
+        context = {
+            "sender":self.sender_object,
+            "verb":self.verb,
+            "action":act,
+            "target": self.target_object,
+            "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
+            "target_url": target_url,
+        }
+        if self.target_object:
+            return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
+        else:
+            "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
+
+
 
 def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)
