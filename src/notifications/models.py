@@ -39,7 +39,6 @@ class NotificationManager(models.Manager):
         return NotificationQuerySet(self.model, using=self._db)
 
     def all_unread(self, user):
-        self.get_queryset().mark_targetless(user)
         return self.get_queryset().get_user(user).unread()
 
     def all_read(self, user):
@@ -125,6 +124,7 @@ def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)
     recipient = kwargs.pop('recipient')
     verb = kwargs.pop('verb')
+    affected_users = kwargs.pop('affected_users')
 
     new_note = Notification(
         recipient = recipient,

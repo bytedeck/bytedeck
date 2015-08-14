@@ -55,11 +55,13 @@ def comment_create(request):
                     quest = quest,
                     parent=parent_comment
                     )
+                affected_users = parent_comment.get_affected_users()
                 notify.send(
                     request.user,
                     action=comment_new,
                     target=parent_comment,
                     recipient=parent_comment.user,
+                    affected_users=affected_users,
                     verb='replied to')
                 messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 return HttpResponseRedirect(parent_comment.get_absolute_url())
