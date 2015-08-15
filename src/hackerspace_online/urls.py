@@ -40,7 +40,6 @@ urlpatterns = [
     url(r'^accounts/', include('allauth.urls')),
     url(r'^search/', include('haystack.urls')),
 ]
-print(urlpatterns)
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

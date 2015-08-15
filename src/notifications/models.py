@@ -113,10 +113,20 @@ class Notification(models.Model):
             "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             "target_url": target_url,
         }
+        print(context)
         if self.target_object:
             return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
         else:
-            "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
+            return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
+
+        #
+        # if self.target_object:
+        #     if self.action_object and target_url:
+        #         return "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>%(target)s</a> with %(action)s" % context
+        #     if self.action_object and not target_url:
+        #         return "%(sender)s %(verb)s %(target)s with %(action)s" % context
+        #     return "%(sender)s %(verb)s %(target)s" % context
+        # return "%(sender)s %(verb)s" % context
 
 
 
@@ -124,13 +134,16 @@ def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)
     recipient = kwargs.pop('recipient')
     verb = kwargs.pop('verb')
-    affected_users = kwargs.pop('affected_users')
+
+    try:
+        affected_users = kwargs.pop('affected_users')
+    except:
+        affected_users = [recipient,]
 
     if affected_users is None:
         affected_users = [recipient,]
 
     for u in affected_users:
-        print(u)
         if u == sender:
             pass
         else:
@@ -150,7 +163,5 @@ def new_notification(sender, **kwargs):
                 except:
                     pass
             new_note.save()
-
-
 
 notify.connect(new_notification)

@@ -38,7 +38,7 @@
             success: function(data){
               $("#notification_dropdown").html("");
               var count = data.count;
-              console.log(count);
+              // console.log(count);
               if(count!=0) {
                 // $("#notification_badge").html(count);
                 $("#notification_dropdown").append("<li class='dropdown-header'>New Notifications</li>")
@@ -46,7 +46,7 @@
                   var link = this;
                   $("#notification_dropdown").append("<li>"+link + "</li>")
                 })
-                console.log(data.notifications);
+                // console.log(data.notifications);
                 $("#notification_dropdown").append("<li role='separator' class='divider'></li>")
               }
 

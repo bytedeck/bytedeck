@@ -81,6 +81,15 @@ class Create(CreateView):
         data.author = self.request.user
         data.save()
         # notify.send(self.request.user, user="somerandomuser", action="New Announcement!")
+
+        # affected_users = parent_comment.get_affected_users()
+        # notify.send(
+        #     self.request.user
+        #     # action=comment_new,
+        #     recipient=self.request.user
+        #     affected_users=affected_users,
+        #     verb='posted')
+
         return super(Create, self).form_valid(form)
 
     def get_context_data(self, **kwargs):
