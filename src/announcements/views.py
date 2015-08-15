@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy, reverse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -82,13 +83,13 @@ class Create(CreateView):
         data.save()
         # notify.send(self.request.user, user="somerandomuser", action="New Announcement!")
 
-        # affected_users = parent_comment.get_affected_users()
-        # notify.send(
-        #     self.request.user
-        #     # action=comment_new,
-        #     recipient=self.request.user
-        #     affected_users=affected_users,
-        #     verb='posted')
+        affected_users = User.objects.all().filter(is_active=True)
+        notify.send(
+            self.request.user,
+            # action=comment_new,
+            recipient=self.request.user,
+            affected_users=affected_users,
+            verb='posted')
 
         return super(Create, self).form_valid(form)
 
