@@ -208,8 +208,8 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL #(=”/”)
     # The name of the field containing the username, if any. See custom user models.
 # ACCOUNT_USER_MODEL_EMAIL_FIELD #(=”email”)
     # The name of the field containing the email, if any. See custom user models.
-# ACCOUNT_USER_DISPLAY #(=a callable returning user.username)
-    # A callable (or string of the form ‘some.module.callable_name’) that takes a user as its only argument and returns the display name of the user. The default implementation returns user.username.
+# ACCOUNT_USER_DISPLAY #(=a callable returning user.get_username())
+    # A callable (or string of the form ‘some.module.callable_name’) that takes a user as its only argument and returns the display name of the user. The default implementation returns user.get_username().
 # ACCOUNT_USERNAME_MIN_LENGTH #(=4)
     # An integer specifying the minimum allowed length of a username.
 # ACCOUNT_USERNAME_BLACKLIST #(=[])

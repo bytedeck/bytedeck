@@ -148,7 +148,40 @@ class TaggedItem(models.Model):
     tag = models.SlugField(choices=TAG_CHOICES)
     content_type = models.ForeignKey(ContentType)
     object_id = models.PositiveIntegerField()
+
+    def get_absolute_url(self):
+        return reverse('profile_detail', kwargs={'pk': self.pk})
+
     content_object = GenericForeignKey()
 
     def __str__(self):
         return self.tag
+
+##### QuestSubmission ###############################################
+
+class QuestSubmissionQuerySet(models.query.QuerySet):
+    def get_user(self, user):
+        return self.filter(user=user)
+
+    def approved(self):
+        return self.filter(is_approved=True)
+
+    def not_approved(self):
+        return self.filter(is_approved=False)
+
+class QuestSubmissionManager(models.Manager):
+    def get_queryset(self):
+        return QuestSubmissionQuerySet(self.model, using=self._db)
+
+    def all_not_approved(self, user):
+        return self.get_queryset().get_user(user).not_approved()
+
+class QuestSubmission(models.Model):
+    quest = models.ForeignKey(Quest)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
+    is_approved = BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
+    updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    # rewards =
+
+    objects = QuestSubmissionManager()

@@ -32,7 +32,7 @@ class Profile(models.Model):
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
 
     def __str__(self):
-        return self.user.username
+        return self.user.get_username()
 
     def get_absolute_url(self):
         return reverse('profiles:profile_detail') #uses the logged in user
