@@ -113,22 +113,26 @@ class Notification(models.Model):
             "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             "target_url": target_url,
         }
-        print(context)
-        if self.target_object:
-            return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
-        else:
-            return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
+        # return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
 
-        #
+        # url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s" % context
         # if self.target_object:
-        #     if self.action_object and target_url:
-        #         return "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>%(target)s</a> with %(action)s" % context
-        #     if self.action_object and not target_url:
-        #         return "%(sender)s %(verb)s %(target)s with %(action)s" % context
-        #     return "%(sender)s %(verb)s %(target)s" % context
-        # return "%(sender)s %(verb)s" % context
+        #     if self.action:
+        #         return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
+        #     else:
+        #         return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s</a>" % context
+        # else:
+        #     return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
 
-
+        url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s" % context
+        if self.target_object:
+            if self.action:
+                url = url_common_part + "%(target)s with %(action)s</a>" % context
+            else:
+                url = url_common_part + "%(target)s</a>" % context
+        else:
+            url = url_common_part + "</a>"
+        return url
 
 def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)

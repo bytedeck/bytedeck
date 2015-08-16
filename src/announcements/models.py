@@ -37,7 +37,7 @@ class AnnouncementManager(models.Manager):
         return self.get_queryset().released().not_expired().order_by('-sticky','-datetime_released')
 
 class Announcement(models.Model):
-    title = models.CharField(max_length=50)
+    title = models.CharField(max_length=80)
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
@@ -47,9 +47,6 @@ class Announcement(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL)
     datetime_released = models.DateTimeField(default=timezone.now)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text = 'blank = never')
-
-    # def get_absolute_url(self):
-    #     return reverse('profile_detail', kwargs={'pk': self.pk})
 
     objects = AnnouncementManager()
 

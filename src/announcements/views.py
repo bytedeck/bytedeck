@@ -16,7 +16,7 @@ from .forms import AnnouncementForm
 @login_required
 def list(request):
     object_list = Announcement.objects.get_active()
-    paginator = Paginator(object_list, 2)
+    paginator = Paginator(object_list, 10)
     page = request.GET.get('page')
 
     try:
@@ -78,15 +78,18 @@ class Create(CreateView):
     template_name = 'announcements/form.html'
 
     def form_valid(self, form):
-        data = form.save(commit=False)
-        data.author = self.request.user
-        data.save()
+        new_announcement = form.save(commit=False)
+        new_announcement.author = self.request.user
+        new_announcement.save()
         # notify.send(self.request.user, user="somerandomuser", action="New Announcement!")
+        print(new_announcement)
 
         affected_users = User.objects.all().filter(is_active=True)
+
         notify.send(
             self.request.user,
-            # action=comment_new,
+            action=None,
+            target=new_announcement,
             recipient=self.request.user,
             affected_users=affected_users,
             verb='posted')
