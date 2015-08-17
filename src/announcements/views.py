@@ -84,11 +84,13 @@ class Create(CreateView):
         # notify.send(self.request.user, user="somerandomuser", action="New Announcement!")
         print(new_announcement)
 
+
         affected_users = User.objects.all().filter(is_active=True)
+
 
         notify.send(
             self.request.user,
-            action=None,
+            action=new_announcement,
             target=new_announcement,
             recipient=self.request.user,
             affected_users=affected_users,

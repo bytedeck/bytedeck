@@ -113,20 +113,10 @@ class Notification(models.Model):
             "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             "target_url": target_url,
         }
-        # return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
-
-        # url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s" % context
-        # if self.target_object:
-        #     if self.action:
-        #         return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s with %(action)s</a>" % context
-        #     else:
-        #         return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s %(target)s</a>" % context
-        # else:
-        #     return "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s</a>" % context
 
         url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s" % context
         if self.target_object:
-            if self.action:
+            if self.action_object:
                 url = url_common_part + "%(target)s with %(action)s</a>" % context
             else:
                 url = url_common_part + "%(target)s</a>" % context
@@ -138,6 +128,8 @@ def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)
     recipient = kwargs.pop('recipient')
     verb = kwargs.pop('verb')
+
+    print(kwargs)
 
     try:
         affected_users = kwargs.pop('affected_users')
