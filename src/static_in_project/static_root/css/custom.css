@@ -89,9 +89,19 @@ td {
 }
 
 .panel-default > .panel-heading.accordian-trigger.active {
-  background-color: #337AB7;
+  /*background-color: #337AB7;*/
   color: #FFF;
+  text-shadow: 0px -1px 0px #286090;
+  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
+  background-repeat: repeat-x;
+  border-color: #2B669A;
 }
+
+.panel.active {
+  border-color: #2B669A;
+}
+
+
 
 /*Make clickable accordian tabs change to pointer cursor*/
 .accordian-trigger {
