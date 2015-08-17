@@ -129,8 +129,6 @@ def new_notification(sender, **kwargs):
     recipient = kwargs.pop('recipient')
     verb = kwargs.pop('verb')
 
-    print(kwargs)
-
     try:
         affected_users = kwargs.pop('affected_users')
     except:

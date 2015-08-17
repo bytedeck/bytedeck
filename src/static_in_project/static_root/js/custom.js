@@ -1,40 +1,5 @@
 $(document).ready(function() {
 
-  // notifications dropdown
-  $(".notification-toggle").click(function(e){
-    e.preventDefault();
-    $.ajax({
-      type: "POST",
-      url: "{% url 'notifications:ajax' %}",
-      data: {
-        csrfmiddlewaretoken: "{{ csrf_token }}",
-      },
-      success: function(data){
-        $("#notification_dropdown").html("");
-        var count = data.count;
-        // console.log(count);
-        if(count!=0) {
-          // $("#notification_badge").html(count);
-          $("#notification_dropdown").append("<li class='dropdown-header'>New Notifications</li>")
-          $(data.notifications).each(function(){
-            var link = this;
-            $("#notification_dropdown").append("<li>"+link + "</li>")
-          })
-          // console.log(data.notifications);
-          $("#notification_dropdown").append("<li role='separator' class='divider'></li>")
-        }
-
-        var url = "{% url 'notifications:list' %}"
-        $("#notification_dropdown").append("<li><a href='"+url+"'>View All Notifications</a></li>")
-
-      },
-      error: function(rs, e) {
-        console.log(rs);
-        console.log(e);
-      }
-    });
-  });
-
   //Formatting datePicker inputs
   // $('.datePicker')
   //     //this rwap
