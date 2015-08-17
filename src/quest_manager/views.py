@@ -10,7 +10,7 @@ from comments.models import Comment
 from comments.forms import CommentForm
 
 from .forms import QuestForm
-from .models import Quest, TaggedItem
+from .models import Quest, QuestSubmission, TaggedItem
 
 @login_required
 def quest_list(request):
@@ -77,12 +77,12 @@ def detail(request, quest_id):
     heading = "Quest Detail"
 
     q = get_object_or_404(Quest, pk=quest_id)
+    qs = QuestSubmission.objects.all_for_user_quest(request.user, q)
 
     #comments = Comment.objects.filter(quest=q)
     comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
     # content_type = ContentType.objects.get_for_model(q)
     # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
-
 
     comment_form = CommentForm(request.POST or None)
 
@@ -90,6 +90,7 @@ def detail(request, quest_id):
         "title": title,
         "heading": q.name,
         "q": q,
+        "qs": qs,
         "comments": comments,
         "comment_form": comment_form
     }

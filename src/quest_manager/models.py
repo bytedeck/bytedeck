@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -163,6 +164,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
         return self.filter(user=user)
 
+    def get_quest(self, quest):
+        return self.filter(quest=quest)
+
     def approved(self):
         return self.filter(is_approved=True)
 
@@ -176,10 +180,15 @@ class QuestSubmissionManager(models.Manager):
     def all_not_approved(self, user):
         return self.get_queryset().get_user(user).not_approved()
 
+    def all_for_user_quest(self, user, quest):
+        return self.get_queryset().get_user(user).get_quest(quest)
+
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
-    is_approved = BooleanField(default=False)
+    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating submissions beyond the first for repeatable quests')
+    is_approved = models.BooleanField(default=False)
+    is_started = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     # rewards =
