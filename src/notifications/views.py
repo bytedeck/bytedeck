@@ -24,7 +24,7 @@ def read(request, id):
         notification = Notification.objects.get(id=id)
         if notification.recipient == request.user:
             notification.unread = False
-            notification.time_read = timezone.now
+            notification.time_read = timezone.now()
             notification.save()
             if next is not None:
                 return HttpResponseRedirect(next)

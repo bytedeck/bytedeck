@@ -4,6 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 from .signals import notify
 # Create your models here.
@@ -22,10 +23,7 @@ class NotificationQuerySet(models.query.QuerySet):
                         | Q(action_content_type__pk = object_type.id,
                                         action_object_id = object.id)
                         )
-        print("****************** PRINTING QS *************")
-        print(qs)
         qs.delete()
-
 
     def mark_targetless(self, recipient):
         qs = self.unread().get_user(recipient)
@@ -36,7 +34,7 @@ class NotificationQuerySet(models.query.QuerySet):
     def mark_all_read(self, recipient):
         qs = self.unread().get_user(recipient)
         qs.update(unread=False)
-        qs.update(time_read=timezone.now)
+        qs.update(time_read=timezone.now())
 
     def mark_all_unread(self, recipient):
         qs = self.read().get_user(recipient)
@@ -54,7 +52,7 @@ class NotificationQuerySet(models.query.QuerySet):
 
 class NotificationManager(models.Manager):
     def get_queryset(self):
-        return NotificationQuerySet(self.model, using=self._db)
+        return NotificationQuerySet(self.model, using=self._db).order_by('-timestamp')
 
     def all_unread(self, user):
         return self.get_queryset().get_user(user).unread()
@@ -181,6 +179,7 @@ notify.connect(new_notification)
 
 from django.db.models.signals import pre_delete
 from announcements.models import Announcement
+from comments.models import Comment
 
 def deleted_object_receiver(sender, **kwargs):
     print("************delete signal ****************")
@@ -191,3 +190,4 @@ def deleted_object_receiver(sender, **kwargs):
     Notification.objects.get_queryset().get_object_anywhere(object)
 
 pre_delete.connect(deleted_object_receiver, sender=Announcement)
+pre_delete.connect(deleted_object_receiver, sender=Comment)
