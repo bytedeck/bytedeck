@@ -5,7 +5,11 @@
 
 <table class='table'>
 {% for note in notifications %}
-<tr><td>{{note|safe}} </td><td>{% if not note.unread %}Read {% else %} Unread {% endif %}</td></tr>
+<tr>
+  <td>{{note|safe}} </td>
+  <td>{{note.timestamp}}</td>
+  <td>{% if not note.unread %}Read {% else %} Unread {% endif %}</td>
+</tr>
 
 {% endfor %}
 </table>

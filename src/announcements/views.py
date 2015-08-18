@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy, reverse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -49,14 +50,25 @@ def copy(request, id):
     new_ann = get_object_or_404(Announcement, pk=id)
     new_ann.pk = None # autogen a new primary key (quest_id by default)
     new_ann.title = "Copy of " + new_ann.title
-    # print(quest_to_copy)
-    # print(new_quest)
-    # new_quest.save()
 
     form = AnnouncementForm(request.POST or None, instance = new_ann)
     if form.is_valid():
+        new_announcement = form.save(commit=False)
+        new_announcement.author = request.user
+        new_announcement.datetime_created = timezone.now
+        new_announcement.save()
         form.save()
-        return redirect('announcements:list')
+
+        affected_users = User.objects.all().filter(is_active=True)
+        notify.send(
+            request.user,
+            action=new_announcement,
+            target=new_announcement,
+            recipient=request.user,
+            affected_users=affected_users,
+            verb='posted')
+        # return redirect('announcements:list', id=new_announcement.id)
+        return redirect(new_announcement)
     context = {
         "title": "",
         "heading": "Copy an Announcement",
@@ -92,13 +104,8 @@ class Create(CreateView):
         new_announcement = form.save(commit=False)
         new_announcement.author = self.request.user
         new_announcement.save()
-        # notify.send(self.request.user, user="somerandomuser", action="New Announcement!")
-        print(new_announcement)
-
 
         affected_users = User.objects.all().filter(is_active=True)
-
-
         notify.send(
             self.request.user,
             action=new_announcement,
@@ -147,4 +154,4 @@ class Delete(DeleteView):
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
-        return super(Create, self).dispatch(*args, **kwargs)
+        return super(Delete, self).dispatch(*args, **kwargs)

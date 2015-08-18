@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.shortcuts import render, Http404, HttpResponseRedirect
+from django.utils import timezone
 
 from .models import Notification
 # Create your views here.
@@ -23,6 +24,7 @@ def read(request, id):
         notification = Notification.objects.get(id=id)
         if notification.recipient == request.user:
             notification.unread = False
+            notification.time_read = timezone.now
             notification.save()
             if next is not None:
                 return HttpResponseRedirect(next)

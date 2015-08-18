@@ -3,6 +3,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 from django.db import models
+from django.db.models import Q
 
 from .signals import notify
 # Create your models here.
@@ -10,6 +11,21 @@ from .signals import notify
 class NotificationQuerySet(models.query.QuerySet):
     def get_user(self, recipient):
         return self.filter(recipient=recipient)
+
+    #object matching sender, target or action object
+    def get_object_anywhere(self, object):
+        object_type = ContentType.objects.get_for_model(object)
+        qs = self.filter(Q(target_content_type__pk = object_type.id,
+                        target_object_id = object.id)
+                        | Q(sender_content_type__pk = object_type.id,
+                                        sender_object_id = object.id)
+                        | Q(action_content_type__pk = object_type.id,
+                                        action_object_id = object.id)
+                        )
+        print("****************** PRINTING QS *************")
+        print(qs)
+        qs.delete()
+
 
     def mark_targetless(self, recipient):
         qs = self.unread().get_user(recipient)
@@ -20,10 +36,12 @@ class NotificationQuerySet(models.query.QuerySet):
     def mark_all_read(self, recipient):
         qs = self.unread().get_user(recipient)
         qs.update(unread=False)
+        qs.update(time_read=timezone.now)
 
     def mark_all_unread(self, recipient):
         qs = self.read().get_user(recipient)
         qs.update(unread=True)
+        qs.update(time_read=None)
 
     def unread(self):
         return self.filter(unread=True)
@@ -71,6 +89,7 @@ class Notification(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
 
     unread = models.BooleanField(default=True)
+    time_read = models.DateTimeField(null=True, blank = True)
 
 
     objects = NotificationManager()
@@ -159,3 +178,16 @@ def new_notification(sender, **kwargs):
             new_note.save()
 
 notify.connect(new_notification)
+
+from django.db.models.signals import pre_delete
+from announcements.models import Announcement
+
+def deleted_object_receiver(sender, **kwargs):
+    print("************delete signal ****************")
+    print(sender)
+    print(kwargs)
+    object = kwargs["instance"]
+    print(object)
+    Notification.objects.get_queryset().get_object_anywhere(object)
+
+pre_delete.connect(deleted_object_receiver, sender=Announcement)
