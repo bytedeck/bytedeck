@@ -27,7 +27,7 @@
     {% include 'navbar-fixed.html' %}
 
     {% block jumbotron %}{% endblock %}
-    <div class="container-fluid">
+    <div class="container-fluid main-container">
 
       {% if messages %}
         {% for message in messages %}
@@ -53,6 +53,8 @@
     </div> <!-- /container -->
 
     {% block content_last %}{% endblock %}
+
+    {% include 'footer.html' %}
 
     {% include 'javascript.html' %}
     {% block js %}{% endblock %}
