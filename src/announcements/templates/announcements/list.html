@@ -8,9 +8,14 @@
 {% block content %}
 <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
-  <div class="panel  {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
-    <div class="panel-heading accordian-trigger" role="tab" id="heading{{object.id}}"
-      aria-expanded="false" aria-controls="collapse{{object.id}}"
+  <div class="panel
+    {% if object.id == active_id %} active {% endif %}
+    {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
+    <div class="panel-heading accordian-trigger
+      {% if object.id == active_id %} active {% endif %}"
+      role="tab" id="heading{{object.id}}"
+      aria-expanded="{% if object.id == active_id %}true{% else %}false{% endif %}"
+      aria-controls="collapse{{object.id}}"
       data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{object.id}}">
       <h4 class="panel-title">
         <!-- <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{object.id}}" aria-expanded="true" aria-controls="collapse{{object.id}}"> -->
@@ -20,7 +25,9 @@
         <small class="pull-right">{{object.datetime_released.date}}</small>
       </h4>
     </div>
-    <div id="collapse{{object.id}}" class="panel-collapse collapse" role="tabpanel" aria-labelledby="heading{{object.id}}">
+    <div id="collapse{{object.id}}"
+      class="panel-collapse collapse {% if object.id == active_id %} in {% endif %}"
+      role="tabpanel" aria-labelledby="heading{{object.id}}">
       <div class="panel-body">
         <i class="fa fa-quote-left fa-3x pull-left fa-border"></i>
         <div>
@@ -41,17 +48,17 @@
 
 <ul class="pagination pagination-centered">
     {% if object_list.has_previous %}
-        <li><a href="?page=1"><<</a></li>
-        <li><a href="?page={{ object_list.previous_page_number }}"><</a></li>
+        <li><a href="{% url 'announcements:list' %}?page=1"><<</a></li>
+        <li><a href="{% url 'announcements:list' %}?page={{ object_list.previous_page_number }}"><</a></li>
     {% endif %}
 
     {% for i in object_list.paginator.page_range %}
-        <li {% if object_list.number == i %} class="active" {% endif %}><a href="?page={{i}}">{{i}}</a></li>
+        <li {% if object_list.number == i %} class="active" {% endif %}><a href="{% url 'announcements:list' %}?page={{i}}">{{i}}</a></li>
     {% endfor %}
 
     {% if object_list.has_next %}
-        <li><a href="?page={{ object_list.next_page_number }}">></a></li>
-        <li><a href="?page={{ object_list.paginator.num_pages }}">>></a></li>
+        <li><a href="{% url 'announcements:list' %}?page={{ object_list.next_page_number }}">></a></li>
+        <li><a href="{% url 'announcements:list' %}?page={{ object_list.paginator.num_pages }}">>></a></li>
     {% endif %}
 </ul>
 

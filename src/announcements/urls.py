@@ -6,9 +6,8 @@ urlpatterns = [
     # url(r'^$', views.List.as_view(), name='list'), # CBV
     # url(r'^create/$', views.create, name='create'),
     url(r'^create/$', views.Create.as_view(), name='create'), #CBV
-
-    # url(r'^(?P<pk>\d+)/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<pk>\d+)/delete/$', views.Delete.as_view(), name='delete'),
     url(r'^(?P<pk>\d+)/edit/$', views.Update.as_view(), name='update'),
     url(r'^(?P<id>\d+)/copy/$', views.copy, name='copy'),
+    url(r'^(?P<id>\d+)/$', views.list, name='list'),
 ]

@@ -14,10 +14,20 @@ from .forms import AnnouncementForm
 
 #function based views...
 @login_required
-def list(request):
+def list(request, id=None):
     object_list = Announcement.objects.get_active()
-    paginator = Paginator(object_list, 10)
+    paginator = Paginator(object_list, 15)
     page = request.GET.get('page')
+    active_id = 0
+    # we want the page of a specific object
+    if id is not None:
+        active_obj = get_object_or_404(Announcement, pk=id)
+        for pg in paginator.page_range:
+            object_list = paginator.page(pg)
+            if active_obj in object_list:
+                page = pg
+                active_id = int(id)
+                break
 
     try:
         object_list = paginator.page(page)
@@ -30,6 +40,7 @@ def list(request):
 
     context = {
         'object_list': object_list,
+        'active_id': active_id,
     }
     return render(request, 'announcements/list.html', context)
 

@@ -54,4 +54,5 @@ class Announcement(models.Model):
         return str(self.id) + "--" + str(self.title)
 
     def get_absolute_url(self):
-        return reverse('announcements:list')
+        # return reverse('announcements:list')
+        return reverse('announcements:list', kwargs={'id': self.id})
