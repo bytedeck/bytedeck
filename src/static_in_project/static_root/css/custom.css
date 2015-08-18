@@ -12,6 +12,8 @@
   background-color: #FFF;
   border-radius: 0px 0px 10px 10px;
   padding-bottom: 30px;
+  margin-bottom: 5px;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.075) ;
 }
 
 body {
@@ -31,9 +33,11 @@ body {
   margin: 5px;
 }
 
+#notification_badge {
+  margin-top:0px;
+}
 
-
-.list-group-item .badge {
+.badge.alert-danger {
   margin-top: 3px;
   color: #FFF;
   background-color: #D9534F;

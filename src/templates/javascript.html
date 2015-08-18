@@ -26,6 +26,21 @@
     <script>
 
     $(document).ready(function() {
+      //Update badge to show number of new Notifications
+      $.ajax({
+        type: "POST",
+        url: "{% url 'notifications:ajax' %}",
+        data: {
+          csrfmiddlewaretoken: "{{ csrf_token }}",
+        },
+        success: function(data){
+          var count = data.count;
+          console.log(count);
+          if(count!=0) {
+            $("#notification_badge").html(count);
+          }
+        }
+      });
 
       // notifications dropdown
       $(".notification-toggle").click(function(e){
