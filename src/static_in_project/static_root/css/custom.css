@@ -18,6 +18,8 @@
 
 body {
   background-color: #F8F8F8;
+  /*padding to remove gap between navbar and jumbotron*/
+  padding-top: 50px;
 }
 
 .footer {
@@ -223,11 +225,6 @@ already distinguished*/
   margin-right: 8%;
 }*/
 
-body {
-  /*padding to remove gap between navbar and jumbotron*/
-  padding-top: 50px;
-  min-height: 300px;
-}
 
 /*
  * off canvas sidebar

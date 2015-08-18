@@ -16,14 +16,18 @@ class NotificationQuerySet(models.query.QuerySet):
     #object matching sender, target or action object
     def get_object_anywhere(self, object):
         object_type = ContentType.objects.get_for_model(object)
-        qs = self.filter(Q(target_content_type__pk = object_type.id,
+        return self.filter(Q(target_content_type__pk = object_type.id,
                         target_object_id = object.id)
                         | Q(sender_content_type__pk = object_type.id,
                                         sender_object_id = object.id)
                         | Q(action_content_type__pk = object_type.id,
                                         action_object_id = object.id)
                         )
-        qs.delete()
+
+    def get_object_target(self,object):
+        object_type = ContentType.objects.get_for_model(object)
+        return self.filter(target_content_type__pk = object_type.id,
+                        target_object_id = object.id)
 
     def mark_targetless(self, recipient):
         qs = self.unread().get_user(recipient)
@@ -187,7 +191,7 @@ def deleted_object_receiver(sender, **kwargs):
     print(kwargs)
     object = kwargs["instance"]
     print(object)
-    Notification.objects.get_queryset().get_object_anywhere(object)
+    Notification.objects.get_queryset().get_object_anywhere(object).delete()
 
 pre_delete.connect(deleted_object_receiver, sender=Announcement)
 pre_delete.connect(deleted_object_receiver, sender=Comment)
