@@ -9,6 +9,8 @@ bin/
 include/
 share/
 
+media_root/*
+
 *.sqlite3
 
 migrations/
