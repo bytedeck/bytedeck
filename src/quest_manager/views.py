@@ -24,7 +24,6 @@ def quest_list(request):
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
     # output = ', '.join([p.name for p in quest_list])
     context = {
-        "title": "Quests",
         "heading": "Quests",
         "quest_list": quest_list,
         "in_progress_submissions": in_progress_submissions,
@@ -34,12 +33,11 @@ def quest_list(request):
 
 @staff_member_required
 def quest_create(request):
-    form =  QuestForm(request.POST or None)
+    form = QuestForm(request.POST or None, request.FILES or None)
     if form.is_valid():
         form.save()
         return redirect('quests:quests')
     context = {
-        "title": "Quests",
         "heading": "Create New Quest",
         "form": form,
         "submit_btn_value": "Create",
@@ -49,12 +47,11 @@ def quest_create(request):
 @staff_member_required
 def quest_update(request, quest_id):
     quest_to_update = get_object_or_404(Quest, pk=quest_id)
-    form = QuestForm(request.POST or None, instance = quest_to_update)
+    form = QuestForm(request.POST or None, request.FILES or None)
     if form.is_valid():
         form.save()
         return redirect('quests:quests')
     context = {
-        "title": "Quests",
         "heading": "Update Quest",
         "form": form,
         "submit_btn_value": "Update",
@@ -75,7 +72,6 @@ def quest_copy(request, quest_id):
         form.save()
         return redirect('quests:quests')
     context = {
-        "title": "Quests",
         "heading": "Copy a Quest",
         "form": form,
         "submit_btn_value": "Create",
