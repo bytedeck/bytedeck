@@ -1,12 +1,13 @@
-import ipdb
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.mail import send_mail
+from django.core.urlresolvers import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template import RequestContext, loader
+from django.views.generic.edit import CreateView, DeleteView
 
 from comments.models import Comment
 from comments.forms import CommentForm
@@ -18,11 +19,15 @@ from .models import Quest, QuestSubmission, TaggedItem
 def quest_list(request):
     # quest_list = Quest.objects.order_by('name')
     quest_list = Quest.objects.get_active()
+    in_progress_submissions = QuestSubmission.objects.all_not_approved(request.user)
+    completed_submissions = QuestSubmission.objects.all_approved(request.user)
     # output = ', '.join([p.name for p in quest_list])
     context = {
         "title": "Quests",
         "heading": "Quests",
         "quest_list": quest_list,
+        "in_progress_submissions": in_progress_submissions,
+        "completed_submissions": completed_submissions,
     }
     return render(request, "quest_manager/quests.html" , context)
 
@@ -78,44 +83,56 @@ def quest_copy(request, quest_id):
 
 @login_required
 def start(request, quest_id):
-    # sub = Submission.objects.get(id=id)
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
-    return detail(request, quest_id)
+    if new_sub is None:
+        raise Http404 #shouldn't get here
+    return redirect('quests:quest_detail', quest_id = quest_id)
+
+@login_required
+def drop(request, submission_id):
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    template_name = "quest_manager/questsubmission_confirm_delete.html"
+    if sub.user != request.user:
+        return redirect('quests:quests')
+    if request.method=='POST':
+        sub.delete()
+        return redirect('quests:quests')
+    return render(request, template_name, {'submission':sub})
+
+@login_required
+def submission(request, submission_id):
+    sub = QuestSubmission.objects.get(id = submission_id)
+    if sub.user != request.user:
+        return redirect('quest_manager:quests')
+
+    context = {
+        "heading": sub.quest.name,
+        "submission": sub,
+        # "comments": comments,
+        # "comment_form": comment_form
+    }
+    return render(request, 'quest_manager/submission.html', context)
+
 
 @login_required
 def detail(request, quest_id):
-    title = "Quests"
-    heading = "Quest Detail"
+    #if there is an active submission, get it and display accordingly
 
     q = get_object_or_404(Quest, pk=quest_id)
-    qs = QuestSubmission.objects.all_for_user_quest(request.user, q)
-
+    active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
     #comments = Comment.objects.filter(quest=q)
     comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
     # content_type = ContentType.objects.get_for_model(q)
     # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
-
     comment_form = CommentForm(request.POST or None)
 
     context = {
-        "title": title,
         "heading": q.name,
         "q": q,
-        "qs": qs,
         "comments": comments,
         "comment_form": comment_form
     }
-
-    # #using the ModelForm
-    # if comment_form.is_valid():
-    #     obj_instance = comment_form.save(commit=False)
-    #     obj_instance.user = request.user
-    #     obj_instance.path = request.get_full_path()
-    #     obj_instance.quest = q
-    #     obj_instance.save()
-    #     return render(request, 'quest_manager/detail.html', context)
-
     return render(request, 'quest_manager/detail.html', context)
 
 ## Demo of sending email

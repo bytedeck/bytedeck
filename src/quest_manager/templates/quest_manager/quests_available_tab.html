@@ -31,17 +31,7 @@
           <div>
              {{q.short_description}}
           </div>
-          <div class="pull-right">
-            <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
-            <a class="btn btn-primary" href="#" role="button">Start Quest</a>
-          </div>
-          {% if request.user.is_authenticated and request.user.is_staff %}
-          <div>
-            <a class="btn btn-danger" href="/admin/quest_manager/quest/{{q.id}}/delete/" role="button">Delete</a>
-            <a class="btn btn-info" href="/admin/quest_manager/quest/{{q.id}}" role="button">Edit</a>
-            <a class="btn btn-warning" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
-          </div>
-          {% endif %}
+          {% include "quest_manager/buttons.html" %}
         </td>
      </tr>
      {% endfor %}

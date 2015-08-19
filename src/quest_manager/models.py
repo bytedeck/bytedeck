@@ -101,6 +101,15 @@ class Quest(XPItem):
 
     objects = QuestManager()
 
+    def is_repeat_available(time_of_last, ordinal_of_last):
+        # if haven't maxed out repeats
+        if max_repeats == -1 or max_repeats >= ordinal_of_last:
+            time_since_last = timezone.now() - time_of_last
+            hours_since_last = time_since_last.total_seconds()//3600
+            # and the proper amount of time has passed
+            if hours_since_last > hours_between_repeats:
+                return True
+        return False
 
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')
@@ -180,13 +189,17 @@ class QuestSubmissionManager(models.Manager):
     def all_not_approved(self, user):
         return self.get_queryset().get_user(user).not_approved()
 
+    def all_approved(self, user):
+        return self.get_queryset().get_user(user).approved()
+
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)
 
     def num_submissions(self, user, quest):
         qs = self.all_for_user_quest(user, quest)
         if qs.exists():
-            return int(qs.aggregate(Max('ordinal')).get('ordinal_max'))
+            max_dict = qs.aggregate(Max('ordinal'))
+            return max_dict.get('ordinal__max')
         else:
             return 0
 
@@ -195,12 +208,11 @@ class QuestSubmissionManager(models.Manager):
         if num_subs == 0:
             return True
         else:
-            max_repeats = quest.max_repeats
-            if max_repeats == 0:
+            latest_sub = self.all_for_user_quest(user, quest).latest('time_completed')
+            latest_dt = latest_sub.time_completed
+            if latest_dt is None: # quest submission in progress already
                 return False
-            else:
-                None
-
+            return quest.is_repeat_available(latest_dt, num_subs)
 
         # True if:
         #     user has no submissions and quest is Available
@@ -208,15 +220,17 @@ class QuestSubmissionManager(models.Manager):
 
 
     def create_submission(self, user, quest):
-        ordinal = self.num_submissions(user, quest) + 1
-
-        new_submission = QuestSubmission(
-            quest = quest,
-            user = user,
-            ordinal = ordinal,
-        )
-        new_submission.save()
-        return new_submission
+        if self.quest_is_available(user, quest):
+            ordinal = self.num_submissions(user, quest) + 1
+            new_submission = QuestSubmission(
+                quest = quest,
+                user = user,
+                ordinal = ordinal,
+            )
+            new_submission.save()
+            return new_submission
+        else:
+            return None
 
 
 class QuestSubmission(models.Model):
@@ -235,3 +249,5 @@ class QuestSubmission(models.Model):
 
     def __str__(self):
         return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)
+
+        
