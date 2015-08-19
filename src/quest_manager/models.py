@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Max
 from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 
@@ -46,7 +46,7 @@ class XPItem(models.Model):
     # last_editor = models.CharField(max_length=250)
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default = True)
-    max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, -1 = unlimited')
+    max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default = 0)
     date_available = models.DateField(default=timezone.now)
     time_available = models.TimeField(default=time().min) # midnight
@@ -183,14 +183,55 @@ class QuestSubmissionManager(models.Manager):
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)
 
+    def num_submissions(self, user, quest):
+        qs = self.all_for_user_quest(user, quest)
+        if qs.exists():
+            return int(qs.aggregate(Max('ordinal')).get('ordinal_max'))
+        else:
+            return 0
+
+    def quest_is_available(self, user, quest):
+        num_subs = self.num_submissions(user, quest)
+        if num_subs == 0:
+            return True
+        else:
+            max_repeats = quest.max_repeats
+            if max_repeats == 0:
+                return False
+            else:
+                None
+
+
+        # True if:
+        #     user has no submissions and quest is Available
+        #     or user has completed submissions (not nec approved) and repeatable time has passed
+
+
+    def create_submission(self, user, quest):
+        ordinal = self.num_submissions(user, quest) + 1
+
+        new_submission = QuestSubmission(
+            quest = quest,
+            user = user,
+            ordinal = ordinal,
+        )
+        new_submission.save()
+        return new_submission
+
+
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
     ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating submissions beyond the first for repeatable quests')
+    is_completed = models.BooleanField(default=False)
+    time_completed = models.DateTimeField(null=True, blank=True)
     is_approved = models.BooleanField(default=False)
-    is_started = models.BooleanField(default=False)
+    time_approved = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     # rewards =
 
     objects = QuestSubmissionManager()
+
+    def __str__(self):
+        return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)

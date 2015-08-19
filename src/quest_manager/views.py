@@ -1,3 +1,4 @@
+import ipdb
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -76,10 +77,11 @@ def quest_copy(request, quest_id):
     return render(request, "quest_manager/quest_form.html", context)
 
 @login_required
-def start(request, id):
+def start(request, quest_id):
     # sub = Submission.objects.get(id=id)
-
-    return detail(request, id)
+    quest = get_object_or_404(Quest, pk=quest_id)
+    new_sub = QuestSubmission.objects.create_submission(request.user, quest)
+    return detail(request, quest_id)
 
 @login_required
 def detail(request, quest_id):

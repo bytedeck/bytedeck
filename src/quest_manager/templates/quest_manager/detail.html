@@ -14,7 +14,7 @@
     <a class="btn btn-danger pull-right" href="{% url 'quests:quest_detail' q.id %}" role="button">Drop</a>
     <a class="btn btn-primary pull-right" href="#" role="button">Complete</a>
   {% else %}
-    <a class="btn btn-primary pull-right" href="#" role="button">Start Quest</a>
+    <a class="btn btn-primary pull-right" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
   {% endif %}
   {{ q.instructions | safe }}
   <!-- {% if q.tags.all %}
