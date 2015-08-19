@@ -1,16 +1,13 @@
-{% extends "base_sidebar.html" %}
+{% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
-
-{% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
 
 {% block head_css %}
 .reply_comment {
   display: none;
 }
-
 {% endblock %}
 
-{% if heading %}{% block heading %}{{ heading }}{% endblock %}{% endif %}
+{% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
   {% if qs.is_started %}

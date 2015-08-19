@@ -1,8 +1,7 @@
-{% extends "base_sidebar.html" %}
+{% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
-{% block head_title%}{% if title %}{{ title }} | {% endif %}{% endblock%}
 {% block head %}
   <!-- need these loaded first for date-time picker widgets to work I think -->
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
@@ -10,7 +9,7 @@
   {{ form.media }}
 {% endblock %}
 
-{% if heading %}{% block heading %}{{ heading|safe }} <i class="fa fa-shield pull-right"></i>{% endblock %}{% endif %}
+{% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
 <form action="{{ action_value }}" method="post">{% csrf_token %}

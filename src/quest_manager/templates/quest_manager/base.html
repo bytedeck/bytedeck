@@ -1,0 +1,17 @@
+{% extends "base_sidebar.html" %}
+{% load staticfiles %}
+
+{% block head_title %}Quests | {% endblock %}
+{% block head_css %}{% endblock %}
+{% block head %}
+  <!-- need these loaded first for date-time picker widgets to work I think -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+  <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
+  {{ form.media }}
+{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}{% block heading_inner %}{% endblock%}<i class="fa fa-shield pull-right"></i>{% endblock %}
+
+{% block content %}{% endblock %}
+{% block js %}{% endblock %}
