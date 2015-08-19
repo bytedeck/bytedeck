@@ -77,6 +77,8 @@ def quest_copy(request, quest_id):
 
 @login_required
 def start(request, id):
+    # sub = Submission.objects.get(id=id)
+
     return detail(request, id)
 
 @login_required

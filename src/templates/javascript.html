@@ -26,6 +26,16 @@
     <script>
 
     $(document).ready(function() {
+      //attempt to fix left menu
+      $('#sidebar_menu').affix({
+        offset: {
+          top: 100,
+          // bottom: function () {
+          //   return (this.bottom = $('.footer').outerHeight(true))
+          // }
+        }
+      });
+
       //Update badge to show number of new Notifications
       $.ajax({
         type: "POST",

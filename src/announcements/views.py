@@ -96,7 +96,6 @@ def copy(request, id):
 #
 #     return render(request, "announcements/form.html", context)
 
-@staff_member_required
 class Create(CreateView):
     model = Announcement
     form_class = AnnouncementForm
@@ -127,7 +126,7 @@ class Create(CreateView):
         context['submit_btn_value']= "Publish"
         return context
 
-    @method_decorator(login_required)
+    @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(Create, self).dispatch(*args, **kwargs)
 
