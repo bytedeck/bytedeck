@@ -18,7 +18,7 @@ from .models import Quest, QuestSubmission, TaggedItem
 @login_required
 def quest_list(request):
     # quest_list = Quest.objects.order_by('name')
-    quest_list = Quest.objects.get_active()
+    quest_list = Quest.objects.get_available(request.user)
     in_progress_submissions = QuestSubmission.objects.all_not_approved(request.user)
     completed_submissions = QuestSubmission.objects.all_approved(request.user)
     # output = ', '.join([p.name for p in quest_list])

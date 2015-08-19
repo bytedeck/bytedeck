@@ -77,7 +77,7 @@ class XPItem(models.Model):
 
 # Create your models here.
 class QuestQuerySet(models.query.QuerySet):
-    def available(self):
+    def date_available(self):
         return self.filter(date_available__lte = timezone.now)
 
     def not_expired(self):
@@ -91,7 +91,16 @@ class QuestManager(models.Manager):
         return QuestQuerySet(self.model, using=self._db)
 
     def get_active(self):
-        return self.get_queryset().available().not_expired().visible()
+        return self.get_queryset().date_available().not_expired().visible()
+
+    def get_available(self, user):
+        qs = self.get_active()
+        quest_list = list(qs)
+        for quest in quest_list:
+            if not QuestSubmission.objects.quest_is_available(user, quest):
+                quest_list.pop()
+        return quest_list
+
 
 class Quest(XPItem):
     verification_required = models.BooleanField(default = True, )
@@ -249,5 +258,3 @@ class QuestSubmission(models.Model):
 
     def __str__(self):
         return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)
-
-        
