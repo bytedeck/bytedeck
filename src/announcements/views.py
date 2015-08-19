@@ -1,3 +1,4 @@
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -45,7 +46,7 @@ def list(request, id=None):
     }
     return render(request, 'announcements/list.html', context)
 
-@login_required
+@staff_member_required
 def copy(request, id):
     new_ann = get_object_or_404(Announcement, pk=id)
     new_ann.pk = None # autogen a new primary key (quest_id by default)
@@ -95,6 +96,7 @@ def copy(request, id):
 #
 #     return render(request, "announcements/form.html", context)
 
+@staff_member_required
 class Create(CreateView):
     model = Announcement
     form_class = AnnouncementForm
@@ -143,7 +145,7 @@ class Update(UpdateView):
         context['submit_btn_value']= "Update"
         return context
 
-    @method_decorator(login_required)
+    @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(Update, self).dispatch(*args, **kwargs)
 
@@ -152,6 +154,6 @@ class Delete(DeleteView):
     template_name = 'announcements/delete.html'
     success_url = reverse_lazy('announcements:list')
 
-    @method_decorator(login_required)
+    @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(Delete, self).dispatch(*args, **kwargs)

@@ -28,4 +28,5 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
     url(r'^(?P<quest_id>[0-9]+)/edit/$', views.quest_update, name='quest_update'),
     url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
+    url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
 ]

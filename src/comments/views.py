@@ -22,7 +22,7 @@ def comment_thread(request, id):
     }
     return render(request, "comments/comment_thread.html", context)
 
-
+@login_required
 def comment_create(request):
     if request.method == "POST" and request.user.is_authenticated():
         parent_id = request.POST.get('parent_id')

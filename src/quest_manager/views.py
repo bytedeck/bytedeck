@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.mail import send_mail
@@ -24,6 +25,7 @@ def quest_list(request):
     }
     return render(request, "quest_manager/quests.html" , context)
 
+@staff_member_required
 def quest_create(request):
     form =  QuestForm(request.POST or None)
     if form.is_valid():
@@ -37,6 +39,7 @@ def quest_create(request):
     }
     return render(request, "quest_manager/quest_form.html", context)
 
+@staff_member_required
 def quest_update(request, quest_id):
     quest_to_update = get_object_or_404(Quest, pk=quest_id)
     form = QuestForm(request.POST or None, instance = quest_to_update)
@@ -51,6 +54,7 @@ def quest_update(request, quest_id):
     }
     return render(request, "quest_manager/quest_form.html", context)
 
+@staff_member_required
 def quest_copy(request, quest_id):
     new_quest = get_object_or_404(Quest, pk=quest_id)
     new_quest.pk = None # autogen a new primary key (quest_id by default)
@@ -70,6 +74,10 @@ def quest_copy(request, quest_id):
         "submit_btn_value": "Create",
     }
     return render(request, "quest_manager/quest_form.html", context)
+
+@login_required
+def start(request, id):
+    return detail(request, id)
 
 @login_required
 def detail(request, quest_id):
