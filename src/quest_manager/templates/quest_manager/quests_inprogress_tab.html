@@ -32,6 +32,7 @@
              {{s.quest.short_description}}
           </div>
           <div class="pull-right">
+            <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
             <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
           </div>
         </td>

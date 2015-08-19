@@ -18,9 +18,10 @@ from .models import Quest, QuestSubmission, TaggedItem
 @login_required
 def quest_list(request):
     # quest_list = Quest.objects.order_by('name')
+
     quest_list = Quest.objects.get_available(request.user)
-    in_progress_submissions = QuestSubmission.objects.all_not_approved(request.user)
-    completed_submissions = QuestSubmission.objects.all_approved(request.user)
+    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
+    completed_submissions = QuestSubmission.objects.all_completed(request.user)
     # output = ', '.join([p.name for p in quest_list])
     context = {
         "title": "Quests",
@@ -83,11 +84,22 @@ def quest_copy(request, quest_id):
 
 @login_required
 def start(request, quest_id):
+
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None:
         raise Http404 #shouldn't get here
-    return redirect('quests:quest_detail', quest_id = quest_id)
+    return redirect('quests:submission', submission_id = new_sub.id)
+
+@login_required
+def complete(request, submission_id):
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    template_name = "quest_manager/questsubmission_confirm_delete.html"
+    if sub.user != request.user:
+        return redirect('quests:quests')
+    sub.mark_completed()
+    # return render(request, template_name, {'submission':sub})
+    return redirect('quests:quests')
 
 @login_required
 def drop(request, submission_id):
@@ -104,7 +116,7 @@ def drop(request, submission_id):
 def submission(request, submission_id):
     sub = QuestSubmission.objects.get(id = submission_id)
     if sub.user != request.user:
-        return redirect('quest_manager:quests')
+        return redirect('quests:quests')
 
     context = {
         "heading": sub.quest.name,

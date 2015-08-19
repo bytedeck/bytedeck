@@ -94,11 +94,12 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
+
         qs = self.get_active()
         quest_list = list(qs)
         for quest in quest_list:
             if not QuestSubmission.objects.quest_is_available(user, quest):
-                quest_list.pop()
+                quest_list.remove(quest)
         return quest_list
 
 
@@ -110,13 +111,13 @@ class Quest(XPItem):
 
     objects = QuestManager()
 
-    def is_repeat_available(time_of_last, ordinal_of_last):
+    def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
-        if max_repeats == -1 or max_repeats >= ordinal_of_last:
+        if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
             time_since_last = timezone.now() - time_of_last
             hours_since_last = time_since_last.total_seconds()//3600
             # and the proper amount of time has passed
-            if hours_since_last > hours_between_repeats:
+            if hours_since_last > self.hours_between_repeats:
                 return True
         return False
 
@@ -191,6 +192,12 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def not_approved(self):
         return self.filter(is_approved=False)
 
+    def completed(self):
+        return self.filter(is_completed=True)
+
+    def not_completed(self):
+        return self.filter(is_completed=False)
+
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self):
         return QuestSubmissionQuerySet(self.model, using=self._db)
@@ -200,6 +207,12 @@ class QuestSubmissionManager(models.Manager):
 
     def all_approved(self, user):
         return self.get_queryset().get_user(user).approved()
+
+    def all_not_completed(self, user):
+        return self.get_queryset().get_user(user).not_completed()
+
+    def all_completed(self, user):
+        return self.get_queryset().get_user(user).completed()
 
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)
@@ -213,7 +226,9 @@ class QuestSubmissionManager(models.Manager):
             return 0
 
     def quest_is_available(self, user, quest):
+
         num_subs = self.num_submissions(user, quest)
+
         if num_subs == 0:
             return True
         else:
@@ -229,6 +244,7 @@ class QuestSubmissionManager(models.Manager):
 
 
     def create_submission(self, user, quest):
+
         if self.quest_is_available(user, quest):
             ordinal = self.num_submissions(user, quest) + 1
             new_submission = QuestSubmission(
@@ -258,3 +274,8 @@ class QuestSubmission(models.Model):
 
     def __str__(self):
         return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)
+
+    def mark_completed(self):
+        self.is_completed = True
+        self.time_completed = timezone.now()
+        self.save()

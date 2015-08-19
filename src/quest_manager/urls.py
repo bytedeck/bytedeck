@@ -31,5 +31,6 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     url(r'^in-progress/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
     url(r'^in-progress/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
+    url(r'^in-progress/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]

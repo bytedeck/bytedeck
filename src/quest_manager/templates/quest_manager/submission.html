@@ -7,7 +7,7 @@
 
   <div class="pull-right">
       <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a>
-      <a class="btn btn-primary" href="{% url 'quests:submission' submission.id %}" role="button">Complete</a>
+      <a class="btn btn-primary" href="{% url 'quests:complete' submission.id %}" role="button">Complete</a>
   </div>
 
   {{ submission.quest.instructions | safe }}
