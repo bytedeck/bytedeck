@@ -27,20 +27,4 @@
     {% include "quest_manager/buttons.html" %}
   {% endwith %}
 
-  {% with q as target %}
-    {% include "quest_manager/comments.html" %}
-  {% endwith %}
-
-
-
-
-{% endblock %}
-
-{% block js %}
-<script>
-  $('.reply_btn').click(function(e){
-    e.preventDefault();
-    $(this).parent().nextAll('.reply_comment').slideToggle();
-  })
-</script>
 {% endblock %}

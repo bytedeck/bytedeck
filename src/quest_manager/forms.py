@@ -42,6 +42,14 @@ class QuestForm(forms.ModelForm):
         # exclude = None
 
 
+class SubmissionForm(forms.Form):
+    comment_text = forms.CharField(label='Submission', widget=forms.Textarea(attrs={'rows':2}))
+
+class SubmissionReplyForm(forms.Form):
+    comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))
+
+
+
     # def clean_name(self):
     #     name = self.cleaned_data.get('name')
     #     return name

@@ -52,7 +52,7 @@ def comment_create(request):
 
         form = CommentForm(request.POST)
         if form.is_valid():
-            comment_text = form.cleaned_data.get('new_comment')
+            comment_text = form.cleaned_data.get('comment_text')
             if parent_comment is not None:
                 comment_new = Comment.objects.create_comment(
                     user = request.user,

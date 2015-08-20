@@ -36,7 +36,7 @@
         {% if request.user.is_authenticated and request.user.is_staff %}
         <div class="pull-right">
           <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
-          <a class="btn btn-info" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
+          <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
           <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
         </div>
         {% endif %}

@@ -1,0 +1,16 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Delete Quest {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to Delete this quest?  All related submissions will be deleted.<p>
+  <div class="well">
+    <p>Quest Name: {{object.name}}</p>
+    <p>Quest ID: {{object.id}}</p>
+  </div>
+  <a href="{% url 'quests:quest_detail' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}

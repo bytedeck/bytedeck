@@ -7,13 +7,45 @@ from django.core.urlresolvers import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template import RequestContext, loader
-from django.views.generic.edit import CreateView, DeleteView
+from django.utils.decorators import method_decorator
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from comments.models import Comment
 from comments.forms import CommentForm
 
-from .forms import QuestForm
+from .forms import QuestForm, SubmissionForm
 from .models import Quest, QuestSubmission, TaggedItem
+
+class QuestDelete(DeleteView):
+    model = Quest
+    success_url = reverse_lazy('quests:quests')
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        return super(QuestDelete, self).dispatch(*args, **kwargs)
+
+# class QuestUpdate(UpdateView):
+#     model = Server
+#     success_url = reverse_lazy('quests:quest_detail' quest_id)
+#     fields = ['name', 'ip', 'order']
+
+class QuestUpdate(UpdateView):
+    model = Quest
+    form_class = QuestForm
+    # template_name = ''
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get a context
+        context = super(QuestUpdate, self).get_context_data(**kwargs)
+        context['heading'] = "Update Quest"
+        context['action_value']= ""
+        context['submit_btn_value']= "Update"
+        print(context)
+        return context
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        return super(QuestUpdate, self).dispatch(*args, **kwargs)
+
 
 @login_required
 def quest_list(request):
@@ -43,6 +75,10 @@ def quest_create(request):
         "submit_btn_value": "Create",
     }
     return render(request, "quest_manager/quest_form.html", context)
+
+
+
+
 
 @staff_member_required
 def quest_update(request, quest_id):
@@ -115,6 +151,7 @@ def submission(request, submission_id):
     if sub.user != request.user:
         return redirect('quests:quests')
 
+    # comment_form = SubmissionForm(request.POST or None)
     comment_form = CommentForm(request.POST or None)
     comments = Comment.objects.all_with_target_object(sub)
 
@@ -135,16 +172,16 @@ def detail(request, quest_id):
     active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
     #comments = Comment.objects.filter(quest=q)
     # comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
-    comments = Comment.objects.all_with_target_object(q)
+    # comments = Comment.objects.all_with_target_object(q)
     # content_type = ContentType.objects.get_for_model(q)
     # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
-    comment_form = CommentForm(request.POST or None)
+    # comment_form = SubmissionForm(request.POST or None)
 
     context = {
         "heading": q.name,
         "q": q,
-        "comments": comments,
-        "comment_form": comment_form
+        # "comments": comments,
+        # "comment_form": comment_form
     }
     return render(request, 'quest_manager/detail.html', context)
 

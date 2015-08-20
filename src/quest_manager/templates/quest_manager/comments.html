@@ -2,7 +2,7 @@
 {% load comment_tags %}
 
 <hr />
-<h3>Comments</h3>
+<h3>Submission</h3>
 <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
   {{ comment_form | crispy }}
   {% with target|content_type as ctype %}

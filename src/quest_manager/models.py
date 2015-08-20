@@ -72,8 +72,8 @@ class XPItem(models.Model):
     def get_absolute_url(self):
         return reverse('quests:quest_detail', kwargs={'quest_id': self.id})
 
-    def get_icon_url(self):
-        return "/images/s.jpg"
+    # def get_icon_url(self):
+    #     return "/images/s.jpg"
 
 # Create your models here.
 class QuestQuerySet(models.query.QuerySet):
