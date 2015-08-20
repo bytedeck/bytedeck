@@ -3,8 +3,9 @@
 
 <hr />
 <h3>Submission</h3>
-<form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
+<form method="POST" enctype="multipart/form-data" action="{% url 'comments:create' %}">{% csrf_token %}
   {{ comment_form | crispy }}
+  <!-- <input type="file" name="files" multiple /> -->
   {% with target|content_type as ctype %}
     <input type="hidden" name="target_content_type_id" value="{{ ctype.pk }}">
   {% endwith %}

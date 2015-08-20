@@ -156,8 +156,8 @@ def submission(request, submission_id):
     if sub.user != request.user:
         return redirect('quests:quests')
 
-    # comment_form = SubmissionForm(request.POST or None)
-    comment_form = CommentForm(request.POST or None, wysiwyg=True)
+    comment_form = SubmissionForm(request.POST or None)
+    # comment_form = CommentForm(request.POST or None, wysiwyg=True)
     comments = Comment.objects.all_with_target_object(sub)
 
     context = {
