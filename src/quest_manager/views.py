@@ -19,14 +19,10 @@ from .models import Quest, QuestSubmission, TaggedItem
 class QuestDelete(DeleteView):
     model = Quest
     success_url = reverse_lazy('quests:quests')
+
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(QuestDelete, self).dispatch(*args, **kwargs)
-
-# class QuestUpdate(UpdateView):
-#     model = Server
-#     success_url = reverse_lazy('quests:quest_detail' quest_id)
-#     fields = ['name', 'ip', 'order']
 
 class QuestUpdate(UpdateView):
     model = Quest
@@ -76,23 +72,19 @@ def quest_create(request):
     }
     return render(request, "quest_manager/quest_form.html", context)
 
-
-
-
-
-@staff_member_required
-def quest_update(request, quest_id):
-    quest_to_update = get_object_or_404(Quest, pk=quest_id)
-    form = QuestForm(request.POST or None, request.FILES or None)
-    if form.is_valid():
-        form.save()
-        return redirect('quests:quests')
-    context = {
-        "heading": "Update Quest",
-        "form": form,
-        "submit_btn_value": "Update",
-    }
-    return render(request, "quest_manager/quest_form.html", context)
+# @staff_member_required
+# def quest_update(request, quest_id):
+#     quest_to_update = get_object_or_404(Quest, pk=quest_id)
+#     form = QuestForm(request.POST or None, request.FILES or None)
+#     if form.is_valid():
+#         form.save()
+#         return redirect('quests:quests')
+#     context = {
+#         "heading": "Update Quest",
+#         "form": form,
+#         "submit_btn_value": "Update",
+#     }
+#     return render(request, "quest_manager/quest_form.html", context)
 
 @staff_member_required
 def quest_copy(request, quest_id):
@@ -115,8 +107,21 @@ def quest_copy(request, quest_id):
     return render(request, "quest_manager/quest_form.html", context)
 
 @login_required
-def start(request, quest_id):
+def detail(request, quest_id):
+    #if there is an active submission, get it and display accordingly
 
+    q = get_object_or_404(Quest, pk=quest_id)
+    active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
+
+    context = {
+        "heading": q.name,
+        "q": q,
+    }
+    return render(request, 'quest_manager/detail.html', context)
+
+########### QUEST SUBMISSION VIEWS ###############################
+@login_required
+def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None:
@@ -152,7 +157,7 @@ def submission(request, submission_id):
         return redirect('quests:quests')
 
     # comment_form = SubmissionForm(request.POST or None)
-    comment_form = CommentForm(request.POST or None)
+    comment_form = CommentForm(request.POST or None, wysiwyg=True)
     comments = Comment.objects.all_with_target_object(sub)
 
     context = {
@@ -164,26 +169,7 @@ def submission(request, submission_id):
     return render(request, 'quest_manager/submission.html', context)
 
 
-@login_required
-def detail(request, quest_id):
-    #if there is an active submission, get it and display accordingly
 
-    q = get_object_or_404(Quest, pk=quest_id)
-    active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
-    #comments = Comment.objects.filter(quest=q)
-    # comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
-    # comments = Comment.objects.all_with_target_object(q)
-    # content_type = ContentType.objects.get_for_model(q)
-    # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
-    # comment_form = SubmissionForm(request.POST or None)
-
-    context = {
-        "heading": q.name,
-        "q": q,
-        # "comments": comments,
-        # "comment_form": comment_form
-    }
-    return render(request, 'quest_manager/detail.html', context)
 
 ## Demo of sending email
 # @login_required
