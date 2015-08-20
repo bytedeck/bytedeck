@@ -14,4 +14,8 @@
 
   {{ submission.quest.instructions | safe }}
 
+  {% with submission as target %}
+    {% include "quest_manager/comments.html" %}
+  {% endwith %}
+
 {% endblock %}

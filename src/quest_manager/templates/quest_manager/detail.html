@@ -27,7 +27,9 @@
     {% include "quest_manager/buttons.html" %}
   {% endwith %}
 
-  {% include "quest_manager/comments.html" %}
+  {% with q as target %}
+    {% include "quest_manager/comments.html" %}
+  {% endwith %}
 
 
 

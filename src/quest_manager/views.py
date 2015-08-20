@@ -110,15 +110,19 @@ def drop(request, submission_id):
 
 @login_required
 def submission(request, submission_id):
-    sub = QuestSubmission.objects.get(id = submission_id)
+    # sub = QuestSubmission.objects.get(id = submission_id)
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
     if sub.user != request.user:
         return redirect('quests:quests')
+
+    comment_form = CommentForm(request.POST or None)
+    comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest.name,
         "submission": sub,
-        # "comments": comments,
-        # "comment_form": comment_form
+        "comments": comments,
+        "comment_form": comment_form
     }
     return render(request, 'quest_manager/submission.html', context)
 
