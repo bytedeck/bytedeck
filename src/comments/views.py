@@ -2,6 +2,7 @@ from django.shortcuts import render, HttpResponseRedirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 
 # Create your views here.
 from notifications.signals import notify
@@ -24,16 +25,20 @@ def comment_thread(request, id):
 
 @login_required
 def comment_create(request):
+
     if request.method == "POST" and request.user.is_authenticated():
         parent_id = request.POST.get('parent_id')
-        quest_id = request.POST.get('quest_id')
+        # quest_id = request.POST.get('quest_id')
+        target_content_type_id = request.POST.get('target_content_type_id')
+        target_object_id = request.POST.get('target_id')
         origin_path = request.POST.get('origin_path')
 
         try:
-            quest = Quest.objects.get(id = quest_id)
-
+            # quest = Quest.objects.get(id = quest_id)
+            content_type = ContentType.objects.get_for_id(target_content_type_id)
+            target = content_type.get_object_for_this_type(id = target_object_id)
         except:
-            quest = None
+            target = None
 
         parent_comment = None
         if parent_id is not None:
@@ -42,8 +47,8 @@ def comment_create(request):
             except:
                 parent_comment = None
 
-            if parent_comment is not None and parent_comment.quest is not None:
-                quest = parent_comment.quest
+            if parent_comment is not None:
+                target = parent_comment.get_target_object()
 
         form = CommentForm(request.POST)
         if form.is_valid():
@@ -53,7 +58,8 @@ def comment_create(request):
                     user = request.user,
                     path = parent_comment.get_origin,
                     text = comment_text,
-                    quest = quest,
+                    # quest = quest,
+                    target = target,
                     parent=parent_comment
                     )
                 affected_users = parent_comment.get_affected_users()
@@ -71,14 +77,15 @@ def comment_create(request):
                     user = request.user,
                     path = origin_path,
                     text = comment_text,
-                    quest = quest
+                    # quest = quest
+                    target = target
                     )
                 # Fix this to send to all staff
                 affected_users = [User.objects.get(username='90158'),]
                 notify.send(
                     request.user,
                     action=comment_new,
-                    target= comment_new.quest,
+                    target= target,
                     recipient=request.user,
                     affected_users=affected_users,
                     verb='commented on')

@@ -130,7 +130,8 @@ def detail(request, quest_id):
     q = get_object_or_404(Quest, pk=quest_id)
     active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
     #comments = Comment.objects.filter(quest=q)
-    comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
+    # comments = q.comment_set.all() # can get comments from quest due to the one-to-one relationship
+    comments = Comment.objects.all_with_target_object(q)
     # content_type = ContentType.objects.get_for_model(q)
     # tags = TaggedItem.objects.filter(content_type=content_type, object_id = q.id)
     comment_form = CommentForm(request.POST or None)

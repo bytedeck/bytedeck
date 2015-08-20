@@ -1,9 +1,14 @@
 {% load crispy_forms_tags %}
+{% load comment_tags %}
 
 <hr />
 <h3>Comments</h3>
 <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
   {{ comment_form | crispy }}
+  {% with q|content_type as ctype %}
+    <input type="hidden" name="target_content_type_id" value="{{ ctype.pk }}">
+  {% endwith %}
+  <input type='hidden' name = 'target_id' value='{{q.id}}' />
   <input type='hidden' name = 'quest_id' value='{{q.id}}' />
   <input type='hidden' name = 'origin_path' value='{{request.get_full_path}}' />
   <input type='submit' class='btn btn-primary' value='Add comment' />

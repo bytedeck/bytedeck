@@ -1,5 +1,6 @@
 {% extends "comments/base.html" %}
 {% load crispy_forms_tags %}
+{% load comment_tags %}
 
 {% block heading_inner %} {{ heading }}
   <a class="btn btn-info" href="{{comment.get_origin}}" role="button">Back</a>
