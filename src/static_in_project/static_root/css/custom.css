@@ -35,6 +35,10 @@ body {
   margin: 5px;
 }
 
+iframe {
+  border-radius: 8px;
+}
+
 #notification_badge {
   margin-top:0px;
 }
