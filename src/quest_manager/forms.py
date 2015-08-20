@@ -43,7 +43,7 @@ class QuestForm(forms.ModelForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='Submission', widget=forms.Textarea(attrs={'rows':2}))
+    comment_text = forms.CharField(label='Submission', widget=SummernoteWidget())
 
 class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))

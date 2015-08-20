@@ -9,12 +9,12 @@
 {% block content %}
 <blockquote>
   <p class="lead">
-    {{comment.text}} <small>{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
+    {{comment.text | safe}} <small>{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
   </p>
   {% if not comment.is_child %}
     {% for child in comment.get_children %}
     <blockquote>
-      {{child.text}} <small>{{child.user}} | {{child.timestamp|timesince}} ago</small>
+      {{child.text | safe }} <small>{{child.user}} | {{child.timestamp|timesince}} ago</small>
     </blockquote>
     <!-- <p>
       <ul class="list-group">

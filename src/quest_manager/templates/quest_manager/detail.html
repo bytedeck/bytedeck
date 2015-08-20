@@ -13,7 +13,11 @@
   {% with no_details=True %}
     {% include "quest_manager/buttons.html" %}
   {% endwith %}
-  {{ q.instructions | safe }}
+  
+  {% with q as quest %}
+    {% include "quest_manager/quest_detail_content.html" %}
+  {% endwith %}
+
   <!-- {% if q.tags.all %}
   <div>
     <ul>
