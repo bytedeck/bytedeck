@@ -1,8 +1,7 @@
 {% load crispy_forms_tags %}
 {% load comment_tags %}
 
-<hr />
-<h3>Submission</h3>
+<!-- <h3>Submission</h3> -->
 <form method="POST" enctype="multipart/form-data" action="{% url 'comments:create' %}">{% csrf_token %}
   {{ main_comment_form | crispy }}
   <!-- <input type="file" name="files" multiple /> -->
@@ -11,7 +10,12 @@
   {% endwith %}
   <input type='hidden' name = 'target_id' value='{{target.id}}' />
   <input type='hidden' name = 'origin_path' value='{{request.get_full_path}}' />
-  <input type='submit' class='btn btn-primary' value='Add comment' />
+  <div class="panel-body">
+    <input type='submit' class='btn btn-primary' value='Submit Quest for Completion' />
+    {% if not submission.is_completed %}
+      <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+    {% endif %}
+  </div>
 </form>
 <p>
   <ul class="list-group">

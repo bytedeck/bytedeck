@@ -160,7 +160,7 @@ def submission(request, submission_id):
         return redirect('quests:quests')
 
     # comment_form = SubmissionForm(request.POST or None)
-    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="Submission")
+    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     reply_comment_form = CommentForm(request.POST or None, label="Reply")
     comments = Comment.objects.all_with_target_object(sub)
 

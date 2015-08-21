@@ -12,19 +12,26 @@
 {% block content %}
 
   {% if not submission.is_completed %}
-    <div class="pull-right">
-        <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a>
-        <a class="btn btn-primary" href="{% url 'quests:complete' submission.id %}" role="button">Complete</a>
-    </div>
+    <!-- <div class="pull-right"> -->
+        <!-- <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a> -->
+        <!-- <a class="btn btn-primary" href="{% url 'quests:complete' submission.id %}" role="button">Complete</a> -->
+    <!-- </div> -->
   {% endif %}
 
   {% with submission.quest as quest %}
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
 
-  {% with submission as target %}
-    {% include "quest_manager/comments.html" %}
-  {% endwith %}
+  <div class="panel panel-primary">
+    <div class="panel-heading">
+      <h3 class="panel-title">Quest Submission Form</h3>
+    </div>
+      {% with submission as target %}
+        {% include "quest_manager/comments.html" %}
+      {% endwith %}
+
+  </div>
+
 
 {% endblock %}
 
