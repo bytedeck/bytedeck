@@ -32,6 +32,8 @@ def comment_create(request):
         target_content_type_id = request.POST.get('target_content_type_id')
         target_object_id = request.POST.get('target_id')
         origin_path = request.POST.get('origin_path')
+        success_url = request.POST.get('success_url')
+        success_message = request.POST.get('success_message', "Thanks for your comment!")
 
         try:
             # quest = Quest.objects.get(id = quest_id)
@@ -39,6 +41,7 @@ def comment_create(request):
             target = content_type.get_object_for_this_type(id = target_object_id)
         except:
             target = None
+
 
         parent_comment = None
         if parent_id is not None:
@@ -49,6 +52,10 @@ def comment_create(request):
 
             if parent_comment is not None:
                 target = parent_comment.get_target_object()
+                if success_url is None:
+                    success_url = parent_comment.get_absolute_url()
+
+
 
         form = CommentForm(request.POST)
         if form.is_valid():
@@ -70,8 +77,9 @@ def comment_create(request):
                     recipient=parent_comment.user,
                     affected_users=affected_users,
                     verb='replied to')
-                messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
-                return HttpResponseRedirect(parent_comment.get_absolute_url())
+                # messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
+                messages.success(request, success_message)
+                return HttpResponseRedirect(success_url)
             else:
                 comment_new = Comment.objects.create_comment(
                     user = request.user,
@@ -89,8 +97,12 @@ def comment_create(request):
                     recipient=request.user,
                     affected_users=affected_users,
                     verb='commented on')
-                messages.success(request, "Thanks for commenting!")
-                return HttpResponseRedirect(comment_new.get_absolute_url())
+                messages.success(request, success_message)
+
+                if success_url is None:
+                    success_url = comment_new.get_absolute_url()
+
+                return HttpResponseRedirect(success_url)
         else:
             messages.error(request, "There was an error with your comment.")
             if origin_path is None:
