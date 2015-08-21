@@ -4,7 +4,7 @@
 <hr />
 <h3>Submission</h3>
 <form method="POST" enctype="multipart/form-data" action="{% url 'comments:create' %}">{% csrf_token %}
-  {{ comment_form | crispy }}
+  {{ main_comment_form | crispy }}
   <!-- <input type="file" name="files" multiple /> -->
   {% with target|content_type as ctype %}
     <input type="hidden" name="target_content_type_id" value="{{ ctype.pk }}">
@@ -31,7 +31,7 @@
         </p>
         <div class='reply_comment'>
           <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
-            {{ comment_form | crispy }}
+            {{ reply_comment_form | crispy }}
             <input type='hidden' name='parent_id' value='{{comment.id}}'>
             <input type='hidden' name = 'origin_path' value='{{comment.get_origin}}' />
             <input type='submit' class='btn btn-primary' value='Add reply' />

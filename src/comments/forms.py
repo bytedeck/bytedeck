@@ -11,17 +11,18 @@ from .models import Comment
 
 class CommentForm(forms.Form):
 
-    # def __init__(self, *args, **kwargs):
-    #             # label='Comment',  accept_files=False
-    #     self.wysiwyg = kwargs.pop('wysiwyg', False)
-    #     # self.accept_files = accept_files
-    #     # self.label = label
-    #
-    #     super(CommentForm, self).__init__()
-    #     # do some more stuff after the object has been created
-    #     if self.wysiwyg:
-    #         self.fields['comment_text'].widget = SummernoteWidget()
-    #     else:
-    #         self.fields['comment_text'].widget = forms.Textarea(attrs={'rows':2})
+    def __init__(self, *args, **kwargs):
+        self.wysiwyg = kwargs.pop('wysiwyg', False)
+        self.label = kwargs.pop('label', 'Comment')
+        # self.accept_files = kwargs.get('accept_files', False)
+
+        super(CommentForm, self).__init__(*args, **kwargs)
+        # do some more stuff after the object has been created
+        if self.wysiwyg:
+            self.fields['comment_text'].widget = SummernoteWidget()
+        else:
+            self.fields['comment_text'].widget = forms.Textarea(attrs={'rows':2})
+
+        self.fields['comment_text'].label = self.label
 
     comment_text = forms.CharField()

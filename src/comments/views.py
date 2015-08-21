@@ -15,7 +15,7 @@ from .forms import CommentForm
 @login_required
 def comment_thread(request, id):
     comment = Comment.objects.get(id=id)
-    form = CommentForm()
+    form = CommentForm(label = "Reply")
     context = {
         "comment": comment,
         "heading": "Comment Thread",
@@ -92,7 +92,6 @@ def comment_create(request):
                 messages.success(request, "Thanks for commenting!")
                 return HttpResponseRedirect(comment_new.get_absolute_url())
         else:
-
             messages.error(request, "There was an error with your comment.")
             if origin_path is None:
                     return HttpResponseRedirect(parent_comment.get_absolute_url())

@@ -119,7 +119,10 @@ def detail(request, quest_id):
     }
     return render(request, 'quest_manager/detail.html', context)
 
+
+
 ########### QUEST SUBMISSION VIEWS ###############################
+
 @login_required
 def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
@@ -156,15 +159,17 @@ def submission(request, submission_id):
     if sub.user != request.user:
         return redirect('quests:quests')
 
-    comment_form = SubmissionForm(request.POST or None)
-    # comment_form = CommentForm(request.POST or None, wysiwyg=True)
+    # comment_form = SubmissionForm(request.POST or None)
+    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="Submission")
+    reply_comment_form = CommentForm(request.POST or None, label="Reply")
     comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest.name,
         "submission": sub,
         "comments": comments,
-        "comment_form": comment_form
+        "main_comment_form": main_comment_form,
+        "reply_comment_form": reply_comment_form,
     }
     return render(request, 'quest_manager/submission.html', context)
 

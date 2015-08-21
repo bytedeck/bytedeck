@@ -1,19 +1,13 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block head_css %}
-.reply_comment {
-  display: none;
-}
-{% endblock %}
-
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
   {% with no_details=True %}
     {% include "quest_manager/buttons.html" %}
   {% endwith %}
-  
+
   {% with q as quest %}
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
