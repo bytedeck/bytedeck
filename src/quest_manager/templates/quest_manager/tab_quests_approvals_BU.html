@@ -1,0 +1,49 @@
+
+  {% if tab.submissions %}
+
+  <table data-toggle="table"
+          data-classes="table table-hover"
+          data-detail-view="true"
+          data-detail-formatter="detailFormatter"
+          data-pagination="true"
+          data-sidePagination="left"
+          >
+     <thead>
+       <tr>
+          <th> </th>
+          <th data-sortable="true">Quest</th>
+          <th data-halign="center" data-align="center" data-sortable="true">XP</th>
+          <th data-halign="center" data-align="center" data-sortable="true">Student</th>
+          <th data-halign="center" data-align="center" data-sortable="true">Completed</th>
+          <th data-halign="center" data-align="center" data-sortable="true">Approved</th>
+          <th data-visible="false">Short Description</th>
+       </tr>
+      </thead>
+      <tbody>
+      {% for s in tab.submissions %}
+      <tr>
+        <td data-field="icon"><img class="media-object" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
+        <td data-field="name">{{s.quest.name}}</td>
+        <td data-field="xp" >{{s.quest.xp}}</td>
+        <td data-field="user" >{{s.user}}</td>
+        <td data-field="time_completed" >{{s.time_completed|timesince}} ago</td>
+        <td data-field="time_approved" >{{s.time_approved}}</td>
+        <td data-field="short_description">
+          <div>
+             {{s.quest.short_description}}
+          </div>
+          <div class="pull-right">
+            {% for b in tab.buttons %}
+              <a class="btn btn-{{b.style}}" href="{% url b.path s.id %}"
+                  role="button">{{b.text}}</a>
+            {% endfor %}
+          </div>
+        </td>
+       </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+
+  {% else %}
+    <p>None.</p>
+  {% endif %}

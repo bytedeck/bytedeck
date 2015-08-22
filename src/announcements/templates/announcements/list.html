@@ -8,10 +8,10 @@
 {% block content %}
 <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
-  <div class="panel
+  <div class="panel accordian
     {% if object.id == active_id %} active {% endif %}
     {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
-    <div class="panel-heading accordian-trigger
+    <div class="panel-heading accordian accordian-trigger
       {% if object.id == active_id %} active {% endif %}"
       role="tab" id="heading{{object.id}}"
       aria-expanded="{% if object.id == active_id %}true{% else %}false{% endif %}"

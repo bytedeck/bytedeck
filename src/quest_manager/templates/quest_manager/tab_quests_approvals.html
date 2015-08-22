@@ -1,34 +1,28 @@
 
   {% if tab.submissions %}
 
-  <table data-toggle="table"
-          data-classes="table table-hover"
-          data-detail-view="true"
-          data-detail-formatter="detailFormatter"
-          data-pagination="true"
-          data-sidePagination="left"
-          >
-     <thead>
-       <tr>
-          <th> </th>
-          <th data-sortable="true">Quest</th>
-          <th data-halign="center" data-align="center" data-sortable="true">XP</th>
-          <th data-halign="center" data-align="center" data-sortable="true">Student</th>
-          <th data-halign="center" data-align="center" data-sortable="true">Completed</th>
-          <th data-halign="center" data-align="center" data-sortable="true">Approved</th>
-          <th data-visible="false">Short Description</th>
-       </tr>
-      </thead>
-      <tbody>
-      {% for s in tab.submissions %}
-      <tr>
-        <td data-field="icon"><img class="media-object" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
-        <td data-field="name">{{s.quest.name}}</td>
-        <td data-field="xp" >{{s.quest.xp}}</td>
-        <td data-field="user" >{{s.user}}</td>
-        <td data-field="time_completed" >{{s.time_completed|timesince}} ago</td>
-        <td data-field="time_approved" >{{s.time_approved}}</td>
-        <td data-field="short_description">
+  <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
+  {% for s in tab.submissions %}
+    <div class="panel accordian
+      {% if s.id == active_id %} active {% endif %}
+      {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
+      <div class="panel-heading accordian accordian-trigger
+        {% if s.id == active_id %} active {% endif %}"
+        role="tab" id="heading{{s.id}}"
+        aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
+        aria-controls="collapse{{s.id}}"
+        data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{s.id}}">
+        <h4 class="panel-title">
+            {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
+            {{s.quest.name}}
+          <small class="pull-right">{{s.time_completed|timesince}} ago</small>
+        </h4>
+      </div>
+      <div id="collapse{{s.id}}"
+        class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
+        role="tabpanel" aria-labelledby="heading{{object.id}}">
+        <div class="panel-body">
+          <!-- <i class="fa fa-quote-left fa-3x pull-left fa-border"></i> -->
           <div>
              {{s.quest.short_description}}
           </div>
@@ -38,11 +32,11 @@
                   role="button">{{b.text}}</a>
             {% endfor %}
           </div>
-        </td>
-       </tr>
-     {% endfor %}
-     </tbody>
-   </table>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
 
   {% else %}
     <p>None.</p>

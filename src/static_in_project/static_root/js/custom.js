@@ -31,7 +31,7 @@ $(document).ready(function() {
 
   // Accordion active elements
   $('[data-toggle=collapse]').click(function() {
-      $('.active').not(this).not($(this).parent('.panel')).removeClass('active');
+      $('.accordian.active').not(this).not($(this).parent('.panel')).removeClass('active');
       $(this).toggleClass('active');
       $(this).parent('.panel').toggleClass('active');
    });
