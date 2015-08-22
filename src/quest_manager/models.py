@@ -94,13 +94,11 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
-
         qs = self.get_active()
         quest_list = list(qs)
-        for quest in quest_list:
-            if not QuestSubmission.objects.quest_is_available(user, quest):
-                quest_list.remove(quest)
-        return quest_list
+        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
+        available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
+        return available_quests
 
 
 class Quest(XPItem):

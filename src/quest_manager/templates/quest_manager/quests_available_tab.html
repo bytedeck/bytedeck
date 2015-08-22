@@ -1,5 +1,5 @@
 
-  {% if quest_list %}
+  {% if available_quests %}
 
   <table data-toggle="table"
           data-classes="table table-hover"
@@ -20,7 +20,7 @@
        </tr>
       </thead>
       <tbody>
-      {% for q in quest_list %}
+      {% for q in available_quests %}
       <tr>
         <td data-field="icon"><img class="media-object" src="{{ q.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
         <td data-field="name">{{q.name}}</td>
@@ -37,21 +37,6 @@
      {% endfor %}
      </tbody>
    </table>
-
-   <script>
-      // horrible hack!  Figure out a proper way to do this.
-      // it just needs to display the short_description
-       function detailFormatter(index, row) {
-           var html = [];
-           $.each(row, function (key, value) {
-             if(key == '5') {
-               html.push(value);
-             }
-           });
-           return html.join('');
-       }
-   </script>
-
   {% else %}
     <p>No quests are available.</p>
   {% endif %}

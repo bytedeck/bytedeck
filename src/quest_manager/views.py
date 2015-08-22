@@ -47,15 +47,21 @@ class QuestUpdate(UpdateView):
 def quest_list(request):
     # quest_list = Quest.objects.order_by('name')
 
-    quest_list = Quest.objects.get_available(request.user)
+    available_quests = Quest.objects.get_available(request.user)
     in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
+
+    # in_progress_quests = [s.quest for s in in_progress_submissions]
+    # completed_quests = [s.quest for s in completed_submissions]
+
     # output = ', '.join([p.name for p in quest_list])
     context = {
         "heading": "Quests",
-        "quest_list": quest_list,
+        "available_quests": available_quests,
         "in_progress_submissions": in_progress_submissions,
         "completed_submissions": completed_submissions,
+        # "in_progress_quests": in_progress_quests,
+        # "completed_quests": completed_quests,
     }
     return render(request, "quest_manager/quests.html" , context)
 
@@ -125,9 +131,11 @@ def detail(request, quest_id):
 
 @login_required
 def start(request, quest_id):
+
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None:
+        print("This quest is not available, why is it showing up?")
         raise Http404 #shouldn't get here
     return redirect('quests:submission', submission_id = new_sub.id)
 
