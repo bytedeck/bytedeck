@@ -26,10 +26,14 @@
     {% include 'quest_manager/quests_available_tab.html' %}
   </div>
   <div role="tabpanel" class="tab-pane fade" id="inprogress">
-    {% include 'quest_manager/quests_inprogress_tab.html' %}
+    {% with submissions=in_progress_submissions %}
+      {% include 'quest_manager/quests_submission_tab.html' %}
+    {% endwith %}
   </div>
   <div role="tabpanel" class="tab-pane fade" id="completed">
-    {% include 'quest_manager/quests_completed_tab.html' %}
+    {% with submissions=completed_submissions completed=True %}
+      {% include 'quest_manager/quests_submission_tab.html' %}
+    {% endwith %}
   </div>
 </div>
 {% endblock %}

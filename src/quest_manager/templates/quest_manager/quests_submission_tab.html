@@ -1,5 +1,5 @@
 
-  {% if in_progress_submissions %}
+  {% if submissions %}
 
   <table data-toggle="table"
           data-classes="table table-hover"
@@ -20,7 +20,7 @@
        </tr>
       </thead>
       <tbody>
-      {% for s in in_progress_submissions %}
+      {% for s in submissions %}
       <tr>
         <td data-field="icon"><img class="media-object" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/></td>
         <td data-field="name">{{s.quest.name}}</td>
@@ -32,15 +32,19 @@
              {{s.quest.short_description}}
           </div>
           <div class="pull-right">
-            <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
-            <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
+            {% if not completed %}
+              <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
+              <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
+            {% else %}
+              <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
+            {% endif %}
           </div>
         </td>
-     </tr>
+       </tr>
      {% endfor %}
      </tbody>
    </table>
 
   {% else %}
-    <p>No quests are currently in progress.</p>
+    <p>None.</p>
   {% endif %}
