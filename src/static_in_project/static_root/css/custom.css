@@ -256,7 +256,7 @@ already distinguished*/
  padding-bottom: 10px;
 }*/
 
-#lg-menu a {
+#lg-menu a, #lg-menu-staff a {
   font-size: 125%;
   /*display:inline-block
   .text-overflow();*/

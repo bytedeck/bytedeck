@@ -42,19 +42,26 @@ class QuestUpdate(UpdateView):
     def dispatch(self, *args, **kwargs):
         return super(QuestUpdate, self).dispatch(*args, **kwargs)
 
+@staff_member_required
+def approvals(request):
+    awaiting_approval_submissions = QuestSubmission.objects.all_awaiting_approval()
+    approved_submissions = QuestSubmission.objects.all_approved()
+    returned_submissions = QuestSubmission.objects.all_returned()
+    context = {
+        "heading": "Quest Approval",
+        "awaiting_approval_submissions": awaiting_approval_submissions,
+        "approved_submissions": approved_submissions,
+        "returned_submissions": returned_submissions,
+    }
+    return render(request, "quest_manager/quest_approval.html" , context)
 
 @login_required
 def quest_list(request):
-    # quest_list = Quest.objects.order_by('name')
-
     available_quests = Quest.objects.get_available(request.user)
     in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
-
     # in_progress_quests = [s.quest for s in in_progress_submissions]
     # completed_quests = [s.quest for s in completed_submissions]
-
-    # output = ', '.join([p.name for p in quest_list])
     context = {
         "heading": "Quests",
         "available_quests": available_quests,

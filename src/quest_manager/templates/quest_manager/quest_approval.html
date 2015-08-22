@@ -1,0 +1,53 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} {{ heading }}{% endblock %}
+
+{% block content %}
+
+<ul class="nav nav-tabs nav-justified" role="tablist">
+  <li role="presentation" class="active">
+    <a href="#tab1" role="tab" data-toggle="tab">Awaiting Approval</a>
+  </li>
+  <li role="presentation">
+    <a href="#tab2" role="tab" data-toggle="tab">Returned</a>
+  </li>
+  <li role="presentation">
+    <a href="#tab3" role="tab" data-toggle="tab">Approved</a>
+  </li>
+</ul>
+<!-- Tab panes -->
+<div class="tab-content">
+  <div role="tabpanel" class="tab-pane active fade in" id="tab1">
+    {% with submissions=awaiting_approval_submissions %}
+      {% include 'quest_manager/quests_submission_tab.html' %}
+    {% endwith %}
+  </div>
+  <div role="tabpanel" class="tab-pane fade" id="tab2">
+    {% with submissions=approved_submissions %}
+      {% include 'quest_manager/quests_submission_tab.html' %}
+    {% endwith %}
+  </div>
+  <div role="tabpanel" class="tab-pane fade" id="tab3">
+    {% with submissions=returned_submissions %}
+      {% include 'quest_manager/quests_submission_tab.html' %}
+    {% endwith %}
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+  <script>
+     // horrible hack!  Figure out a proper way to do this.
+     // it just needs to display the short_description
+      function detailFormatter(index, row) {
+          var html = [];
+          $.each(row, function (key, value) {
+            if(key == '5') {
+              html.push(value);
+            }
+          });
+          return html.join('');
+      }
+  </script>
+{% endblock %}

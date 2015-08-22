@@ -196,21 +196,44 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def not_completed(self):
         return self.filter(is_completed=False)
 
+    def has_completion_date(self):
+        return self.filter(time_completed__isnull=False)
+
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self):
         return QuestSubmissionQuerySet(self.model, using=self._db)
 
-    def all_not_approved(self, user):
+    def all_not_approved(self, user=None):
+        if user is None:
+            return self.get_queryset().not_approved()
         return self.get_queryset().get_user(user).not_approved()
 
-    def all_approved(self, user):
+    def all_approved(self, user=None):
+        if user is None:
+            return self.get_queryset().approved()
         return self.get_queryset().get_user(user).approved()
 
-    def all_not_completed(self, user):
+    def all_not_completed(self, user=None):
+        if user is None:
+            return self.get_queryset().not_completed()
         return self.get_queryset().get_user(user).not_completed()
 
-    def all_completed(self, user):
+    def all_completed(self, user=None):
+        if user is None:
+            return self.get_queryset().completed()
         return self.get_queryset().get_user(user).completed()
+
+    def all_awaiting_approval(self, user=None):
+        if user is None:
+            return self.get_queryset().not_approved().completed()
+        return self.get_queryset().get_user(user).not_approved().completed()
+
+    def all_returned(self, user=None):
+        #completion date indicates the quest was submitted, but since completed
+        #is false, it must have been returned.
+        if user is None:
+            return self.get_queryset().not_completed().has_completion_date()
+        return self.get_queryset().get_user(user).not_completed().has_completion_date()
 
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)
@@ -224,9 +247,7 @@ class QuestSubmissionManager(models.Manager):
             return 0
 
     def quest_is_available(self, user, quest):
-
         num_subs = self.num_submissions(user, quest)
-
         if num_subs == 0:
             return True
         else:
@@ -236,13 +257,7 @@ class QuestSubmissionManager(models.Manager):
                 return False
             return quest.is_repeat_available(latest_dt, num_subs)
 
-        # True if:
-        #     user has no submissions and quest is Available
-        #     or user has completed submissions (not nec approved) and repeatable time has passed
-
-
     def create_submission(self, user, quest):
-
         if self.quest_is_available(user, quest):
             ordinal = self.num_submissions(user, quest) + 1
             new_submission = QuestSubmission(
@@ -254,7 +269,6 @@ class QuestSubmissionManager(models.Manager):
             return new_submission
         else:
             return None
-
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
@@ -273,7 +287,22 @@ class QuestSubmission(models.Model):
     def __str__(self):
         return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)
 
+    def get_absolute_url(self):
+        return reverse('quests:submission', kwargs={'submission_id': self.id})
+
     def mark_completed(self):
         self.is_completed = True
         self.time_completed = timezone.now()
         self.save()
+
+    def mark_approved(self):
+        self.is_approved = True
+        self.time_approved = timezone.now()
+        self.save()
+
+    def mark_returned(self):
+        self.is_complete = False
+        self.save()
+
+    def is_awaiting_approval(self):
+        return is_completed and not is_approved
