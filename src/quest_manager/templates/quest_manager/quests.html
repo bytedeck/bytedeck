@@ -23,16 +23,16 @@
 <!-- Tab panes -->
 <div class="tab-content">
   <div role="tabpanel" class="tab-pane active fade in" id="available">
-    {% include 'quest_manager/quests_available_tab.html' %}
+    {% include 'quest_manager/tab_quests_available.html' %}
   </div>
   <div role="tabpanel" class="tab-pane fade" id="inprogress">
     {% with submissions=in_progress_submissions %}
-      {% include 'quest_manager/quests_submission_tab.html' %}
+      {% include 'quest_manager/tab_quests_submission.html' %}
     {% endwith %}
   </div>
   <div role="tabpanel" class="tab-pane fade" id="completed">
     {% with submissions=completed_submissions completed=True %}
-      {% include 'quest_manager/quests_submission_tab.html' %}
+      {% include 'quest_manager/tab_quests_submission.html' %}
     {% endwith %}
   </div>
 </div>

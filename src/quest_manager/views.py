@@ -44,14 +44,47 @@ class QuestUpdate(UpdateView):
 
 @staff_member_required
 def approvals(request):
-    awaiting_approval_submissions = QuestSubmission.objects.all_awaiting_approval()
+    approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     approved_submissions = QuestSubmission.objects.all_approved()
     returned_submissions = QuestSubmission.objects.all_returned()
+
+    # aw_appr_btns = '''<a class='btn btn-danger' href='{% url "quests:drop" s.id %}' role='button'>Drop</a>'''
+    approval_buttons = [
+        # { "path": "quests:drop", "style": "primary", "text": "Approve" },
+        # { "path": "quests:drop", "style": "warning", "text": "Return" },
+    ]
+
+    approved_buttons = [
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+    ]
+
+    returned_buttons = [
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+    ]
+
+    tab_list = [{
+            "name": "Awaiting Approval",
+            "submissions": approval_submissions,
+            "buttons": approval_buttons
+        },
+        {
+            "name": "Returned",
+            "submissions": returned_submissions,
+            "buttons": returned_buttons
+        },
+        {
+            "name": "Approved",
+            "submissions": approved_submissions,
+            "buttons": approved_buttons
+        },
+
+    ]
+
     context = {
         "heading": "Quest Approval",
-        "awaiting_approval_submissions": awaiting_approval_submissions,
-        "approved_submissions": approved_submissions,
-        "returned_submissions": returned_submissions,
+        "tab_list": tab_list,
     }
     return render(request, "quest_manager/quest_approval.html" , context)
 
