@@ -21,7 +21,7 @@ class Profile(models.Model):
                 grad_year_choices.append((r,r)) #(actual value, human readable name) tuples
         return grad_year_choices
 
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name="profile_user", null=False)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
     alias = models.CharField(max_length=50, unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=50, null=True, blank=False)
     last_name = models.CharField(max_length=50, null=True, blank=False)

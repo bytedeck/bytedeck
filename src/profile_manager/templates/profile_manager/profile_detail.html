@@ -1,6 +1,6 @@
 {% extends "profile_manager/base.html" %}
 
-{% block heading_inner %}{{ heading }}
+{% block heading_inner %}{{ object.user.username }}'s Profile
   <a class="btn btn-info" href="{% url 'profiles:profile_update' %}" role="button">Edit</a>
 {% endblock %}
 

@@ -37,24 +37,21 @@
       <div id="collapse{{s.id}}"
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading{{object.id}}">
-        <div class="panel-body">
-            {{s.quest.submission_details}}
-            <div class="panel panel-primary">
-              <div class="panel-heading">
-                <h4 class="panel-title">Submission</h4>
-              </div>
-                {% with s.get_comments as target_comments %}
-                  {% include "quest_manager/comments.html" %}
-                {% endwith %}
+        <ul class="list-group">
+          <li class="list-group-item list-group-item-info">Submission Details</li>
+          <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
 
-            </div>
-          <!-- <div class="pull-right">
-            {% for b in tab.buttons %}
-              <a class="btn btn-{{b.style}}" href="{% url b.path s.id %}"
-                  role="button">{{b.text}}</a>
-            {% endfor %}
-          </div> -->
-        </div>
+          {% with s.get_comments as target_comments %}
+            {% include "quest_manager/comments_approvals.html" %}
+          {% endwith %}
+          <li class="list-group-item list-group-item-info">New Submission Comment</li>
+          <li class="list-group-item">
+            {% with s as target %}
+              {% include "quest_manager/comment_form_main.html" %}
+            {% endwith %}
+          </li>
+        </ul>
+
       </div>
     </div>
   {% endfor %}

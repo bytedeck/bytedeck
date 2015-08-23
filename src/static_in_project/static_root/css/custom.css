@@ -178,18 +178,23 @@ td {
 }
 
 /**** panel packed together: add packed class to panel group div ***/
-.panel-group-packed .panel {
+.panel-group-packed > .panel {
   margin-top: 0px !important;
   border-radius: 0px ;
   border-bottom-style: none;
 }
 
-.panel-group-packed .panel:first-child{
+.panel-group-packed > .panel > .panel-heading{
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.panel-group-packed > .panel:first-child{
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
 }
 
-.panel-group-packed .panel:last-child {
+.panel-group-packed > .panel:last-child {
   border-bottom-left-radius: 4px;
   border-bottom-right-radius: 4px;
   border-bottom-style: solid;
@@ -221,6 +226,24 @@ td {
 .panel-body-comments .list-group-item {
   border-style: none none solid none;
   margin: 0px;
+}
+
+.avatar-left-sm {
+  padding-left: 70px;
+  min-height: 70px;
+}
+
+.avatar-left-sm > .avatar {
+  position: absolute;
+  /*top: 10px;*/
+  left: 10px;
+  height: 48px;
+  width: 48px;
+}
+
+.comment-heading hr {
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 

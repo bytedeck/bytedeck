@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 
 from .forms import ProfileForm
 from .models import Profile
@@ -28,18 +28,28 @@ class ProfileCreate(CreateView):
 class ProfileDetail(DetailView):
     model = Profile
 
-    def get_context_data(self, **kwargs):
-        context = super(ProfileDetail, self).get_context_data(**kwargs)
-        context['heading'] = self.request.user.get_username() + "'s Profile"
-        context
-        return context
-
-    def get_object(self):
-        return get_object_or_404(Profile, user_id=self.request.user)
-
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
-        return super(ProfileDetail, self).dispatch(*args, **kwargs)
+        # only allow the users to see their own profiles, or admins
+        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
+        if profile_user == self.request.user or self.request.user.is_staff:
+            return super(ProfileDetail, self).dispatch(*args, **kwargs)
+
+        return redirect('quests:quests')
+
+
+    # def get_context_data(self, **kwargs):
+    #     context = super(ProfileDetail, self).get_context_data(**kwargs)
+    #     context['heading'] = self.request.user.get_username() + "'s Profile"
+    #     context
+    #     return context
+    #
+    # def get_object(self):
+    #     return get_object_or_404(Profile, user_id=self.request.user)
+    #
+    # @method_decorator(login_required)
+    # def dispatch(self, *args, **kwargs):
+    #     return super(ProfileDetail, self).dispatch(*args, **kwargs)
 
 
 class ProfileUpdate(UpdateView):
