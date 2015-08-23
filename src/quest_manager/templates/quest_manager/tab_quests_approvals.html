@@ -1,6 +1,24 @@
 
   {% if tab.submissions %}
-
+  <div class="row panel-heading">
+    <div class="col-xs-1">
+    </div>
+    <div class="col-xs-4">
+      Quest
+    </div>
+    <div class="col-xs-1">
+      XP
+    </div>
+    <div class="col-xs-2">
+      Ave. Time
+    </div>
+    <div class="col-xs-2">
+      User
+    </div>
+    <div class="col-xs-2">
+      Completed
+    </div>
+  </div>
   <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
     <div class="panel accordian
@@ -12,11 +30,30 @@
         aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
         aria-controls="collapse{{s.id}}"
         data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{s.id}}">
+
+        <div class="row">
         <h4 class="panel-title">
-            {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
-            {{s.quest.name}}
-          <small class="pull-right">{{s.time_completed|timesince}} ago</small>
+          <div class="col-xs-1">
+            <img class="media-object panel-title-img" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon"/>
+          </div>
+          <div class="col-xs-4">
+              {{s.quest.name}}
+          </div>
+          <div class="col-xs-1">
+              {{s.quest.xp}}
+          </div>
+          <div class="col-xs-2">
+              {{s.quest.id}}
+          </div>
+          <div class="col-xs-2">
+              {{s.user}}
+          </div>
+          <div class="col-xs-2">
+              <small>{{s.time_completed|timesince}} ago</small>
+          </div>
         </h4>
+      </div>
+
       </div>
       <div id="collapse{{s.id}}"
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
@@ -24,7 +61,7 @@
         <div class="panel-body">
           <!-- <i class="fa fa-quote-left fa-3x pull-left fa-border"></i> -->
           <div>
-             {{s.quest.short_description}}
+            {{s.quest.short_description}}
           </div>
           <div class="pull-right">
             {% for b in tab.buttons %}

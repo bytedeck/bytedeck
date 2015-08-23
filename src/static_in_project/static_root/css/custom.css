@@ -151,6 +151,11 @@ td {
   border-color: #2B669A;
 }
 
+.panel-title > img, .panel-title-img {
+  height: 30px;
+  margin: -7px 5px -10px 0px;
+}
+
 
 
 /*Make clickable accordian tabs change to pointer cursor*/
