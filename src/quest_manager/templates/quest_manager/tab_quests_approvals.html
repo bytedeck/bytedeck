@@ -1,23 +1,12 @@
 
   {% if tab.submissions %}
   <div class="row panel-heading">
-    <div class="col-xs-1">
-    </div>
-    <div class="col-xs-4">
-      Quest
-    </div>
-    <div class="col-xs-1">
-      XP
-    </div>
-    <div class="col-xs-2">
-      Ave. Time
-    </div>
-    <div class="col-xs-2">
-      User
-    </div>
-    <div class="col-xs-2">
-      Completed
-    </div>
+    <div class="col-xs-1"></div>
+    <div class="col-xs-4">Quest</div>
+    <div class="col-xs-1">XP   </div>
+    <div class="col-xs-1">Ave</div>
+    <div class="col-xs-2">User</div>
+    <div class="col-xs-3">Completed</div>
   </div>
   <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
@@ -36,21 +25,11 @@
           <div class="col-xs-1">
             <img class="media-object panel-title-img" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon"/>
           </div>
-          <div class="col-xs-4">
-              {{s.quest.name}}
-          </div>
-          <div class="col-xs-1">
-              {{s.quest.xp}}
-          </div>
-          <div class="col-xs-2">
-              {{s.quest.id}}
-          </div>
-          <div class="col-xs-2">
-              {{s.user}}
-          </div>
-          <div class="col-xs-2">
-              <small>{{s.time_completed|timesince}} ago</small>
-          </div>
+          <div class="col-xs-4">{{s.quest.name}}</div>
+          <div class="col-xs-1">{{s.quest.xp}}  </div>
+          <div class="col-xs-1">{{s.quest.id}}</div>
+          <div class="col-xs-2">{{s.user}}  </div>
+          <div class="col-xs-3"><small>{{s.time_completed|timesince}} ago</small></div>
         </h4>
       </div>
 
@@ -59,16 +38,22 @@
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading{{object.id}}">
         <div class="panel-body">
-          <!-- <i class="fa fa-quote-left fa-3x pull-left fa-border"></i> -->
-          <div>
-            {{s.quest.short_description}}
-          </div>
-          <div class="pull-right">
+            {{s.quest.submission_details}}
+            <div class="panel panel-primary">
+              <div class="panel-heading">
+                <h4 class="panel-title">Submission</h4>
+              </div>
+                {% with s.get_comments as target_comments %}
+                  {% include "quest_manager/comments.html" %}
+                {% endwith %}
+
+            </div>
+          <!-- <div class="pull-right">
             {% for b in tab.buttons %}
               <a class="btn btn-{{b.style}}" href="{% url b.path s.id %}"
                   role="button">{{b.text}}</a>
             {% endfor %}
-          </div>
+          </div> -->
         </div>
       </div>
     </div>

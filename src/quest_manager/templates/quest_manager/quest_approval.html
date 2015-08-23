@@ -26,17 +26,10 @@
 {% endblock %}
 
 {% block js %}
-  <script>
-     // horrible hack!  Figure out a proper way to do this.
-     // it just needs to display the short_description
-      function detailFormatter(index, row) {
-          var html = [];
-          $.each(row, function (key, value) {
-            if(key == '6') {
-              html.push(value);
-            }
-          });
-          return html.join('');
-      }
-  </script>
+<script>
+  $('.reply_btn').click(function(e){
+    e.preventDefault();
+    $(this).parent().nextAll('.reply_comment').slideToggle();
+  })
+</script>
 {% endblock %}

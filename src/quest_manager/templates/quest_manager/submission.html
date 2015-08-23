@@ -27,9 +27,12 @@
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>
       {% with submission as target %}
-        {% include "quest_manager/comments.html" %}
+        {% include "quest_manager/comment_form_main.html" %}
       {% endwith %}
 
+        {% with submission.get_comments as target_comments %}
+          {% include "quest_manager/comments.html" %}
+        {% endwith %}
   </div>
 
 {% endblock %}

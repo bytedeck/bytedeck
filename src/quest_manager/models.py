@@ -12,6 +12,8 @@ from django.core.urlresolvers import reverse
 from datetime import time, date
 from django.utils import timezone
 
+from comments.models import Comment
+
 
 
 class Course(models.Model):
@@ -306,3 +308,6 @@ class QuestSubmission(models.Model):
 
     def is_awaiting_approval(self):
         return is_completed and not is_approved
+
+    def get_comments(self):
+        return Comment.objects.all_with_target_object(self)

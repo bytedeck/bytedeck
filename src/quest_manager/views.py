@@ -42,52 +42,6 @@ class QuestUpdate(UpdateView):
     def dispatch(self, *args, **kwargs):
         return super(QuestUpdate, self).dispatch(*args, **kwargs)
 
-@staff_member_required
-def approvals(request):
-    approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-    approved_submissions = QuestSubmission.objects.all_approved()
-    returned_submissions = QuestSubmission.objects.all_returned()
-
-    # aw_appr_btns = '''<a class='btn btn-danger' href='{% url "quests:drop" s.id %}' role='button'>Drop</a>'''
-    approval_buttons = [
-        # { "path": "quests:drop", "style": "primary", "text": "Approve" },
-        # { "path": "quests:drop", "style": "warning", "text": "Return" },
-    ]
-
-    approved_buttons = [
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-    ]
-
-    returned_buttons = [
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-    ]
-
-    tab_list = [{
-            "name": "Awaiting Approval",
-            "submissions": approval_submissions,
-            "buttons": approval_buttons
-        },
-        {
-            "name": "Returned",
-            "submissions": returned_submissions,
-            "buttons": returned_buttons
-        },
-        {
-            "name": "Approved",
-            "submissions": approved_submissions,
-            "buttons": approved_buttons
-        },
-
-    ]
-
-    context = {
-        "heading": "Quest Approval",
-        "tab_list": tab_list,
-    }
-    return render(request, "quest_manager/quest_approval.html" , context)
-
 @login_required
 def quest_list(request):
     available_quests = Quest.objects.get_available(request.user)
@@ -165,6 +119,59 @@ def detail(request, quest_id):
     }
     return render(request, 'quest_manager/detail.html', context)
 
+########### Quest APPROVAL VIEWS #################################
+
+
+@staff_member_required
+def approvals(request):
+    approval_submissions = QuestSubmission.objects.all_awaiting_approval()
+    approved_submissions = QuestSubmission.objects.all_approved()
+    returned_submissions = QuestSubmission.objects.all_returned()
+
+    # aw_appr_btns = '''<a class='btn btn-danger' href='{% url "quests:drop" s.id %}' role='button'>Drop</a>'''
+    approval_buttons = [
+        # { "path": "quests:drop", "style": "primary", "text": "Approve" },
+        # { "path": "quests:drop", "style": "warning", "text": "Return" },
+    ]
+
+    approved_buttons = [
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+    ]
+
+    returned_buttons = [
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+        { "path": "quests:drop", "style": "danger", "text": "Drop" },
+    ]
+
+    tab_list = [{
+            "name": "Awaiting Approval",
+            "submissions": approval_submissions,
+            "buttons": approval_buttons
+        },
+        {
+            "name": "Returned",
+            "submissions": returned_submissions,
+            "buttons": returned_buttons
+        },
+        {
+            "name": "Approved",
+            "submissions": approved_submissions,
+            "buttons": approved_buttons
+        },
+
+    ]
+
+    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    reply_comment_form = CommentForm(request.POST or None, label="Reply")
+
+    context = {
+        "heading": "Quest Approval",
+        "tab_list": tab_list,
+        "main_comment_form": main_comment_form,
+        "reply_comment_form": reply_comment_form,
+    }
+    return render(request, "quest_manager/quest_approval.html" , context)
 
 
 ########### QUEST SUBMISSION VIEWS ###############################
