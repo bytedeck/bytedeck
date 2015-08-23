@@ -8,7 +8,7 @@
     <div class="col-xs-2">User</div>
     <div class="col-xs-3">Completed</div>
   </div>
-  <div class="panel-group" id="accordion" role="tablist" aria-multiselectable="true">
+  <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
     <div class="panel accordian
       {% if s.id == active_id %} active {% endif %}

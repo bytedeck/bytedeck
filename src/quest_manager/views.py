@@ -217,12 +217,12 @@ def submission(request, submission_id):
     # comment_form = SubmissionForm(request.POST or None)
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     reply_comment_form = CommentForm(request.POST or None, label="Reply")
-    comments = Comment.objects.all_with_target_object(sub)
+    # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest.name,
         "submission": sub,
-        "comments": comments,
+        # "comments": comments,
         "main_comment_form": main_comment_form,
         "reply_comment_form": reply_comment_form,
     }

@@ -1,18 +1,24 @@
 {% load crispy_forms_tags %}
 {% load comment_tags %}
 
-<ul class="list-group">
+<ul class="list-group panel">
   {% for comment in target_comments %}
-    <li class="list-group-item">"{{comment.text}}" <small>-{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
-      {% if not comment.is_child %}
+    <li class="list-group-item">
       <div class="pull-right">
         <a href='#' class='reply_btn btn btn-default btn-xs'>Reply</a>
         <a href='{{comment.get_absolute_url}}' class='btn btn-default btn-xs'>View Thread</a>
       </div>
+      <small>{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
+      {{comment.text|safe}}
+      {% if not comment.is_child %}
+
         {% if comment.get_children %}
           <ul class="list-group">
             {% for child in comment.get_children %}
-              <li class="list-group-item">"{{child.text}}" <small>-{{child.user}}</small></li>
+              <li class="list-group-item">
+                <small>{{child.user}} | {{child.timestamp|timesince}} ago</small>
+                {{child.text}}
+              </li>
             {% endfor %}
           </ul>
         {% endif %}

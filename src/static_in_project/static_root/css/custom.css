@@ -58,12 +58,22 @@ iframe {
 }
 
 /************ SUMMERNOTE WIDGET **************/
+.panel-summernote {
+  padding: 0px;
+  border-radius: 0px
+}
+
 .summernotewidget {
   padding: 0px;
   border-top: none;
   border-left: none;
   border-bottom: none;
 }
+
+.panel-summernote iframe {
+  height: 515px !important;
+}
+
 
 form .panel-body {
   padding-top: 0px;
@@ -197,12 +207,23 @@ td {
   border-radius: 0px ;
 }
 
-,
-.panel-group-packed .panel-heading.active:first-child
+
+/***********Submission ********************************/
+.panel-body-comments {
+  padding: 0px;
+}
+
+.panel-body-comments .panel {
+  margin: 0px;
+  border-style: none;
+}
+
+.panel-body-comments .list-group-item {
+  border-style: none none solid none;
+  margin: 0px;
+}
 
 
-
-/*************************************************************/
 
 /***********ACCORDIAN COMMENTS *******************************/
 

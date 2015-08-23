@@ -16,15 +16,21 @@ class CommentQuerySet(models.query.QuerySet):
         return self.filter(target_content_type__pk = object_type.id,
                             target_object_id = object.id)
 
+    def get_no_parents(self):
+        return self.filter(parent=None)
+
+    def get_active(self):
+        return self.filter(active=True)
+
 class CommentManager(models.Manager):
     def get_queryset(self):
         return CommentQuerySet(self.model, using=self._db)
 
     def all_with_target_object(self, object):
-        return self.get_queryset().get_object_target(object)
+        return self.get_queryset().get_object_target(object).get_no_parents()
 
     def all(self):
-        return self.get_queryset.filter(active=True).filter(parent=None)
+        return self.get_queryset.get_active().get_no_parents()
 
     def create_comment(self, user=None, text=None, path=None, target=None, parent=None):
         if not path:
