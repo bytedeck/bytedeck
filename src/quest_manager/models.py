@@ -223,7 +223,7 @@ class QuestSubmissionManager(models.Manager):
     def all_completed(self, user=None):
         if user is None:
             return self.get_queryset().completed()
-        return self.get_queryset().get_user(user).completed()
+        return self.get_queryset().get_user(user).completed().order_by('is_approved')
 
     def all_awaiting_approval(self, user=None):
         if user is None:
@@ -312,7 +312,10 @@ class QuestSubmission(models.Model):
         self.save()
 
     def is_awaiting_approval(self):
-        return is_completed and not is_approved
+        return (self.is_completed and not self.is_approved)
+
+    def is_returned(self):
+        return (self.time_completed != None and not self.is_completed)
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)

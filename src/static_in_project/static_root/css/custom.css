@@ -202,8 +202,16 @@ td {
   color: #FFF !important;
 }
 
-.panel.active {
+.panel-default.active {
   border-color: #2B669A;
+}
+
+.panel-danger.active {
+  border-color: rgb(169, 68, 66);
+}
+
+.panel-warning.active {
+  border-color: rgb(138, 109, 59);
 }
 
 .panel-title > img, .panel-title-img {
@@ -217,6 +225,8 @@ td {
 }
 
 /**** panel packed together: add packed class to panel group div ***/
+/**** INSTEAD OF THIS FANCY CRAP, TRY changing the top or bottom margin to -1px
+to overlap borders ****/
 .panel-group-packed > .panel {
   margin-top: 0px !important;
   border-radius: 0px ;
