@@ -7,8 +7,19 @@
 }
 {% endblock %}
 
-{% block heading_inner %}{{ heading }}
-{% if request.user.is_staff %} <small>({{submission.user}})</small>{% endif %}
+{% block heading_inner %}{{ heading }}<br/>
+<small>
+{% if request.user.is_staff %} {{submission.user}} | {% endif %}
+{% if submission.is_approved %}
+  Approved - {{submission.time_approved}}
+{% elif submission.is_awaiting_approval %}
+  Submitted - {{submission.time_completed}}
+{% elif submission.is_returned %}
+  Returned - {{submission.updated|timesince}} ago
+{% else %}
+  In progress
+{% endif %}
+</small>
 {% endblock %}
 
 {% block content %}
