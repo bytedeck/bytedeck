@@ -39,11 +39,10 @@ iframe {
   border-radius: 8px;
 }
 
+/*********** BADGES **************************/
 #notification_badge {
   margin-top:0px;
 }
-
-/*********** BADGES **************************/
 
 .badge.alert-danger {
   margin-top: 3px;
@@ -65,6 +64,8 @@ iframe {
   background-color: #fff;
   text-shadow: none;
 }
+
+/*************************************************/
 
 .quest-icon {
   margin-right: 10px;
@@ -167,6 +168,10 @@ td {
     background-repeat: repeat-x;
 }
 
+.panel-heading.accordian {
+  min-height: 65px;
+}
+
 .panel-default > .panel-heading.accordian-trigger.active {
   /*background-color: #337AB7;*/
   color: #FFF !important;
@@ -185,7 +190,7 @@ td {
 }
 
 .panel-title > img, .panel-title-img {
-  height: 30px;
+  height: 48px;
   margin: -7px 5px -10px 0px;
 }
 
