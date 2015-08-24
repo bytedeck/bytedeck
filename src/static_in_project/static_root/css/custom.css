@@ -84,6 +84,10 @@ td.notification-icons .fa-stack {
   margin-top: -4px;
 }
 
+td.notification-icons .fa-stack {
+  margin-top: -4px;
+}
+
 /************ SUMMERNOTE WIDGET **************/
 .panel-summernote, .list-group-item-summernote {
   padding: 0px;

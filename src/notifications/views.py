@@ -3,7 +3,7 @@ import json
 from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse
-from django.shortcuts import render, Http404, HttpResponseRedirect
+from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
 
 from .models import Notification
@@ -16,6 +16,26 @@ def list(request):
         "notifications": notifications,
     }
     return render(request, "notifications/list.html", context)
+
+@login_required
+def list_unread(request):
+    notifications = Notification.objects.all_unread(request.user)
+    context = {
+        "notifications": notifications,
+    }
+    return render(request, "notifications/list.html", context)
+
+@login_required
+def read_all(request):
+    notifications = Notification.objects.all_unread(request.user)
+
+    for note in notifications:
+        note.unread = False
+        note.time_read = timezone.now()
+        note.save()
+
+    return redirect('notifications:list')
+
 
 @login_required
 def read(request, id):

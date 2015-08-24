@@ -1,6 +1,12 @@
 {% extends "base_sidebar.html" %}
-
-
+{% block head_title %}Notifications |{% endblock %}
+{% block heading %}Notifications
+<small>
+  <a href="{% url 'notifications:list' %}">All</a> |
+  <a href="{% url 'notifications:list_unread' %}">Unread</a> |
+  <a href="{% url 'notifications:read_all' %}">Mark all read</a>
+</small>
+<i class="fa fa-inbox pull-right"></i>{% endblock %}
 {% block content %}
 
 <table class='table'>

@@ -61,7 +61,7 @@ class NotificationManager(models.Manager):
         return NotificationQuerySet(self.model, using=self._db).order_by('-timestamp')
 
     def all_unread(self, user):
-        return self.get_queryset().get_user(user).unread()
+        return self.all_for_user(user).unread()
 
     def all_read(self, user):
         return self.get_queryset().get_user(user).read()
