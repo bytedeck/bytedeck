@@ -65,10 +65,23 @@ iframe {
   text-shadow: none;
 }
 
-/*************************************************/
+/************ ICONS **********************/
 
 .quest-icon {
   margin-right: 10px;
+}
+
+td.notification-icons {
+  text-align: center;
+  padding-bottom: 0px !important;
+}
+
+/*td.notification-icons .fa {
+  margin-top: 8px;
+}*/
+
+td.notification-icons .fa-stack {
+  margin-top: -4px;
 }
 
 /************ SUMMERNOTE WIDGET **************/

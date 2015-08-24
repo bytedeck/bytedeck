@@ -109,10 +109,11 @@ class Create(CreateView):
         affected_users = User.objects.all().filter(is_active=True)
         notify.send(
             self.request.user,
-            action=new_announcement,
+            # action=new_announcement,
             target=new_announcement,
             recipient=self.request.user,
             affected_users=affected_users,
+            icon="<i class='fa fa-newspaper-o'></i>",
             verb='posted')
 
         return super(Create, self).form_valid(form)

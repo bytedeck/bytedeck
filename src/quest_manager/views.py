@@ -145,9 +145,17 @@ def approve(request, submission_id):
 
             if 'approve_button' in request.POST:
                 note_verb="approved"
+                icon="<span class='fa-stack'>" + \
+                    "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
+                    "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                    "</span>"
                 submission.mark_approved()
             else:
                 note_verb="returned"
+                icon="<span class='fa-stack'>" + \
+                    "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                    "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+                    "</span>"
                 submission.mark_returned()
 
             affected_users = [submission.user,]
@@ -157,7 +165,8 @@ def approve(request, submission_id):
                 target= submission,
                 recipient=submission.user,
                 affected_users=affected_users,
-                verb=note_verb
+                verb=note_verb,
+                icon=icon,
             )
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:approvals")

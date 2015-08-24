@@ -1,3 +1,4 @@
+import ipdb
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -5,6 +6,7 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from .signals import notify
 # Create your models here.
@@ -86,6 +88,8 @@ class Notification(models.Model):
     target_object_id = models.PositiveIntegerField(null=True, blank=True)
     target_object = GenericForeignKey("target_content_type", "target_object_id")
 
+    font_icon = models.CharField(max_length=255, default="<i class='fa fa-info-circle'></i>")
+
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='notifications')
 
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -102,22 +106,42 @@ class Notification(models.Model):
             target_url = self.target_object.get_absolute_url()
         except:
             target_url = None
+
+        action = self.action_object
+
+        if len(str(self.action_object)) > 50:
+            action = str(self.action_object)[:50] + "..."
+        else:
+            action = str(self.action_object)
+
+        action = strip_tags(action)
+
         context = {
             "sender":self.sender_object,
             "verb":self.verb,
-            "action":self.action_object,
+            "action": action,
             "target": self.target_object,
             "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             "target_url": target_url,
         }
 
+        url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
         if self.target_object:
-            if self.action_object and target_url:
-                return "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>%(target)s</a> with %(action)s" % context
-            if self.action_object and not target_url:
-                return "%(sender)s %(verb)s %(target)s with %(action)s" % context
-            return "%(sender)s %(verb)s %(target)s" % context
-        return "%(sender)s %(verb)s" % context
+            if self.action_object:
+                url = url_common_part + ' %(target)s with "%(action)s"</a>' % context
+            else:
+                url = url_common_part + " %(target)s</a>" % context
+        else:
+            url = url_common_part + "</a>"
+        return url
+
+        # if self.target_object:
+        #     if self.action_object and target_url:
+        #         return '%(sender)s %(verb)s <a href="%(verify_read)s?next=%(target_url)s">%(target)s</a> with "%(action)s"' % context
+        #     if self.action_object and not target_url:
+        #         return "%(sender)s %(verb)s %(target)s with %(action)s" % context
+        #     return "%(sender)s %(verb)s %(target)s" % context
+        # return "%(sender)s %(verb)s" % context
 
     def get_link(self):
         try:
@@ -125,22 +149,29 @@ class Notification(models.Model):
         except:
             target_url = reverse('notifications:list')
 
-        act = str(self.action_object)[:30]
+        if len(str(self.action_object)) > 50:
+            action = str(self.action_object)[:50] + "..."
+        else:
+            action = str(self.action_object)
+
+        action = strip_tags(action)
+
         context = {
             "sender":self.sender_object,
             "verb":self.verb,
-            "action":act,
+            "action":action,
             "target": self.target_object,
             "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             "target_url": target_url,
+            "icon": self.font_icon
         }
 
-        url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(sender)s %(verb)s" % context
+        url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
         if self.target_object:
             if self.action_object:
-                url = url_common_part + "%(target)s with %(action)s</a>" % context
+                url = url_common_part + ' %(target)s with "%(action)s"</a>' % context
             else:
-                url = url_common_part + "%(target)s</a>" % context
+                url = url_common_part + " %(target)s</a>" % context
         else:
             url = url_common_part + "</a>"
         return url
@@ -149,6 +180,7 @@ def new_notification(sender, **kwargs):
     signal = kwargs.pop('signal', None)
     recipient = kwargs.pop('recipient')
     verb = kwargs.pop('verb')
+    icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
 
     try:
         affected_users = kwargs.pop('affected_users')
@@ -167,6 +199,7 @@ def new_notification(sender, **kwargs):
                 verb = verb,
                 sender_content_type = ContentType.objects.get_for_model(sender),
                 sender_object_id = sender.id,
+                font_icon = icon,
                 )
             for option in ("target", "action"):
                 # obj = kwargs.pop(option, None) #don't want to remove option with pop

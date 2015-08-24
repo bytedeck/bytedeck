@@ -287,7 +287,11 @@ class QuestSubmission(models.Model):
     objects = QuestSubmissionManager()
 
     def __str__(self):
-        return self.user.get_username() + "-" + self.quest.name + "-" + str(self.ordinal)
+        if self.ordinal > 1:
+            ordinal_str = " (" + str(self.ordinal) + ")"
+        else:
+            ordinal_str = ""
+        return self.quest.name + ordinal_str
 
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})
