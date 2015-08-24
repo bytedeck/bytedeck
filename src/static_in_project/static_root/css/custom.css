@@ -255,6 +255,11 @@ td {
   min-height: 55px;
 }
 
+.list-group-item-buttons > .pull-right {
+  margin-left: 15px;
+  margin-bottom: 15px;
+}
+
 
 /***********Submission ********************************/
 .panel-body-comments {

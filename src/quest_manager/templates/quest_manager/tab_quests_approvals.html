@@ -22,22 +22,22 @@
         data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{s.id}}">
 
         <div class="row">
-        <h4 class="panel-title">
-          <div class="col-xs-1">
-            <img class="media-object panel-title-img" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon"/>
-          </div>
-          <div class="col-xs-4">{{s.quest.name}}</div>
-          <div class="col-xs-1">{{s.quest.xp}}  </div>
-          <div class="col-xs-1">{{s.quest.id}}</div>
-          <div class="col-xs-2">{{s.user}}  </div>
-          <div class="col-xs-3"><small>{{s.time_completed|timesince}} ago</small></div>
-        </h4>
+          <h4 class="panel-title">
+            <div class="col-xs-1">
+              <img class="media-object panel-title-img" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt="icon"/>
+            </div>
+            <div class="col-xs-4">{{s.quest.name}}</div>
+            <div class="col-xs-1">{{s.quest.xp}}  </div>
+            <div class="col-xs-1">{{s.quest.id}}</div>
+            <div class="col-xs-2">{{s.user}}  </div>
+            <div class="col-xs-3"><small>{{s.time_completed|timesince}} ago</small></div>
+          </h4>
+        </div>
       </div>
 
-      </div>
       <div id="collapse{{s.id}}"
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
-        role="tabpanel" aria-labelledby="heading{{object.id}}">
+        role="tabpanel" aria-labelledby="heading{{s.id}}">
         <ul class="list-group">
           <li class="list-group-item list-group-item-info">Submission Details</li>
           <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
@@ -62,8 +62,8 @@
             </form>
           </li>
         </ul>
-
       </div>
+
     </div>
   {% endfor %}
   </div>

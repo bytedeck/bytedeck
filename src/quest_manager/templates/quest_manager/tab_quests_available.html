@@ -15,7 +15,7 @@
         {% if q.id == active_q_id %} active {% endif %}"
         role="tab" id="heading-quest-{{q.id}}"
         aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
-        aria-controls="collapse{{q.id}}"
+        aria-controls="collapse-quest-{{q.id}}"
         data-parent="#accordion" data-toggle="collapse" data-target="#collapse-quest-{{q.id}}">
 
         <div class="row">
@@ -35,10 +35,9 @@
         class="panel-collapse collapse {% if q.id == active_q_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
         <ul class="list-group">
-          <li class="list-group-item list-group-item-info">Submission Details</li>
           <li class="list-group-item list-group-item-buttons">
             {% include "quest_manager/buttons.html" %}
-            {{quest.submission_details|safe}}
+            {{q.short_description|safe}}
           </li>
         </ul>
 
