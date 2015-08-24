@@ -55,7 +55,7 @@ def comment_create(request):
                 if success_url is None:
                     success_url = parent_comment.get_absolute_url()
 
-
+        icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
 
         form = CommentForm(request.POST)
         if form.is_valid():
@@ -67,7 +67,7 @@ def comment_create(request):
                     text = comment_text,
                     # quest = quest,
                     target = target,
-                    parent=parent_comment
+                    parent=parent_comment,
                     )
                 affected_users = parent_comment.get_affected_users()
                 notify.send(
@@ -76,7 +76,9 @@ def comment_create(request):
                     target=parent_comment,
                     recipient=parent_comment.user,
                     affected_users=affected_users,
-                    verb='replied to')
+                    verb='replied to',
+                    icon=icon,
+                    )
                 # messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 messages.success(request, success_message)
                 return HttpResponseRedirect(success_url)
@@ -86,7 +88,7 @@ def comment_create(request):
                     path = origin_path,
                     text = comment_text,
                     # quest = quest
-                    target = target
+                    target = target,
                     )
                 # Fix this to send to all staff
                 affected_users = [User.objects.get(username='90158'),]
@@ -96,7 +98,9 @@ def comment_create(request):
                     target= target,
                     recipient=request.user,
                     affected_users=affected_users,
-                    verb='commented on')
+                    verb='commented on',
+                    icon=icon,
+                    )
                 messages.success(request, success_message)
 
                 if success_url is None:
