@@ -88,8 +88,12 @@ form .panel-body {
 
 
 /************ALERTS *************************/
-.alert:first-child {
+.alert:first-of-type {
   margin-top: 10px;
+}
+
+.alert {
+  margin-bottom: 0px;
 }
 
 /******** Bootstrap Tables ******************************/
