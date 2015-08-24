@@ -251,6 +251,10 @@ td {
   border-radius: 0px ;
 }
 
+.list-group-item-buttons {
+  min-height: 55px;
+}
+
 
 /***********Submission ********************************/
 .panel-body-comments {
@@ -292,6 +296,7 @@ td {
 .panel>.list-group>.list-group-item>.list-group {
   margin-bottom: 0px
 }
+
 
 .reply_comment {
   display: none;
