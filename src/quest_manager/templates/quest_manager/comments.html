@@ -1,37 +1,15 @@
 {% load crispy_forms_tags %}
 {% load comment_tags %}
-
-<ul class="list-group panel">
   {% for comment in target_comments %}
-    <li class="list-group-item">
-      <div class="pull-right">
-        <a href='#' class='reply_btn btn btn-default btn-xs'>Reply</a>
-        <a href='{{comment.get_absolute_url}}' class='btn btn-default btn-xs'>View Thread</a>
+    <li class="list-group-item avatar-left-sm">
+      <img class="avatar" src="{{comment.user.profile.avatar.url}}" alt="avatar"/>
+      <div class="comment-heading">
+        <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
+        &mdash; {{comment.timestamp|timesince}} ago
+        <hr/>
       </div>
-      <small>{{comment.user}} | {{comment.timestamp|timesince}} ago</small>
-      {{comment.text|safe}}
-      {% if not comment.is_child %}
-
-        {% if comment.get_children %}
-          <ul class="list-group">
-            {% for child in comment.get_children %}
-              <li class="list-group-item">
-                <small>{{child.user}} | {{child.timestamp|timesince}} ago</small>
-                {{child.text}}
-              </li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-
-        <div class='reply_comment'>
-          <form method="POST" action="{% url 'comments:create' %}">{% csrf_token %}
-            {{ reply_comment_form | crispy }}
-            <input type='hidden' name='parent_id' value='{{comment.id}}'>
-            <input type='hidden' name = 'origin_path' value='{{comment.get_origin}}' />
-            <input type='submit' class='btn btn-primary' value='Add reply' />
-          </form>
-        </div>
-      {% endif %}
+      <div class="comment-text">
+        {{comment.text|safe}}
+      </div>
     </li>
   {% endfor %}
-</ul>

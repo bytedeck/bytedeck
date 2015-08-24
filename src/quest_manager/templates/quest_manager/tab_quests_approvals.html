@@ -41,8 +41,9 @@
         <ul class="list-group">
           <li class="list-group-item list-group-item-info">Submission Details</li>
           <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
+          <li class="list-group-item list-group-item-info">Submission Comments</li>
           {% with s.get_comments as target_comments %}
-            {% include "quest_manager/comments_approvals.html" %}
+            {% include "quest_manager/comments.html" %}
           {% endwith %}
           <li class="list-group-item list-group-item-info">
             Quick Reply Form

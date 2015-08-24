@@ -1,4 +1,3 @@
-import ipdb
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -141,7 +140,6 @@ def approve(request, submission_id):
                 text = comment_text,
                 target = submission
             )
-            ipdb.set_trace()  ######### Break Point ###########
 
             if 'approve_button' in request.POST:
                 note_verb="approved"
@@ -169,6 +167,7 @@ def approve(request, submission_id):
 
 @staff_member_required
 def approvals(request):
+
     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     approved_submissions = QuestSubmission.objects.all_approved()
     returned_submissions = QuestSubmission.objects.all_returned()
@@ -261,7 +260,7 @@ def submission(request, submission_id):
 
     # comment_form = SubmissionForm(request.POST or None)
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    reply_comment_form = CommentForm(request.POST or None, label="Reply")
+    reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
 
     context = {

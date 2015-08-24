@@ -2,7 +2,7 @@
 {% load comment_tags %}
 
 <form method="POST" enctype="multipart/form-data" action="{% url 'comments:create' %}">{% csrf_token %}
-  {{ main_comment_form | crispy }}
+  {{ form | crispy }}
   <!-- <input type="file" name="files" multiple /> -->
   {% with target|content_type as ctype %}
     <input type="hidden" name="target_content_type_id" value="{{ ctype.pk }}">
@@ -11,10 +11,12 @@
   <input type='hidden' name = 'origin_path' value='{{request.get_full_path}}' />
   <input type='hidden' name = 'success_url' value='{% url "quests:complete" target.id %}' />
   <input type='hidden' name = 'success_message' value='Your quest was successfully submitted.' />
-  <p>
-    <input type='submit' class='btn btn-primary' value='Submit Quest for Completion' />
-    {% if not target.is_completed %}
+  <div class="panel-body">
+    {% if target.is_completed %}
+      <input type='submit' class='btn btn-primary' value='Add Submission Comment' />
+    {% else %}
+      <input type='submit' class='btn btn-primary' value='Submit Quest for Completion' />
       <a class="btn btn-danger" href="{% url 'quests:drop' target.id %}" role="button">Drop Quest</a>
     {% endif %}
-  </p>
+  </div>
 </form>

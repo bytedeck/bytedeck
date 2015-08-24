@@ -212,8 +212,8 @@ class QuestSubmissionManager(models.Manager):
 
     def all_approved(self, user=None):
         if user is None:
-            return self.get_queryset().approved()
-        return self.get_queryset().get_user(user).approved()
+            return self.get_queryset().approved().completed()
+        return self.get_queryset().get_user(user).approved().completed()
 
     def all_not_completed(self, user=None):
         if user is None:

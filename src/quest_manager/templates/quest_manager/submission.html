@@ -24,25 +24,27 @@
 
   <div class="panel panel-primary">
     <div class="panel-heading">
+      <h3 class="panel-title">Past Submissions and Replies</h3>
+    </div>
+    <ul class="list-group">
+      {% with submission.get_comments as target_comments %}
+        {% include "quest_manager/comments.html" %}
+      {% endwith %}
+    </ul>
+  </div>
+
+  <div class="panel panel-primary">
+    <div class="panel-heading">
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>
     <div class="panel-body panel-summernote">
-      {% with submission as target %}
+      {% with target=submission  form=main_comment_form%}
         {% include "quest_manager/comment_form_main.html" %}
       {% endwith %}
     </div>
   </div>
 
-  <div class="panel panel-primary">
-    <div class="panel-heading">
-      <h3 class="panel-title">Past Submissions and Comments</h3>
-    </div>
-    <div class="panel-body panel-body-comments">
-        {% with submission.get_comments as target_comments %}
-          {% include "quest_manager/comments.html" %}
-        {% endwith %}
-    </div>
-  </div>
+
 
 {% endblock %}
 

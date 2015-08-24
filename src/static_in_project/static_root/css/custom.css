@@ -71,7 +71,7 @@ iframe {
 }
 
 .panel-summernote iframe, .list-group-item-summernote iframe {
-  height: 550px !important;
+  /*height: 500px !important;*/
 }
 
 
