@@ -5,7 +5,7 @@
     <li class="list-group-item avatar-left-sm">
       <img class="avatar" src="{{comment.user.profile.avatar.url}}" alt="avatar"/>
       <div class="comment-heading">
-        <a href="{% url 'comments:create' %}">{{comment.user}}</a> 
+        <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a> 
         &mdash; {{comment.timestamp|timesince}} ago
         <hr/>
       </div>

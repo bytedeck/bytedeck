@@ -1,4 +1,6 @@
+import ipdb
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
@@ -12,6 +14,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from comments.models import Comment
 from comments.forms import CommentForm
+from notifications.signals import notify
 
 from .forms import QuestForm, SubmissionForm
 from .models import Quest, QuestSubmission, TaggedItem
@@ -121,6 +124,48 @@ def detail(request, quest_id):
 
 ########### Quest APPROVAL VIEWS #################################
 
+@staff_member_required
+def approve(request, submission_id):
+    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    origin_path = submission.get_absolute_url()
+
+    if request.method == "POST":
+
+        form = CommentForm(request.POST)
+
+        if form.is_valid():
+            comment_text = form.cleaned_data.get('comment_text')
+            comment_new = Comment.objects.create_comment(
+                user = request.user,
+                path = origin_path,
+                text = comment_text,
+                target = submission
+            )
+            ipdb.set_trace()  ######### Break Point ###########
+
+            if 'approve_button' in request.POST:
+                note_verb="approved"
+                submission.mark_approved()
+            else:
+                note_verb="returned"
+                submission.mark_returned()
+
+            affected_users = [submission.user,]
+            notify.send(
+                request.user,
+                action=comment_new,
+                target= submission,
+                recipient=submission.user,
+                affected_users=affected_users,
+                verb=note_verb
+            )
+            messages.success(request, ("Quest " + note_verb))
+            return redirect("quests:approvals")
+        else:
+            messages.error(request, "There was an error with your comment.")
+            return redirect(origin_path)
+    else:
+        raise Http404
 
 @staff_member_required
 def approvals(request):
@@ -163,18 +208,19 @@ def approvals(request):
     ]
 
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    reply_comment_form = CommentForm(request.POST or None, label="Reply")
+    quick_reply_form = CommentForm(request.POST or None, label="")
 
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
         "main_comment_form": main_comment_form,
-        "reply_comment_form": reply_comment_form,
+        "quick_reply_form": quick_reply_form,
     }
     return render(request, "quest_manager/quest_approval.html" , context)
 
 
 ########### QUEST SUBMISSION VIEWS ###############################
+
 
 @login_required
 def start(request, quest_id):
@@ -189,7 +235,6 @@ def start(request, quest_id):
 @login_required
 def complete(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
-    template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user:
         return redirect('quests:quests')
     sub.mark_completed()

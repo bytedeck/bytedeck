@@ -1,3 +1,4 @@
+{% load crispy_forms_tags %}
 
   {% if tab.submissions %}
   <div class="row panel-heading">
@@ -40,15 +41,21 @@
         <ul class="list-group">
           <li class="list-group-item list-group-item-info">Submission Details</li>
           <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
-
           {% with s.get_comments as target_comments %}
             {% include "quest_manager/comments_approvals.html" %}
           {% endwith %}
-          <li class="list-group-item list-group-item-info">New Submission Comment</li>
+          <li class="list-group-item list-group-item-info">
+            Quick Reply Form
+            (<a href="{% url 'quests:submission' s.id %}">Full Reply</a>)
+          </li>
           <li class="list-group-item">
-            {% with s as target %}
-              {% include "quest_manager/comment_form_main.html" %}
-            {% endwith %}
+            <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' s.id %}">{% csrf_token %}
+              {{ quick_reply_form | crispy }}
+              <div>
+                <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
+                <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
+              </div>
+            </form>
           </li>
         </ul>
 

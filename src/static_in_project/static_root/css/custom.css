@@ -58,7 +58,7 @@ iframe {
 }
 
 /************ SUMMERNOTE WIDGET **************/
-.panel-summernote {
+.panel-summernote, .list-group-item-summernote {
   padding: 0px;
   border-radius: 0px
 }
@@ -70,8 +70,8 @@ iframe {
   border-bottom: none;
 }
 
-.panel-summernote iframe {
-  height: 515px !important;
+.panel-summernote iframe, .list-group-item-summernote iframe {
+  height: 550px !important;
 }
 
 

@@ -48,6 +48,9 @@ class SubmissionForm(forms.Form):
 class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))
 
+class SubmissionQuickReplyForm(forms.Form):
+    comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))
+
 
 
     # def clean_name(self):
