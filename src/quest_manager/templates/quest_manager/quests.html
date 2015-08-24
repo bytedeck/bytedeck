@@ -11,13 +11,23 @@
 
 <ul class="nav nav-tabs nav-justified" role="tablist">
   <li role="presentation" class="active">
-    <a href="#available" role="tab" data-toggle="tab">Available</a>
+    <a href="#available" role="tab" data-toggle="tab">
+      Available
+      <span class="badge">{{available_quests|length}}</span>
+    </a>
+
   </li>
   <li role="presentation">
-    <a href="#inprogress" role="tab" data-toggle="tab">In Progress</a>
+    <a href="#inprogress" role="tab" data-toggle="tab">
+      In Progress
+      <span class="badge">{{in_progress_submissions|length}}</span>
+    </a>
   </li>
   <li role="presentation">
-    <a href="#completed" role="tab" data-toggle="tab">Completed</a>
+    <a href="#completed" role="tab" data-toggle="tab">
+      Completed
+      <span class="badge">{{completed_submissions|length}}</span>
+    </a>
   </li>
 </ul>
 <!-- Tab panes -->

@@ -43,6 +43,8 @@ iframe {
   margin-top:0px;
 }
 
+/*********** BADGES **************************/
+
 .badge.alert-danger {
   margin-top: 3px;
   color: #FFF;
@@ -51,6 +53,17 @@ iframe {
   /*font-size: 75%;*/
   background-image: none;
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
+}
+
+.nav-tabs .badge {
+  margin-top: -2px;
+  margin-left: 10px;
+}
+
+.nav-tabs > .active .badge {
+  color: #337ab7;
+  background-color: #fff;
+  text-shadow: none;
 }
 
 .quest-icon {

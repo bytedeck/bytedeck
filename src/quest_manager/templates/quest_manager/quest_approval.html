@@ -8,7 +8,10 @@
 <ul class="nav nav-tabs nav-justified" role="tablist">
   {% for tab in tab_list %}
     <li role="presentation" {% if forloop.first %}class="active" {% endif %}>
-      <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab">{{tab.name}}</a>
+      <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab">
+        {{tab.name}}
+        <span class="badge">{{tab.submissions|length}}</span>
+      </a>
     </li>
   {% endfor %}
 </ul>
