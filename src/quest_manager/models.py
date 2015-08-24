@@ -298,6 +298,7 @@ class QuestSubmission(models.Model):
         self.save()
 
     def mark_approved(self):
+        self.is_completed = True #might have been false if returned
         self.is_approved = True
         self.time_approved = timezone.now()
         self.save()

@@ -168,7 +168,7 @@ td {
     background-repeat: repeat-x;
 }
 
-.panel-heading.accordian {
+.panel-heading-tall {
   min-height: 65px;
 }
 
@@ -326,6 +326,10 @@ td {
 already distinguished*/
 .nav-tabs > .active > a, .nav-tabs > .active > a:hover {
   outline: 0;
+}
+
+.nav-tabs > li > a {
+  border-bottom-color: #2B669A !important;
 }
 
 /*to match other elements, taken from .list-group-item.active in bootstrap-theme.css*/
