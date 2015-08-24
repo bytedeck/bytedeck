@@ -7,7 +7,9 @@
 }
 {% endblock %}
 
-{% block heading_inner %}{{ heading }}{% endblock %}
+{% block heading_inner %}{{ heading }}
+{% if request.user.is_staff %} <small>({{submission.user}})</small>{% endif %}
+{% endblock %}
 
 {% block content %}
 

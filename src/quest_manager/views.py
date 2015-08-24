@@ -15,7 +15,7 @@ from comments.models import Comment
 from comments.forms import CommentForm
 from notifications.signals import notify
 
-from .forms import QuestForm, SubmissionForm
+from .forms import QuestForm, SubmissionForm, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission, TaggedItem
 
 class QuestDelete(DeleteView):
@@ -130,10 +130,12 @@ def approve(request, submission_id):
 
     if request.method == "POST":
 
-        form = CommentForm(request.POST)
+        form = SubmissionQuickReplyForm(request.POST)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
+            if not comment_text:
+                comment_text = "&lt;blank&gt;"
             comment_new = Comment.objects.create_comment(
                 user = request.user,
                 path = origin_path,
@@ -207,7 +209,7 @@ def approvals(request):
     ]
 
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    quick_reply_form = CommentForm(request.POST or None, label="")
+    quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
     context = {
         "heading": "Quest Approval",
@@ -255,7 +257,7 @@ def drop(request, submission_id):
 def submission(request, submission_id):
     # sub = QuestSubmission.objects.get(id = submission_id)
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
-    if sub.user != request.user:
+    if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 
     # comment_form = SubmissionForm(request.POST or None)

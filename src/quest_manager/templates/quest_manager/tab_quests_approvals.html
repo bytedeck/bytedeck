@@ -47,7 +47,10 @@
           {% endwith %}
           <li class="list-group-item list-group-item-info">
             Quick Reply Form
-            (<a href="{% url 'quests:submission' s.id %}">Full Reply</a>)
+            (
+            <a href="{% url 'quests:submission' s.id %}">Full Reply</a> |
+            <a href="{% url 'quests:quest_update' s.quest.id %}">Edit Quest</a>
+            )
           </li>
           <li class="list-group-item">
             <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' s.id %}">{% csrf_token %}

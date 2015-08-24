@@ -303,7 +303,7 @@ class QuestSubmission(models.Model):
         self.save()
 
     def mark_returned(self):
-        self.is_complete = False
+        self.is_completed = False
         self.save()
 
     def is_awaiting_approval(self):
