@@ -1,6 +1,7 @@
 # from django.http import HttpResponse
 # from django.template import RequestContext, loader
 from django.contrib.auth.decorators import login_required
+from django.core.urlresolvers import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
@@ -51,6 +52,25 @@ class ProfileDetail(DetailView):
     # def dispatch(self, *args, **kwargs):
     #     return super(ProfileDetail, self).dispatch(*args, **kwargs)
 
+# class ProfileEdit(UpdateView):
+#     model = Profile
+#     success_url = reverse_lazy('profile_list')
+#     fields = '__all__'
+#
+# class ProfileUpdate(UpdateView):
+#     model = Profile
+#     form_class = ProfileForm
+#     template_name = 'profile_manager/form.html'
+#
+#     @method_decorator(login_required)
+#     def dispatch(self, *args, **kwargs):
+#
+#         # only allow the users to see their own profiles, or admins
+#         profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
+#         if profile_user == self.request.user or self.request.user.is_staff:
+#             return super(ProfileUpdate, self).dispatch(*args, **kwargs)
+#
+#         return redirect('quests:quests')
 
 class ProfileUpdate(UpdateView):
     model = Profile
@@ -70,4 +90,7 @@ class ProfileUpdate(UpdateView):
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
-        return super(ProfileUpdate, self).dispatch(*args, **kwargs)
+        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
+        if profile_user == self.request.user or self.request.user.is_staff:
+            return super(ProfileUpdate, self).dispatch(*args, **kwargs)
+        return redirect('quests:quests')

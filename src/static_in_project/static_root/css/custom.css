@@ -39,6 +39,13 @@ iframe {
   border-radius: 8px;
 }
 
+/*********** PROFILE PAGE ********************/
+
+.progress-xp {
+  /*margin-left: 10px;
+  margin-right: 10px;*/
+}
+
 /*********** BADGES **************************/
 #notification_badge {
   margin-top:0px;

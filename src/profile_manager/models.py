@@ -35,7 +35,7 @@ class Profile(models.Model):
         return self.user.get_username()
 
     def get_absolute_url(self):
-        return reverse('profiles:profile_detail') #uses the logged in user
+        return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         #return u'/some_url/%d' % self.id
 

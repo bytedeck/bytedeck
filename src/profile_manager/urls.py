@@ -9,9 +9,12 @@ from profile_manager import views
 urlpatterns = [
     url(r'^$', views.ProfileList.as_view(), name='profile_list'),
     url(r'^create/$', views.ProfileCreate.as_view(), name='profile_create'),
+    # url(r'^edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
     # url(r'^detail/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<pk>[0-9]+)/$', views.ProfileDetail.as_view(), name='profile_detail'),
-    url(r'^edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
+    url(r'^(?P<pk>[0-9]+)/edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
+    # url(r'^edit/(?P<pk>[0-9]+)/$', views.ProfileEdit.as_view(), name='profile_edit'),
+
 
 
     #Examples
