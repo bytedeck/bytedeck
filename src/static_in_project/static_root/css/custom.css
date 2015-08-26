@@ -76,6 +76,26 @@ iframe {
 
 /************ ICONS **********************/
 
+.icon-xs {
+  width: 16px
+}
+
+.icon-sm {
+  width: 24px
+}
+
+.icon-md {
+  width: 32px
+}
+
+.icon-lg {
+  width: 64px
+}
+
+.icon-xl {
+  width: 128px
+}
+
 .quest-icon {
   margin-right: 10px;
 }
@@ -116,7 +136,7 @@ td.notification-icons .fa-stack {
   /*height: 500px !important;*/
 }
 
-.panel-summernote input {
+.panel-summernote div + input {
   margin-left: 15px;
 }
 
@@ -237,6 +257,10 @@ td {
 /*Make clickable accordian tabs change to pointer cursor*/
 .accordian-trigger {
   cursor: pointer;
+}
+
+.panel-top {
+  margin-top: 15px;
 }
 
 /**** panel packed together: add packed class to panel group div ***/
