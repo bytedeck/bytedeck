@@ -272,7 +272,7 @@ def complete(request, submission_id):
                 if request.user.is_staff:
                     affected_users = [submission.user,]
                 else:  # student comment
-                    affected_users = [User.objects.get(is_staff=True),]
+                    affected_users = User.objects.filter(is_staff=True)
             else:
                 raise Http404("unrecognized submit button")
 
