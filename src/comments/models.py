@@ -19,18 +19,19 @@ class CommentQuerySet(models.query.QuerySet):
     def get_no_parents(self):
         return self.filter(parent=None)
 
-    def get_active(self):
-        return self.filter(active=True)
+    def get_not_flagged(self):
+        return self.filter(flagged=False)
+
 
 class CommentManager(models.Manager):
     def get_queryset(self):
         return CommentQuerySet(self.model, using=self._db)
 
     def all_with_target_object(self, object):
-        return self.get_queryset().get_object_target(object).get_no_parents()
+        return self.get_queryset().get_object_target(object).get_no_parents().get_not_flagged()
 
-    def all(self):
-        return self.get_queryset.get_active().get_no_parents()
+    # def all(self):
+    #     return self.get_queryset.get_active().get_no_parents()
 
     def create_comment(self, user=None, text=None, path=None, target=None, parent=None):
         if not path:
@@ -70,6 +71,7 @@ class Comment(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     active = models.BooleanField(default=True)
+    flagged = models.BooleanField(default=False)
 
     target_content_type = models.ForeignKey(ContentType, related_name='comment_target',
         null=True, blank=True)
@@ -101,6 +103,10 @@ class Comment(models.Model):
             return True
         else:
             return False
+
+    def flag(self):
+        self.flagged=True;
+        self.save()
 
     def get_children(self):
         if self.is_child():

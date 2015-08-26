@@ -1,4 +1,5 @@
 {% extends "announcements/base.html" %}
+{% load crispy_forms_tags %}
 
 {% block heading_inner %}Announcements
 {% if request.user.is_authenticated and request.user.is_staff %}
@@ -28,19 +29,37 @@
     <div id="collapse{{object.id}}"
       class="panel-collapse collapse {% if object.id == active_id %} in {% endif %}"
       role="tabpanel" aria-labelledby="heading{{object.id}}">
-      <div class="panel-body">
-        <i class="fa fa-quote-left fa-3x pull-left fa-border"></i>
-        <div>
-          {{object.content|safe}}
-        </div>
-        {% if request.user.is_authenticated and request.user.is_staff %}
-        <div class="pull-right">
-          <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
-          <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
-          <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
-        </div>
-        {% endif %}
-      </div>
+      <ul class="list-group">
+        <li class="list-group-item">
+          {% if request.user.is_staff %}
+          <div class="pull-right">
+            <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
+            <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
+            <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
+          </div>
+          {% endif %}
+          <!-- <i class="fa fa-quote-left fa-2x pull-left"></i> -->
+          <div>
+            {{object.content|safe}}
+          </div>
+        </li>
+
+        {% with object.get_comments as target_comments %}
+          {% if target_comments %}
+            <li class="list-group-item list-group-item-info">Announcement Comments</li>
+            {% include "quest_manager/comments.html" %}
+          {% endif %}
+        {% endwith %}
+
+        <li class="list-group-item list-group-item-info">Comment </li>
+        <li class="list-group-item">
+          <form method="POST" action="{% url 'announcements:comment' object.id %}">{% csrf_token %}
+            {{ comment_form | crispy }}
+            <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
+          </form>
+        </li>
+      </ul>
+
     </div>
   </div>
 {% endfor %}

@@ -157,7 +157,10 @@ def approve(request, submission_id):
                 submission.mark_approved() ##############
             elif 'comment_button' in request.POST:
                 note_verb="commented on"
-                icon= "<i class='fa fa-lg fa-comment-o text-info'></i>"
+                icon="<span class='fa-stack'>" + \
+                    "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                    "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
+                    "</span>"
             elif 'return_button' in request.POST:
                 note_verb="returned"
                 icon="<span class='fa-stack'>" + \
@@ -193,39 +196,9 @@ def approvals(request):
     approved_submissions = QuestSubmission.objects.all_approved()
     returned_submissions = QuestSubmission.objects.all_returned()
 
-    # aw_appr_btns = '''<a class='btn btn-danger' href='{% url "quests:drop" s.id %}' role='button'>Drop</a>'''
-    approval_buttons = [
-        { "path": "quests:drop", "style": "primary", "text": "Approve" },
-        { "path": "quests:drop", "style": "warning", "text": "Return" },
-    ]
-
-    approved_buttons = [
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-    ]
-
-    returned_buttons = [
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-        { "path": "quests:drop", "style": "danger", "text": "Drop" },
-    ]
-
-    tab_list = [{
-            "name": "Awaiting Approval",
-            "submissions": approval_submissions,
-            "buttons": approval_buttons
-        },
-        {
-            "name": "Returned",
-            "submissions": returned_submissions,
-            "buttons": returned_buttons
-        },
-        {
-            "name": "Approved",
-            "submissions": approved_submissions,
-            "buttons": approved_buttons
-        },
-
-    ]
+    tab_list = [{"name": "Awaiting Approval", "submissions": approval_submissions,},
+                { "name": "Returned", "submissions": returned_submissions,},
+                { "name": "Approved", "submissions": approved_submissions,},]
 
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
@@ -268,7 +241,10 @@ def complete(request, submission_id):
                 affected_users = None
             elif 'comment' in request.POST:
                 note_verb="commented on"
-                icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
+                icon="<span class='fa-stack'>" + \
+                    "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                    "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
+                    "</span>"
                 if request.user.is_staff:
                     affected_users = [submission.user,]
                 else:  # student comment

@@ -1,7 +1,8 @@
 {% load crispy_forms_tags %}
 {% load comment_tags %}
+
   {% for comment in target_comments %}
-    <li class="list-group-item avatar-left-sm" id="comment-{{comment.id}}">
+    <!-- <li class="list-group-item avatar-left-sm" id="comment-{{comment.id}}">
       <img class="avatar" src="{{comment.user.profile.avatar.url}}" alt="avatar"/>
       <div class="comment-heading">
         <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
@@ -10,6 +11,21 @@
       </div>
       <div class="comment-text">
         {{comment.text|safe}}
+      </div>
+    </li> -->
+    <li class="list-group-item" id="comment-{{comment.id}}">
+      <div class="media">
+        <div class="media-left">
+          <img class="media-object icon-md" src="{{comment.user.profile.avatar.url}}" alt="avatar"/>
+        </div>
+        <div class="media-body">
+          {% if request.user.is_staff %}
+            <a class='btn btn-danger btn-xs pull-right' href="{% url 'comments:flag' comment.id %}"><i class="fa fa-flag"></i></a>
+          {% endif %}
+          <h5 class="media-heading">  <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
+            <small>&ndash; {{comment.timestamp|timesince}} ago</small></h5>
+            {{comment.text}}
+        </div>
       </div>
     </li>
   {% endfor %}

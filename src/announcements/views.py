@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -11,10 +12,67 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from notifications.signals import notify
 
+from comments.forms import CommentForm
+from comments.models import Comment
+
 from .models import Announcement
 from .forms import AnnouncementForm
 
-#function based views...
+#function based views..
+
+@login_required
+def comment(request, id):
+    announcement = get_object_or_404(Announcement, pk=id)
+    origin_path = announcement.get_absolute_url()
+
+    if request.method == "POST":
+
+        form = CommentForm(request.POST)
+
+        if form.is_valid():
+            comment_text = form.cleaned_data.get('comment_text')
+            if not comment_text:
+                comment_text = ""
+            comment_new = Comment.objects.create_comment(
+                user = request.user,
+                path = origin_path,
+                text = comment_text,
+                target = announcement,
+            )
+
+            if 'comment_button' in request.POST:
+                note_verb="commented on"
+                # icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
+                icon="<span class='fa-stack'>" + \
+                    "<i class='fa fa-newspaper-o fa-stack-1x'></i>" + \
+                    "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
+                    "</span>"
+                if request.user.is_staff:
+                    #get other commenters on this announcement
+                    affected_users = None
+                else:  # student comment
+                    affected_users = User.objects.filter(is_staff=True)
+            else:
+                raise Http404("unrecognized submit button")
+
+            notify.send(
+                request.user,
+                action=comment_new,
+                target= announcement,
+                recipient=request.user,
+                affected_users=affected_users,
+                verb=note_verb,
+                icon=icon,
+            )
+            messages.success(request, ("Announcement " + note_verb))
+            return redirect(origin_path)
+        else:
+            messages.error(request, "There was an error with your comment.")
+            return redirect(origin_path)
+    else:
+        raise Http404
+
+
 @login_required
 def list(request, id=None):
     object_list = Announcement.objects.get_active()
@@ -40,7 +98,10 @@ def list(request, id=None):
         # If page is out of range (e.g. 9999), deliver last page of results.
         object_list = paginator.page(paginator.num_pages)
 
+    comment_form = CommentForm(request.POST or None, label="")
+
     context = {
+        'comment_form': comment_form,
         'object_list': object_list,
         'active_id': active_id,
     }

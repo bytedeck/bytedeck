@@ -4,6 +4,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from comments.models import Comment
+
 # Create your models here.
 class AnnouncementQuerySet(models.query.QuerySet):
     def sticky(self):
@@ -56,3 +58,6 @@ class Announcement(models.Model):
     def get_absolute_url(self):
         # return reverse('announcements:list')
         return reverse('announcements:list', kwargs={'id': self.id})
+
+    def get_comments(self):
+        return Comment.objects.all_with_target_object(self)

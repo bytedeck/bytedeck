@@ -1,5 +1,6 @@
-from django.shortcuts import render, HttpResponseRedirect
+from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
@@ -11,10 +12,15 @@ from quest_manager.models import Quest
 from .models import Comment
 from .forms import CommentForm
 
+@staff_member_required
+def flag(request, id):
+    comment = get_object_or_404(Comment, pk=id)
+    comment.flag()
+    return redirect(comment.path)
 
 @login_required
 def comment_thread(request, id):
-    comment = Comment.objects.get(id=id)
+    comment = get_object_or_404(Comment, id=id)
     form = CommentForm(label = "Reply")
     context = {
         "comment": comment,
