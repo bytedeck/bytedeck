@@ -1,15 +1,20 @@
 from django.conf import settings
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+
 from django.core.mail import send_mail
 from django.core.urlresolvers import reverse_lazy
+
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template import RequestContext, loader
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+
 
 from comments.models import Comment
 from comments.forms import CommentForm
@@ -149,14 +154,19 @@ def approve(request, submission_id):
                     "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
                     "<i class='fa fa-shield fa-stack-1x'></i>" + \
                     "</span>"
-                submission.mark_approved()
-            else:
+                submission.mark_approved() ##############
+            elif 'comment_button' in request.POST:
+                note_verb="commented on"
+                icon= "<i class='fa fa-lg fa-comment-o text-info'></i>"
+            elif 'return_button' in request.POST:
                 note_verb="returned"
                 icon="<span class='fa-stack'>" + \
                     "<i class='fa fa-shield fa-stack-1x'></i>" + \
                     "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
                     "</span>"
-                submission.mark_returned()
+                submission.mark_returned() ##############
+            else:
+                raise Http404("unrecognized submit button")
 
             affected_users = [submission.user,]
             notify.send(
@@ -185,8 +195,8 @@ def approvals(request):
 
     # aw_appr_btns = '''<a class='btn btn-danger' href='{% url "quests:drop" s.id %}' role='button'>Drop</a>'''
     approval_buttons = [
-        # { "path": "quests:drop", "style": "primary", "text": "Approve" },
-        # { "path": "quests:drop", "style": "warning", "text": "Return" },
+        { "path": "quests:drop", "style": "primary", "text": "Approve" },
+        { "path": "quests:drop", "style": "warning", "text": "Return" },
     ]
 
     approved_buttons = [
@@ -230,7 +240,59 @@ def approvals(request):
 
 
 ########### QUEST SUBMISSION VIEWS ###############################
+@login_required
+def complete(request, submission_id):
+    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    origin_path = submission.get_absolute_url()
 
+    if request.method == "POST":
+
+        form = CommentForm(request.POST or None, wysiwyg=True, label="")
+        # form = SubmissionQuickReplyForm(request.POST)
+
+        if form.is_valid():
+            comment_text = form.cleaned_data.get('comment_text')
+            if not comment_text:
+                comment_text = ""
+            comment_new = Comment.objects.create_comment(
+                user = request.user,
+                path = origin_path,
+                text = comment_text,
+                target = submission,
+            )
+
+            if 'complete' in request.POST:
+                note_verb="completed"
+                icon="<i class='fa fa-shield fa-lg'></i>"
+                submission.mark_completed() ###################
+                affected_users = None
+            elif 'comment' in request.POST:
+                note_verb="commented on"
+                icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
+                if request.user.is_staff:
+                    affected_users = [submission.user,]
+                else:  # student comment
+                    affected_users = [User.objects.get(is_staff=True),]
+            else:
+                raise Http404("unrecognized submit button")
+
+
+            notify.send(
+                request.user,
+                action=comment_new,
+                target= submission,
+                recipient=submission.user,
+                affected_users=affected_users,
+                verb=note_verb,
+                icon=icon,
+            )
+            messages.success(request, ("Quest " + note_verb))
+            return redirect("quests:quests")
+        else:
+            messages.error(request, "There was an error with your comment.")
+            return redirect(origin_path)
+    else:
+        raise Http404
 
 @login_required
 def start(request, quest_id):
@@ -243,7 +305,7 @@ def start(request, quest_id):
     return redirect('quests:submission', submission_id = new_sub.id)
 
 @login_required
-def complete(request, submission_id):
+def complete_old(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     if sub.user != request.user:
         return redirect('quests:quests')
@@ -278,8 +340,8 @@ def submission(request, submission_id):
         "heading": sub.quest.name,
         "submission": sub,
         # "comments": comments,
-        "main_comment_form": main_comment_form,
-        "reply_comment_form": reply_comment_form,
+        "submission_form": main_comment_form,
+        # "reply_comment_form": reply_comment_form,
     }
     return render(request, 'quest_manager/submission.html', context)
 

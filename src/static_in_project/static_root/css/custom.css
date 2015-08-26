@@ -39,6 +39,8 @@ iframe {
   border-radius: 8px;
 }
 
+:target::before
+
 /*********** PROFILE PAGE ********************/
 
 .progress-xp {
@@ -98,7 +100,9 @@ td.notification-icons .fa-stack {
 /************ SUMMERNOTE WIDGET **************/
 .panel-summernote, .list-group-item-summernote {
   padding: 0px;
-  border-radius: 0px
+  border-radius: 0px;
+  /*DOM height on load so doesn't grow when Summernote finishes loading */
+  min-height: 544px;
 }
 
 .summernotewidget {
@@ -110,6 +114,10 @@ td.notification-icons .fa-stack {
 
 .panel-summernote iframe, .list-group-item-summernote iframe {
   /*height: 500px !important;*/
+}
+
+.panel-summernote input {
+  margin-left: 15px;
 }
 
 

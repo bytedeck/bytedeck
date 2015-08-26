@@ -56,8 +56,12 @@
             <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' s.id %}">{% csrf_token %}
               {{ quick_reply_form | crispy }}
               <div>
-                <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
-                <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
+                {% if s.is_approved %}
+                  <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
+                {% else %}
+                  <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
+                {% endif %}
+                  <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
               </div>
             </form>
           </li>
