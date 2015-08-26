@@ -13,9 +13,30 @@ from .models import Comment
 from .forms import CommentForm
 
 @staff_member_required
+def unflag(request, id):
+    comment = get_object_or_404(Comment, pk=id)
+    comment.unflag()
+    return redirect(comment.path)
+
+@staff_member_required
 def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
     comment.flag()
+
+    icon="<span class='fa-stack'>" + \
+        "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+        "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+        "</span>"
+
+    notify.send(
+        request.user,
+        target= comment,
+        recipient=comment.user,
+        affected_users= [comment.user,],
+        verb='flagged',
+        icon=icon,
+        )
+
     return redirect(comment.path)
 
 @login_required

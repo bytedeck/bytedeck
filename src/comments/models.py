@@ -28,7 +28,7 @@ class CommentManager(models.Manager):
         return CommentQuerySet(self.model, using=self._db)
 
     def all_with_target_object(self, object):
-        return self.get_queryset().get_object_target(object).get_no_parents().get_not_flagged()
+        return self.get_queryset().get_object_target(object).get_no_parents()
 
     # def all(self):
     #     return self.get_queryset.get_active().get_no_parents()
@@ -68,8 +68,8 @@ class Comment(models.Model):
     path = models.CharField(max_length=350)
     # quest = models.ForeignKey(Quest, null=True, blank=True)
     text = models.TextField()
-    timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
-    updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
     active = models.BooleanField(default=True)
     flagged = models.BooleanField(default=False)
 
@@ -106,6 +106,10 @@ class Comment(models.Model):
 
     def flag(self):
         self.flagged=True;
+        self.save()
+
+    def unflag(self):
+        self.flagged=False;
         self.save()
 
     def get_children(self):
