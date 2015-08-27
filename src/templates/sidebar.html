@@ -13,7 +13,9 @@
     <img id="logo" src ="{% static 'img/banner.png' %}"  class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
   </h3>
   <div class="nav list-group hidden-xs" id="lg-menu">
-      <a class="list-group-item {% if '/quests/' in request.path_info %}active{% endif %}" href="{% url 'quests:quests' %}">
+      <a class="list-group-item
+        {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info %}active{% endif %}"
+        href="{% url 'quests:quests' %}">
         <i class="fa fa-shield fa-fw"></i>&nbsp; Quests
       </a>
       <a class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}" href="#">
