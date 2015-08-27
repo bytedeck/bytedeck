@@ -75,6 +75,7 @@ INSTALLED_APPS = (
     'announcements',
     'comments',
     'notifications',
+    'courses',
 )
 
 MIDDLEWARE_CLASSES = (
