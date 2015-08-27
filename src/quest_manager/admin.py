@@ -3,7 +3,7 @@ from django.contrib.contenttypes.admin  import GenericTabularInline
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
-from .models import Quest, Category, Prerequisite, Course, TaggedItem, QuestSubmission
+from .models import Quest, Category, Prerequisite, TaggedItem, QuestSubmission
 
 
 class FeedbackAdmin(admin.ModelAdmin):
@@ -34,5 +34,4 @@ admin.site.register(Quest, QuestAdmin)
 admin.site.register(Category)
 admin.site.register(QuestSubmission)
 # admin.site.register(Feedback, FeedbackAdmin)
-admin.site.register(Course)
 # admin.site.register(TaggedItem)

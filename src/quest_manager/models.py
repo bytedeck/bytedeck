@@ -14,21 +14,10 @@ from django.utils import timezone
 
 from comments.models import Comment
 
-
-
-class Course(models.Model):
-    title = models.CharField(max_length=50, unique=True)
-    icon = models.ImageField(upload_to='icons/', null=True,blank=True)
-    active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return self.title
-
 class Category(models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
-    course = models.ForeignKey(Course, null=True)
 
     class Meta:
         verbose_name_plural = "Categories"
