@@ -32,6 +32,7 @@ urlpatterns = [
     url(r'^announcements/', include('announcements.urls', namespace='announcements')),
     url(r'^comments/', include('comments.urls', namespace='comments')),
     url(r'^notifications/', include('notifications.urls', namespace='notifications')),
+    url(r'^courses/', include('courses.urls', namespace='courses')),
     #admin
     url(r'^admin/', include(admin.site.urls)),
     #summer_note

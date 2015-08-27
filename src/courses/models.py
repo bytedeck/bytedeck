@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.urlresolvers import reverse
 
 from django.db import models
 
@@ -22,6 +23,8 @@ class DateType(models.Model):
 
 class Block(models.Model):
     block = models.CharField(max_length=50, unique=True)
+    start_time = models.TimeField(blank=True, null=True)
+    end_time = models.TimeField(blank=True, null=True)
 
     def __str__(self):
         return self.block
@@ -32,7 +35,7 @@ class ExcludedDate(models.Model):
     date = models.DateField(unique=True)
 
     def __str__(self):
-        return self.first_day.strftime("%d-%b-%Y")
+        return self.date.strftime("%d-%b-%Y")
 
 
 class Course(models.Model):
@@ -43,13 +46,37 @@ class Course(models.Model):
     def __str__(self):
         return self.title
 
+class CourseStudentQuerySet(models.query.QuerySet):
+    def sticky(self):
+        return self.filter(sticky=True)
+
+    def get_user(self, user):
+        return self.filter(user=user)
+
+    def get_semester(self, semester):
+        return self.filter(semester=semester)
+
+
+class CourseStudentManager(models.Manager):
+    def get_queryset(self):
+        return CourseStudentQuerySet(self.model, using=self._db)
+
+    def all_for_user_semester(self, user, semester):
+        return self.get_queryset.get_user(user).get_semester(semester)
+
 class CourseStudent(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True)
     semester = models.ForeignKey(Semester)
     block = models.ForeignKey(Block)
     course = models.ForeignKey(Course)
     grade = models.PositiveIntegerField()
     active = models.BooleanField(default=True)
 
+    objects = CourseStudentManager()
+
     def __str__(self):
         return self.user.username + ", " + str(semester) + ", "  + block.block
+
+    def get_absolute_url(self):
+        return reverse('courses:list')
+        # return reverse('courses:detail', kwargs={'pk': self.pk})

@@ -1,0 +1,19 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+
+{% block heading_inner %}Courses{% endblock%}
+
+{% block content %}
+{% for object in object_list %}
+<ul>
+  <li>User: {{object.user}}</li>
+  <li>Semester: {{object.semester}}</li>
+  <li>Block: {{object.block}}</li>
+  <li>Course: {{object.course}}</li>
+  <li>Grade: {{object.grade}}</li>
+  <li>Active: {{object.active}}</li>
+</ul>
+{% endfor %}
+{% endblock %}

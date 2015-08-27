@@ -26,13 +26,9 @@ class AnnouncementManager(models.Manager):
         return AnnouncementQuerySet(self.model, using=self._db)
 
     def get_sticky(self):
-        #Announcement.objects.filter(condition)
-        #return super(AnnouncementManager, self).filter(sticky=True)
         return self.get_active().sticky()
 
     def get_not_sticky(self):
-        #Announcement.objects.filter(condition)
-        #return super(AnnouncementManager, self).filter(sticky=True)
         return self.get_active().not_sticky()
 
     def get_active(self):

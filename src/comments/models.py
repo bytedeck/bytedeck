@@ -39,12 +39,6 @@ class CommentManager(models.Manager):
         if not user:
             raise ValueError("Must include a user  when adding a comment")
 
-        # comment = self.model(
-        #     user = user,
-        #     path = path,
-        #     text = text,
-        #     quest = quest
-        # )
         comment = self.model(
             user = user,
             path = path,
