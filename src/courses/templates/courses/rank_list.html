@@ -1,0 +1,24 @@
+{% extends "base_sidebar.html" %}
+
+{% block head_title %}Ranks | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}<i class="fa fa-star pull-right"></i>Ranks{% endblock %}
+
+{% block content %}
+<table class="table table-striped">
+  <tr>
+    <th>Rank</th><th>XP</th>
+  </tr>
+  {% for object in object_list %}
+    <tr>
+      <td>{{object.title}}</td>
+      <td>{{object.xp}} XP</td>
+    </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}
+
+{% block js %}{% endblock %}

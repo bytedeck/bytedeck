@@ -16,7 +16,7 @@
       <div class="panel-heading">
 
         <h3 class="panel-title">
-          <div class="pull-right"> Rank: </div>
+          <div class="pull-right"> Rank: {{object.get_rank}}</div>
           {{object.first_name}}
           {% if object.preferred_name %} ({{ object.preferred_name}}) {% endif %}
           {{object.last_name}}{% if object.alias %}, aka {{ object.alias}}{% endif %}

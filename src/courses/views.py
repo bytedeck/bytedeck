@@ -6,9 +6,12 @@ from django.views.generic import DetailView, ListView
 from django.shortcuts import get_object_or_404, redirect
 
 # from .forms import ProfileForm
-from .models import CourseStudent
+from .models import CourseStudent, Rank
 from .forms import CourseStudentForm
 # Create your views here.
+
+class RankList(ListView):
+    model = Rank
 
 class CourseStudentList(ListView):
     model = CourseStudent

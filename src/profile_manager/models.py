@@ -9,6 +9,7 @@ from notifications.signals import notify
 from datetime import datetime
 
 from quest_manager.models import QuestSubmission
+from courses.models import Rank
 
 GRAD_YEAR_CHOICES = []
 for r in range(datetime.now().year, datetime.now().year+4):
@@ -43,6 +44,9 @@ class Profile(models.Model):
     def get_xp(self):
         return QuestSubmission.objects.calculate_xp(self.user)
 
+    def get_rank(self):
+        return Rank.objects.get_rank(self.get_xp())
+
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:
@@ -55,8 +59,3 @@ def create_profile(sender, **kwargs):
             verb='new user created')
 
 post_save.connect(create_profile, sender=User)
-
-class Rank(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-    xp_min = models.PositiveIntegerField(unique=True)
-    icon = models.ImageField(upload_to='icons/', null=True, blank=True)

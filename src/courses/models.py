@@ -6,6 +6,25 @@ from django.db import models
 from datetime import timedelta
 
 # Create your models here.
+
+
+class RankManager(models.Manager):
+    def get_queryset(self):
+        return models.query.QuerySet(self.model, using=self._db).order_by('xp')
+
+    def get_rank(self, user_xp=0):
+        return self.get_queryset().filter(xp__gte = user_xp).first()
+
+class Rank(models.Model):
+    title = models.CharField(max_length=50, unique=True)
+    xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
+    icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+
+    objects = RankManager()
+
+    def __str__(self):
+        return self.title
+
 class SemesterManager(models.Manager):
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
@@ -80,7 +99,6 @@ class CourseStudentQuerySet(models.query.QuerySet):
 
     def get_semester(self, semester):
         return self.filter(semester=semester)
-
 
 class CourseStudentManager(models.Manager):
     def get_queryset(self):

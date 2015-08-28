@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.contenttypes.admin  import GenericTabularInline
 
 # Register your models here.
-from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course
+from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank
 
 class ExcludedDateInline(admin.TabularInline):
     model = ExcludedDate
