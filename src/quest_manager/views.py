@@ -138,22 +138,14 @@ def approve(request, submission_id):
         form = SubmissionQuickReplyForm(request.POST)
 
         if form.is_valid():
-            comment_text = form.cleaned_data.get('comment_text')
-            if not comment_text:
-                comment_text = "&lt;blank&gt;"
-            comment_new = Comment.objects.create_comment(
-                user = request.user,
-                path = origin_path,
-                text = comment_text,
-                target = submission
-            )
-
+            blank_comment_text = ""
             if 'approve_button' in request.POST:
                 note_verb="approved"
                 icon="<span class='fa-stack'>" + \
                     "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
                     "<i class='fa fa-shield fa-stack-1x'></i>" + \
                     "</span>"
+                blank_comment_text="(approved without comment)"
                 submission.mark_approved() ##############
             elif 'comment_button' in request.POST:
                 note_verb="commented on"
@@ -167,14 +159,34 @@ def approve(request, submission_id):
                     "<i class='fa fa-shield fa-stack-1x'></i>" + \
                     "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
                     "</span>"
+                blank_comment_text="(returned without comment)"
                 submission.mark_returned() ##############
             else:
                 raise Http404("unrecognized submit button")
 
+
+            comment_text_form = form.cleaned_data.get('comment_text')
+            if not comment_text_form:
+                comment_text = blank_comment_text
+            else:
+                comment_text = comment_text_form
+            comment_new = Comment.objects.create_comment(
+                user = request.user,
+                path = origin_path,
+                text = comment_text,
+                target = submission
+            )
+
+            # don't say "with" if no comment was entered
+            if not comment_text_form:
+                action = None
+            else:
+                action = comment_new
+
             affected_users = [submission.user,]
             notify.send(
                 request.user,
-                action=comment_new,
+                action=action,
                 target= submission,
                 recipient=submission.user,
                 affected_users=affected_users,
