@@ -47,10 +47,12 @@
           var count = data.count;
           if(count!=0) {
             $("#notification_badge").html(count);
+              console.log(data);
             var announcements_count = 0;
             $(data.notifications).each(function(){
               var link = this;
-              if (this.indexOf("announcements")) {
+              if (this.indexOf("announcements")>0) {
+                console.log(this.indexOf("announcements"));
                 announcements_count++;
               }
             })
