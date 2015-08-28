@@ -19,6 +19,8 @@ class Rank(models.Model):
     title = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+    fa_icon = models.TextField(null=True, blank=True,
+        help_text='html to render a font-awesome icon or icon stack etc.')
 
     objects = RankManager()
 

@@ -16,7 +16,12 @@
       <div class="panel-heading">
 
         <h3 class="panel-title">
-          <div class="pull-right"> Rank: {{object.get_rank}}</div>
+          <a href="{% url 'courses:ranks' %}">
+             <div class="pull-right">
+               <i class="{{object.get_rank.fa_icon}} fa-lg"></i>
+               {{object.get_rank}}
+             </div>
+          </a>
           {{object.first_name}}
           {% if object.preferred_name %} ({{ object.preferred_name}}) {% endif %}
           {{object.last_name}}{% if object.alias %}, aka {{ object.alias}}{% endif %}

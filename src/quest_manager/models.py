@@ -265,7 +265,10 @@ class QuestSubmissionManager(models.Manager):
     def calculate_xp(self, user):
 
         total_xp = self.all_approved(user).aggregate(Sum('quest__xp'))
-        return total_xp['quest__xp__sum']
+        xp = total_xp['quest__xp__sum']
+        if xp is None:
+            xp = 0
+        return xp
 
 
 
