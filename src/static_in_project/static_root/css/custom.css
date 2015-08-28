@@ -154,12 +154,16 @@ form .panel-body {
 
 
 /************ALERTS *************************/
-.alert:first-of-type {
+.alert-dismissable:first-of-type {
   margin-top: 10px;
 }
 
-.alert {
+.alert .alert-dismissable {
   margin-bottom: 0px;
+}
+
+.alert-block ul {
+  padding-left: 20px;
 }
 
 /******** Bootstrap Tables ******************************/

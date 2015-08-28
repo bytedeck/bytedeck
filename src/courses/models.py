@@ -17,8 +17,6 @@ class SemesterManager(models.Manager):
         return qs.filter(pk__in=valid_ids)
 
 
-
-
 class Semester(models.Model):
     SEMESTER_CHOICES = ((1,1),(2,2),)
 
@@ -26,10 +24,13 @@ class Semester(models.Model):
     first_day = models.DateField(blank=True, null=True)
     last_day = models.DateField(blank=True, null=True)
 
+    objects = SemesterManager()
+
+    class Meta:
+        get_latest_by = "first_day"
+
     def __str__(self):
         return self.first_day.strftime("%b-%Y")
-
-    objects = SemesterManager()
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -95,9 +96,10 @@ class CourseStudent(models.Model):
 
     class Meta:
         unique_together = (
-                ('semester', 'block', 'user'), 
+                ('semester', 'block', 'user'),
                 ('user','course','grade'),
             )
+        verbose_name = "Course"
 
     def __str__(self):
         return self.user.username + ", " + str(self.semester) + ", "  + self.block.block
