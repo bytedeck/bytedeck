@@ -8,6 +8,8 @@ from notifications.signals import notify
 
 from datetime import datetime
 
+from quest_manager.models import QuestSubmission
+
 GRAD_YEAR_CHOICES = []
 for r in range(datetime.now().year, datetime.now().year+4):
         GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
@@ -38,11 +40,8 @@ class Profile(models.Model):
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         #return u'/some_url/%d' % self.id
 
-    def get_avatar_url(self):
-        return reverse('')
-
-    def get_courses(self):
-        return 0
+    def get_xp(self):
+        return QuestSubmission.objects.calculate_xp(self.user)
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]

@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.db.models import Q, Max
+from django.db.models import Q, Max, Sum
 from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 
@@ -261,6 +261,14 @@ class QuestSubmissionManager(models.Manager):
             return new_submission
         else:
             return None
+
+    def calculate_xp(self, user):
+
+        total_xp = self.all_approved(user).aggregate(Sum('quest__xp'))
+        return total_xp['quest__xp__sum']
+
+
+
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
