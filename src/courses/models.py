@@ -37,7 +37,6 @@ class Semester(models.Model):
         return self.first_day.strftime("%b-%Y")
 
     def active_by_date(self):
-
         return (self.last_day+timedelta(days=5)) > timezone.now().date() and (self.first_day-timedelta(days=20)) < timezone.now().date()
 
 class DateType(models.Model):
