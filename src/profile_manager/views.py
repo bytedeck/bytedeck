@@ -5,6 +5,8 @@ from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
 from django.shortcuts import get_object_or_404, redirect
 
+from courses.models import CourseStudent
+
 from .forms import ProfileForm
 from .models import Profile
 # Create your views here.
@@ -25,6 +27,7 @@ class ProfileCreate(CreateView):
         data.save()
         return super(ProfileCreate, self).form_valid(form)
 
+
 class ProfileDetail(DetailView):
     model = Profile
 
@@ -36,6 +39,13 @@ class ProfileDetail(DetailView):
             return super(ProfileDetail, self).dispatch(*args, **kwargs)
 
         return redirect('quests:quests')
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get a context
+        context = super(ProfileDetail, self).get_context_data(**kwargs)
+        # Add in a QuerySet of all the books
+        context['courses'] = CourseStudent.objects.all_for_user(self.request.user)
+        return context
 
 class ProfileUpdate(UpdateView):
     model = Profile

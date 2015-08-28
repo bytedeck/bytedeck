@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.core.urlresolvers import reverse
-
+from django.utils import timezone
 from django.db import models
+
+from datetime import timedelta
 
 # Create your models here.
 class SemesterManager(models.Manager):
@@ -23,14 +25,20 @@ class Semester(models.Model):
     number = models.PositiveIntegerField(choices=SEMESTER_CHOICES)
     first_day = models.DateField(blank=True, null=True)
     last_day = models.DateField(blank=True, null=True)
+    active = models.BooleanField(default=True)
 
     objects = SemesterManager()
 
     class Meta:
         get_latest_by = "first_day"
+        ordering = ['first_day']
 
     def __str__(self):
         return self.first_day.strftime("%b-%Y")
+
+    def active_by_date(self):
+
+        return (self.last_day+timedelta(days=5)) > timezone.now().date() and (self.first_day-timedelta(days=20)) < timezone.now().date()
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -80,7 +88,10 @@ class CourseStudentManager(models.Manager):
         return CourseStudentQuerySet(self.model, using=self._db)
 
     def all_for_user_semester(self, user, semester):
-        return self.get_queryset.get_user(user).get_semester(semester)
+        return self.get_queryset().get_user(user).get_semester(semester)
+
+    def all_for_user(self, user):
+        return self.get_queryset().get_user(user)
 
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9,9),(10,10),(11,11),(12,12),(13, 'Adult'))
@@ -90,6 +101,8 @@ class CourseStudent(models.Model):
     block = models.ForeignKey(Block)
     course = models.ForeignKey(Course)
     grade = models.PositiveIntegerField(choices=GRADE_CHOICES)
+    final_xp = models.PositiveIntegerField(blank=True, null=True)
+    final_grade = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
 
     objects = CourseStudentManager()
@@ -99,7 +112,8 @@ class CourseStudent(models.Model):
                 ('semester', 'block', 'user'),
                 ('user','course','grade'),
             )
-        verbose_name = "Course"
+        verbose_name = "Student Course"
+        ordering = ['semester', 'block']
 
     def __str__(self):
         return self.user.username + ", " + str(self.semester) + ", "  + self.block.block

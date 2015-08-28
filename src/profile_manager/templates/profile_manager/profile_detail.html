@@ -75,18 +75,27 @@
       <div class="panel-body">
         <p>SN: {{ object.student_number}}</p>
         <p>Grad: {{ object.grad_year}}</p>
-        <p>Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
+        <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
       </div>
      </div> <!--panel -->
      <div class="panel panel-info">
        <div class="panel-heading">
          <h3 class="panel-title">Courses</h3>
        </div>
-       <div class="panel-body">
-         <p>SN: {{ object.student_number}}</p>
-         <p>Grad: {{ object.grad_year}}</p>
-         <p>Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
-       </div>
+       <ul class="list-group">
+         {% if courses %}
+             {% for course in courses %}
+               <li class="list-group-item {% if not course.semester.active_by_date %}text-muted{% endif %}">
+                 {{course.course}} {{course.grade}} <br/>
+                 <small>{{course.block}} Block, Semester {{course.semester.number}}, {{course.semester}}</small>
+               </li>
+             {% endfor %}
+         {% else %}
+           <li class="list-group-item">You have not joined a course yet.
+             <a href="{% url 'courses:create' %}" class="btn btn-info btn-xs" role="button">Join a Course</a>
+           </li>
+         {% endif %}
+       </ul>
       </div> <!--panel -->
      <div class="panel panel-info">
        <div class="panel-heading">
