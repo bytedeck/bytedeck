@@ -25,8 +25,6 @@
 
     {% block content_first %}{% endblock %}
     {% include 'navbar-fixed.html' %}
-
-    {% block jumbotron %}{% endblock %}
     <div class="container-fluid main-container">
 
       {% if messages %}
@@ -36,7 +34,8 @@
           {% elif 'warning' in message.tags %}alert-warning
           {% elif 'info' in message.tags %}alert-info
           {% elif 'success' in message.tags %}alert-success
-          {% endif %}">
+          {% endif %}
+          dismiss-in-3">
           <button type="button" class="close" data-dismiss="alert" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
@@ -48,7 +47,7 @@
         </div>
         {% endfor %}
       {% endif %}
-
+      
       {% block content_outer %}{% endblock %}
     </div> <!-- /container -->
 

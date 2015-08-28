@@ -35,6 +35,9 @@
       //     // }
       //   }
       // });
+      if ($('.dismiss-in-3').length) {
+        setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
+      }
 
       //Update badge to show number of new Notifications
       $.ajax({
@@ -47,12 +50,10 @@
           var count = data.count;
           if(count!=0) {
             $("#notification_badge").html(count);
-              console.log(data);
             var announcements_count = 0;
             $(data.notifications).each(function(){
               var link = this;
               if (this.indexOf("announcements")>0) {
-                console.log(this.indexOf("announcements"));
                 announcements_count++;
               }
             })

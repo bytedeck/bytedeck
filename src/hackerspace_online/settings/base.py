@@ -69,6 +69,10 @@ INSTALLED_APPS = (
     # https://github.com/asaglimbeni/django-datetime-widget
     'datetimewidget',
 
+    # https://pypi.python.org/pypi/django-badgify
+    # 'badgify',
+
+
     #local apps
     'quest_manager',
     'profile_manager',

@@ -293,15 +293,6 @@ def start(request, quest_id):
     return redirect('quests:submission', submission_id = new_sub.id)
 
 @login_required
-def complete_old(request, submission_id):
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
-    if sub.user != request.user:
-        return redirect('quests:quests')
-    sub.mark_completed()
-    # return render(request, template_name, {'submission':sub})
-    return redirect('quests:quests')
-
-@login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"
@@ -309,6 +300,7 @@ def drop(request, submission_id):
         return redirect('quests:quests')
     if request.method=='POST':
         sub.delete()
+        messages.error(request, ("Quest dropped."))
         return redirect('quests:quests')
     return render(request, template_name, {'submission':sub})
 

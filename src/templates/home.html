@@ -8,7 +8,7 @@
 
 {% block content_first %}{% endblock %}
 
-{% block jumbotron %}
+<!-- {% block jumbotron %}
   <div class="jumbotron">
     <div class="container-fluid">
       <img class = "img-responsive banner1" src ="{% static 'img/banner.png' %}" alt="Timberline's Digital Hackerspace Landing Page" />
@@ -17,14 +17,14 @@
       <p>To see the difference between static and fixed top navbars, just scroll.</p>
       <p>
         <a class="btn btn-lg btn-primary" href="../../components/#navbar" role="button">View navbar docs &raquo;</a>
-      </p> -->
+      </p>
     </div>
-  </div>
+  </div> -->
+<!-- {% endblock %} -->
+{% block content_outer %}
+  <img class = "img-responsive jumbo-banner banner1" src ="{% static 'img/banner.png' %}" alt="Timberline's Digital Hackerspace Landing Page" />
 {% endblock %}
 
-{% block content_outer %}
-  {% block content %}{% endblock %}
-{% endblock %}
 
 {% block content_last %}{% endblock %}
 

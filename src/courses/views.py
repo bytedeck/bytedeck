@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib.messages.views import SuccessMessageMixin
 from django.core.urlresolvers import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
@@ -30,11 +31,12 @@ class CourseStudentList(ListView):
 #     }
 #     return render(request, 'courses/coursestudent_form.html', context)
 
-class CourseStudentCreate(CreateView):
+class CourseStudentCreate(SuccessMessageMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
+    success_message = "You have been added to the %(course)s %(grade)s course"
 
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()

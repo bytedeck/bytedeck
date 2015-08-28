@@ -7,6 +7,10 @@
   background-color: white;
 }
 
+.jumbo-banner {
+  padding-top: 20px;
+}
+
 .main-container {
   min-height: 950px;
   background-color: #FFF;
