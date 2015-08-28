@@ -18,8 +18,8 @@
         <h3 class="panel-title">
           <a href="{% url 'courses:ranks' %}">
              <div class="pull-right">
-               <i class="{{object.get_rank.fa_icon}} fa-lg"></i>
-               {{object.get_rank}}
+               <i class="{{object.rank.fa_icon}} fa-lg"></i>
+               {{object.rank}}
              </div>
           </a>
           {{object.first_name}}
@@ -46,20 +46,20 @@
             X | 1000
           </div>
         </div> -->
-        <div class="pull-right"> {{object.get_xp}} | 1000</div>
+        <div class="pull-right"> {{object.xp}} | 1000</div>
         <div>{{courses.0.course}} {{courses.0.grade}} </div>
-        <div class="progress progress-xp">&nbsp; {% widthratio object.get_xp 1000 100 %}&#37;
-          <div class="progress-bar" role="progressbar" aria-valuenow="{{object.get_xp}}" aria-valuemin="0" aria-valuemax="1000"
-              style="width: {% widthratio object.get_xp 1000 100 %}%;">
-            <span class="sr-only">{% widthratio object.get_xp 1000 100 %}% Complete</span>
+        <div class="progress progress-xp">&nbsp; {% widthratio object.xp 1000 100 %}&#37;
+          <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp}}" aria-valuemin="0" aria-valuemax="1000"
+              style="width: {% widthratio object.xp 1000 100 %}%;">
+            <span class="sr-only">{% widthratio object.xp 1000 100 %}% Complete</span>
           </div>
         </div>
 
-        <div class="pull-right"> x | 1000</div>
-        <div>Next Rank </div>
-        <div class="progress progress-xp">progress
+        <div class="pull-right"> {{object.xp_since_last_rank}} | {{object.xp_to_next_rank}}</div>
+        <div>Next Rank: {{object.next_rank}} </div>
+        <div class="progress progress-xp">
           <div class="progress-bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"
-              style="width: 60%;">progress-bar
+              style="width: {% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}%;">
             <span class="sr-only">60% Complete</span>
           </div>
         </div>

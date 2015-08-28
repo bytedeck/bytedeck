@@ -6,14 +6,22 @@ from django.db import models
 from datetime import timedelta
 
 # Create your models here.
+class RankQuerySet(models.query.QuerySet):
+    def get_ranks_lte(self, xp):
+        return self.filter(xp__lte = xp)
 
+    def get_ranks_gt(self, xp):
+        return self.filter(xp__gt = xp)
 
 class RankManager(models.Manager):
     def get_queryset(self):
-        return models.query.QuerySet(self.model, using=self._db).order_by('xp')
+        return RankQuerySet(self.model, using=self._db).order_by('xp')
 
     def get_rank(self, user_xp=0):
-        return self.get_queryset().filter(xp__gte = user_xp).first()
+        return self.get_queryset().get_ranks_lte(user_xp).last()
+
+    def get_next_rank(self, user_xp=0):
+        return self.get_queryset().get_ranks_gt(user_xp).first()
 
 class Rank(models.Model):
     title = models.CharField(max_length=50, unique=True)

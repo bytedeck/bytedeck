@@ -41,11 +41,20 @@ class Profile(models.Model):
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         #return u'/some_url/%d' % self.id
 
-    def get_xp(self):
+    def xp(self):
         return QuestSubmission.objects.calculate_xp(self.user)
 
-    def get_rank(self):
-        return Rank.objects.get_rank(self.get_xp())
+    def rank(self):
+        return Rank.objects.get_rank(self.xp())
+
+    def next_rank(self):
+        return Rank.objects.get_next_rank(self.xp())
+
+    def xp_to_next_rank(self):
+        return self.next_rank().xp - self.rank().xp
+
+    def xp_since_last_rank(self):
+        return self.xp() - self.rank().xp
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
