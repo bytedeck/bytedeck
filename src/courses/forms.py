@@ -1,22 +1,37 @@
 from django import forms
 
-from .models import CourseStudent
+from .models import CourseStudent, Semester
+
+# class CourseStudentForm(forms.ModelForm):
+#
+#     # filtering the available options in a foreign key choice field
+#     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
+#     def __init__(self, *args, **kwargs):
+#         super (CourseStudentForm, self).__init__(*args,**kwargs)
+#         self.fields['semester'].queryset = Semester.objects.get_current()
+#
+#     # http://stackoverflow.com/questions/32260785/django-validating-unique-together-constraints-in-a-modelform-with-excluded-fiel/32261039#32261039
+#     def clean(self):
+#         cleaned_data = super(CourseStudentForm, self).clean()
+#         self.validate_unique()
+#         return cleaned_data
+#
+#         # Passing parameters to forms (w/CBV in comments).
+#         # http://stackoverflow.com/questions/7299973/django-how-to-access-current-request-user-in-modelform
+#
+#     class Meta:
+#         model = CourseStudent
+#         # fields = ['user','semester', 'block', 'course', 'grade']
+#         exclude = ['user', 'active']
+#         # widgets = {'user': forms.HiddenInput()}
 
 class CourseStudentForm(forms.ModelForm):
+
     class Meta:
         model = CourseStudent
-        exclude = ['user','active']
+        exclude = ['user']
 
-# class ProfileForm(forms.Form):
-#     class Meta:
-#         model = Profile
-#         # fields = ['name','xp']
-#         widgets = {
-#
-#         }
-#         fields = '__all__'
-
-# class ProfileUpdateForm(forms.ModelForm):
-#     class Meta:
-#         model = Profile
-#         fields = '__all__'
+    def clean(self):
+        cleaned_data = super(CourseStudentForm, self).clean()
+        self.validate_unique()
+        return cleaned_data

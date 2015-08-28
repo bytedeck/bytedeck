@@ -13,22 +13,38 @@ from .forms import CourseStudentForm
 class CourseStudentList(ListView):
     model = CourseStudent
 
+# @login_required
+# def course_student_create(request):
+#     template_name='courses/coursestudent_form.html'
+#     form = CourseStudentForm(request.POST or None)
+#     if form.is_valid():
+#         form.save()
+#         return redirect('quests:quests')
+#     context = {
+#         # "heading": "Create New Quest",
+#         "form": form,
+#         # "submit_btn_value": "Create",
+#     }
+#     return render(request, 'courses/coursestudent_form.html', context)
+
 class CourseStudentCreate(CreateView):
     model = CourseStudent
-    # form_class = CourseStudentForm
-    fields = ['semester', 'block', 'course', 'grade']
+    form_class = CourseStudentForm
+    # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
+
+    def get_form_kwargs(self):
+        kwargs = super(CreateView, self).get_form_kwargs()
+        kwargs['instance'] = CourseStudent(user=self.request.user)
+        return kwargs
 
     # def get_initial(self):
     #     data = { 'user': self.request.user }
     #     return data
 
-    def form_valid(self, form):
-        form.instance.user = self.request.user
-        # data = form.save(commit=False)
-        # data.user = self.request.user
-        # data.save()
-        return super(CourseStudentCreate, self).form_valid(form)
+    # def form_valid(self, form):
+    #     form.instance.user = self.request.user
+    #     return super(CourseStudentCreate, self).form_valid(form)
 #
 # class ProfileDetail(DetailView):
 #     model = UserCourse

@@ -41,6 +41,9 @@ class Profile(models.Model):
     def get_avatar_url(self):
         return reverse('')
 
+    def get_courses(self):
+        return 0
+
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:

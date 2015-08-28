@@ -3,11 +3,16 @@
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
-{% block heading_inner %}Courses{% endblock %}
+{% block heading_inner %}Add a new course{% endblock %}
 
 {% block content %}
-<form method="post">{% csrf_token %}
-    {{ form | crispy }}
-    <input type="submit" value="Submit" />
-</form>
+<div class="row">
+  <div class="col-sm-6">
+    <form method="post">{% csrf_token %}
+        {{ form | crispy }}
+        <input type="submit" value="Create" />
+    </form>
+  </div>
+</div>
+
 {% endblock %}

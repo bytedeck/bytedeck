@@ -80,6 +80,16 @@
      </div> <!--panel -->
      <div class="panel panel-info">
        <div class="panel-heading">
+         <h3 class="panel-title">Courses</h3>
+       </div>
+       <div class="panel-body">
+         <p>SN: {{ object.student_number}}</p>
+         <p>Grad: {{ object.grad_year}}</p>
+         <p>Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
+       </div>
+      </div> <!--panel -->
+     <div class="panel panel-info">
+       <div class="panel-heading">
          <h3 class="panel-title">Quests</h3>
        </div>
        <div class="panel-body">
