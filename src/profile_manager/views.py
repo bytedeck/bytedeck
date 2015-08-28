@@ -6,6 +6,7 @@ from django.views.generic import DetailView, ListView
 from django.shortcuts import get_object_or_404, redirect
 
 from courses.models import CourseStudent
+from quest_manager.models import QuestSubmission
 
 from .forms import ProfileForm
 from .models import Profile
@@ -44,7 +45,13 @@ class ProfileDetail(DetailView):
         # Call the base implementation first to get a context
         context = super(ProfileDetail, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
+        # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
+        # completed_submissions = QuestSubmission.objects.all_completed(request.user)
+
         context['courses'] = CourseStudent.objects.all_for_user(self.request.user)
+        context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(self.request.user)
+        context['completed_submissions'] = QuestSubmission.objects.all_completed(self.request.user)
+
         return context
 
 class ProfileUpdate(UpdateView):

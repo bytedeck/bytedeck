@@ -68,7 +68,7 @@
 
 <div class="row">
   <div class="col-sm-6">
-    <div class="panel panel-info">
+    <div class="panel panel-primary">
       <div class="panel-heading">
         <h3 class="panel-title">General</h3>
       </div>
@@ -78,7 +78,7 @@
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
       </div>
      </div> <!--panel -->
-     <div class="panel panel-info">
+     <div class="panel panel-primary">
        <div class="panel-heading">
          <h3 class="panel-title">Courses</h3>
        </div>
@@ -97,15 +97,54 @@
          {% endif %}
        </ul>
       </div> <!--panel -->
-     <div class="panel panel-info">
+
+     <div class="panel panel-primary">
        <div class="panel-heading">
          <h3 class="panel-title">Quests</h3>
        </div>
-       <div class="panel-body">
-         <p>Badges</p>
-       </div>
+       <div class="list-group">
+         <div class="list-group-item list-group-item-info">In Progress</div>
+         {% if in_progress_submissions %}
+           {% for s in in_progress_submissions %}
+             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+                 {% if s.is_returned %}list-group-item-danger
+                 {% endif %}">
+               <img class="icon-xs" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt=""/>
+               {{s.quest}} <small>({{s.quest.xp}} XP)</small>
+             </a>
+           {% endfor %}
+         {% else %}
+           <div class="list-group-item">None.</div>
+         {% endif %}
+         <div class="list-group-item list-group-item-info">Completed</div>
+         {% if completed_submissions %}
+           {% for s in completed_submissions %}
+             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+                 {% if s.is_awaiting_approval %}list-group-item-warning
+                 {% endif %}">
+               <img class="icon-xs" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt=""/>
+               {{s.quest}} <small>({{s.quest.xp}} XP)</small>
+             </a>
+           {% endfor %}
+         {% else %}
+           <div class="list-group-item">None.</div>
+         {% endif %}
+        </div>
+
+         <!-- <li class="list-group-item list-group-item-info">Completed</li>
+         {% if completed_submissions %}
+             {% for s in completed_submissions %}
+               <li class="list-group-item list-group-item-packed">
+                {{s.quest}} <small>({{s.quest.xp}} XP)</small>
+               </li>
+             {% endfor %}
+         {% else %}
+           <li class="list-group-item">None.</li>
+         {% endif %}
+       </ul> -->
       </div> <!--panel -->
-      <div class="panel panel-info">
+
+      <div class="panel panel-primary">
         <div class="panel-heading">
           <h3 class="panel-title">Recent Activity</h3>
         </div>
@@ -115,7 +154,7 @@
        </div> <!--panel -->
   </div>
   <div class="col-sm-6">
-     <div class="panel panel-info">
+     <div class="panel panel-primary">
        <div class="panel-heading">
          <h3 class="panel-title">Badges</h3>
        </div>
@@ -123,7 +162,7 @@
          <p>Badges</p>
        </div>
       </div> <!--panel -->
-      <div class="panel panel-info">
+      <div class="panel panel-primary">
         <div class="panel-heading">
           <h3 class="panel-title">Achievements</h3>
         </div>
@@ -131,7 +170,7 @@
           <p>Badges</p>
         </div>
        </div> <!--panel -->
-       <div class="panel panel-info">
+       <div class="panel panel-primary">
          <div class="panel-heading">
            <h3 class="panel-title">Awards</h3>
          </div>

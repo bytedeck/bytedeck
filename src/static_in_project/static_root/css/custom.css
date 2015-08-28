@@ -154,11 +154,11 @@ form .panel-body {
 
 
 /************ALERTS *************************/
-.alert-dismissable:first-of-type {
+.main-container > .alert:first-of-type {
   margin-top: 10px;
 }
 
-.alert .alert-dismissable {
+.main-container > .alert {
   margin-bottom: 0px;
 }
 
@@ -313,6 +313,10 @@ to overlap borders ****/
   margin-bottom: 15px;
 }
 
+.list-group-item-packed {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
 
 /***********Submission ********************************/
 .panel-body-comments {

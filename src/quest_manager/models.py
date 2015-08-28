@@ -207,7 +207,8 @@ class QuestSubmissionManager(models.Manager):
     def all_not_completed(self, user=None):
         if user is None:
             return self.get_queryset().not_completed()
-        return self.get_queryset().get_user(user).not_completed()
+        #only returned quests will have a time compelted, placing them on top
+        return self.get_queryset().get_user(user).not_completed().order_by('-time_completed')
 
     def all_completed(self, user=None):
         if user is None:
