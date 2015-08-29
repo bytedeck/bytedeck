@@ -26,6 +26,23 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
+class Prereq(models.Model):
+    parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent')
+    parent_object_id = models.PositiveIntegerField()
+    parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
+
+    prereq_content_type = models.ForeignKey(ContentType, related_name='prereq_item')
+    prereq_object_id = models.PositiveIntegerField()
+    prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
+    prereq_invert = models.BooleanField(default=False, help_text = 'parent is available if user does NOT have this pre-requisite')
+
+    or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
+        blank=True, null=True)
+    or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True)
+    or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
+    or_prereq_invert = models.BooleanField(default=False, help_text = 'parent is available if user does NOT have this pre-requisite')
+
+
 
 
 class XPItem(models.Model):
@@ -98,6 +115,9 @@ class Quest(XPItem):
     categories = models.ManyToManyField(Category, blank=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
+    prereqs = GenericRelation(Prereq,
+                              content_type_field='parent_content_type',
+                              object_id_field='parent_object_id')
 
     objects = QuestManager()
 
@@ -128,6 +148,10 @@ class Quest(XPItem):
 #     def __str__(self):
 #         return str(self.id)
 
+
+
+
+
 class Prerequisite(models.Model):
     parent_quest = models.ForeignKey(Quest)
     # Generic relations:
@@ -137,17 +161,14 @@ class Prerequisite(models.Model):
     # content_object = generic.GenericForeignKey('content_type', 'object_id')
     prerequisite_item = models.ForeignKey(Quest, related_name='prerequisite_item')
     invert_prerequisite = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
-    alternate_prerequisite_item_1 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_1',
+    or_prerequisite_item = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_1',
         help_text = 'user must have one of the prerequisite items',  blank=True, null=True)
-    invert_alt_prerequisite_1 = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
-    alternate_prerequisite_item_2 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_2',
-        help_text = 'user must have one of the prerequisite items', blank=True, null=True)
-    invert_alt_prerequisite_2 = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
     # minimum_rank =
     # maximum_rank =
 
     # def __str__(self):
     #     return self.category
+
 TAG_CHOICES = (
 ("python","python"),
 ("django","django"),
