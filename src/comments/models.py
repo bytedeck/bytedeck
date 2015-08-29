@@ -125,3 +125,7 @@ class Comment(models.Model):
             return users
         else:
             return None
+
+from notifications.models import Notification, deleted_object_receiver
+from django.db.models.signals import pre_delete
+pre_delete.connect(deleted_object_receiver, sender=Comment)

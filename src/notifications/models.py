@@ -74,7 +74,6 @@ class NotificationManager(models.Manager):
         return self.get_queryset().get_user(user).get_object_target(target)
 
     def get_user_target_unread(self, user, target):
-
         notification = self.get_queryset().get_user(user).get_object_target(target)
         return notification.unread
 
@@ -222,9 +221,7 @@ def new_notification(sender, **kwargs):
 
 notify.connect(new_notification)
 
-from django.db.models.signals import pre_delete
-from announcements.models import Announcement
-from comments.models import Comment
+
 
 def deleted_object_receiver(sender, **kwargs):
     print("************delete signal ****************")
@@ -233,6 +230,3 @@ def deleted_object_receiver(sender, **kwargs):
     object = kwargs["instance"]
     print(object)
     Notification.objects.get_queryset().get_object_anywhere(object).delete()
-
-pre_delete.connect(deleted_object_receiver, sender=Announcement)
-pre_delete.connect(deleted_object_receiver, sender=Comment)
