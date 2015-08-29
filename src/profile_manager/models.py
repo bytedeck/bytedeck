@@ -2,8 +2,9 @@ from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models.signals import post_save
-
 from django.contrib.auth.models import User
+from django.templatetags.static import static
+
 from notifications.signals import notify
 
 from datetime import datetime
@@ -40,6 +41,12 @@ class Profile(models.Model):
         return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         #return u'/some_url/%d' % self.id
+
+    def get_avatar_url(self):
+        if self.avatar and hasattr(self.avatar, 'url'):
+            return self.avatar.url
+        else:
+            return static('img/default_avatar.jpg')
 
     def xp(self):
         return QuestSubmission.objects.calculate_xp(self.user)

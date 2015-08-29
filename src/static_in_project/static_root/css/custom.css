@@ -99,6 +99,10 @@ iframe {
   width: 128px
 }
 
+.icon-avatar {
+  width: 170px;
+}
+
 .quest-icon {
   margin-right: 10px;
 }

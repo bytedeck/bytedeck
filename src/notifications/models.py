@@ -1,4 +1,3 @@
-import ipdb
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -69,6 +68,15 @@ class NotificationManager(models.Manager):
     def all_for_user(self, user):
         self.get_queryset().mark_targetless(user)
         return self.get_queryset().get_user(user)
+
+    def get_user_target(self, user, target):
+        # should only have one element?
+        return self.get_queryset().get_user(user).get_object_target(target)
+
+    def get_user_target_unread(self, user, target):
+
+        notification = self.get_queryset().get_user(user).get_object_target(target)
+        return notification.unread
 
 class Notification(models.Model):
 

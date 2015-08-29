@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from comments.models import Comment
+# from notifications.models import Notification
 
 # Create your models here.
 class AnnouncementQuerySet(models.query.QuerySet):
@@ -57,3 +58,6 @@ class Announcement(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
+    #
+    # def get_unread(self):
+    #     return Notificaition.objects.get_user_target_unread()
