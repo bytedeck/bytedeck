@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist,  MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
 from django.contrib.auth.models import User
@@ -102,11 +103,12 @@ class Quest(XPItem):
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
+
         if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
             time_since_last = timezone.now() - time_of_last
             hours_since_last = time_since_last.total_seconds()//3600
             # and the proper amount of time has passed
-            if hours_since_last > self.hours_between_repeats:
+            if hours_since_last >= self.hours_between_repeats:
                 return True
         return False
 
@@ -242,12 +244,23 @@ class QuestSubmissionManager(models.Manager):
         num_subs = self.num_submissions(user, quest)
         if num_subs == 0:
             return True
-        else:
-            latest_sub = self.all_for_user_quest(user, quest).latest('time_completed')
-            latest_dt = latest_sub.time_completed
-            if latest_dt is None: # quest submission in progress already
-                return False
-            return quest.is_repeat_available(latest_dt, num_subs)
+
+
+        # check if the quest is already in progress
+        try:
+            s = self.all_not_completed().get(quest=quest)
+            #if no exception is thrown it means that an inprogress submission was found
+            return False
+        except MultipleObjectsReturned:
+            return False # multiple found
+        except ObjectDoesNotExist:
+            pass #nothing found, continue
+
+        latest_sub = self.all_for_user_quest(user, quest).latest('time_completed')
+        latest_dt = latest_sub.time_completed
+        # if latest_dt is None: # quest submission in progress already
+        #     return False
+        return quest.is_repeat_available(latest_dt, num_subs)
 
     def create_submission(self, user, quest):
         if self.quest_is_available(user, quest):
