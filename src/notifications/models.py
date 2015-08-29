@@ -31,39 +31,39 @@ class NotificationQuerySet(models.query.QuerySet):
                         target_object_id = object.id)
 
     def mark_targetless(self, recipient):
-        qs = self.unread().get_user(recipient)
+        qs = self.get_unread().get_user(recipient)
         qs_no_target = qs.filter(target_object_id = None)
         if qs_no_target:
             qs_no_target.update(unread=False)
 
     def mark_all_read(self, recipient):
-        qs = self.unread().get_user(recipient)
+        qs = self.get_unread().get_user(recipient)
         qs.update(unread=False)
         qs.update(time_read=timezone.now())
 
     def mark_all_unread(self, recipient):
-        qs = self.read().get_user(recipient)
+        qs = self.get_read().get_user(recipient)
         qs.update(unread=True)
         qs.update(time_read=None)
 
-    def unread(self):
+    def get_unread(self):
         return self.filter(unread=True)
 
-    def read(self):
+    def get_read(self):
         return self.filter(unread=False)
 
     def recent(self):
-        return self.unread()[:5] #last five
+        return self.get_unread()[:5] #last five
 
 class NotificationManager(models.Manager):
     def get_queryset(self):
         return NotificationQuerySet(self.model, using=self._db).order_by('-timestamp')
 
     def all_unread(self, user):
-        return self.all_for_user(user).unread()
+        return self.all_for_user(user).get_unread()
 
     def all_read(self, user):
-        return self.get_queryset().get_user(user).read()
+        return self.get_queryset().get_user(user).get_read()
 
     def all_for_user(self, user):
         self.get_queryset().mark_targetless(user)
@@ -71,11 +71,15 @@ class NotificationManager(models.Manager):
 
     def get_user_target(self, user, target):
         # should only have one element?
-        return self.get_queryset().get_user(user).get_object_target(target)
+        return self.get_queryset().get_user(user).get_object_target(target).first()
 
     def get_user_target_unread(self, user, target):
-        notification = self.get_queryset().get_user(user).get_object_target(target)
-        return notification.unread
+        # should be only one, first will convert from queryset to notification
+        notification = self.get_queryset().get_user(user).get_object_target(target).first()
+        if notification:
+            return notification.unread
+        else:
+            return None
 
 class Notification(models.Model):
 
@@ -150,11 +154,25 @@ class Notification(models.Model):
         #     return "%(sender)s %(verb)s %(target)s" % context
         # return "%(sender)s %(verb)s" % context
 
-    def get_link(self):
+    def get_url(self):
         try:
             target_url = self.target_object.get_absolute_url()
         except:
             target_url = reverse('notifications:list')
+
+        context = {
+            "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
+            "target_url": target_url
+        }
+
+        return "%(verify_read)s?next=%(target_url)s" % context
+
+
+    def get_link(self):
+        # try:
+        #     target_url = self.target_object.get_absolute_url()
+        # except:
+        #     target_url = reverse('notifications:list')
 
         if len(str(self.action_object)) > 50:
             action = str(self.action_object)[:50] + "..."
@@ -168,12 +186,13 @@ class Notification(models.Model):
             "verb":self.verb,
             "action":action,
             "target": self.target_object,
-            "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
-            "target_url": target_url,
+            # "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
+            # "target_url": target_url,
+            "url": self.get_url(),
             "icon": self.font_icon
         }
 
-        url_common_part = "<a href='%(verify_read)s?next=%(target_url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
+        url_common_part = "<a href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
         if self.target_object:
             if self.action_object:
                 url = url_common_part + ' %(target)s with "%(action)s"</a>' % context
@@ -181,6 +200,7 @@ class Notification(models.Model):
                 url = url_common_part + " %(target)s</a>" % context
         else:
             url = url_common_part + "</a>"
+
         return url
 
 def new_notification(sender, **kwargs):

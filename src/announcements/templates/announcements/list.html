@@ -1,5 +1,6 @@
 {% extends "announcements/base.html" %}
 {% load crispy_forms_tags %}
+{% load notification_tags %}
 
 {% block heading_inner %}Announcements
 {% if request.user.is_authenticated and request.user.is_staff %}
@@ -11,8 +12,15 @@
 {% for object in object_list %}
   <div class="panel accordian
     {% if object.id == active_id %} active {% endif %}
-    {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
-    <div class="panel-heading accordian accordian-trigger
+    {% if object|notification_unread:request.user %}panel-warning note-unread
+    {% elif object.sticky %}panel-info
+    {% else %}panel-default
+    {% endif %}">
+    <div
+      {% if object|notification_unread:request.user %}
+        href="{{ object|notification_url:request.user }}"
+      {% endif %}
+      class="panel-heading accordian accordian-trigger
       {% if object.id == active_id %} active {% endif %}"
       role="tab" id="heading{{object.id}}"
       aria-expanded="{% if object.id == active_id %}true{% else %}false{% endif %}"

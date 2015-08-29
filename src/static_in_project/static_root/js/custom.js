@@ -35,4 +35,9 @@ $(document).ready(function() {
       $(this).toggleClass('active');
       $(this).parent('.panel').toggleClass('active');
    });
+
+  //  If clicking an unread announcement, mark it read.
+     $('.note-unread').find('.accordian-trigger').click(function() {
+       window.location.href = $(this).attr("href");
+     });
 });

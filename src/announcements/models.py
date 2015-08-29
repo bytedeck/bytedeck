@@ -57,10 +57,8 @@ class Announcement(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
-    #
-    # def get_unread(self):
-    #     return Notificaition.objects.get_user_target_unread()
 
-from notifications.models import Notification, deleted_object_receiver
+
+from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
 pre_delete.connect(deleted_object_receiver, sender=Announcement)
