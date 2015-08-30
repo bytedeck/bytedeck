@@ -5,7 +5,6 @@ from django_summernote.admin import SummernoteModelAdmin
 # Register your models here.
 from .models import Quest, Category, Prerequisite, TaggedItem, QuestSubmission, Prereq
 
-
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')
 
@@ -22,7 +21,6 @@ class PrereqInline(GenericTabularInline):
     fk_name = "parent_object"
     ct_field = "parent_content_type"
     ct_fk_field = "parent_object_id"
-
 
 
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin

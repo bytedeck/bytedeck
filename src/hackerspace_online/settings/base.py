@@ -39,6 +39,9 @@ EMAIL_USE_TLS = True
 # Application definition
 
 INSTALLED_APPS = (
+    # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
+    'grappelli',
+
     #default apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -71,7 +74,6 @@ INSTALLED_APPS = (
 
     # https://pypi.python.org/pypi/django-badgify
     # 'badgify',
-
 
     #local apps
     'quest_manager',

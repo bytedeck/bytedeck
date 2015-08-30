@@ -24,6 +24,7 @@ admin.site.site_header = "Hackerspace Administration"
 admin.site.site_title = "Hackerspace Admin"
 
 urlpatterns = [
+    url(r'^grappelli/', include('grappelli.urls')), # grappelli URLS
     url(r'^$', 'hackerspace_online.views.home', name='home'),
     #quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
@@ -33,6 +34,7 @@ urlpatterns = [
     url(r'^comments/', include('comments.urls', namespace='comments')),
     url(r'^notifications/', include('notifications.urls', namespace='notifications')),
     url(r'^courses/', include('courses.urls', namespace='courses')),
+
     #admin
     url(r'^admin/', include(admin.site.urls)),
     #summer_note
