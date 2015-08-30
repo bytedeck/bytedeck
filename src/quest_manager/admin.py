@@ -3,7 +3,8 @@ from django.contrib.contenttypes.admin  import GenericTabularInline
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
-from .models import Quest, Category, TaggedItem, QuestSubmission, Prereq
+from prerequisites.models import Prereq
+from .models import Quest, Category, TaggedItem, QuestSubmission
 
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')

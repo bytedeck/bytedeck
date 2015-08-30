@@ -26,25 +26,6 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
-class Prereq(models.Model):
-    parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent')
-    parent_object_id = models.PositiveIntegerField()
-    parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
-
-    prereq_content_type = models.ForeignKey(ContentType, related_name='prereq_item',
-        verbose_name="Type of Prerequisite")
-    prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
-    prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
-    prereq_invert = models.BooleanField(default=False, verbose_name="NOT")
-
-    or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
-        verbose_name="OR Type of Prerequisite", blank=True, null=True)
-    or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True,
-        verbose_name="OR Prerequisite")
-    or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
-    or_prereq_invert = models.BooleanField(default=False, verbose_name = 'OR NOT')
-
-
 class XPItem(models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default = 0)
@@ -117,9 +98,9 @@ class Quest(XPItem):
     categories = models.ManyToManyField(Category, blank=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
-    prereqs = GenericRelation(Prereq,
-                              content_type_field='parent_content_type',
-                              object_id_field='parent_object_id')
+    # prereqs = GenericRelation(Prereq,
+    #                           content_type_field='parent_content_type',
+    #                           object_id_field='parent_object_id')
 
     objects = QuestManager()
 
