@@ -31,11 +31,11 @@ class Prereq(models.Model):
     parent_object_id = models.PositiveIntegerField()
     parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
 
-    prereq_content_type = models.ForeignKey(ContentType, related_name='prereq_item')
-    prereq_object_id = models.PositiveIntegerField()
+    prereq_content_type = models.ForeignKey(ContentType, related_name='prereq_item',
+        verbose_name="Type of Prerequisite")
+    prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
     prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
-    prereq_invert = models.BooleanField(default=False, help_text = 'parent is available if user does NOT have this pre-requisite')
-
+    prereq_invert = models.BooleanField(default=False, verbose_name="NOT")
     # or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
     #     blank=True, null=True)
     # or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True)
@@ -122,6 +122,10 @@ class Quest(XPItem):
                               object_id_field='parent_object_id')
 
     objects = QuestManager()
+
+    @staticmethod
+    def autocomplete_search_fields():
+        return ("name__icontains",)
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats

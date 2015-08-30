@@ -18,9 +18,17 @@ class PrerequisiteInline(admin.TabularInline):
 
 class PrereqInline(GenericTabularInline):
     model = Prereq
-    fk_name = "parent_object"
     ct_field = "parent_content_type"
     ct_fk_field = "parent_object_id"
+    fk_name = "parent_object"
+
+    # related_lookup_fields = {
+    #     'generic': [['prereq_content_type', 'prereq_object_id'],],
+    # }
+
+    autocomplete_lookup_fields = {
+        'generic': [['prereq_content_type', 'prereq_object_id'],],
+    }
 
 
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
@@ -32,6 +40,8 @@ class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
         # TaggedItemInline
         PrereqInline,
     ]
+
+    change_list_filter_template = "admin/filter_listing.html"
 
     # fieldsets = [
     #     ('Available', {'fields': ['date_available', 'time_available']}),
