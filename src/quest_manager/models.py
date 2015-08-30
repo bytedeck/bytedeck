@@ -36,13 +36,13 @@ class Prereq(models.Model):
     prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
     prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
     prereq_invert = models.BooleanField(default=False, verbose_name="NOT")
-    # or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
-    #     blank=True, null=True)
-    # or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True)
-    # or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
-    # or_prereq_invert = models.BooleanField(default=False, help_text = 'parent is available if user does NOT have this pre-requisite')
 
-
+    or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
+        verbose_name="OR Type of Prerequisite", blank=True, null=True)
+    or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True,
+        verbose_name="OR Prerequisite")
+    or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
+    or_prereq_invert = models.BooleanField(default=False, verbose_name = 'OR NOT')
 
 
 class XPItem(models.Model):
@@ -155,29 +155,6 @@ class Quest(XPItem):
 #         return str(self.id)
 
 
-
-
-
-class Prerequisite(models.Model):
-    parent_quest = models.ForeignKey(Quest)
-    # Generic relations:
-    # https://docs.djangoproject.com/en/1.4/ref/contrib/contenttypes/#generic-relations
-    # content_type = models.ForeignKey(ContentType)
-    # object_id = models.PositiveIntegerField()
-    # content_object = generic.GenericForeignKey('content_type', 'object_id')
-    prerequisite_item = models.ForeignKey(Quest, related_name='prerequisite_item')
-    invert_prerequisite = models.BooleanField(default = False, help_text = 'item is available if user does NOT have this pre-requisite')
-    alternate_prerequisite_item_1 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_1',
-        help_text = 'user must have one of the prerequisite items',  blank=True, null=True)
-    invert_alt_prerequisite_1 = models.BooleanField(default = False, help_text = 'item is available if user does NOT have this pre-requisite')
-    alternate_prerequisite_item_2 = models.ForeignKey(Quest, related_name='alternate_prerequisite_item_2',
-        help_text = 'user must have one of the prerequisite items', blank=True, null=True)
-    invert_alt_prerequisite_2 = models.BooleanField(help_text = 'item is available if user does NOT have this pre-requisite')
-    # minimum_rank =
-    # maximum_rank =
-
-    # def __str__(self):
-    #     return self.category
 TAG_CHOICES = (
 ("python","python"),
 ("django","django"),

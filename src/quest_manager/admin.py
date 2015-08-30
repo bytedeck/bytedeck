@@ -3,7 +3,7 @@ from django.contrib.contenttypes.admin  import GenericTabularInline
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
-from .models import Quest, Category, Prerequisite, TaggedItem, QuestSubmission, Prereq
+from .models import Quest, Category, TaggedItem, QuestSubmission, Prereq
 
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')
@@ -11,23 +11,23 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
-class PrerequisiteInline(admin.TabularInline):
-    model = Prerequisite
-    fk_name = "parent_quest"
-    extra = 1
-
 class PrereqInline(GenericTabularInline):
     model = Prereq
     ct_field = "parent_content_type"
     ct_fk_field = "parent_object_id"
     fk_name = "parent_object"
 
+    extra = 1
+
     # related_lookup_fields = {
     #     'generic': [['prereq_content_type', 'prereq_object_id'],],
     # }
 
     autocomplete_lookup_fields = {
-        'generic': [['prereq_content_type', 'prereq_object_id'],],
+        'generic': [
+                        ['prereq_content_type', 'prereq_object_id'],
+                        ['or_prereq_content_type','or_prereq_object_id'],
+                    ]
     }
 
 
@@ -36,7 +36,6 @@ class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
     list_filter = ['visible_to_students','max_repeats','verification_required']
     search_fields = ['name']
     inlines = [
-        PrerequisiteInline,
         # TaggedItemInline
         PrereqInline,
     ]
