@@ -30,11 +30,8 @@ class PrereqManager(models.Manager):
         return self.get_queryset().get_all_parent_object(parent_object)
 
     def all_conditions_met(self, parent_object, user):
-        # qs = self.all_parent(parent_object)
-        print("checking prereq conditions!!!!!!!!")
         for prereq in self.all_parent(parent_object):
             if not prereq.condition_met_as_prerequisite(user):
-                print("failed prereq condition!!!!!!!!")
                 return False
         return True
 
@@ -61,13 +58,38 @@ class Prereq(models.Model):
 
     objects = PrereqManager()
 
+    def __str__(self):
+        # s = str(self.get_parent()) + " needs: "
+        s = ""
+        if self.prereq_invert:
+            s += "NOT "
+        s += str(self.get_prereq())
+        if self.prereq_count > 1:
+            s += " x" + str(self.prereq_count)
+        if self.or_prereq_object_id and self.or_prereq_content_type:
+            s += " OR "
+            if self.or_prereq_invert:
+                s += "NOT "
+            s += str(self.get_or_prereq())
+            if self.or_prereq_count > 1:
+                s += " x" + str(self.or_prereq_count)
+        return s
+
     # @staticmethod
     # def autocomplete_search_fields():
     #     return ("name__icontains",)
 
+    def parent(self):
+        return self.parent_content_type.get_object_for_this_type(pk=self.parent_object_id)
+
+    def get_prereq(self):
+        return self.prereq_content_type.get_object_for_this_type(pk=self.prereq_object_id)
+
+    def get_or_prereq(self):
+        return self.or_prereq_content_type.get_object_for_this_type(pk=self.or_prereq_object_id)
+
     def condition_met_as_prerequisite(self, user):
-        print("checking prereq #" + str(self.id))
-        prereq_object = self.prereq_content_type.get_object_for_this_type(pk=self.prereq_object_id)
+        prereq_object = self.get_prereq()
         main_condition_met = prereq_object.condition_met_as_prerequisite(user, self.prereq_count)
 
         if self.prereq_invert:
@@ -76,8 +98,7 @@ class Prereq(models.Model):
         if not self.or_prereq_object_id or not self.or_prereq_content_type:
             return main_condition_met
 
-        print("checking OR prereq #" + str(self.id))
-        or_prereq_object = self.or_prereq_content_type.get_object_for_this_type(pk=self.or_prereq_object_id)
+        or_prereq_object = self.get_or_prereq()
         or_condition_met = or_prereq_object.condition_met_as_prerequisite(user, self.or_prereq_count)
 
         if self.or_prereq_invert:
