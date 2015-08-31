@@ -6,7 +6,7 @@
     <div class="col-xs-5">Quest</div>
     <div class="col-xs-1">XP   </div>
     <div class="col-xs-2">Ave Time</div>
-    <div class="col-xs-3">Due Date</div>
+    <div class="col-xs-3">Due</div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for q in available_quests %}
@@ -31,7 +31,11 @@
           <div class="col-xs-5">{{q.name}}</div>
           <div class="col-xs-1">{{q.xp}}  </div>
           <div class="col-xs-2">{{q.id}}</div>
-          <div class="col-xs-3"><small>{{q.date_expired}}</small></div>
+          <div class="col-xs-3"><small>
+            {% if q.date_expired %}{{q.date_expired}}
+            {% else %}{{q.time_expired}}
+            {% endif %}
+          </small></div>
         </h4>
       </div>
 
