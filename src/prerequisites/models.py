@@ -98,7 +98,7 @@ class Prereq(models.Model):
         except ObjectDoesNotExist:
             return None
 
-    def condition_met_as_prerequisite(self, user):
+    def condition_met_as_prerequisite(self, user, num_required = 1):
 
             prereq_object = self.get_prereq()
             if prereq_object is None:
@@ -120,3 +120,24 @@ class Prereq(models.Model):
                 or_condition_met = not or_condition_met
 
             return main_condition_met or or_condition_met
+
+    @classmethod
+    def all_registered_content_types(self):
+        registered_list = [
+            ct.pk for ct in ContentType.objects.all()
+            if Prereq.model_is_registered(ct)
+        ]
+        return ContentType.objects.filter(pk__in=registered_list)
+
+    @classmethod
+    def model_is_registered(cls, content_type):
+
+        # Check if class has the method `condition_met_as_prerequisite`
+        # http://stackoverflow.com/questions/25295327/how-to-check-if-a-python-class-has-particular-method-or-not
+        C = content_type.model_class()
+
+
+        if any("condition_met_as_prerequisite" in B.__dict__ for B in C.__mro__):
+                return True
+
+        return False
