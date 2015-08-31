@@ -136,6 +136,9 @@ class Prereq(models.Model):
         # http://stackoverflow.com/questions/25295327/how-to-check-if-a-python-class-has-particular-method-or-not
         C = content_type.model_class()
 
+        #deleted models?
+        if C == None:
+            return False
 
         if any("condition_met_as_prerequisite" in B.__dict__ for B in C.__mro__):
                 return True
