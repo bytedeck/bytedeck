@@ -39,19 +39,6 @@ class PrereqInline(GenericTabularInline):
                     ]
     }
 
-    # def queryset(self, request):
-    #
-    #     qs = super(PrereqInline, self).queryset(request)
-    #     qs = qs.filter(pk__gte = 5)
-    #     return qs
-
-    # # limit fields to only models with a "conditions_met" method
-    # def __init__(self, *args, **kwargs):
-    #
-    #     super(PrereqInline, self).__init__(*args, **kwargs)
-    #     self.fields['ct_field'].queryset = ContentType.objects.all()
-
-
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
     list_display = ('name', 'xp','visible_to_students','max_repeats','date_expired')
     list_filter = ['visible_to_students','max_repeats','verification_required']
