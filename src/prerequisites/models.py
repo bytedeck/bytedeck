@@ -42,7 +42,7 @@ class Prereq(models.Model):
         verbose_name="Type of Prerequisite")
     prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
     prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
-    prereq_count = models.PositiveIntegerField()
+    prereq_count = models.PositiveIntegerField(default=1)
     prereq_invert = models.BooleanField(default=False, verbose_name="NOT")
 
     or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
@@ -50,10 +50,11 @@ class Prereq(models.Model):
     or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True,
         verbose_name="OR Prerequisite")
     or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
-    or_prereq_count = models.PositiveIntegerField()
+    or_prereq_count = models.PositiveIntegerField(default=1)
     or_prereq_invert = models.BooleanField(default=False, verbose_name = 'OR NOT')
 
     objects = PrereqManager()
 
     def conditions_met(self):
-        self.prereq_content_type.get_object_for_this_type(pk=prereq_object_id)
+        parent = self.prereq_content_type.get_object_for_this_type(pk=prereq_object_id)
+        return parent

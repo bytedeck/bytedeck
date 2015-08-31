@@ -1,5 +1,9 @@
+import ipdb
 from django.contrib import admin
 from django.contrib.contenttypes.admin  import GenericTabularInline
+from django.contrib.contenttypes.models import ContentType
+
+
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
@@ -20,16 +24,25 @@ class PrereqInline(GenericTabularInline):
 
     extra = 1
 
-    # related_lookup_fields = {
-    #     'generic': [['prereq_content_type', 'prereq_object_id'],],
-    # }
-
     autocomplete_lookup_fields = {
         'generic': [
                         ['prereq_content_type', 'prereq_object_id'],
                         ['or_prereq_content_type','or_prereq_object_id'],
                     ]
     }
+
+    # def queryset(self, request):
+    #     ipdb.set_trace()  ######### Break Point ###########
+    #
+    #     qs = super(PrereqInline, self).queryset(request)
+    #     qs = qs.filter(pk__gte = 5)
+    #     return qs
+
+    # # limit fields to only models with a "conditions_met" method
+    # def __init__(self, *args, **kwargs):
+    #
+    #     super(PrereqInline, self).__init__(*args, **kwargs)
+    #     self.fields['ct_field'].queryset = ContentType.objects.all()
 
 
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin

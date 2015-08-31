@@ -76,6 +76,13 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students = True)
 
+    def get_conditions_met(self, **kwargs):
+        pk_met_list = [
+                obj.pk for obj in self
+                if obj.conditions_met(**kwargs)
+            ]
+        return self.filter(pk__in = pk_met_list)
+
 class QuestManager(models.Manager):
     def get_queryset(self):
         return QuestQuerySet(self.model, using=self._db)
@@ -84,14 +91,11 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
-        qs = self.get_active()
+        qs = self.get_active().get_conditions_met()
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
         return available_quests
-
-
-
 
 class Quest(XPItem):
     verification_required = models.BooleanField(default = True, )
@@ -118,6 +122,10 @@ class Quest(XPItem):
             if hours_since_last >= self.hours_between_repeats:
                 return True
         return False
+
+    def conditions_met(self, **kwargs):
+        # my_conditions = Prereq.objects.get_mine(self)
+        return True
 
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')
