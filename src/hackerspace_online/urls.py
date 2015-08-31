@@ -34,6 +34,7 @@ urlpatterns = [
     url(r'^comments/', include('comments.urls', namespace='comments')),
     url(r'^notifications/', include('notifications.urls', namespace='notifications')),
     url(r'^courses/', include('courses.urls', namespace='courses')),
+    url(r'^achievements/', include('badges.urls', namespace='badges')),
 
     #admin
     url(r'^admin/', include(admin.site.urls)),

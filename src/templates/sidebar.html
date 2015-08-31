@@ -18,15 +18,18 @@
         href="{% url 'quests:quests' %}">
         <i class="fa fa-shield fa-fw"></i>&nbsp; Quests
       </a>
-      <a class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}" href="#">
-          <i class="fa fa-trophy fa-fw"></i>&nbsp;
-          <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
-          <span class="hidden-sm hidden-xs">Achievements</span>
-        </a>
-      <a class="list-group-item {% if '/profiles/' in request.path_info %}active{% endif %}" href="{% url 'profiles:profile_list' %}">
+      <a class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
+        href="{% url 'badges:list' %}">
+        <i class="fa fa-trophy fa-fw"></i>&nbsp;
+        <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
+        <span class="hidden-sm hidden-xs">Achievements</span>
+      </a>
+      <a class="list-group-item {% if '/profiles/' in request.path_info %}active{% endif %}"
+        href="{% url 'profiles:profile_list' %}">
         <i class="fa fa-users fa-fw"></i>&nbsp; Group
       </a>
-      <a class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}" href="{% url 'announcements:list' %}">
+      <a class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}"
+        href="{% url 'announcements:list' %}">
         <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
         <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
         <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
@@ -36,7 +39,8 @@
 
   {% if request.user.is_staff %}
   <div class="nav list-group hidden-xs" id="lg-menu-staff">
-      <a class="list-group-item {% if '/approvals/' in request.path_info %}active{% endif %}" href="{% url 'quests:approvals' %}">
+      <a class="list-group-item {% if '/approvals/' in request.path_info %}active{% endif %}"
+        href="{% url 'quests:approvals' %}">
         <i class="fa fa-shield fa-fw"></i>&nbsp; Quest Approval
       </a>
   </div>
