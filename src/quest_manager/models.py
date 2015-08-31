@@ -1,3 +1,4 @@
+import ipdb
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -10,7 +11,7 @@ from django.core.urlresolvers import reverse
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
 
-from datetime import time, date
+from datetime import time, date, datetime
 from django.utils import timezone
 
 from prerequisites.models import Prereq
@@ -72,10 +73,10 @@ class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte = timezone.now)
 
-    #doesn't include time yet!
+    #doesn't time is UTC or something
     def not_expired(self):
-        return self.filter( Q(date_expired = None) | Q(date_expired__gt = timezone.now),
-                            Q(date_expired = None) & Q(time_expired__gt = timezone.now)
+        return self.filter( Q(date_expired = None) | Q(date_expired__gt = datetime.now),
+                            Q(date_expired = None) & Q(time_expired__gt = datetime.now)
                           )
 
     def visible(self):
@@ -128,7 +129,9 @@ class Quest(XPItem):
     def expired(self):
 
         # if(self.id == 7):
-        #
+        #     # ipdb.set_trace()  ######### Break Point ###########
+
+
         # # Q(date_expired = None) | Q(date_expired__gt = timezone.now) &
         # #                     Q(date_expired = None) & Q(time_expired__gt = timezone.now)
         #
@@ -140,9 +143,13 @@ class Quest(XPItem):
         if self.date_expired == None:
             if self.time_expired == None:
                 return False
-            return timezone.now().time() > self.time_expired
+            return datetime.now().time() > self.time_expired
 
-        return timezone.now().date() > self.date_expired
+        return datetime.now().date() > self.date_expired
+
+        #     return timezone.now().time() > self.time_expired
+        #
+        # return timezone.now().date() > self.date_expired
 
     @staticmethod
     def autocomplete_search_fields():
