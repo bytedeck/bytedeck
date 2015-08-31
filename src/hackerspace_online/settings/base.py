@@ -73,7 +73,7 @@ INSTALLED_APPS = (
     'datetimewidget',
 
     # https://pypi.python.org/pypi/django-badgify
-    # 'badgify',
+    #'badgify',
 
     #local apps
     'quest_manager',

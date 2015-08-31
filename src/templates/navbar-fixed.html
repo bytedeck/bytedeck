@@ -78,7 +78,7 @@
         <li>
           <a href="{% url 'profiles:profile_detail' request.user.id %}">
             <i class="fa fa-user{% if request.user.is_staff %}-secret{%endif%}"></i>
-            &nbsp; {{ request.user }} 
+            &nbsp; {{ request.user }}
           </a>
         </li>
         <!-- <li class="dropdown">

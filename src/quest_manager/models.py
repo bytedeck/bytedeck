@@ -43,7 +43,7 @@ class XPItem(models.Model):
     date_available = models.DateField(default=timezone.now)
     time_available = models.TimeField(default=time().min) # midnight
     date_expired = models.DateField(blank=True, null=True)
-    time_expired = models.TimeField(blank=True, null=True)
+    time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
     minimum_XP = models.PositiveIntegerField(blank=True, null=True)
     maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
@@ -72,8 +72,11 @@ class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte = timezone.now)
 
+    #doesn't include time yet!
     def not_expired(self):
-        return self.filter( Q(date_expired = None) | Q(date_expired__gt = timezone.now) )
+        return self.filter( Q(date_expired = None) | Q(date_expired__gt = timezone.now),
+                            Q(date_expired = None) & Q(time_expired__gt = timezone.now)
+                          )
 
     def visible(self):
         return self.filter(visible_to_students = True)
@@ -121,6 +124,25 @@ class Quest(XPItem):
 
 
     objects = QuestManager()
+
+    def expired(self):
+
+        # if(self.id == 7):
+        #
+        # # Q(date_expired = None) | Q(date_expired__gt = timezone.now) &
+        # #                     Q(date_expired = None) & Q(time_expired__gt = timezone.now)
+        #
+        # date_none = self.date_expired == None
+        # date_over = self.date_expired > timezone.now()
+        # time_none = self.time_expired == None
+        # time_over = self.time_expired > timezone.now()
+
+        if self.date_expired == None:
+            if self.time_expired == None:
+                return False
+            return timezone.now().time() > self.time_expired
+
+        return timezone.now().date() > self.date_expired
 
     @staticmethod
     def autocomplete_search_fields():

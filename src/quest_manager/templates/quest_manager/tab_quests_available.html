@@ -10,7 +10,12 @@
   </div>
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for q in available_quests %}
-    <div class="panel panel-default accordian {% if q.id == active_q_id %} active {% endif %}">
+    <div class="panel accordian
+      {% if not q.visible_to_students %}panel-danger
+      {% elif q.expired %}panel-warning
+      {% else %}panel-default
+      {% endif %}
+      {% if q.id == active_q_id %} active {% endif %}">
       <div class="panel-heading accordian accordian-trigger panel-heading-tall
         {% if q.id == active_q_id %} active {% endif %}"
         role="tab" id="heading-quest-{{q.id}}"
