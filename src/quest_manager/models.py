@@ -13,6 +13,8 @@ from django.core.urlresolvers import reverse
 from datetime import time, date
 from django.utils import timezone
 
+from prerequisites.models import Prereq
+
 from comments.models import Comment
 
 class Category(models.Model):
@@ -76,10 +78,11 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students = True)
 
-    def get_conditions_met(self, **kwargs):
+    def get_conditions_met(self, user):
         pk_met_list = [
                 obj.pk for obj in self
-                if obj.conditions_met(**kwargs)
+                if Prereq.objects.all_conditions_met(obj, user)
+                # if obj.conditions_met_as_parent(**kwargs)
             ]
         return self.filter(pk__in = pk_met_list)
 
@@ -91,7 +94,7 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
-        qs = self.get_active().get_conditions_met()
+        qs = self.get_active().get_conditions_met(user)
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
@@ -114,7 +117,6 @@ class Quest(XPItem):
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
-
         if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
             time_since_last = timezone.now() - time_of_last
             hours_since_last = time_since_last.total_seconds()//3600
@@ -123,9 +125,10 @@ class Quest(XPItem):
                 return True
         return False
 
-    def conditions_met(self, **kwargs):
-        # my_conditions = Prereq.objects.get_mine(self)
-        return True
+    def condition_met_as_prerequisite(self, user, num_required):
+        num_approved = QuestSubmission.objects.all_for_user_quest(user, self).approved().count()
+        print("num_approved: " + str(num_approved) + "/" + str(num_required))
+        return num_approved >= num_required
 
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')
