@@ -78,6 +78,8 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students = True)
 
+    #this should be generic and placed in the prerequisites app
+    # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
                 obj.pk for obj in self
@@ -105,9 +107,18 @@ class Quest(XPItem):
     categories = models.ManyToManyField(Category, blank=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
-    # prereqs = GenericRelation(Prereq,
-    #                           content_type_field='parent_content_type',
-    #                           object_id_field='parent_object_id')
+    prereq_parent = GenericRelation(Prereq,
+                              content_type_field='parent_content_type',
+                              object_id_field='parent_object_id')
+
+    prereq_prereq = GenericRelation(Prereq,
+                              content_type_field='prereq_content_type',
+                              object_id_field='prereq_object_id')
+
+    prereq_or_prereq = GenericRelation(Prereq,
+                              content_type_field='or_prereq_content_type',
+                              object_id_field='or_prereq_object_id')
+
 
     objects = QuestManager()
 
@@ -125,6 +136,9 @@ class Quest(XPItem):
                 return True
         return False
 
+    # all models that want to act as a possible prerequisite need to have this method
+    # Create a default in the PrereqModel(models.Model) class that uses a default:
+    # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
         num_approved = QuestSubmission.objects.all_for_user_quest(user, self).approved().count()
         print("num_approved: " + str(num_approved) + "/" + str(num_required))

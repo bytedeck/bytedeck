@@ -1,6 +1,7 @@
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.db.models.base import ObjectDoesNotExist
 
 
 # Create your models here.
@@ -80,28 +81,42 @@ class Prereq(models.Model):
     #     return ("name__icontains",)
 
     def parent(self):
-        return self.parent_content_type.get_object_for_this_type(pk=self.parent_object_id)
+        try:
+            return self.parent_content_type.get_object_for_this_type(pk=self.parent_object_id)
+        except ObjectDoesNotExist:
+            return None
 
     def get_prereq(self):
-        return self.prereq_content_type.get_object_for_this_type(pk=self.prereq_object_id)
+        try:
+            return self.prereq_content_type.get_object_for_this_type(pk=self.prereq_object_id)
+        except ObjectDoesNotExist:
+            return None
 
     def get_or_prereq(self):
-        return self.or_prereq_content_type.get_object_for_this_type(pk=self.or_prereq_object_id)
+        try:
+            return self.or_prereq_content_type.get_object_for_this_type(pk=self.or_prereq_object_id)
+        except ObjectDoesNotExist:
+            return None
 
     def condition_met_as_prerequisite(self, user):
-        prereq_object = self.get_prereq()
-        main_condition_met = prereq_object.condition_met_as_prerequisite(user, self.prereq_count)
 
-        if self.prereq_invert:
-            main_condition_met = not main_condition_met
+            prereq_object = self.get_prereq()
+            if prereq_object is None:
+                return False
+            main_condition_met = prereq_object.condition_met_as_prerequisite(user, self.prereq_count)
 
-        if not self.or_prereq_object_id or not self.or_prereq_content_type:
-            return main_condition_met
+            if self.prereq_invert:
+                main_condition_met = not main_condition_met
 
-        or_prereq_object = self.get_or_prereq()
-        or_condition_met = or_prereq_object.condition_met_as_prerequisite(user, self.or_prereq_count)
+            if not self.or_prereq_object_id or not self.or_prereq_content_type:
+                return main_condition_met
 
-        if self.or_prereq_invert:
-            or_condition_met = not or_condition_met
+            or_prereq_object = self.get_or_prereq()
+            if or_prereq_object is None:
+                return False
+            or_condition_met = or_prereq_object.condition_met_as_prerequisite(user, self.or_prereq_count)
 
-        return main_condition_met or or_condition_met
+            if self.or_prereq_invert:
+                or_condition_met = not or_condition_met
+
+            return main_condition_met or or_condition_met
