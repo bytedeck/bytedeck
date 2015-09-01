@@ -3,7 +3,7 @@ from django.contrib import admin
 # Register your models here.
 from prerequisites.admin import PrereqInline
 
-from .models import Badge
+from .models import Badge, BadgeType, BadgeSeries
 
 class BadgeAdmin(admin.ModelAdmin):
     list_display = ('name', 'xp','visible_to_students')
@@ -12,3 +12,5 @@ class BadgeAdmin(admin.ModelAdmin):
     ]
 
 admin.site.register(Badge, BadgeAdmin)
+admin.site.register(BadgeSeries)
+admin.site.register(BadgeType)

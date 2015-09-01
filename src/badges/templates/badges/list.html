@@ -5,32 +5,48 @@
 {% block heading_inner %}{{heading}}{% endblock %}
 
 {% block content %}
-<hr />
-<div class="row">
-  <h3>Talents</h3>
-  {% for badge in badges %}
-  <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
-    <div class="thumbnail">
-      <img class="hackerbadge hackerbadge-unearned" src="{{badge.icon.url}}" alt="badge icon">
-      <div class="caption caption-badge text-center">
-        <a href="{% url 'badges:badge_detail' badge.id %}">{{badge.name}}</a>
-          {% if request.user.is_staff %}
-          <br/>
-          <div class="btn-group block" role="group">
-            <a class="btn btn-warning btn-xs" href="{% url 'badges:badge_update' badge.id %}" role="button">
-              <i class="fa fa-edit"></i>
-            </a>
-            <a class="btn btn-primary btn-xs" href="{% url 'badges:badge_copy' badge.id %}" role="button">
-              <i class="fa fa-copy"></i>
-            </a>
-            <a class="btn btn-danger btn-xs" href="{% url 'badges:badge_delete' badge.id %}" role="button">
-              <i class="fa fa-trash-o"></i>
-            </a>
-          </div>
-          {% endif %}
-      </div>
-    </div>
+<div class="panel panel-primary">
+
+  <div class="panel-heading">
+    <h3 class="panel-title">
+      Talents
+    </h3>
   </div>
-  {% endfor %}
-</div>
+
+  <div class="panel-body">
+    <div class="row">
+      {% for badge in badges %}
+      <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
+        <a href="{% url 'badges:badge_detail' badge.id %}">
+        <div class="thumbnail">
+          <img class="hackerbadge hackerbadge-unearned" src="{{badge.icon.url}}" alt="badge icon">
+          <div class="caption caption-badge text-center">
+              <p>{{badge.name}}</p>
+              {% if request.user.is_staff %}
+              <div class="btn-group block" role="group">
+                <a class="btn btn-warning btn-xs" href="{% url 'badges:badge_update' badge.id %}" role="button">
+                  <i class="fa fa-edit"></i>
+                </a>
+                <a class="btn btn-primary btn-xs" href="{% url 'badges:badge_copy' badge.id %}" role="button">
+                  <i class="fa fa-copy"></i>
+                </a>
+                <a class="btn btn-danger btn-xs" href="{% url 'badges:badge_delete' badge.id %}" role="button">
+                  <i class="fa fa-trash-o"></i>
+                </a>
+              </div>
+              {% endif %}
+          </div>
+        </div>
+      </a>
+      </div>
+      {% endfor %}
+
+    </div>
+
+  </div>
+
+</div> <!--panel -->
+
+
+
 {% endblock %}
