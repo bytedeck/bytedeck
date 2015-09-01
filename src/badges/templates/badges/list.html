@@ -1,14 +1,40 @@
-{% extends "base_sidebar.html" %}
+{% extends "badges/base.html" %}
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
-{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
-
-{% block heading %}{{heading}} <i class="fa fa-trophy pull-right"></i>{% endblock %}
+{% block heading_inner %}{{heading}}{% endblock %}
 
 {% block content %}
+
+<div class="row">
+  {% for badge in badges %}
+  <div class="col-xs-4 col-sm-3 col-md-2">
+    <div class="thumbnail">
+      <img class="badge-unearned" src="{{badge.icon.url}}" alt="badge icon">
+      <div class="caption text-center">
+        <a href="{% url 'badges:badge_detail' badge.id %}">{{badge.name}}</a>
+          {% if request.user.is_staff %}
+          <div class="btn-group " role="group">
+
+            <a class="btn btn-warning btn-sm" href="{% url 'badges:badge_update' badge.id %}" role="button">
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-primary btn-sm" href="{% url 'badges:badge_copy' badge.id %}" role="button">
+              <i class="fa fa-copy"></i>
+            </a>
+            <a class="btn btn-danger btn-sm" href="{% url 'badges:badge_delete' badge.id %}" role="button">
+              <i class="fa fa-trash-o"></i>
+            </a>
+          </div>
+          {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 {% for badge in badges %}
-<h3>Name: {{badge.name}}</h3>
+<h3>Name: </h3>
 <p>Desc: {{badge.short_description}} </p>
 {% endfor %}
 {% endblock %}

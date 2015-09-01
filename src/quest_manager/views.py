@@ -42,7 +42,6 @@ class QuestUpdate(UpdateView):
         context['heading'] = "Update Quest"
         context['action_value']= ""
         context['submit_btn_value']= "Update"
-        print(context)
         return context
 
     @method_decorator(staff_member_required)

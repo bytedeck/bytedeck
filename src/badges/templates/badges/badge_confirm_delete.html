@@ -1,0 +1,16 @@
+{% extends "badges/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Delete Badge {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to Delete this Achievement?  All rewardings will be deleted.<p>
+  <div class="well">
+    <p>Badge Name: {{object.name}}</p>
+    <p>Badge ID: {{object.id}}</p>
+  </div>
+  <a href="{% url 'badges:detail' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}

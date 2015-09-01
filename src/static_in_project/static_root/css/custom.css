@@ -43,6 +43,17 @@ iframe {
   border-radius: 8px;
 }
 
+/************ BADGES **********************/
+
+.badge {
+
+}
+
+.badge-unearned {
+  -webkit-filter: grayscale(100%);
+  filter: grayscale(100%);
+}
+
 /*********** PROFILE PAGE ********************/
 
 .progress-xp {

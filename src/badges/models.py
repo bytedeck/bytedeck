@@ -1,5 +1,6 @@
 from datetime import time, date, datetime
 
+from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils import timezone
 
@@ -13,7 +14,7 @@ class Badge(models.Model):
     # tags = GenericRelation("TaggedItem", null=True, blank=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
-    short_description = models.CharField(max_length=500, blank=True, null=True)
+    short_description = models.TextField(blank=True, null=True)
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True) #needs Pillow for ImageField
     visible_to_students = models.BooleanField(default = True)
     max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, enter -1 for unlimited')
@@ -27,3 +28,6 @@ class Badge(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse('badges:badge_detail', kwargs={'badge_id': self.id})

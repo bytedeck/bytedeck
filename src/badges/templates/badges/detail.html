@@ -1,0 +1,18 @@
+{% extends "badges/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} {{ heading }}{% endblock %}
+
+{% block content %}
+
+  <div class="media">
+    <div class="media-left">
+      <img class="media-object icon-lg" src="{{ badge.icon.url|default_if_none:'#' }}" alt="icon" />
+    </div>
+    <div class="media-body">
+      {{ badge.short_description }}
+    </div>
+  </div>
+
+
+{% endblock %}

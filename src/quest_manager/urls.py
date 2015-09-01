@@ -21,13 +21,8 @@ from quest_manager import views
 urlpatterns = [
     url(r'^$', views.quest_list, name='quests'),
     url(r'^approvals/$', views.approvals, name='approvals'),
-    # url(r'^email_demo/$', views.email_demo, name='email_demo'),
-    # url(r'^new_quest_custom/$', views.new_quest_custom, name='new_quest_custom'),
-    # url(r'^quests/$', 'quest_manager.views.quests', name='quests'),
-     # ex: /quest/25/
     url(r'^create/$', views.quest_create, name='quest_create'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
-    # url(r'^(?P<quest_id>[0-9]+)/edit/$', views.quest_update, name='quest_update'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),
     url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
