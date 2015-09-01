@@ -51,6 +51,9 @@ INSTALLED_APPS = (
     'django.contrib.sites', #for allauth
     'django.contrib.staticfiles',
 
+    #added django apps
+    'django.contrib.webdesign',
+
     #third party apps
 
     # https://django-allauth.readthedocs.org/en/latest/installation.html

@@ -73,6 +73,20 @@ iframe {
   padding-right: 0px !important;
 }
 
+.thumbnail-badge:hover, .thumbnail-badge:focus {
+  border-color: #337ab7;
+  color: #337ab7 !important;;
+}
+
+.popover {
+  width: 400px;
+  /*width: auto;*/
+}
+
+.badge-popover:hover, .badge-popover:focus{
+  text-decoration: none ;
+  color: #337ab7;
+}
 
 /*********** PROFILE PAGE ********************/
 
