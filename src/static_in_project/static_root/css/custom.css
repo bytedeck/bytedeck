@@ -45,14 +45,34 @@ iframe {
 
 /************ BADGES **********************/
 
-.badge {
-
+.hackerbadge {
+  min-height:64px;
+  height:64px !important;
 }
 
-.badge-unearned {
-  -webkit-filter: grayscale(100%);
-  filter: grayscale(100%);
+.hackerbadge-unearned {
+  -webkit-filter: grayscale(100%) blur(3px) opacity(.5);
+  filter: grayscale(100%) blur(3px) opacity(.5);
+  -webkit-transition: filter .5s;
+  transition: filter .5s;
 }
+
+.hackerbadge-unearned:hover {
+  -webkit-filter: none;
+  filter: none;
+}
+
+.col-badge {
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.caption-badge {
+  height: 58px;
+  padding-left: 0px !important;
+  padding-right: 0px !important;
+}
+
 
 /*********** PROFILE PAGE ********************/
 
