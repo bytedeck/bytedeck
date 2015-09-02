@@ -24,7 +24,7 @@ class RankManager(models.Manager):
         return self.get_queryset().get_ranks_gt(user_xp).first()
 
 class Rank(models.Model):
-    title = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50, unique=False, null=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     fa_icon = models.TextField(null=True, blank=True,
@@ -32,8 +32,25 @@ class Rank(models.Model):
 
     objects = RankManager()
 
+
+    class Meta:
+        ordering = ['xp']
+
     def __str__(self):
-        return self.title
+        return self.name
+
+    # to help with the prerequisite choices!
+    @staticmethod
+    def autocomplete_search_fields():
+        return ("name__icontains",)
+
+    # all models that want to act as a possible prerequisite need to have this method
+    # Create a default in the PrereqModel(models.Model) class that uses a default:
+    # prereq_met boolean field.  Use that or override the method like this
+    def condition_met_as_prerequisite(self, user, num_required):
+        #num_required is not used for this one
+        profile = Profile.objects.get(user=user)
+        return profile.xp > self.xp
 
 class SemesterManager(models.Manager):
     def get_queryset(self):

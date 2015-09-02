@@ -12,9 +12,13 @@ class SemesterAdmin(admin.ModelAdmin):
         ExcludedDateInline,
     ]
 
+class RankAdmin(admin.ModelAdmin):
+    list_display = ('name','xp')
+
+
 admin.site.register(CourseStudent)
 admin.site.register(Semester, SemesterAdmin)
 admin.site.register(Block)
 admin.site.register(Course)
 admin.site.register(DateType)
-admin.site.register(Rank)
+admin.site.register(Rank, RankAdmin)

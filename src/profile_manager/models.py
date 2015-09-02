@@ -16,6 +16,14 @@ GRAD_YEAR_CHOICES = []
 for r in range(datetime.now().year, datetime.now().year+4):
         GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
 
+class ProfileQuerySet(models.query.QuerySet):
+    def get_grad_year(self, year):
+        return self.filter(grad_year = year)
+
+class ProfileManager(models.Manager):
+    def get_queryset(self):
+        return ProfileQuerySet(self.model, using=self._db)
+
 class Profile(models.Model):
 
     def get_grad_year_choices():
@@ -33,6 +41,8 @@ class Profile(models.Model):
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
+
+    objects = ProfileManager()
 
     def __str__(self):
         return self.user.get_username()
