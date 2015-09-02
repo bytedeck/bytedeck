@@ -133,11 +133,6 @@ class Quest(XPItem):
 
         return datetime.now().date() > self.date_expired
 
-
-    @staticmethod
-    def autocomplete_search_fields():
-        return ("name__icontains",)
-
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
         if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
@@ -148,12 +143,17 @@ class Quest(XPItem):
                 return True
         return False
 
+    # to help with the prerequisite choices!
+    @staticmethod
+    def autocomplete_search_fields():
+        return ("name__icontains",)
+
     # all models that want to act as a possible prerequisite need to have this method
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
         num_approved = QuestSubmission.objects.all_for_user_quest(user, self).approved().count()
-        print("num_approved: " + str(num_approved) + "/" + str(num_required))
+        # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
 # class Feedback(models.Model):

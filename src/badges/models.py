@@ -43,7 +43,6 @@ class BadgeManager(models.Manager):
 
     def get_type_dicts(self):
         types = BadgeType.objects.all()
-
         return {t.name : self.get_queryset().get_type(t) for t in types}
 
 class Badge(models.Model):
@@ -83,19 +82,38 @@ class Badge(models.Model):
         else:
             return static('img/default_icon.png')
 
+    # to help with the prerequisite choices!
+    @staticmethod
+    def autocomplete_search_fields():
+        return ("name__icontains",)
+
+    # all models that want to act as a possible prerequisite need to have this method
+    # Create a default in the PrereqModel(models.Model) class that uses a default:
+    # prereq_met boolean field.  Use that or override the method like this
+    def condition_met_as_prerequisite(self, user, num_required):
+        num_approved = BadgeAssertion.objects.all_for_user_badge(user, self).count()
+        # print("num_approved: " + str(num_approved) + "/" + str(num_required))
+        return num_approved >= num_required
+
 
 class BadgeAssertionQuerySet(models.query.QuerySet):
-    def get_recipient(self, recipient):
-        return self.filter(recipient = recipient)
+    def get_user(self, user):
+        return self.filter(user = user)
+
+    def get_badge(self, badge):
+        return self.filter(badge = badge)
 
 class BadgeAssertionManager(models.Manager):
     def get_queryset(self):
         return BadgeAssertionQuerySet(self.model, using=self._db)
 
+    def all_for_user_badge(self, user, badge):
+        return self.get_queryset().get_user(user).get_badge(badge)
+
 class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)
-    recipient = models.ForeignKey(settings.AUTH_USER_MODEL)
-    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time recipient has received this badge')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time user has received this badge')
     time_issued = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
