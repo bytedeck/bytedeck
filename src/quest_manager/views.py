@@ -53,7 +53,9 @@ def quest_list(request):
     if request.user.is_staff:
         available_quests = Quest.objects.all()
     else:
+
         available_quests = Quest.objects.get_available(request.user)
+
     in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
     # in_progress_quests = [s.quest for s in in_progress_submissions]

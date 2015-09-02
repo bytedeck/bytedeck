@@ -1,4 +1,3 @@
-import ipdb
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -73,11 +72,12 @@ class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte = timezone.now)
 
-    #doesn't time is UTC or something
+    #doesn't worktime is UTC or something
     def not_expired(self):
-        return self.filter( Q(date_expired = None) | Q(date_expired__gt = datetime.now),
-                            Q(date_expired = None) & Q(time_expired__gt = datetime.now)
-                          )
+
+        qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gt = datetime.now) )
+        # return qs_date
+        return qs_date.exclude( Q(date_expired = None) & Q(time_expired__lt = datetime.now) )
 
     def visible(self):
         return self.filter(visible_to_students = True)
@@ -88,8 +88,7 @@ class QuestQuerySet(models.query.QuerySet):
         pk_met_list = [
                 obj.pk for obj in self
                 if Prereq.objects.all_conditions_met(obj, user)
-                # if obj.conditions_met_as_parent(**kwargs)
-            ]
+                ]
         return self.filter(pk__in = pk_met_list)
 
 class QuestManager(models.Manager):
@@ -100,6 +99,7 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
+
         qs = self.get_active().get_conditions_met(user)
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
@@ -127,19 +127,6 @@ class Quest(XPItem):
     objects = QuestManager()
 
     def expired(self):
-
-        # if(self.id == 7):
-        #     # ipdb.set_trace()  ######### Break Point ###########
-
-
-        # # Q(date_expired = None) | Q(date_expired__gt = timezone.now) &
-        # #                     Q(date_expired = None) & Q(time_expired__gt = timezone.now)
-        #
-        # date_none = self.date_expired == None
-        # date_over = self.date_expired > timezone.now()
-        # time_none = self.time_expired == None
-        # time_over = self.time_expired > timezone.now()
-
         if self.date_expired == None:
             if self.time_expired == None:
                 return False
@@ -147,9 +134,6 @@ class Quest(XPItem):
 
         return datetime.now().date() > self.date_expired
 
-        #     return timezone.now().time() > self.time_expired
-        #
-        # return timezone.now().date() > self.date_expired
 
     @staticmethod
     def autocomplete_search_fields():
@@ -286,8 +270,6 @@ class QuestSubmissionManager(models.Manager):
         num_subs = self.num_submissions(user, quest)
         if num_subs == 0:
             return True
-
-
         # check if the quest is already in progress
         try:
             s = self.all_not_completed().get(quest=quest)
