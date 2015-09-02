@@ -16,7 +16,7 @@ def list(request):
 
     context = {
         "heading": "Achievements",
-        "badge_type_dicts": badge_type_dicts,
+        "badge_type_dicts": sorted(badge_type_dicts.items(), reverse=True),
         # "badge_types": badge_types,
     }
     return render(request, "badges/list.html" , context)

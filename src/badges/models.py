@@ -21,6 +21,9 @@ class BadgeType(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        ordering = ['sort_order']
+
 class BadgeSeries(models.Model):
     name = models.CharField(max_length=50, unique=True)
 
@@ -39,7 +42,7 @@ class BadgeManager(models.Manager):
         return BadgeQuerySet(self.model, using=self._db)
 
     def get_type_dicts(self):
-        types = BadgeType.objects.all().order_by('sort_order')
+        types = BadgeType.objects.all()
 
         return {t.name : self.get_queryset().get_type(t) for t in types}
 
@@ -52,6 +55,7 @@ class Badge(models.Model):
     series = models.ForeignKey(BadgeSeries, blank=True, null=True)
     badge_type = models.ForeignKey(BadgeType)
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True) #needs Pillow for ImageField
+    sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default = True)
     hours_between_repeats = models.PositiveIntegerField(default = 0)
     date_available = models.DateField(default=timezone.now)
@@ -62,6 +66,10 @@ class Badge(models.Model):
     maximum_XP = models.PositiveIntegerField(blank=True, null=True)
 
     objects = BadgeManager()
+
+    class Meta:
+        order_with_respect_to = 'badge_type'
+        ordering = ['sort order', 'name']
 
     def __str__(self):
         return self.name
