@@ -1,5 +1,6 @@
 from datetime import time, date, datetime
 
+from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.templatetags.static import static
@@ -66,10 +67,35 @@ class Badge(models.Model):
         return self.name
 
     def get_absolute_url(self):
-        return reverse('badges:badge_detail', kwargs={'badge_id': self.id})
+        return reverse('badges:list', kwargs={'badge_id': self.id})
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
         else:
             return static('img/default_icon.png')
+
+
+class BadgeAssertionQuerySet(models.query.QuerySet):
+    def get_recipient(self, recipient):
+        return self.filter(recipient = recipient)
+
+class BadgeAssertionManager(models.Manager):
+    def get_queryset(self):
+        return BadgeAssertionQuerySet(self.model, using=self._db)
+
+class BadgeAssertion(models.Model):
+    badge = models.ForeignKey(Badge)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL)
+    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time recipient has received this badge')
+    time_issued = models.DateTimeField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
+    updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+
+    # objects = BadgeAssertionManager()
+
+    def __str__(self):
+        ordinal_str = ""
+        if self.ordinal > 1:
+            ordinal_str = " (" + str(self.ordinal) + ")"
+        return self.badge.name + ordinal_str
