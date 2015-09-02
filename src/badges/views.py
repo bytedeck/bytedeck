@@ -5,17 +5,19 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
-from .models import Badge
+from .models import Badge, BadgeType
 from .forms import BadgeForm
 
 @login_required
 def list(request):
 
-    badges = Badge.objects.all()
+    badge_type_dicts = Badge.objects.get_type_dicts()
+    # badge_types = BadgeType.objects.all()
 
     context = {
         "heading": "Achievements",
-        "badges": badges,
+        "badge_type_dicts": badge_type_dicts,
+        # "badge_types": badge_types,
     }
     return render(request, "badges/list.html" , context)
 

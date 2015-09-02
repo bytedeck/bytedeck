@@ -3,18 +3,22 @@
 {% load webdesign %}
 {% load staticfiles %}
 
-{% block heading_inner %}{{heading}}{% endblock %}
+{% block heading_inner %}{{heading}}
+{% if request.user.is_staff %}
+  <a class="btn btn-primary" href="{% url 'badges:badge_create' %}" role="button">New</a>
+{% endif %}
+{% endblock %}
 
 {% block content %}
+{% for type, badges in badge_type_dicts.items %}
 <div class="panel panel-primary">
 
   <div class="panel-heading">
     <h3 class="panel-title">
-      Talents
+      {{type}}s
     </h3>
   </div>
-
-  <div class="panel-body">
+  <div class="panel-body panel-body-badge">
     <div class="row">
       {% for badge in badges %}
       <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
@@ -40,13 +44,15 @@
         {% endif %}
         '>
         <div class="thumbnail thumbnail-badge">
-          <img class="hackerbadge hackerbadge-unearned" src="{{badge.icon.url}}" alt="badge icon">
+          <img class="hackerbadge hackerbadge-unearned" src="{{badge.get_icon_url}}" alt="badge icon">
           <div class="caption caption-badge text-center">
             {{badge.name}}
           </div>
         </div>
       </a>
       </div>
+      {% empty %}
+      <div class='col-sm-12'>None.</div>
       {% endfor %}
 
     </div>
@@ -54,6 +60,7 @@
   </div>
 
 </div> <!--panel -->
+{% endfor %}
 
 {% endblock %}
 {% block js %}
