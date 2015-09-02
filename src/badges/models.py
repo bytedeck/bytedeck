@@ -92,10 +92,26 @@ class BadgeAssertion(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
 
-    # objects = BadgeAssertionManager()
+    objects = BadgeAssertionManager()
 
     def __str__(self):
         ordinal_str = ""
         if self.ordinal > 1:
             ordinal_str = " (" + str(self.ordinal) + ")"
         return self.badge.name + ordinal_str
+
+    def get_absolute_url(self):
+        return reverse('badges:list')
+
+    # def grant(self, user):
+        # self.is_completed = True
+        # self.time_issued = timezone.now()
+        # self.save()
+
+    # def revoke(self):
+        # self.is_completed = False
+        # self.is_approved = False
+        # self.save()
+
+    # def get_comments(self):
+    #     return Comment.objects.all_with_target_object(self)
