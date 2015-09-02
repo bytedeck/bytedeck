@@ -74,9 +74,8 @@ class QuestQuerySet(models.query.QuerySet):
 
     #doesn't worktime is UTC or something
     def not_expired(self):
-
-        qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gt = datetime.now) )
-        # return qs_date
+        qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gte = datetime.now) )
+        # qs_date = qs_date.exclude( Q(date_expired = datetime.now) & Q(time_expired__gt = datetime.now ))
         return qs_date.exclude( Q(date_expired = None) & Q(time_expired__lt = datetime.now) )
 
     def visible(self):
