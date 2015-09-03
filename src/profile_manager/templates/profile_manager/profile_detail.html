@@ -92,6 +92,7 @@
      </div> <!--panel -->
      <div class="panel panel-primary">
        <div class="panel-heading">
+         <i class="pull-right fa fa-fw fa-book"></i>
          <h3 class="panel-title">Courses</h3>
        </div>
        <ul class="list-group">
@@ -112,6 +113,7 @@
     <!-- QUESTS -->
      <div class="panel panel-primary">
        <div class="panel-heading">
+         <i class="pull-right fa fa-fw fa-shield"></i>
          <h3 class="panel-title">Quests</h3>
        </div>
        <div class="list-group">
@@ -167,40 +169,43 @@
   </div>
   <!-- BADGES -->
   <div class="col-sm-6">
-    {% for badges in badge_assertions_by_type %}
     <div class="panel panel-primary">
       <div class="panel-heading">
-        <h3 class="panel-title">
-          <i class="pull-right fa {{badges.badge_type.fa_icon}}"></i>
-          {{badges.badge_type.name}}s
-          {% if request.user.is_staff %}
-            <a class="btn btn-xs btn-primary" href="{% url 'badges:list' %}" role="button">Grant</a>
-          {% endif %}
-        </h3>
+        <i class="pull-right fa fa-fw fa-trophy"></i>
+        <h3 class="panel-title">Achievments</h3>
       </div>
-      <div class="panel-body">
-        {% for assertion in badges.list %}
-          <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-          data-trigger="focus" data-placement="left" data-html="true"
-          title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
-          data-content='
-          <img class="icon-lg center-block" src="{{assertion.badge.icon.url}}">
-          <p>{{assertion.badge.short_description}}</p>
-          <p>XP: {{assertion.badge.xp}}</p>
-          <p><small>Granted on: {{assertion.time_issued}}</small></p>
-          '>
-              <img class="icon-md" src="{{assertion.badge.icon.url}}">
-          </a>
-        {% empty %}
-          None.
-        {% endfor %}
-      </div>
-
-    </div> <!--panel -->
-    {% endfor %}
-
-  </div>
-</div>
+      <div class="list-group">
+      {% for badges in badge_assertions_by_type %}
+        <div class="list-group-item list-group-item-info">
+            <i class="pull-right fa fa-fw {{badges.badge_type.fa_icon}}"></i>
+            {{badges.badge_type.name}}s
+            {% if request.user.is_staff %}
+              &nbsp;&nbsp;<a class="btn btn-xs btn-primary" href="{% url 'badges:list' %}" role="button">Grant</a>
+            {% endif %}
+          </h3>
+        </div>
+        <div class="list-group-item">
+          {% for assertion in badges.list %}
+            <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
+            data-trigger="hover" data-placement="left" data-html="true"
+            title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
+            data-content='
+            <img class="icon-lg center-block" src="{{assertion.badge.icon.url}}">
+            <p>{{assertion.badge.short_description}}</p>
+            <p>XP: {{assertion.badge.xp}}</p>
+            <p><small>Granted on: {{assertion.time_issued}}</small></p>
+            '>
+                <img class="icon-md" src="{{assertion.badge.icon.url}}">
+            </a>
+          {% empty %}
+            None.
+          {% endfor %}
+        </div>
+      {% endfor %}
+      </div> <!--list-group -->
+    </div> <!-- panel -->
+  </div> <!-- col -->
+</div> <!-- row -->
 
 {% endblock %}
 
