@@ -1,11 +1,12 @@
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse_lazy
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
-from .models import Badge, BadgeType
+from .models import Badge, BadgeType, BadgeAssertion
 from .forms import BadgeForm
 
 @login_required
@@ -91,3 +92,16 @@ def detail(request, badge_id):
         "badge": badge,
     }
     return render(request, 'badges/detail.html', context)
+
+########### Badge Assertion Views #########################
+
+@staff_member_required
+def grant(request, badge_id, user_id):
+
+    badge = get_object_or_404(Badge, pk=badge_id)
+    user = get_object_or_404(User, pk=user_id)
+    new_assertion= BadgeAssertion.objects.create_assertion(user, badge)
+    if new_assertion is None:
+        print("This achievement is not available, why is it showing up?")
+        raise Http404 #shouldn't get here
+    return redirect('profiles:profile_detail', pk = user_id)

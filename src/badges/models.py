@@ -43,7 +43,10 @@ class BadgeManager(models.Manager):
 
     def get_type_dicts(self):
         types = BadgeType.objects.all()
-        return {t.name : self.get_queryset().get_type(t) for t in types}
+        # return {t.name : self.get_queryset().get_type(t) for t in types}
+        return {t.name : {'badge_type': t, 'list': self.get_queryset().get_type(t)} for t in types}
+
+
 
 class Badge(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -103,12 +106,39 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_badge(self, badge):
         return self.filter(badge = badge)
 
+    def get_type(self, badge_type):
+        return self.filter(badge__badge_type = badge_type)
+
 class BadgeAssertionManager(models.Manager):
     def get_queryset(self):
         return BadgeAssertionQuerySet(self.model, using=self._db)
 
     def all_for_user_badge(self, user, badge):
         return self.get_queryset().get_user(user).get_badge(badge)
+
+    def num_assertions(self, user, badge):
+        qs = self.all_for_user_badge(user, badge)
+        if qs.exists():
+            max_dict = qs.aggregate(Max('ordinal'))
+            return max_dict.get('ordinal__max')
+        else:
+            return 0
+
+    def create_assertion(self, user, badge):
+        ordinal = self.num_assertions(user, badge) + 1
+        new_assertion = BadgeAssertion(
+            badge = badge,
+            user = user,
+            ordinal = ordinal,
+            time_issued = timezone.now(),
+        )
+        new_assertion.save()
+        return new_assertion
+
+    def get_by_type_for_user(self, user):
+        types = BadgeType.objects.all()
+        qs = self.get_queryset().get_user(user)
+        return {t.name : qs.get_type(t) for t in types}
 
 class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)

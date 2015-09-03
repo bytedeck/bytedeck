@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect
 
 from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
+from badges.models import BadgeAssertion
 
 from .forms import ProfileForm
 from .models import Profile
@@ -51,7 +52,9 @@ class ProfileDetail(DetailView):
         context['courses'] = CourseStudent.objects.all_for_user(self.request.user)
         context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(self.request.user)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(self.request.user)
-
+        context['badges_by_type'] = BadgeAssertion.objects.get_by_type_for_user(self.request.user)
+        context['talents'] = BadgeAssertion.objects.get_by_type_for_user(self.request.user)
+        print(context)
         return context
 
 class ProfileUpdate(UpdateView):

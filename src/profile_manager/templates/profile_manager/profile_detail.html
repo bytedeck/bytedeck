@@ -109,7 +109,7 @@
          {% endif %}
        </ul>
       </div> <!--panel -->
-
+    <!-- QUESTS -->
      <div class="panel panel-primary">
        <div class="panel-heading">
          <h3 class="panel-title">Quests</h3>
@@ -165,31 +165,20 @@
         </div>
        </div> <!--panel -->
   </div>
+  <!-- BADGES -->
   <div class="col-sm-6">
-     <div class="panel panel-primary">
-       <div class="panel-heading">
-         <h3 class="panel-title">Badges</h3>
-       </div>
-       <div class="panel-body">
-         <p>Badges</p>
-       </div>
-      </div> <!--panel -->
-      <div class="panel panel-primary">
-        <div class="panel-heading">
-          <h3 class="panel-title">Achievements</h3>
-        </div>
-        <div class="panel-body">
-          <p>Badges</p>
-        </div>
-       </div> <!--panel -->
-       <div class="panel panel-primary">
-         <div class="panel-heading">
-           <h3 class="panel-title">Awards</h3>
-         </div>
-         <div class="panel-body">
-           <p>Badges</p>
-         </div>
-        </div> <!--panel -->
+    {% for type, badges in badges_by_type %}
+    <div class="panel panel-primary">
+      <div class="panel-heading">
+        <h3 class="panel-title">{{type}}</h3>
+      </div>
+      <div class="panel-body">
+          {{badges.0.name}}
+      </div>
+
+    </div> <!--panel -->
+    {% endfor %}
+
   </div>
 </div>
 
