@@ -26,7 +26,7 @@
         <div class="row">
         <h4 class="panel-title">
           <div class="col-xs-1">
-            <img class="media-object panel-title-img" src="{{ q.icon_url|default_if_none:'#' }}" alt="icon"/>
+            <img class="media-object panel-title-img" src="{{ q.get_icon_url }}" alt="icon"/>
           </div>
           <div class="col-xs-5">{{q.name}}</div>
           <div class="col-xs-1">{{q.xp}}  </div>

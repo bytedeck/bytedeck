@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models import Q, Max, Sum
 from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
+from django.templatetags.static import static
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
@@ -124,6 +125,12 @@ class Quest(XPItem):
 
 
     objects = QuestManager()
+
+    def get_icon_url(self):
+        if self.icon and hasattr(self.icon, 'url'):
+            return self.icon.url
+        else:
+            return static('img/default_icon.png')
 
     def expired(self):
         if self.date_expired == None:

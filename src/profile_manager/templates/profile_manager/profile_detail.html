@@ -123,7 +123,7 @@
              <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
                  {% if s.is_returned %}list-group-item-danger
                  {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt=""/>
+               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
                {{s.quest}} <small>({{s.quest.xp}} XP)</small>
              </a>
            {% endfor %}
@@ -136,7 +136,7 @@
              <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
                  {% if s.is_awaiting_approval %}list-group-item-warning
                  {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.icon_url|default_if_none:'#' }}" alt=""/>
+               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
                {{s.quest}} <small>({{s.quest.xp}} XP)</small>
              </a>
            {% endfor %}
@@ -190,12 +190,12 @@
             data-trigger="hover" data-placement="left" data-html="true"
             title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
             data-content='
-            <img class="icon-lg center-block" src="{{assertion.badge.icon.url}}">
+            <img class="icon-lg center-block" src="{{assertion.badge.get_icon_url}}">
             <p>{{assertion.badge.short_description}}</p>
             <p>XP: {{assertion.badge.xp}}</p>
             <p><small>Granted on: {{assertion.time_issued}}</small></p>
             '>
-                <img class="icon-md" src="{{assertion.badge.icon.url}}">
+                <img class="icon-md" src="{{assertion.badge.get_icon_url}}">
             </a>
           {% empty %}
             None.

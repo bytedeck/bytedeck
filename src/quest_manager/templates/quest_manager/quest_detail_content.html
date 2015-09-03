@@ -7,7 +7,7 @@
 </div> -->
 <div class="media">
   <div class="media-left">
-    <img class="media-object icon-lg" src="{{ quest.icon_url|default_if_none:'#' }}" alt="icon" />
+    <img class="media-object icon-lg" src="{{ quest.get_icon_url }}" alt="icon" />
   </div>
   <div class="media-body">
     {{ quest.short_description }}
