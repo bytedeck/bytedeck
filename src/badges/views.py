@@ -13,12 +13,9 @@ from .forms import BadgeForm
 def list(request):
 
     badge_type_dicts = Badge.objects.get_type_dicts()
-    # badge_types = BadgeType.objects.all()
-
     context = {
         "heading": "Achievements",
-        "badge_type_dicts": sorted(badge_type_dicts.items(), reverse=True),
-        # "badge_types": badge_types,
+        "badge_type_dicts": badge_type_dicts,
     }
     return render(request, "badges/list.html" , context)
 

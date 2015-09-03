@@ -167,13 +167,33 @@
   </div>
   <!-- BADGES -->
   <div class="col-sm-6">
-    {% for type, badges in badges_by_type %}
+    {% for badges in badge_assertions_by_type %}
     <div class="panel panel-primary">
       <div class="panel-heading">
-        <h3 class="panel-title">{{type}}</h3>
+        <h3 class="panel-title">
+          <i class="pull-right fa {{badges.badge_type.fa_icon}}"></i>
+          {{badges.badge_type.name}}s
+          {% if request.user.is_staff %}
+            <a class="btn btn-xs btn-primary" href="{% url 'badges:list' %}" role="button">Grant</a>
+          {% endif %}
+        </h3>
       </div>
       <div class="panel-body">
-          {{badges.0.name}}
+        {% for assertion in badges.list %}
+          <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
+          data-trigger="focus" data-placement="left" data-html="true"
+          title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
+          data-content='
+          <img class="icon-lg center-block" src="{{assertion.badge.icon.url}}">
+          <p>{{assertion.badge.short_description}}</p>
+          <p>XP: {{assertion.badge.xp}}</p>
+          <p><small>Granted on: {{assertion.time_issued}}</small></p>
+          '>
+              <img class="icon-md" src="{{assertion.badge.icon.url}}">
+          </a>
+        {% empty %}
+          None.
+        {% endfor %}
       </div>
 
     </div> <!--panel -->
@@ -182,4 +202,14 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function() {
+  $('[data-toggle="popover"]').popover(
+
+  )
+});
+</script>
 {% endblock %}

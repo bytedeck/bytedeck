@@ -43,10 +43,12 @@ class BadgeManager(models.Manager):
 
     def get_type_dicts(self):
         types = BadgeType.objects.all()
-        # return {t.name : self.get_queryset().get_type(t) for t in types}
-        return {t.name : {'badge_type': t, 'list': self.get_queryset().get_type(t)} for t in types}
-
-
+        return [
+                    {
+                        'badge_type': t,
+                        'list': self.get_queryset().get_type(t)
+                    } for t in types
+                ]
 
 class Badge(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -136,9 +138,20 @@ class BadgeAssertionManager(models.Manager):
         return new_assertion
 
     def get_by_type_for_user(self, user):
+
         types = BadgeType.objects.all()
         qs = self.get_queryset().get_user(user)
-        return {t.name : qs.get_type(t) for t in types}
+        by_type =  [
+                    {
+                        'badge_type': t,
+                        'list': qs.get_type(t)
+                    } for t in types
+                ]
+
+        return by_type
+        #
+        # return {t.name : qs.get_type(t) for t in types}
+
 
 class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)

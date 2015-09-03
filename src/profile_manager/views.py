@@ -44,17 +44,16 @@ class ProfileDetail(DetailView):
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
+        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
         context = super(ProfileDetail, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
 
-        context['courses'] = CourseStudent.objects.all_for_user(self.request.user)
-        context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(self.request.user)
-        context['completed_submissions'] = QuestSubmission.objects.all_completed(self.request.user)
-        context['badges_by_type'] = BadgeAssertion.objects.get_by_type_for_user(self.request.user)
-        context['talents'] = BadgeAssertion.objects.get_by_type_for_user(self.request.user)
-        print(context)
+        context['courses'] = CourseStudent.objects.all_for_user(profile_user)
+        context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile_user)
+        context['completed_submissions'] = QuestSubmission.objects.all_completed(profile_user)
+        context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile_user)
         return context
 
 class ProfileUpdate(UpdateView):
