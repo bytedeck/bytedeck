@@ -17,6 +17,7 @@ SECRET_KEY = '8(@^b-s07o7a(*durcp#sx!-8=cnq2-shiq61!7nznn=h$az7n'
 DEBUG = True
 
 ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = [www.hackerspace.sd72.bc.ca, hackerspace.sd72.bc.ca]
 
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
@@ -44,7 +45,8 @@ STATIC_URL = '/static/'
 
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set in production settings for deployment
-#STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
+STATIC_ROOT = "/home/couture/www/hackerspace/static"
+# STATIC_ROOT = "/home/90158/www/hackerspace/static"
 
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static_in_project",  "static_root"),
@@ -54,7 +56,8 @@ STATICFILES_DIRS = (
 MEDIA_URL = "/media/"
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set properly in production settings for deployment
-MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project",  "media_root")
+MEDIA_ROOT = "/home/couture/www/hackerspace/media"
+# MEDIA_ROOT = "/home/90158/www/hackerspace/media"
 
 
 # END STATIC #######################################

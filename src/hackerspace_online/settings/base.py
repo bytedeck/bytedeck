@@ -28,13 +28,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 #DEBUG = True
 
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
 
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
-EMAIL_HOST_PASSWORD =""
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
+# EMAIL_HOST_PASSWORD =""
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
 
 # Application definition
 
@@ -137,28 +137,16 @@ WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/1.8/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
-}
+# define in local or production
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/1.8/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'America/Vancouver'
-
 USE_I18N = True
-
 USE_L10N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images) ####################
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
@@ -169,7 +157,6 @@ CRISPY_TEMPLATE_PACK = 'bootstrap3'
 SITE_ID = 3
 
 # AllAuth Configuration
-
 SOCIALACCOUNT_PROVIDERS = \
     {'facebook':
        {'SCOPE': ['email', 'public_profile'],

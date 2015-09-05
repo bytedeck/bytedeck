@@ -4,7 +4,7 @@ Django==1.8.2
 django-allauth==0.21.0
 django-crispy-forms==1.4.0
 django-datetime-widget==0.9.3
-django-gfklookupwidget==1.0.3
+django-grappelli==2.7.1
 django-haystack==2.4.0
 django-postgrespool==0.3.0
 django-summernote==0.6.8

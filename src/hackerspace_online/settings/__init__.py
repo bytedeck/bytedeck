@@ -1,16 +1,8 @@
 from .base import *
 
 try:
-    from .local import *
+    from .production_hackerspace import *
 except:
-    pass
-
-# try:
-#     from .production_heroku import *
-# except:
-#     pass
-
-# try:
-#     from .production_hope import *
-# except:
-#     pass
+    print("***** EXCEPTION IMPORTING PRODUCTION SETTINGS! *******")
+    print("***** IMPORTING LOCAL SETTINGS INSTEAD         *******")
+    from .local import *
