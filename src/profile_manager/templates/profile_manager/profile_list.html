@@ -2,16 +2,59 @@
 {% load crispy_forms_tags %}
 {% load staticfiles %}
 
+{% block head_css %}
+<!-- BOOTSTRAP TABLES -->
+<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.css">
+{% endblock %}
+
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
 {% block heading %}Group <i class="fa fa-users pull-right"></i>{% endblock %}
 
 {% block content %}
-{% for object in object_list %}
-<h3>User: {{object.user}}</h3>
-<p>Primary Key: {{object.pk}} </p>
-<p>Alias: {{object.alias}} </p>
-<p>First Name: {{object.first_name}} </p>
-<p>Last Name: {{object.last_name}} </p>
-{% endfor %}
+<!-- <table class="table table-striped"> -->
+<table data-toggle="table">
+  <thead>
+    <tr>
+      <th>Username</th>
+      {% if request.user.is_staff %}
+      <th>XP</th>
+      <th>First Name</th>
+      <th>Last Name</th>
+      <th>Preferred</th>
+      <th>Alias</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr>
+      {% if request.user.is_staff %}
+      <td>
+        <a href="{% url 'profiles:profile_detail' object.id %}">
+        {{object.user}}
+        </a>
+      </th>
+      <td>{{object.xp}}</th>
+      <td>{{object.first_name}}</td>
+      <td>{{object.last_name}}</td>
+      <td>{{object.preferred_name}}</td>
+      <td>{{object.alias}}</td>
+      {% else %}
+      <td>{{object.user}}</th>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}
+
+{% block js %}
+<!-- BOOTSTRAP TABLES -->
+<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
+<!-- Latest compiled and minified JavaScript -->
+<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.js"></script>
 {% endblock %}
