@@ -253,8 +253,11 @@ def complete(request, submission_id):
             if 'complete' in request.POST:
                 note_verb="completed"
                 icon="<i class='fa fa-shield fa-lg'></i>"
-                submission.mark_completed() ###################
                 affected_users = None
+                submission.mark_completed() ###################
+                if submission.quest.verification_required == False:
+                    submission.mark_approved()                
+
             elif 'comment' in request.POST:
                 note_verb="commented on"
                 icon="<span class='fa-stack'>" + \
