@@ -53,6 +53,7 @@ class XPItem(models.Model):
 
     class Meta:
         abstract = True
+        ordering = ["-time_expired", "-date_expired", "name"]
 
     def __str__(self):
         return self.name
@@ -216,10 +217,10 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(is_approved=False)
 
     def completed(self):
-        return self.filter(is_completed=True)
+        return self.filter(is_completed=True).order_by('-time_completed')
 
     def not_completed(self):
-        return self.filter(is_completed=False)
+        return self.filter(is_completed=False).order_by('-time_completed')
 
     def has_completion_date(self):
         return self.filter(time_completed__isnull=False)
@@ -242,12 +243,13 @@ class QuestSubmissionManager(models.Manager):
         if user is None:
             return self.get_queryset().not_completed()
         #only returned quests will have a time compelted, placing them on top
-        return self.get_queryset().get_user(user).not_completed().order_by('-time_completed')
+        return self.get_queryset().get_user(user).not_completed()
 
     def all_completed(self, user=None):
         if user is None:
             return self.get_queryset().completed()
-        return self.get_queryset().get_user(user).completed().order_by('is_approved')
+        return self.get_queryset().get_user(user).completed().order_by(
+                    'is_approved', '-time_approved')
 
     def all_awaiting_approval(self, user=None):
         if user is None:
@@ -327,6 +329,9 @@ class QuestSubmission(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     # rewards =
+
+    class Meta:
+        ordering = ["time_approved", "time_completed"]
 
     objects = QuestSubmissionManager()
 

@@ -30,6 +30,10 @@ class BadgeSeries(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "Badge Series'"
+
 class BadgeQuerySet(models.query.QuerySet):
     def get_type(self, badge_type):
         return self.filter(badge_type = badge_type)
