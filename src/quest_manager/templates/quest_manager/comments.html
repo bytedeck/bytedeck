@@ -21,7 +21,7 @@
               <small>&ndash; {{comment.timestamp|timesince}} ago</small>
               {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
             </h5>
-              {{comment.text}}
+              {{comment.text|safe}}
           </div>
         </div>
       </li>
