@@ -151,7 +151,7 @@
           <h3 class="panel-title">Recent Activity</h3>
         </div>
         <div class="panel-body">
-          <p>Badges</p>
+          <p>Under construction...</p>
         </div>
        </div> <!--panel -->
   </div>
@@ -160,16 +160,18 @@
     <div class="panel panel-primary">
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-trophy"></i>
-        <h3 class="panel-title">Achievments</h3>
+        <h3 class="panel-title">Achievments
+          {% if request.user.is_staff %}
+            &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
+            href="{% url 'badges:grant' object.user.id %}" role="button">Grant</a>
+          {% endif %}
+        </h3>
       </div>
       <div class="list-group">
       {% for badges in badge_assertions_by_type %}
         <div class="list-group-item list-group-item-info">
             <i class="pull-right fa fa-fw {{badges.badge_type.fa_icon}}"></i>
             {{badges.badge_type.name}}s
-            {% if request.user.is_staff %}
-              &nbsp;&nbsp;<a class="btn btn-xs btn-primary" href="{% url 'badges:list' %}" role="button">Grant</a>
-            {% endif %}
           </h3>
         </div>
         <div class="list-group-item">
@@ -181,7 +183,7 @@
             <img class="icon-lg center-block" src="{{assertion.badge.get_icon_url}}">
             <p>{{assertion.badge.short_description}}</p>
             <p>XP: {{assertion.badge.xp}}</p>
-            <p><small>Granted on: {{assertion.time_issued}}</small></p>
+            <p><small>Granted on: {{assertion.timestamp}}</small></p>
             '>
                 <img class="icon-md" src="{{assertion.badge.get_icon_url}}">
             </a>

@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -6,14 +7,17 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
+from notifications.signals import notify
+
 from .models import Badge, BadgeType, BadgeAssertion
-from .forms import BadgeForm
+from .forms import BadgeForm, BadgeAssertionForm
 
 @login_required
 def list(request):
 
     # badge_type_dicts = Badge.objects.get_type_dicts()
     badge_types = BadgeType.objects.all()
+    # earned_badges =
     context = {
         "heading": "Achievements",
         # "badge_type_dicts": badge_type_dicts,
@@ -95,11 +99,45 @@ def detail(request, badge_id):
 ########### Badge Assertion Views #########################
 
 @staff_member_required
+def assertion_create(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+    form = BadgeAssertionForm(request.POST or None, initial={'user': user})
+
+    if form.is_valid():
+        new_assertion = form.save(commit=False)
+        new_assertion.issued_by = request.user
+        new_assertion.ordinal = BadgeAssertion.objects.get_assertion_ordinal(
+                                    new_assertion.user, new_assertion.badge)
+        new_assertion.save()
+
+        notify.send(
+            new_assertion.issued_by,
+            # action=...,
+            target=new_assertion,
+            recipient=new_assertion.user,
+            affected_users=[new_assertion.user,],
+            icon="<i class='fa fa-fw fa-lg fa-trophy text-warning'></i>",
+            verb='granted')
+
+        messages.success(request, ("Achievement " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+
+        return redirect('badges:list')
+
+    context = {
+        "heading": "Grant an Achievment",
+        "form": form,
+        "submit_btn_value": "Grant",
+    }
+
+    return render(request, "badges/assertion_form.html", context)
+
+@staff_member_required
 def grant(request, badge_id, user_id):
 
     badge = get_object_or_404(Badge, pk=badge_id)
     user = get_object_or_404(User, pk=user_id)
-    new_assertion= BadgeAssertion.objects.create_assertion(user, badge)
+    issued_by = request.user
+    new_assertion= BadgeAssertion.objects.create_assertion(user, badge, issued_by)
     if new_assertion is None:
         print("This achievement is not available, why is it showing up?")
         raise Http404 #shouldn't get here

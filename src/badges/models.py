@@ -3,6 +3,7 @@ from datetime import time, date, datetime
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
+from django.db.models import Max
 from django.templatetags.static import static
 from django.utils import timezone
 
@@ -77,7 +78,7 @@ class Badge(models.Model):
 
     class Meta:
         order_with_respect_to = 'badge_type'
-        ordering = ['sort order', 'name']
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -130,13 +131,16 @@ class BadgeAssertionManager(models.Manager):
         else:
             return 0
 
-    def create_assertion(self, user, badge):
-        ordinal = self.num_assertions(user, badge) + 1
+    def get_assertion_ordinal(self, user, badge):
+        return self.num_assertions(user, badge) + 1
+
+    def create_assertion(self, user, badge, issued_by=None):
+        ordinal = self.get_assertion_ordinal(user, badge)
         new_assertion = BadgeAssertion(
             badge = badge,
             user = user,
             ordinal = ordinal,
-            time_issued = timezone.now(),
+            issued_by = issued_by,
         )
         new_assertion.save()
         return new_assertion
@@ -161,9 +165,10 @@ class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
     ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time user has received this badge')
-    time_issued = models.DateTimeField(null=True, blank=True)
+    # time_issued = models.DateTimeField(default = timezone.now)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
 
     objects = BadgeAssertionManager()
 

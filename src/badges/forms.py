@@ -4,7 +4,7 @@ from django.forms.extras.widgets import SelectDateWidget
 
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 
-from .models import Badge
+from .models import Badge, BadgeAssertion
 
 def make_custom_datetimefield(f):
     formfield = f.formfield()
@@ -32,3 +32,9 @@ class BadgeForm(forms.ModelForm):
         model = Badge
         fields = '__all__'
         # exclude = None
+
+class BadgeAssertionForm(forms.ModelForm):
+    class Meta:
+        model = BadgeAssertion
+        fields = '__all__'
+        exclude = ['ordinal', 'issued_by']

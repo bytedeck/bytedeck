@@ -174,7 +174,7 @@ class Create(CreateView):
             target=new_announcement,
             recipient=self.request.user,
             affected_users=affected_users,
-            icon="<i class='fa fa-lg fa-newspaper-o text-info'></i>",
+            icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
             verb='posted')
 
         return super(Create, self).form_valid(form)
