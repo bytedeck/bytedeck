@@ -10,6 +10,7 @@ from notifications.signals import notify
 from datetime import datetime
 
 from quest_manager.models import QuestSubmission
+from badges.models import BadgeAssertion
 from courses.models import Rank
 
 GRAD_YEAR_CHOICES = []
@@ -59,7 +60,7 @@ class Profile(models.Model):
             return static('img/default_avatar.jpg')
 
     def xp(self):
-        return QuestSubmission.objects.calculate_xp(self.user)
+        return QuestSubmission.objects.calculate_xp(self.user) + BadgeAssertion.objects.calculate_xp(self.user)
 
     def rank(self):
         return Rank.objects.get_rank(self.xp())

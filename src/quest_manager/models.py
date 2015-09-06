@@ -316,8 +316,6 @@ class QuestSubmissionManager(models.Manager):
         return xp
 
 
-
-
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")

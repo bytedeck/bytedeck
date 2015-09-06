@@ -3,7 +3,7 @@ from datetime import time, date, datetime
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
-from django.db.models import Max
+from django.db.models import Max, Sum
 from django.templatetags.static import static
 from django.utils import timezone
 
@@ -157,8 +157,13 @@ class BadgeAssertionManager(models.Manager):
                 ]
 
         return by_type
-        #
-        # return {t.name : qs.get_type(t) for t in types}
+
+    def calculate_xp(self, user):
+        total_xp = self.get_queryset().get_user(user).aggregate(Sum('badge__xp'))
+        xp = total_xp['badge__xp__sum']
+        if xp is None:
+            xp = 0
+        return xp
 
 
 class BadgeAssertion(models.Model):
