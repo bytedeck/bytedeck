@@ -53,7 +53,6 @@ def quest_list(request):
     if request.user.is_staff:
         available_quests = Quest.objects.all()
     else:
-
         available_quests = Quest.objects.get_available(request.user)
 
     in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
@@ -256,7 +255,7 @@ def complete(request, submission_id):
                 affected_users = None
                 submission.mark_completed() ###################
                 if submission.quest.verification_required == False:
-                    submission.mark_approved()                
+                    submission.mark_approved()
 
             elif 'comment' in request.POST:
                 note_verb="commented on"

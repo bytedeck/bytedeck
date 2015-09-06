@@ -12,10 +12,12 @@ from .forms import BadgeForm
 @login_required
 def list(request):
 
-    badge_type_dicts = Badge.objects.get_type_dicts()
+    # badge_type_dicts = Badge.objects.get_type_dicts()
+    badge_types = BadgeType.objects.all()
     context = {
         "heading": "Achievements",
-        "badge_type_dicts": badge_type_dicts,
+        # "badge_type_dicts": badge_type_dicts,
+        "badge_types": badge_types,
     }
     return render(request, "badges/list.html" , context)
 

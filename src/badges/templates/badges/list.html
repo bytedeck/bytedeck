@@ -10,18 +10,18 @@
 {% endblock %}
 
 {% block content %}
-{% for badges in badge_type_dicts %}
+{% for badge_type in badge_types %}
 <div class="panel panel-primary">
 
   <div class="panel-heading">
     <h3 class="panel-title">
       <i class="pull-right fa {{badges.badge_type.fa_icon}}"></i>
-      {{badges.badge_type.name}}s
+      {{badge_type.name}}s
     </h3>
   </div>
   <div class="panel-body panel-body-badge">
     <div class="row">
-      {% for badge in badges.list %}
+      {% for badge in badge_type.badge_set.all %}
       <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
         <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
         data-trigger="focus" data-placement="left" data-html="true"

@@ -43,7 +43,7 @@ class BadgeQuerySet(models.query.QuerySet):
 
 class BadgeManager(models.Manager):
     def get_queryset(self):
-        return BadgeQuerySet(self.model, using=self._db)
+        return BadgeQuerySet(self.model, using=self._db).order_by('-sort_order')
 
     def get_type_dicts(self):
         types = BadgeType.objects.all()
@@ -83,7 +83,7 @@ class Badge(models.Model):
         return self.name
 
     def get_absolute_url(self):
-        return reverse('badges:list', kwargs={'badge_id': self.id})
+        return reverse('badges:list')
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
