@@ -1,0 +1,16 @@
+{% extends "badges/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Revoke Achievement {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to Revoke this achievment?<p>
+  <div class="well">
+    <p>Achievement: {{object}}</p>
+    <p>User: {{object.user}}</p>
+  </div>
+  <a href="{% url 'profiles:profile_detail' object.user.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Revoke" class="btn btn-danger" />
+</form>
+{% endblock %}

@@ -152,6 +152,10 @@ iframe {
 }
 
 .icon-xl {
+  width: 80px
+}
+
+.icon-xxl {
   width: 128px
 }
 

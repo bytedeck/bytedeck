@@ -177,15 +177,20 @@
         <div class="list-group-item">
           {% for assertion in badges.list %}
             <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-            data-trigger="hover" data-placement="left" data-html="true"
+            data-trigger="hover focus" data-placement="left" data-html="true"
             title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
             data-content='
-            <img class="icon-lg center-block" src="{{assertion.badge.get_icon_url}}">
+            <img class="icon-xl center-block" src="{{assertion.badge.get_icon_url}}">
             <p>{{assertion.badge.short_description}}</p>
             <p>XP: {{assertion.badge.xp}}</p>
             <p><small>Granted on: {{assertion.timestamp}}</small></p>
+            {% if request.user.is_staff %}
+            <a class="btn btn-danger" href="{% url 'badges:revoke' assertion.id %}" role="button">
+              <i class="fa fa-trash-o"></i>
+            </a>
+            {% endif %}
             '>
-                <img class="icon-md" src="{{assertion.badge.get_icon_url}}">
+                <img class="icon-lg" src="{{assertion.badge.get_icon_url}}">
             </a>
           {% empty %}
             None.

@@ -132,6 +132,34 @@ def assertion_create(request, user_id):
     return render(request, "badges/assertion_form.html", context)
 
 @staff_member_required
+def assertion_delete(request, assertion_id):
+    assertion = get_object_or_404(BadgeAssertion, pk=assertion_id)
+
+    if request.method=='POST':
+        user = assertion.user
+        notify.send(
+            request.user,
+            # action=...,
+            target=assertion.badge,
+            recipient=user,
+            affected_users=[user,],
+            icon="<span class='fa-stack'>" + \
+                "<i class='fa fa-trophy fa-stack-1x text-warning'></i>" + \
+                "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+                "</span>",
+            verb='revoked')
+
+        messages.success(request,
+                            ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
+                        ))
+        assertion.delete()
+        return redirect('profiles:profile_detail', pk = user.id)
+
+    template_name='badges/assertion_confirm_delete.html'
+    return render(request, template_name, {'object':assertion})
+
+
+@staff_member_required
 def grant(request, badge_id, user_id):
 
     badge = get_object_or_404(Badge, pk=badge_id)
