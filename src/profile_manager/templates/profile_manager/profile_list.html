@@ -25,6 +25,7 @@
       <th>Last Name</th>
       <th>Preferred</th>
       <th>Alias</th>
+      <th></th>
       {% endif %}
     </tr>
   </thead>
@@ -42,8 +43,9 @@
       <td>{{object.last_name}}</td>
       <td>{{object.preferred_name}}</td>
       <td>{{object.alias}}</td>
+      <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a></td>
       {% else %}
-      <td>{{object.user}}</th>
+      <td>{{object.user}}</td>
       {% endif %}
     </tr>
     {% endfor %}
