@@ -324,10 +324,36 @@ def start(request, quest_id):
 
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
-    if new_sub is None:
-        print("This quest is not available, why is it showing up?")
-        raise Http404 #shouldn't get here
-    return redirect('quests:submission', submission_id = new_sub.id)
+    # if new_sub is None:
+    #     print("This quest is not available, why is it showing up?")
+    #     raise Http404 #shouldn't get here
+    #should just do this, but the redirect is screwing up with the tour...
+    #return redirect('quests:submission', submission_id = new_sub.id)
+
+    if new_sub is None: #might be because quest was already started
+        #so try to get the started Quest
+        sub = QuestSubmission.objects.all_for_user_quest(request.user, quest).last()
+        if sub is None:
+            raise Http404
+    else:
+        sub = new_sub
+
+    if sub.user != request.user and not request.user.is_staff:
+        return redirect('quests:quests')
+
+    # comment_form = SubmissionForm(request.POST or None)
+    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    reply_comment_form = CommentForm(request.POST or None, label="")
+    # comments = Comment.objects.all_with_target_object(sub)
+
+    context = {
+        "heading": sub.quest.name,
+        "submission": sub,
+        # "comments": comments,
+        "submission_form": main_comment_form,
+        # "reply_comment_form": reply_comment_form,
+    }
+    return render(request, 'quest_manager/submission.html', context)
 
 @login_required
 def drop(request, submission_id):
@@ -341,8 +367,9 @@ def drop(request, submission_id):
         return redirect('quests:quests')
     return render(request, template_name, {'submission':sub})
 
+
 @login_required
-def submission(request, submission_id):
+def submission(request, submission_id=None, quest_id=None):
     # sub = QuestSubmission.objects.get(id = submission_id)
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     if sub.user != request.user and not request.user.is_staff:

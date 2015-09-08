@@ -123,7 +123,7 @@ $(document).ready(function() {
         <p>You can explore these later on your own</p>",
       },
       {
-        backdrop: true,
+        // backdrop: true,
         element: "#logo",
         title: "An adorable asparagus",
         content: "<img class='popover-img' src='/static/img/asparagus.jpg' />",
@@ -146,6 +146,7 @@ $(document).ready(function() {
         <p><b>In progress</b>: quests you  have already started, or quests that have been returned to you.</p> \
         <p><b>Completed</b>: quests that you have submitted for completion.</p> \
         ",
+        path: "{% url 'quests:quests' %}",
       },
       {
         backdrop: true,
@@ -153,11 +154,11 @@ $(document).ready(function() {
         element: "#accordion-available",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Preview",
         content: "<p>A list of available quests will show up here. You can click them to get a short description and a few more details.</p> \
-        <p>At first, you will only see one quest, <b>click it before you hit next.</b></p> \
         ",
+        path: "{% url 'quests:quests' %}",
       },
       {
-        backdrop: true,
+        // backdrop: true,
         placement: 'bottom',
         element: "#preview-btns-1",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest  Preview Buttons",
@@ -165,10 +166,10 @@ $(document).ready(function() {
         <p><b>Start Quest:</b> This will also bring you to the full details of the quest, however it will also move the quest to your <em>In Progress</em> tab.</p>\
         <img class='pop-over-img' src='http://img4.wikia.nocookie.net/__cb20120507011516/lotr/images/0/09/Fotr0946.jpg' /> \
         <p>The footing is tricky here so follow the directions carefully. I don't want you to fall off a cliff!</p> \
-        <ol><li>Read all the instructions,</li> \
-        <li>Click <em>Next &raquo;</em>,</li> \
-        <li>Click the <em>Start Quest</em> button.</li></ol> \
+        <p>Click <b>Next &raquo;</b> to start the quest and continue the tour. \
+        If you hit the start button and go on without me, I'm not sure I'll be able to find you again!\
         ",
+        path: "{% url 'quests:quest_active' 1 %}",
       },
       {
         // backdrop: true,
@@ -177,7 +178,9 @@ $(document).ready(function() {
         content: "<p>OMG you made it!  You have no idea how many students \
         I've lost on that part of the tour.  We probably should have taken the \
         Mines of Moria instead.</p> \
+        <img class='popover-img' src='http://i0.wp.com/static.bangordailynews.com/wp-content/blogs.dir/122/files/2013/09/you-shall-not-pass.jpg' />\
         ",
+        path: "{% url 'quests:start' 1 %}",
       },
       {
         backdrop: true,
@@ -187,6 +190,7 @@ $(document).ready(function() {
         content: "<p>After starting a quest, you should carefully read through \
         the <em>Quest Details</em>.  This is your lesson.</p>\
         ",
+        path: "{% url 'quests:start' 1 %}",
       },
       {
         backdrop: true,
@@ -198,6 +202,7 @@ $(document).ready(function() {
         will explain how to complete the task using the information \
         you gained from the <em>Quest Details</em>.</p>\
         ",
+        path: "{% url 'quests:start' 1 %}",
       },
       {
         backdrop: true,
@@ -207,6 +212,7 @@ $(document).ready(function() {
         content: "<p>You will use this form to provide the information that \
         the <em>Submission Instructions</em> asked you to submit.</p> \
         ",
+        path: "{% url 'quests:start' 1 %}",
       },
       {
         backdrop: true,
@@ -224,7 +230,8 @@ $(document).ready(function() {
         placement: 'top',
         element: "#submission-instructions-1",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
-        content: "<p>The submission details for this quest ask you to complete this tour.\
+        content: "<p>The submission details for this quest ask you to \
+        complete this tour that I'm giving you right now.</p>\
         Although the tour isn't over yet, I trust you to complete it.  Besides,\
         if you don't complete it, I will harrass you every time your log in \
         for the rest of the year! HA!</p>\
@@ -236,7 +243,7 @@ $(document).ready(function() {
         element: "#submission-form-1",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
         content: "<p>This is another one of those tricky spots, so pay attention here...</p>\
-        <ol><li>Read all the instructions,</li> \
+        <ol><li>Read all of the instructions first!</li> \
         <li>Type &quot;Complete&quot; in the <em>Quest Submission Form</em>,</li>\
         <li>Click <em>Next &raquo;</em> on the tour,</li> \
         <li>Click the <em>Submit Quest for Completion</em> button below the form.</li></ol>\
@@ -244,7 +251,7 @@ $(document).ready(function() {
       },
       {
         backdrop: true,
-        delay: 500,
+        delay: 2000,
         placement: 'bottom',
         element: "#quest-tabs",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completed",
@@ -280,7 +287,7 @@ $(document).ready(function() {
   intro_tour.init();
 
   // Start the tour
-  //intro_tour.start();
+  intro_tour.start();
 
 });
 
