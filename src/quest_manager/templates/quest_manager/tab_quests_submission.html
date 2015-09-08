@@ -23,7 +23,8 @@
         role="tab" id="heading-{{s.id}}"
         aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
         aria-controls="collapse-{{s.id}}"
-        data-parent="#accordion" data-toggle="collapse" data-target="#collapse-{{s.id}}">
+        data-parent="#accordion-{% if completed %}completed{% else %}inprogress{% endif %}"
+        data-toggle="collapse" data-target="#collapse-{{s.id}}">
 
         <div class="row">
           <h4 class="panel-title">

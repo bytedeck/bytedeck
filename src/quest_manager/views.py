@@ -49,7 +49,7 @@ class QuestUpdate(UpdateView):
         return super(QuestUpdate, self).dispatch(*args, **kwargs)
 
 @login_required
-def quest_list(request):
+def quest_list(request, quest_id=None, submission_id=None):
     if request.user.is_staff:
         available_quests = Quest.objects.all()
     else:
@@ -57,13 +57,37 @@ def quest_list(request):
 
     in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
-    # in_progress_quests = [s.quest for s in in_progress_submissions]
-    # completed_quests = [s.quest for s in completed_submissions]
+
+    active_quest_id = 0
+    active_submission_id=0
+
+    available_tab_active=True
+    inprogress_tab_active=False
+    completed_tab_active=False
+
+    if quest_id is not None:
+        active_quest_id = int(quest_id)
+    elif submission_id is not None:
+        active_submission_id = int(submission_id)
+        active_sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        if active_sub in in_progress_submissions:
+            inprogress_tab_active = True
+            available_tab_active= False
+        elif active_sub in completed_submissions:
+            completed_tab_active = True
+            available_tab_active= False
+
     context = {
         "heading": "Quests",
         "available_quests": available_quests,
         "in_progress_submissions": in_progress_submissions,
         "completed_submissions": completed_submissions,
+        "active_q_id": active_quest_id,
+        "active_id": active_submission_id,
+        "available_tab_active": available_tab_active,
+        "inprogress_tab_active": inprogress_tab_active,
+        "completed_tab_active": completed_tab_active,
+
         # "in_progress_quests": in_progress_quests,
         # "completed_quests": completed_quests,
     }

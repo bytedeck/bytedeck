@@ -20,6 +20,8 @@ from quest_manager import views
 
 urlpatterns = [
     url(r'^$', views.quest_list, name='quests'),
+    url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quests'),
+    url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='quests'),
     url(r'^approvals/$', views.approvals, name='approvals'),
     url(r'^create/$', views.quest_create, name='quest_create'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),

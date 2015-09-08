@@ -10,20 +10,20 @@
 {% block content %}
 
 <ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
-  <li role="presentation" class="active">
+  <li role="presentation" {% if available_tab_active %}class="active"{% endif%}>
     <a href="#available" role="tab" data-toggle="tab">
       Available
       <span class="badge">{{available_quests|length}}</span>
     </a>
 
   </li>
-  <li role="presentation">
+  <li role="presentation" {% if inprogress_tab_active %}class="active"{% endif%}>
     <a href="#inprogress" role="tab" data-toggle="tab">
       In Progress
       <span class="badge">{{in_progress_submissions|length}}</span>
     </a>
   </li>
-  <li role="presentation">
+  <li role="presentation" {% if completed_tab_active %}class="active"{% endif%}>
     <a href="#completed" role="tab" data-toggle="tab">
       Completed
       <span class="badge">{{completed_submissions|length}}</span>
@@ -32,15 +32,18 @@
 </ul>
 <!-- Tab panes -->
 <div class="tab-content">
-  <div role="tabpanel" class="tab-pane active fade in" id="available">
+  <div role="tabpanel"
+  class="tab-pane fade {% if available_tab_active %}in active{% endif%}" id="available">
     {% include 'quest_manager/tab_quests_available.html' %}
   </div>
-  <div role="tabpanel" class="tab-pane fade" id="inprogress">
+  <div role="tabpanel"
+  class="tab-pane fade {% if inprogress_tab_active %}in active{% endif%}" id="inprogress">
     {% with submissions=in_progress_submissions %}
       {% include 'quest_manager/tab_quests_submission.html' %}
     {% endwith %}
   </div>
-  <div role="tabpanel" class="tab-pane fade" id="completed">
+  <div role="tabpanel"
+  class="tab-pane fade {% if completed_tab_active %}in active{% endif%}" id="completed">
     {% with submissions=completed_submissions completed=True %}
       {% include 'quest_manager/tab_quests_submission.html' %}
     {% endwith %}
