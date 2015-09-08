@@ -65,6 +65,7 @@ def quest_list(request, quest_id=None, submission_id=None):
     inprogress_tab_active=False
     completed_tab_active=False
 
+
     if quest_id is not None:
         active_quest_id = int(quest_id)
     elif submission_id is not None:
@@ -76,6 +77,12 @@ def quest_list(request, quest_id=None, submission_id=None):
         elif active_sub in completed_submissions:
             completed_tab_active = True
             available_tab_active= False
+    elif '/inprogress/' in request.path_info:
+        inprogress_tab_active = True
+        available_tab_active= False
+    elif '/completed/' in request.path_info:
+        completed_tab_active = True
+        available_tab_active= False
 
     context = {
         "heading": "Quests",
