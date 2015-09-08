@@ -1,0 +1,287 @@
+
+
+<script>
+$(document).ready(function() {
+
+  var intro_tour = new Tour({
+    storage: window.sessionStorage,
+
+    steps: [
+      {
+        orphan: true,
+        delay: 500,
+        backdrop: true,
+        title: "Welcome!",
+        content: "<p>Now that you've successfully registered with \
+        <b>Timberline's Digital Hackerspace - Online</b>, \
+        I've prepared a tour to show you around.</p> \
+        <p>Use the buttons below to navigate through the tour.</p> \
+        <p>If you grow weary of my tour, you can hit the <em>End Tour</em> button, \
+        however I will continue to appear each time you visit, until you have \
+        completed the tour.</p>",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "Hackerspace Tour Guide",
+        content: "<p>Here are a few tips for the tour.  If you stay on the marked trail, you won't have a problem.  There will be plenty of time to explore later.  But just in case...</p> \
+        <p><b>If you get lost</b> during the tour, just refresh your browser and I'll pick back up where we left off.</p> \
+        <p><b>If I can't find you</b> during the tour, try resizing the window, it acts like a scream in the jungle and I will come to the rescue!</p> \
+        <p><b>As a last resort</b>, in case you get blown up by a creeper or something, close the browser tab and come back and we can try again.</p> \
+        <p><b>If you end the tour</b> early and want to get me back, close this browser tab then come back. Unfortunately I'll have to start from the beginning again.</p>\
+        ",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "Hackerspace - Online",
+        content: "<p>You will be using this site for almost everything in your course, whether you are taking:\
+        <ul><li>Computer Modelling & Animation,</li><li>Computer Programming,</li> \
+        <li>Digital Art & Desgin,</li><li>Digital Hacklab,</li> \
+        <li>Digital Photography, or</li><li>Game Programming & Design,</li></ul> \
+        <p>this is where you will receive your lessons and assignments, where \
+        your work will be marked, and where you will track your grade in the course.</p>",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "Hackerspace - Online",
+        content: "<p>The Digital Hackerspace - Online uses a form of <strong>gamification</strong>:</p> \
+        <blockquote><dl> \
+          <dt>gam·i·fi·ca·tion</dt> \
+          <dd><small>the application of typical elements of game playing (e.g., \
+            point scoring, competition with others, rules of play) to other \
+            areas of activity, typically as an online marketing technique to \
+            encourage engagement with a product or service.</small></dd> \
+        </dl></blockquote> \
+        <p>That's right, I'm going to try to trick you into enjoying the course! \
+        MWAHAHAAHAHA!!!</p>",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "Hackerspace - Online",
+        content: "<p>Your lessons and assignments will be given in the form of <b>Quests</b>. \
+        When you complete a quest, you will be given experience points (XP) instead of marks. \
+        Instead of completing a Unit, you will embark on a <b>Campaign</b>.</p>\
+        <p>As you gain XP you will go up levels, and as you complete quests and campaigns \
+        you will gain <b>Achievements</b> such as <b>Talents</b>, <b>Badges</b>, and <b>Awards</b>.</p>",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "Hackerspace - Online",
+        content: "<p>On the other hand, if you're too cool to have fun... </p> \
+        <img class='popover-img'src='http://www.troll.me/images/brick-tamland/wow-youre-so-cool.jpg' /> \
+        <p>...it's still a really nice system once you get used to it,  \
+        and you can ignore all the fun stuff!</p> \
+        <p>This system will provide you with the flexibility to learn what interests you most,  \
+        you will always know exactly what your mark is, and you will have access to  \
+        all of this from home, or from your phone.</p> \
+        ",
+      },
+      {
+        // backdrop: true,
+        placement: 'bottom',
+        element: "#profile",
+        title: "<i class='fa fa-user'></i>&nbsp;&nbsp;Profile",
+        content: "<p>You can click your username to view or edit your profile.</p> \
+        <p>One of the quests in the introductory campaign will ask you to update your profile and create an avatar.</p>",
+      },
+      {
+        // backdrop: true,
+        element: "#announcements-menu",
+        title: "<i class='fa fa-newspaper-o'></i>&nbsp;&nbsp;Announcements",
+        content: "<p>This button will take you to the announcements page. \
+        Every day there will be a new announcement.</p> \
+        <p>You are expected to read the daily announcement as the first thing you do \
+        each class, after logging in to the Hackerspace - Online.</p> \
+        <p>A little number will show up on this menu button if you have unread announcements.</p>",
+      },
+      {
+        // backdrop: true,
+        placement: 'bottom',
+        element: "#notifications-menu",
+        title: "<i class='fa fa-inbox'></i>&nbsp;&nbsp;Notifications",
+        content: "<p>This inbox symbol shows your notifications.</p> \
+        <p>New announcements will also show up in this menu, but so will a lot more.</p> \
+        <p>A little number will appear here too, showing how many new notifications you have.</p>",
+      },
+      {
+        // backdrop: true,
+        element: "#groups-menu",
+        title: "<i class='fa fa-users'></i>&nbsp;&nbsp;Group",
+        content: "<p>The group page will allow you to view how other students are doing, if they choose to share this info.</p> \
+        ",
+      },
+      {
+        // backdrop: true,
+        element: "#achievements-menu",
+        title: "<i class='fa fa-trophy'></i>&nbsp;&nbsp;Achievements",
+        content: "<p>This page will list all of the achievements that are available.</p> \
+        <p>Achievements you have earned will appear in color.  You can also view your achievements on your profile page.</p> \
+        <p>You can explore these later on your own</p>",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "An adorable asparagus",
+        content: "<img class='popover-img' src='/static/img/asparagus.jpg' />",
+      },
+      {
+        // backdrop: true,
+        element: "#quests-menu",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quests",
+        content: "<p>You will probabyl spend most of you time on the Quests page.</p> \
+        <p><b>Click the Quests button</b> now so I can give you more details.</p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'bottom',
+        element: "#quest-tabs",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Tabs",
+        content: "<p>There are three tabs on this page:</p> \
+        <p><b>Available</b>: quests you can try. When you first join, you should have one quest available to you.</p> \
+        <p><b>In progress</b>: quests you  have already started, or quests that have been returned to you.</p> \
+        <p><b>Completed</b>: quests that you have submitted for completion.</p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'bottom',
+        element: "#accordion-available",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Preview",
+        content: "<p>A list of available quests will show up here. You can click them to get a short description and a few more details.</p> \
+        <p>At first, you will only see one quest, <b>click it before you hit next.</b></p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'bottom',
+        element: "#preview-btns-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest  Preview Buttons",
+        content: "<p><b>View Details:</b> This will allow you to see the full contents of a quest.  Chose this if you are curious, but might not want to actually do the quest.</p> \
+        <p><b>Start Quest:</b> This will also bring you to the full details of the quest, however it will also move the quest to your <em>In Progress</em> tab.</p>\
+        <img class='pop-over-img' src='http://img4.wikia.nocookie.net/__cb20120507011516/lotr/images/0/09/Fotr0946.jpg' /> \
+        <p>The footing is tricky here so follow the directions carefully. I don't want you to fall off a cliff!</p> \
+        <ol><li>Read all the instructions,</li> \
+        <li>Click <em>Next &raquo;</em>,</li> \
+        <li>Click the <em>Start Quest</em> button.</li></ol> \
+        ",
+      },
+      {
+        // backdrop: true,
+        element: "#submission-inprogress-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Success!",
+        content: "<p>OMG you made it!  You have no idea how many students \
+        I've lost on that part of the tour.  We probably should have taken the \
+        Mines of Moria instead.</p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#quest-instructions-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Details",
+        content: "<p>After starting a quest, you should carefully read through \
+        the <em>Quest Details</em>.  This is your lesson.</p>\
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-instructions-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Submission Instructions",
+        content: "<p>After carefully reading the <em>Quest Details</em> above, \
+        You will usually be given a task.  The <em>Submission Instructions</em> \
+        will explain how to complete the task using the information \
+        you gained from the <em>Quest Details</em>.</p>\
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-form-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Submission Form",
+        content: "<p>You will use this form to provide the information that \
+        the <em>Submission Instructions</em> asked you to submit.</p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-comments-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Past Submissions and Replies",
+        content: "<p>When you first start, this section will be empty. \
+        However, after you complete a quest your submission will appear here, as \
+        well as your teacher's comments.  You can always add more details by \
+        using the <em>Quest Submission Form</em> again.</p> \
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-instructions-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
+        content: "<p>The submission details for this quest ask you to complete this tour.\
+        Although the tour isn't over yet, I trust you to complete it.  Besides,\
+        if you don't complete it, I will harrass you every time your log in \
+        for the rest of the year! HA!</p>\
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-form-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
+        content: "<p>This is another one of those tricky spots, so pay attention here...</p>\
+        <ol><li>Read all the instructions,</li> \
+        <li>Type &quot;Complete&quot; in the <em>Quest Submission Form</em>,</li>\
+        <li>Click <em>Next &raquo;</em> on the tour,</li> \
+        <li>Click the <em>Submit Quest for Completion</em> button below the form.</li></ol>\
+        ",
+      },
+      {
+        backdrop: true,
+        delay: 500,
+        placement: 'bottom',
+        element: "#quest-tabs",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completed",
+        content: "<p>Ok, if you did that properly, you should noticed that you \
+        now have several new quests in your <em>Available</em> tab (see that little number?)</p> \
+        <p>You should also notice that you now have one quest in your \
+        <em>Completed</em> tab as well. Congratulations!\
+        ",
+      },
+      {
+        backdrop: true,
+        element: "#logo",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Break",
+        content: "<p>We've been at this for a while, I think you deserve a break.  Enjoy this short video interlude.</p>\
+        <p>I highly recommend you wear your headphones!</p>\
+        <div class='embed-responsive embed-responsive-4by3'>\
+          <iframe class='embed-responsive-item' src='https://www.youtube.com/embed/6-HUgzYPm9g?rel=0&amp;controls=0'></iframe>\
+        </div>\
+        ",
+      },
+
+      // {
+      //   backdrop: true,
+      //   element: "#logo",
+      //   title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Success!",
+      //   content: "<p>OMG you made it!  You have know idea how many students I've lost on that part of the tour.  We probably should have takent he Mines of Moria instead.</p> \
+      //   ",
+      // },
+    ]
+  });
+
+  // Initialize the tour
+  intro_tour.init();
+
+  // Start the tour
+  //intro_tour.start();
+
+});
+
+</script>

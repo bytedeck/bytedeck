@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block heading_inner %}{{ heading }}<br/>
-<small>
+<small id='submission-inprogress-{{submission.quest.id}}'>
 {% if request.user.is_staff %} {{submission.user}} | {% endif %}
 {% if submission.is_approved %}
   Approved - {{submission.time_approved}}
@@ -35,7 +35,7 @@
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
 
-  <div class="panel panel-primary">
+  <div id='submission-comments-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
       <h3 class="panel-title">Past Submissions and Replies</h3>
     </div>
@@ -46,7 +46,7 @@
     </ul>
   </div>
 
-  <div class="panel panel-primary">
+  <div id='submission-form-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>

@@ -21,3 +21,9 @@
 {% block content_last %}{% endblock %}
 
 {% block js %}{% endblock %}
+
+{% block tour_js %}
+    {% if not request.user.intro_tour_completed %}
+      {% include 'intro_tour.html' %}
+    {% endif %}
+{% endblock %}

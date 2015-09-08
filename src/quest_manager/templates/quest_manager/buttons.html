@@ -1,4 +1,4 @@
-<div class="pull-right">
+<div id='preview-btns-{{ q.id }}' class="pull-right">
   {% if  request.user.is_staff %}
     <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">
       <i class="fa fa-eye"></i>

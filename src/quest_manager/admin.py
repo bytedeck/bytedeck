@@ -17,7 +17,7 @@ class FeedbackAdmin(admin.ModelAdmin):
 #     model = TaggedItem
 
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
-    list_display = ('name', 'xp','visible_to_students','max_repeats','date_expired')
+    list_display = ('id','name', 'xp','visible_to_students','max_repeats','date_expired')
     list_filter = ['visible_to_students','max_repeats','verification_required']
     search_fields = ['name']
     inlines = [

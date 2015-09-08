@@ -42,6 +42,7 @@ class Profile(models.Model):
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
+    intro_tour_completed = models.BooleanField(default = False)
 
     objects = ProfileManager()
 

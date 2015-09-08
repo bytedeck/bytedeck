@@ -21,11 +21,11 @@
   </head>
 
   <body>
-
+    <div id='popover-fake-orphan-anchor'></div>
 
     {% block content_first %}{% endblock %}
     {% include 'navbar-fixed.html' %}
-    <div class="container-fluid main-container">
+    <div class="container-fluid" id="main-container">
 
       {% if messages %}
         {% for message in messages %}
@@ -57,6 +57,7 @@
 
     {% include 'javascript.html' %}
     {% block js %}{% endblock %}
+    {% block tour_js %}{% endblock %}
 
   </body>
 </html>

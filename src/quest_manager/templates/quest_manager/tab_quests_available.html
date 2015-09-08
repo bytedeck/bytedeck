@@ -5,10 +5,10 @@
     <div class="col-xs-1"></div>
     <div class="col-xs-5">Quest</div>
     <div class="col-xs-1">XP   </div>
-    <div class="col-xs-2">Ave Time</div>
+    <div class="col-xs-2">Campaigns</div>
     <div class="col-xs-3">Due</div>
   </div>
-  <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
+  <div class="panel-group panel-group-packed" id="accordion-available" role="tablist" aria-multiselectable="true">
   {% for q in available_quests %}
     <div class="panel accordian
       {% if not q.visible_to_students %}panel-danger
@@ -21,7 +21,7 @@
         role="tab" id="heading-quest-{{q.id}}"
         aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
         aria-controls="collapse-quest-{{q.id}}"
-        data-parent="#accordion" data-toggle="collapse" data-target="#collapse-quest-{{q.id}}">
+        data-parent="#accordion-available" data-toggle="collapse" data-target="#collapse-quest-{{q.id}}">
 
         <div class="row">
         <h4 class="panel-title">
@@ -30,7 +30,7 @@
           </div>
           <div class="col-xs-5">{{q.name}}</div>
           <div class="col-xs-1">{{q.xp}}  </div>
-          <div class="col-xs-2">{{q.id}}</div>
+          <div class="col-xs-2">-</div>
           <div class="col-xs-3"><small>
             {% if q.date_expired %}{{q.date_expired}}
             {% else %}{{q.time_expired}}

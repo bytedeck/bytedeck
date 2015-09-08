@@ -11,7 +11,7 @@
   padding-top: 20px;
 }
 
-.main-container {
+#main-container {
   min-height: 950px;
   background-color: #FFF;
   border-radius: 0px 0px 10px 10px;
@@ -221,11 +221,11 @@ form .panel-body {
 
 
 /************ALERTS *************************/
-.main-container > .alert:first-of-type {
+#main-container > .alert:first-of-type {
   margin-top: 10px;
 }
 
-.main-container > .alert {
+#main-container > .alert {
   margin-bottom: 0px;
 }
 

@@ -66,7 +66,7 @@
 
       <ul class="nav navbar-nav navbar-right">
         {% if request.user.is_authenticated %}
-        <li class="dropdown">
+        <li id='notifications-menu' class="dropdown">
           <a href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
             <span id="notification_badge" class="badge alert-danger"></span>
@@ -75,7 +75,7 @@
           <ul class="dropdown-menu" id="notification_dropdown">
           </ul>
         </li>
-        <li>
+        <li id="profile">
           <a href="{% url 'profiles:profile_detail' request.user.id %}">
             <i class="fa fa-user{% if request.user.is_staff %}-secret{%endif%}"></i>
             &nbsp; {{ request.user }}

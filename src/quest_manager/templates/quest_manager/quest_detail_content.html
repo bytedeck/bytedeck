@@ -15,15 +15,15 @@
 </div>
 
 
-<div class="panel panel-primary panel-top">
+<div id="quest-instructions-{{quest.id}}" class="panel panel-primary panel-top">
   <div class="panel-heading">
-    <h3 class="panel-title">Quest Instructions</h3>
+    <h3 class="panel-title">Quest Details</h3>
   </div>
   <div class="panel-body">
     {{ quest.instructions | safe }}
   </div>
 </div>
-<div class="panel panel-primary">
+<div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
     <h3 class="panel-title">Submission Instructions</h3>
   </div>
