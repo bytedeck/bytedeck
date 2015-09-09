@@ -70,9 +70,13 @@ class Profile(models.Model):
         return Rank.objects.get_next_rank(self.xp())
 
     def xp_to_next_rank(self):
+        next_rank = self.next_rank()
+        if next_rank == None:
+            return 0 #maxed out!
         return self.next_rank().xp - self.rank().xp
 
     def xp_since_last_rank(self):
+
         return self.xp() - self.rank().xp
 
 def create_profile(sender, **kwargs):

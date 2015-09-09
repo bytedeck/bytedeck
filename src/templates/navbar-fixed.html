@@ -67,7 +67,7 @@
       <ul class="nav navbar-nav navbar-right">
         {% if request.user.is_authenticated %}
         <li id="menu-xp">
-          <a class="navbar-text-large">XP: <strong>{{ request.user.profile.xp }}</strong></a>
+          <a class="navbar-text-large">XP: {{ request.user.profile.xp }}</a>
         </li>
         <li id="profile">
           <a href="{% url 'profiles:profile_detail' request.user.id %}">

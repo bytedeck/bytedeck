@@ -49,8 +49,8 @@ class Rank(models.Model):
     # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
         #num_required is not used for this one
-        profile = Profile.objects.get(user=user)
-        return profile.xp > self.xp
+        # profile = Profile.objects.get(user=user)
+        return user.profile.xp() > self.xp
 
 class SemesterManager(models.Manager):
     def get_queryset(self):

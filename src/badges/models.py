@@ -1,11 +1,15 @@
 from datetime import time, date, datetime
 
+from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Max, Sum
 from django.templatetags.static import static
 from django.utils import timezone
+
+from prerequisites.models import Prereq
+from notifications.signals import notify
 
 # Create your models here.
 
@@ -54,6 +58,16 @@ class BadgeManager(models.Manager):
                         'list': self.get_queryset().get_type(t)
                     } for t in types
                 ]
+
+
+    #this should be generic and placed in the prerequisites app
+    # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
+    def get_conditions_met(self, user):
+        pk_met_list = [
+                obj.pk for obj in self.get_queryset()
+                if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
+                ]
+        return self.filter(pk__in = pk_met_list)
 
 class Badge(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -143,10 +157,32 @@ class BadgeAssertionManager(models.Manager):
             issued_by = issued_by,
         )
         new_assertion.save()
+
+        if issued_by==None:
+            issued_by=User.objects.filter(is_staff=True).first()
+
+        notify.send(
+            issued_by, #sender
+            # action=...,
+            target=new_assertion.badge,
+            recipient=user,
+            affected_users=[user,],
+            icon="<i class='fa fa-lg fa-fw fa-trophy text-warning'></i>",
+            verb='granted you the achievement')
+
         return new_assertion
 
-    def get_by_type_for_user(self, user):
+    def check_for_new_assertions(self, user):
 
+        badges = Badge.objects.get_conditions_met(user)
+        for badge in badges:
+            #if the badge doesn't already exist
+            if not self.all_for_user_badge(user, badge):
+                self.create_assertion(user, badge)
+
+
+    def get_by_type_for_user(self, user):
+        self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
         qs = self.get_queryset().get_user(user)
         by_type =  [
@@ -155,10 +191,10 @@ class BadgeAssertionManager(models.Manager):
                         'list': qs.get_type(t)
                     } for t in types
                 ]
-
         return by_type
 
     def calculate_xp(self, user):
+        # self.check_for_new_assertions(user)
         total_xp = self.get_queryset().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
