@@ -66,21 +66,25 @@
 
       <ul class="nav navbar-nav navbar-right">
         {% if request.user.is_authenticated %}
+        <li id="menu-xp">
+          <a class="navbar-text-large">XP: <strong>{{ request.user.profile.xp }}</strong></a>
+        </li>
+        <li id="profile">
+          <a href="{% url 'profiles:profile_detail' request.user.id %}">
+            <i class="{% if request.user.is_staff %}fa fa-user-secret
+            {% else %} {{request.user.profile.rank.fa_icon}} {% endif %}"></i>
+            &nbsp; {{ request.user }}
+          </a>
+        </li>
         <li id='notifications-menu' class="dropdown">
           <a href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
-            <span id="notification_badge" class="badge alert-danger"></span>
-            &nbsp;<i class="fa fa-inbox"></i>
+            <i class="fa fa-inbox"></i>&nbsp;<span id="notification_badge" class="badge alert-danger"></span>
           </a>
           <ul class="dropdown-menu" id="notification_dropdown">
           </ul>
         </li>
-        <li id="profile">
-          <a href="{% url 'profiles:profile_detail' request.user.id %}">
-            <i class="fa fa-user{% if request.user.is_staff %}-secret{%endif%}"></i>
-            &nbsp; {{ request.user }}
-          </a>
-        </li>
+
         <!-- <li class="dropdown">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
@@ -98,7 +102,19 @@
             <li><a href="{% url 'notifications:list'%}">Notifications</a></li>
           </ul>
         </li> -->
-
+        <li id="extras-menu" class="dropdown">
+          <a href="#" class="dropdown-toggle" data-toggle="dropdown"
+            role="button" aria-haspopup="true" aria-expanded="false">
+            <i class="fa fa-bars"></i>
+          </a>
+          <ul class="dropdown-menu">
+            <li><a href="https://docs.google.com/drawings/d/1IN1nFr00VI2BWaRvraiiRGgnYoKPs4ywt2rWevwHgXI/edit?usp=sharing">Quest Map</a></li>
+            <li><a href="{% url 'courses:ranks' %}">Ranks List</a></li>
+            <!-- <li><a href="#">#</a></li> -->
+            <!-- <li role="separator" class="divider"></li>
+            <li class="dropdown-header">Debug</li> -->
+          </ul>
+        </li>
         <li><a href="{% url 'account_logout' %}">Sign Out</a></li>
         {% else %}
 
