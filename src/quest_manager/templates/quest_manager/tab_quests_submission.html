@@ -33,7 +33,9 @@
             </div>
             <div class="col-xs-5">{{s.quest.name}}</div>
             <div class="col-xs-1">{{s.quest.xp}}  </div>
-            <div class="col-xs-2">-</div>
+            <div class="col-xs-2"><small>
+              {% for c in s.quest.categories.all %}{{c}} {% empty %}-{% endfor %}
+            </small></div>
             <div class="col-xs-3">
               {% if s.is_approved %}
                 Approved<br/>

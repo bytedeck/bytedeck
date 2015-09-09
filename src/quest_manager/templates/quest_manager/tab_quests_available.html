@@ -30,7 +30,9 @@
           </div>
           <div class="col-xs-5">{{q.name}}</div>
           <div class="col-xs-1">{{q.xp}}  </div>
-          <div class="col-xs-2">-</div>
+          <div class="col-xs-2"><small>
+            {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
+          </small></div>
           <div class="col-xs-3"><small>
             {% if q.date_expired %}{{q.date_expired}}
             {% else %}{{q.time_expired}}
