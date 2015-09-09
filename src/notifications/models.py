@@ -139,9 +139,9 @@ class Notification(models.Model):
         url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
         if self.target_object:
             if self.action_object:
-                url = url_common_part + ' %(target)s with "%(action)s"</a>' % context
+                url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
-                url = url_common_part + " %(target)s</a>" % context
+                url = url_common_part + " <em>%(target)s</em></a>" % context
         else:
             url = url_common_part + "</a>"
         return url
@@ -195,9 +195,9 @@ class Notification(models.Model):
         url_common_part = "<a href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
         if self.target_object:
             if self.action_object:
-                url = url_common_part + ' %(target)s with "%(action)s"</a>' % context
+                url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
-                url = url_common_part + " %(target)s</a>" % context
+                url = url_common_part + " <em>%(target)s</em></a>" % context
         else:
             url = url_common_part + "</a>"
 
