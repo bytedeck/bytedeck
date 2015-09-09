@@ -78,3 +78,10 @@ class ProfileUpdate(UpdateView):
         if profile_user == self.request.user or self.request.user.is_staff:
             return super(ProfileUpdate, self).dispatch(*args, **kwargs)
         return redirect('quests:quests')
+
+@login_required
+def tour_complete(request):
+    profile = request.user.profile
+    profile.intro_tour_completed = True
+    profile.save()
+    return redirect('quests:quests')

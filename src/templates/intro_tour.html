@@ -21,19 +21,20 @@ $(document).ready(function() {
         completed the tour.</p>",
       },
       {
-        backdrop: true,
-        element: "#logo",
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
         title: "Hackerspace Tour Guide",
         content: "<p>Here are a few tips for the tour.  If you stay on the marked trail, you won't have a problem.  There will be plenty of time to explore later.  But just in case...</p> \
         <p><b>If you get lost</b> during the tour, just refresh your browser and I'll pick back up where we left off.</p> \
-        <p><b>If I can't find you</b> during the tour, try resizing the window, it acts like a scream in the jungle and I will come to the rescue!</p> \
         <p><b>As a last resort</b>, in case you get blown up by a creeper or something, close the browser tab and come back and we can try again.</p> \
         <p><b>If you end the tour</b> early and want to get me back, close this browser tab then come back. Unfortunately I'll have to start from the beginning again.</p>\
         ",
       },
       {
-        backdrop: true,
-        element: "#logo",
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
         title: "Hackerspace - Online",
         content: "<p>You will be using this site for almost everything in your course, whether you are taking:\
         <ul><li>Computer Modelling & Animation,</li><li>Computer Programming,</li> \
@@ -43,8 +44,9 @@ $(document).ready(function() {
         your work will be marked, and where you will track your grade in the course.</p>",
       },
       {
-        backdrop: true,
-        element: "#logo",
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
         title: "Hackerspace - Online",
         content: "<p>The Digital Hackerspace - Online uses a form of <strong>gamification</strong>:</p> \
         <blockquote><dl> \
@@ -58,8 +60,9 @@ $(document).ready(function() {
         MWAHAHAAHAHA!!!</p>",
       },
       {
-        backdrop: true,
-        element: "#logo",
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
         title: "Hackerspace - Online",
         content: "<p>Your lessons and assignments will be given in the form of <b>Quests</b>. \
         When you complete a quest, you will be given experience points (XP) instead of marks. \
@@ -68,8 +71,9 @@ $(document).ready(function() {
         you will gain <b>Achievements</b> such as <b>Talents</b>, <b>Badges</b>, and <b>Awards</b>.</p>",
       },
       {
-        backdrop: true,
-        element: "#logo",
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
         title: "Hackerspace - Online",
         content: "<p>On the other hand, if you're too cool to have fun... </p> \
         <img class='popover-img'src='http://www.troll.me/images/brick-tamland/wow-youre-so-cool.jpg' /> \
@@ -86,7 +90,9 @@ $(document).ready(function() {
         element: "#profile",
         title: "<i class='fa fa-user'></i>&nbsp;&nbsp;Profile",
         content: "<p>You can click your username to view or edit your profile.</p> \
-        <p>One of the quests in the introductory campaign will ask you to update your profile and create an avatar.</p>",
+        <p>One of the quests in the introductory campaign will ask you to update your profile and create an avatar.</p>\
+        <p>That little symbol to the left of your username is your Rank.</p>\
+        ",
       },
       {
         // backdrop: true,
@@ -97,6 +103,7 @@ $(document).ready(function() {
         <p>You are expected to read the daily announcement as the first thing you do \
         each class, after logging in to the Hackerspace - Online.</p> \
         <p>A little number will show up on this menu button if you have unread announcements.</p>",
+        path: "{% url 'announcements:list' %}",
       },
       {
         // backdrop: true,
@@ -109,10 +116,18 @@ $(document).ready(function() {
       },
       {
         // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
+        title: "An adorable asparagus",
+        content: "<img class='popover-img' src='/static/img/asparagus.jpg' />",
+      },
+      {
+        // backdrop: true,
         element: "#groups-menu",
         title: "<i class='fa fa-users'></i>&nbsp;&nbsp;Group",
         content: "<p>The group page will allow you to view how other students are doing, if they choose to share this info.</p> \
         ",
+        path: "{% url 'profiles:profile_list' %}",
       },
       {
         // backdrop: true,
@@ -121,12 +136,7 @@ $(document).ready(function() {
         content: "<p>This page will list all of the achievements that are available.</p> \
         <p>Achievements you have earned will appear in color.  You can also view your achievements on your profile page.</p> \
         <p>You can explore these later on your own</p>",
-      },
-      {
-        // backdrop: true,
-        element: "#logo",
-        title: "An adorable asparagus",
-        content: "<img class='popover-img' src='/static/img/asparagus.jpg' />",
+        path: "{% url 'badges:list' %}",
       },
       {
         // backdrop: true,
@@ -135,6 +145,7 @@ $(document).ready(function() {
         content: "<p>You will probabyl spend most of you time on the Quests page.</p> \
         <p><b>Click the Quests button</b> now so I can give you more details.</p> \
         ",
+        reflex: true,
       },
       {
         backdrop: true,
@@ -226,6 +237,18 @@ $(document).ready(function() {
         ",
       },
       {
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
+        title: "Break",
+        content: "<p>We've been at this for a while, I think you deserve a break.  Enjoy this short video interlude.</p>\
+        <p>I highly recommend you wear your headphones!</p>\
+        <div class='embed-responsive embed-responsive-4by3'>\
+          <iframe class='embed-responsive-item' src='https://www.youtube.com/embed/6-HUgzYPm9g?rel=0&amp;controls=0&amp;showinfo=0'></iframe>\
+        </div>\
+        ",
+      },
+      {
         backdrop: true,
         placement: 'top',
         element: "#submission-instructions-1",
@@ -242,18 +265,38 @@ $(document).ready(function() {
         placement: 'top',
         element: "#submission-form-1",
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
-        content: "<p>This is another one of those tricky spots, so pay attention here...</p>\
-        <ol><li>Read all of the instructions first!</li> \
-        <li>Type &quot;Complete&quot; in the <em>Quest Submission Form</em>,</li>\
-        <li>Click <em>Next &raquo;</em> on the tour,</li> \
-        <li>Click the <em>Submit Quest for Completion</em> button below the form.</li></ol>\
+        content: "<p>Type 'Completed' in the <em>Quest Submission Form</em>.</p>\
+        <p><b>Do not</b> hit any buttons yet!</p>",
+      },
+      {
+        backdrop: true,
+        placement: 'top',
+        element: "#submission-form-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
+        content: "<p>Ok, I'm not smart enough to tell if you actually wrote something, so I'm trusting you here...</p>\
         ",
       },
       {
         backdrop: true,
-        delay: 2000,
+        placement: 'top',
+        element: "#submission-form-1",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
+        content: "<p>Seriously, if you haven't typed anything in there yet, please do, or I'm going to lose you.</p>\
+        ",
+      },
+      {
+        backdrop: true,
+        placement: 'bottom',
+        element: "#tour-submit-quest",
+        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completion",
+        content: "<p>Ok, you can hit the button now.</p>\
+        ",
+        reflex: true,
+      },
+      {
         placement: 'bottom',
         element: "#quest-tabs",
+        delay: 1000,
         title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Quest Completed",
         content: "<p>Ok, if you did that properly, you should noticed that you \
         now have several new quests in your <em>Available</em> tab (see that little number?)</p> \
@@ -262,24 +305,48 @@ $(document).ready(function() {
         ",
       },
       {
-        backdrop: true,
-        element: "#logo",
-        title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Break",
-        content: "<p>We've been at this for a while, I think you deserve a break.  Enjoy this short video interlude.</p>\
-        <p>I highly recommend you wear your headphones!</p>\
-        <div class='embed-responsive embed-responsive-4by3'>\
-          <iframe class='embed-responsive-item' src='https://www.youtube.com/embed/6-HUgzYPm9g?rel=0&amp;controls=0'></iframe>\
-        </div>\
+        // backdrop: true,
+        placement: 'bottom',
+        element: "#menu-xp",
+        title: "Experience Points!",
+        content: "<p>You'll also notice that you have 10XP!</p>\
+        <p>5 of those XP came from completing the quest.</p>\
+        <p>(If you don't have any XP, you should probably go back and complete \
+        the quest properly before continuing.)</p>\
         ",
       },
-
-      // {
-      //   backdrop: true,
-      //   element: "#logo",
-      //   title: "<i class='fa fa-shield'></i>&nbsp;&nbsp;Success!",
-      //   content: "<p>OMG you made it!  You have know idea how many students I've lost on that part of the tour.  We probably should have takent he Mines of Moria instead.</p> \
-      //   ",
-      // },
+      {
+        // backdrop: true,
+        placement: 'bottom',
+        element: "#notifications-menu",
+        title: "You First Achievement!",
+        content: "<p>The other 5 XP came from a <em>Badge</em> that is automatically awarded \
+        when you complete your first quest.</p> \
+        <p>You should see a notification appear letting you know about the Achievement.</p>\
+        <p>You can click to check it out.</p>\
+        ",
+        path: "{% url 'profiles:profile_detail' request.user.profile.id  %}",
+      },
+      {
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
+        title: "Finished",
+        content: "<p>Well, that brings us to the end of the tour.  I encourage you to \
+        explore the site more on your own.  </p> \
+        <p>Hit <b>Next &raquo;</b> one more time and I'll never bug you again.</p>\
+        <p>Good luck!</p> \
+        ",
+      },
+      {
+        // backdrop: true,
+        element: "#navbar",
+        placement: 'bottom',
+        title: "Huh?",
+        content: "<p>You really shouldn't be seeing this.  Can you please tell your teacher?</p> \
+        ",
+        path: "{% url 'profiles:tour_complete' %}",
+      },
     ]
   });
 
