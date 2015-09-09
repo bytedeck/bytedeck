@@ -34,7 +34,7 @@ class Profile(models.Model):
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
-    alias = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    alias = models.CharField(max_length=50, unique=True, null=True, blank=True, default=None)
     first_name = models.CharField(max_length=50, null=True, blank=False)
     last_name = models.CharField(max_length=50, null=True, blank=False)
     preferred_name = models.CharField(max_length=50, null=True, blank=True)
