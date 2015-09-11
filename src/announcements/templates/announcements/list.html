@@ -72,7 +72,7 @@
   </div>
 {% endfor %}
 </div>
-
+{% if object_list.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">
     {% if object_list.has_previous %}
         <li><a href="{% url 'announcements:list' %}?page=1"><<</a></li>
@@ -88,5 +88,6 @@
         <li><a href="{% url 'announcements:list' %}?page={{ object_list.paginator.num_pages }}">>></a></li>
     {% endif %}
 </ul>
+{% endif %}
 
 {% endblock %}

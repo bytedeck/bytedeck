@@ -49,6 +49,9 @@ class Profile(models.Model):
     def __str__(self):
         return self.user.get_username()
 
+    class Meta:
+        ordering = ['user__username']
+
     def get_absolute_url(self):
         return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
@@ -87,7 +90,9 @@ def create_profile(sender, **kwargs):
 
         notify.send(
             current_user,
-            recipient=User.objects.get(username='90158'), #admin user
+            recipient=User.objects.filter(is_staff=True).first(), #admin user
+            affected_users=User.objects.filter(is_staff=True),
+            icon="<i class='fa fa-fw fa-lg fa-user'></i>",
             verb='new user created')
 
 post_save.connect(create_profile, sender=User)

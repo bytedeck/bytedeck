@@ -16,6 +16,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 
+from badges.models import BadgeAssertion
 from comments.models import Comment
 from comments.forms import CommentForm
 from notifications.signals import notify
@@ -287,6 +288,8 @@ def complete(request, submission_id):
                 submission.mark_completed() ###################
                 if submission.quest.verification_required == False:
                     submission.mark_approved()
+                    #update badges
+                    BadgeAssertion.objects.check_for_new_assertions(submission.user)
 
             elif 'comment' in request.POST:
                 note_verb="commented on"
