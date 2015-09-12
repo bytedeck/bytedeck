@@ -288,8 +288,6 @@ def complete(request, submission_id):
                 submission.mark_completed() ###################
                 if submission.quest.verification_required == False:
                     submission.mark_approved()
-                    #update badges
-                    BadgeAssertion.objects.check_for_new_assertions(submission.user)
 
             elif 'comment' in request.POST:
                 note_verb="commented on"
