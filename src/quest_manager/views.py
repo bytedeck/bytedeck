@@ -302,7 +302,6 @@ def complete(request, submission_id):
             else:
                 raise Http404("unrecognized submit button")
 
-
             notify.send(
                 request.user,
                 action=comment_new,

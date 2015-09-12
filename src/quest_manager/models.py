@@ -253,7 +253,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None):
         if user is None:
-            return self.get_queryset().not_approved().completed()
+            return self.get_queryset().not_approved().completed().order_by('time_completed')
         return self.get_queryset().get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):

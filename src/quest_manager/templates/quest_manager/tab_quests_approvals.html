@@ -7,7 +7,7 @@
     <div class="col-xs-1">XP   </div>
     <div class="col-xs-1">q.id</div>
     <div class="col-xs-2">User</div>
-    <div class="col-xs-3">Completed</div>
+    <div class="col-xs-3">Status</div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
@@ -30,7 +30,20 @@
             <div class="col-xs-1">{{s.quest.xp}}  </div>
             <div class="col-xs-1">{{s.quest.id}}</div>
             <div class="col-xs-2">{{s.user}}  </div>
-            <div class="col-xs-3"><small>{{s.time_completed|timesince}} ago</small></div>
+            <div class="col-xs-3">
+              {% if s.is_approved %}
+                Approved<br/>
+                <small>{{s.time_approved|timesince}} ago</small>
+              {% elif s.is_awaiting_approval %}
+                Submitted<br/>
+                <small>{{s.time_completed|timesince}} ago</small>
+              {% elif s.is_returned %}
+                Returned<br/>
+                <small>{{s.updated|timesince}} ago</small>
+              {% else %}
+                In progress
+              {% endif %}
+            </div>
           </h4>
         </div>
       </div>
