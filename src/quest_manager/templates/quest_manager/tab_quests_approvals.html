@@ -28,8 +28,10 @@
             </div>
             <div class="col-xs-4">{{s.quest.name}}</div>
             <div class="col-xs-1">{{s.quest.xp}}  </div>
-            <div class="col-xs-1">{{s.quest.id}}</div>
-            <div class="col-xs-2">{{s.user}}  </div>
+            <div class="col-xs-1">{{s.quest.id}} </div>
+            <div class="col-xs-2">{{s.user}} <br />
+              <small>{{s.user.profile.first_name|add:' '|add:s.user.profile.last_name|truncatechars:15}}</small>
+             </div>
             <div class="col-xs-3">
               {% if s.is_approved %}
                 <small>{{s.time_approved|timesince}} ago</small>
