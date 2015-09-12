@@ -15,7 +15,7 @@ from datetime import time, date, datetime
 from django.utils import timezone
 
 from prerequisites.models import Prereq
-
+from badges.models import BadgeAssertion
 from comments.models import Comment
 
 class Category(models.Model):
@@ -354,7 +354,7 @@ class QuestSubmission(models.Model):
         self.time_approved = timezone.now()
         self.save
         #update badges
-        BadgeAssertion.objects.check_for_new_assertions(submission.user)
+        BadgeAssertion.objects.check_for_new_assertions(self.user)
 
     def mark_returned(self):
         self.is_completed = False
