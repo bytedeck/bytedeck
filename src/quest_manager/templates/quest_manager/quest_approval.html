@@ -7,10 +7,11 @@
 
 <ul class="nav nav-tabs nav-justified" role="tablist">
   {% for tab in tab_list %}
-    <li role="presentation" {% if forloop.first %}class="active" {% endif %}>
-      <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab">
+    <li role="presentation" {% if tab.active %}class="active" {% endif %}>
+      <a href="{{tab.url}}">      
+      <!-- <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab"> -->
         {{tab.name}}
-        <span class="badge">{{tab.submissions|length}}</span>
+        <!-- <span class="badge">{{tab.submissions|length}}</span> -->
       </a>
     </li>
   {% endfor %}
@@ -19,7 +20,7 @@
 <div class="tab-content">
   {% for tab in tab_list %}
   <div role="tabpanel"
-    class="tab-pane fade {% if forloop.first %}in active{% endif %}"
+    class="tab-pane fade {% if tab.active %}in active{% endif %}"
     id="tab-{{tab.name|slugify}}">
     {% include 'quest_manager/tab_quests_approvals.html' %}
   </div>

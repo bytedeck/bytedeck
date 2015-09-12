@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 
 from django.core.mail import send_mail
-from django.core.urlresolvers import reverse_lazy
+from django.core.urlresolvers import reverse_lazy, reverse
 
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect, Http404
@@ -239,13 +239,48 @@ def approve(request, submission_id):
 @staff_member_required
 def approvals(request):
 
-    approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-    approved_submissions = QuestSubmission.objects.all_approved()
-    returned_submissions = QuestSubmission.objects.all_returned()
+    submitted_submissions = []
+    approved_submissions = []
+    returned_submissions = []
 
-    tab_list = [{"name": "Awaiting Approval", "submissions": approval_submissions,},
-                { "name": "Returned", "submissions": returned_submissions,},
-                { "name": "Approved", "submissions": approved_submissions,},]
+    submitted_tab_active=True
+    returned_tab_active=False
+    approved_tab_active=False
+
+    # if '/submitted/' in request.path_info:
+    #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
+    if '/returned/' in request.path_info:
+        returned_submissions = QuestSubmission.objects.all_returned()
+        returned_tab_active = True
+        submitted_tab_active= False
+    elif '/approved/' in request.path_info:
+        approved_submissions = QuestSubmission.objects.all_approved()
+        approved_tab_active = True
+        submitted_tab_active= False
+    else:
+        submitted_submissions = QuestSubmission.objects.all_awaiting_approval()
+        # approval_submissions = QuestSubmission.objects.all_awaiting_approval()
+        # approved_submissions = QuestSubmission.objects.all_approved()
+        # returned_submissions = QuestSubmission.objects.all_returned()
+
+    tab_list = [{   "name": "Awaiting Approval",
+                    "submissions": submitted_submissions,
+                    "active" : submitted_tab_active,
+                    "time_heading": "Submitted",
+                    "url": reverse('quests:submitted'),
+                },
+                {   "name": "Returned",
+                    "submissions": returned_submissions,
+                    "active" : returned_tab_active,
+                    "time_heading": "Returned",
+                    "url": reverse('quests:returned'),
+                },
+                {   "name": "Approved",
+                    "submissions": approved_submissions,
+                    "active" : approved_tab_active,
+                    "time_heading": "Approved",
+                    "url": reverse('quests:approved'),
+                },]
 
     main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
