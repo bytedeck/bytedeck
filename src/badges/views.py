@@ -17,11 +17,16 @@ def list(request):
 
     # badge_type_dicts = Badge.objects.get_type_dicts()
     badge_types = BadgeType.objects.all()
-    # earned_badges =
+
+    # earned_badges = Badge.objects.user_earned_badges(request.user)
+    #http://stackoverflow.com/questions/32421214/django-queryset-all-model1-objects-where-a-model2-exists-with-a-model1-and-the
+    earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
+
     context = {
         "heading": "Achievements",
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
+        "earned_badges": earned_badges,
     }
     return render(request, "badges/list.html" , context)
 

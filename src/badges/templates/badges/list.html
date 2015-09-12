@@ -29,7 +29,7 @@
         data-content='
         <p>{{badge.short_description}}</p>
         <p>XP: {{badge.xp}}</p>
-        <p>Series: {{badge.series}}</p>
+        <!-- <p>Series: {{badge.series}}</p> -->
         {% if request.user.is_staff %}
         <div class="btn-group block" role="group">
           <a class="btn btn-warning " href="{% url 'badges:badge_update' badge.id %}" role="button">
@@ -45,7 +45,9 @@
         {% endif %}
         '>
         <div class="thumbnail thumbnail-badge">
-          <img class="hackerbadge hackerbadge-unearned" src="{{badge.get_icon_url}}" alt="badge icon">
+          <img class="hackerbadge
+            {% if not badge in earned_badges %} hackerbadge-unearned {% endif %}"
+            src="{{badge.get_icon_url}}" alt="badge icon">
           <div class="caption caption-badge text-center">
             {{badge.name}}
           </div>

@@ -50,6 +50,15 @@ class BadgeManager(models.Manager):
     def get_queryset(self):
         return BadgeQuerySet(self.model, using=self._db).order_by('-sort_order')
 
+    def user_earned_badges(self, user):
+        return list(
+                set(
+                  [
+                    ass.badge for ass in BadgeAssertion.objects.filter(user=user).all()
+                  ]
+                )
+               )
+
     def get_type_dicts(self):
         types = BadgeType.objects.all()
         return [
