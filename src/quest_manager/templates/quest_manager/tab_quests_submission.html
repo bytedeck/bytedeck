@@ -2,7 +2,7 @@
 {% if submissions %}
 
   <div class="row panel-heading">
-    <div class="col-xs-1"></div>
+    <div class="col-xs-1 col-icon"></div>
     <div class="col-xs-5">Quest</div>
     <div class="col-xs-1">XP   </div>
     <div class="col-xs-2">Campaigns</div>
@@ -28,8 +28,8 @@
 
         <div class="row">
           <h4 class="panel-title">
-            <div class="col-xs-1">
-              <img class="panel-title-img" src="{{ s.quest.get_icon_url }}" alt="icon"/>
+            <div class="col-xs-1 col-icon">
+              <img class="img-responsive panel-title-img" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
             <div class="col-xs-5">{{s.quest.name}}</div>
             <div class="col-xs-1">{{s.quest.xp}}  </div>

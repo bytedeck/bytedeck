@@ -326,8 +326,19 @@ td {
 }
 
 .panel-title > img, .panel-title-img {
-  height: 48px;
-  margin: -7px 5px -10px 0px;
+  max-height: 48px;
+}
+
+.panel-heading > .col-icon {
+  margin-right: -5px;
+}
+
+.panel-title > .col-icon {
+  padding-right: 0px;
+  padding-left: 10px;
+  margin-top: -5px;
+  margin-bottom: -5px;
+  margin-right: -5px;
 }
 
 /*Make clickable accordian tabs change to pointer cursor*/

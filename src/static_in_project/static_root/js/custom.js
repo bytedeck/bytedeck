@@ -24,7 +24,9 @@ $(document).ready(function() {
     $(this).find('i').toggleClass('fa-chevron-right fa-chevron-left');
     $('.row-offcanvas').toggleClass('active');
     $('#lg-menu').toggleClass('hidden-xs').toggleClass('visible-xs');
+    $('#lg-menu-staff').toggleClass('hidden-xs').toggleClass('visible-xs');
     $('#xs-menu').toggleClass('visible-xs').toggleClass('hidden-xs');
+    $('#xs-menu-staff').toggleClass('visible-xs').toggleClass('hidden-xs');
     $('#btnShow').toggle();
   });
 
