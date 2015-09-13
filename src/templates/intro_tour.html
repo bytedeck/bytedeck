@@ -68,7 +68,7 @@ $(document).ready(function() {
         When you complete a quest, you will be given experience points (XP) instead of marks. \
         Instead of completing a Unit, you will embark on a <b>Campaign</b>.</p>\
         <p>As you gain XP you will go up levels, and as you complete quests and campaigns \
-        you will gain <b>Achievements</b> such as <b>Talents</b>, <b>Badges</b>, and <b>Awards</b>.</p>",
+        you will gain <b>Badges</b> such as <b>Talents</b>, <b>Achievements</b>, and <b>Awards</b>.</p>",
       },
       {
         // backdrop: true,
@@ -131,10 +131,10 @@ $(document).ready(function() {
       },
       {
         // backdrop: true,
-        element: "#achievements-menu",
-        title: "<i class='fa fa-trophy'></i>&nbsp;&nbsp;Achievements",
-        content: "<p>This page will list all of the achievements that are available.</p> \
-        <p>Achievements you have earned will appear in color.  You can also view your achievements on your profile page.</p> \
+        element: "#badges-menu",
+        title: "<i class='fa fa-certificate'></i>&nbsp;&nbsp;Badges",
+        content: "<p>This page will list all of the badges that are available.</p> \
+        <p>Badges you have earned will appear in color.  You can also view your badges on your profile page.</p> \
         <p>You can explore these later on your own</p>",
         path: "{% url 'badges:list' %}",
       },

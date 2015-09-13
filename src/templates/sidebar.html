@@ -20,9 +20,7 @@
       </a>
       <a id="achievements-menu" class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
         href="{% url 'badges:list' %}">
-        <i class="fa fa-trophy fa-fw"></i>&nbsp;
-        <span class="visible-sm-inline visible-xs-inline shrinktextmore">Acheive...</span>
-        <span class="hidden-sm hidden-xs">Achievements</span>
+        <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges
       </a>
       <a id="groups-menu" class="list-group-item {% if '/profiles/' in request.path_info %}active{% endif %}"
         href="{% url 'profiles:profile_list' %}">
@@ -51,7 +49,7 @@
   <!-- tiny only nav-->
   <ul class="nav visible-xs" id="xs-menu">
     <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
-    <li><a href="#" class="text-center"><i class="fa fa-trophy fa-fw"></i></a></li>
+    <li><a href="#" class="text-center"><i class="fa fa-certificate fa-fw"></i></a></li>
     <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>
     <li><a href="#" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>
   </ul>

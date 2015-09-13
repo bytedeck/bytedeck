@@ -179,7 +179,7 @@ class BadgeAssertionManager(models.Manager):
             target=new_assertion.badge,
             recipient=user,
             affected_users=[user,],
-            icon="<i class='fa fa-lg fa-fw fa-trophy text-warning'></i>",
+            icon="<i class='fa fa-lg fa-fw fa-certificate text-warning'></i>",
             verb='granted you the achievement')
 
         return new_assertion

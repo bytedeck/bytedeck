@@ -23,7 +23,7 @@ def list(request):
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
 
     context = {
-        "heading": "Achievements",
+        "heading": "Badges",
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
         "earned_badges": earned_badges,
@@ -121,7 +121,7 @@ def assertion_create(request, user_id):
             target=new_assertion,
             recipient=new_assertion.user,
             affected_users=[new_assertion.user,],
-            icon="<i class='fa fa-fw fa-lg fa-trophy text-warning'></i>",
+            icon="<i class='fa fa-fw fa-lg fa-certificate text-warning'></i>",
             verb='granted')
 
         messages.success(request, ("Achievement " + str(new_assertion) + " granted to " + str(new_assertion.user)))
@@ -149,7 +149,7 @@ def assertion_delete(request, assertion_id):
             recipient=user,
             affected_users=[user,],
             icon="<span class='fa-stack'>" + \
-                "<i class='fa fa-trophy fa-stack-1x text-warning'></i>" + \
+                "<i class='fa fa-certificate fa-stack-1x text-warning'></i>" + \
                 "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
                 "</span>",
             verb='revoked')
