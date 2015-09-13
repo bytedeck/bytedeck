@@ -184,7 +184,15 @@
             <img class="icon-xl center-block" src="{{assertion.badge.get_icon_url}}">
             <p>{{assertion.badge.short_description}}</p>
             <p>XP: {{assertion.badge.xp}}</p>
-            <p><small>Granted on: {{assertion.timestamp}}</small></p>
+            <p>Requirements:
+            {% for p in assertion.badge.prereqs %}
+              {% if forloop.first %}<ul><small>{% endif %}
+              <li>{{ p }}</li>
+              {% if forloop.last %}</ul></small>{% endif %}
+            {% empty %}
+              None
+            {% endfor %}</p>
+            <p>Granted on: <small>{{assertion.timestamp}}</small></p>
             {% if request.user.is_staff %}
             <a class="btn btn-danger" href="{% url 'badges:revoke' assertion.id %}" role="button">
               <i class="fa fa-trash-o"></i>

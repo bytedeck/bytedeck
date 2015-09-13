@@ -133,6 +133,9 @@ class Quest(XPItem):
         else:
             return static('img/default_icon.png')
 
+    def prereqs(self):
+        return Prereq.objects.all_parent(self)
+
     def expired(self):
         if self.date_expired == None:
             if self.time_expired == None:

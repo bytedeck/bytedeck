@@ -30,12 +30,14 @@
         <p>{{badge.short_description}}</p>
         <p>XP: {{badge.xp}}</p>
         <!-- <p>Series: {{badge.series}}</p> -->
-        <p>Prerequisites:<ul><small>
+        <p>Requirements:
         {% for p in badge.prereqs %}
+          {% if forloop.first %}<ul><small>{% endif %}
           <li>{{ p }}</li>
+          {% if forloop.last %}</ul></small>{% endif %}
         {% empty %}
           None
-        {% endfor %}</ul></small></p>
+        {% endfor %}</p>
         {% if request.user.is_staff %}
         <div class="btn-group block" role="group">
           <a class="btn btn-warning " href="{% url 'badges:badge_update' badge.id %}" role="button">
