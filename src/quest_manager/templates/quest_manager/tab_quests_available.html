@@ -6,7 +6,7 @@
     <div class="col-xs-5">Quest</div>
     <div class="col-xs-1">XP   </div>
     <div class="col-xs-2">Campaigns</div>
-    <div class="col-xs-3">Due</div>
+    <div class="col-xs-3">Expiry</div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion-available" role="tablist" aria-multiselectable="true">
   {% for q in available_quests %}
@@ -49,6 +49,35 @@
           <li class="list-group-item list-group-item-buttons">
             {% include "quest_manager/buttons.html" %}
             {{q.short_description|safe}}
+            {% if request.user.is_staff %}
+              <hr />
+              <div class="row">
+                <div class="col-sm-6">
+                    Available Date: {{q.date_available}}<br/>
+                    Available Time: {{q.time_available}}<br/>
+                    Visible to Students: {{q.visible_to_students|yesno}}
+                </div>
+                <div class="col-sm-6">
+                  Repeatable: {% if q.max_repeats = 0 %}No
+                         {% else %}
+                           {% if q.max_repeats = -1 %} Unlimited
+                           {% else %} {{q.max_repeats}} times max
+                           {% endif %}
+                           {% if q.hours_between_repeats > 0 %}
+                           - every {{ q.hours_between_repeats}} hrs
+                           {% endif %}
+                        {% endif %}<br/>
+                  Requirements:
+                        {% for p in q.prereqs %}
+                          {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
+                          <li>{{ p }}</li>
+                          {% if forloop.last %}</ul></small>{% endif %}
+                        {% empty %}
+                          None
+                        {% endfor %}
+              </div>
+            </div>
+            {% endif %}
           </li>
         </ul>
 

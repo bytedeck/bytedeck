@@ -14,6 +14,41 @@
   </div>
 </div>
 
+<div id="quest-info-{{quest.id}}" class="panel panel-primary panel-top">
+  <div class="panel-heading">
+    <h3 class="panel-title">Quest Info</h3>
+  </div>
+  <div class="panel-body">
+
+    <div class="row">
+      <div class="col-sm-6">
+          <h4>XP: {{quest.xp}}</h4>
+          Campaigns: {% for c in quest.categories.all %}{{c}} {% empty %}-{% endfor %} <br/>
+          Expiry: {{quest.date_expired}}
+      </div>
+      <div class="col-sm-6">
+          Repeatable: {% if quest.max_repeats = 0 %}No
+                 {% else %}
+                   {% if quest.max_repeats = -1 %} Unlimited
+                   {% else %} {{quest.max_repeats}} times max
+                   {% endif %}
+                   {% if quest.hours_between_repeats > 0 %}
+                   - every {{ quest.hours_between_repeats}} hrs
+                   {% endif %}
+                {% endif %}<br/>
+          Requirements:
+                {% for p in quest.prereqs %}
+                  {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
+                  <li>{{ p }}</li>
+                  {% if forloop.last %}</ul></small>{% endif %}
+                {% empty %}
+                  None
+                {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <div id="quest-instructions-{{quest.id}}" class="panel panel-primary panel-top">
   <div class="panel-heading">
@@ -23,6 +58,7 @@
     {{ quest.instructions | safe }}
   </div>
 </div>
+
 <div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
     <h3 class="panel-title">Submission Instructions</h3>

@@ -50,6 +50,10 @@ iframe {
   border-radius: 8px;
 }
 
+ul.left-aligned, ol.left-aligned  {
+  padding-left:20px;
+}
+
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
   padding-bottom: 0px;
