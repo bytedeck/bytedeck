@@ -30,6 +30,12 @@
         <p>{{badge.short_description}}</p>
         <p>XP: {{badge.xp}}</p>
         <!-- <p>Series: {{badge.series}}</p> -->
+        <p>Prerequisites:<ul><small>
+        {% for p in badge.prereqs %}
+          <li>{{ p }}</li>
+        {% empty %}
+          None
+        {% endfor %}</ul></small></p>
         {% if request.user.is_staff %}
         <div class="btn-group block" role="group">
           <a class="btn btn-warning " href="{% url 'badges:badge_update' badge.id %}" role="button">

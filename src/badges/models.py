@@ -106,6 +106,9 @@ class Badge(models.Model):
     def __str__(self):
         return self.name
 
+    def prereqs(self):
+        return Prereq.objects.all_parent(self)
+
     def get_absolute_url(self):
         return reverse('badges:list')
 
