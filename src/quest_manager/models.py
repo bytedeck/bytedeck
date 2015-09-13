@@ -355,7 +355,7 @@ class QuestSubmission(models.Model):
         self.is_completed = True #might have been false if returned
         self.is_approved = True
         self.time_approved = timezone.now()
-        self.save
+        self.save()
         #update badges
         BadgeAssertion.objects.check_for_new_assertions(self.user)
 

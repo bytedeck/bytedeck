@@ -165,6 +165,7 @@ def detail(request, quest_id):
 
 @staff_member_required
 def approve(request, submission_id):
+
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
 

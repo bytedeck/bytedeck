@@ -25,7 +25,7 @@
 
     <script src="{% static 'js/bootstrap-tour.min.js' %}"></script>
 
-    <!-- <script src="{% static 'js/intro-tour.js' %}"></script> -->
+    <script src="{% static 'js/jquery-double-submission' %}"></script>
 
     <script>
 
@@ -39,9 +39,14 @@
       //     // }
       //   }
       // });
+
+      // Dismiss bootstrap alerts
       if ($('.dismiss-in-3').length) {
         setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
       }
+
+      // Prevent double submission of forms
+      // $('form').preventDoubleSubmission();
 
       //Update badge to show number of new Notifications
       $.ajax({
