@@ -283,7 +283,8 @@ class QuestSubmissionManager(models.Manager):
             return True
         # check if the quest is already in progress
         try:
-            s = self.all_not_completed().get(quest=quest)
+
+            s = self.all_not_completed(user=user).get(quest=quest)
             #if no exception is thrown it means that an inprogress submission was found
             return False
         except MultipleObjectsReturned:

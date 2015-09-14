@@ -114,20 +114,6 @@ def quest_create(request):
     }
     return render(request, "quest_manager/quest_form.html", context)
 
-# @staff_member_required
-# def quest_update(request, quest_id):
-#     quest_to_update = get_object_or_404(Quest, pk=quest_id)
-#     form = QuestForm(request.POST or None, request.FILES or None)
-#     if form.is_valid():
-#         form.save()
-#         return redirect('quests:quests')
-#     context = {
-#         "heading": "Update Quest",
-#         "form": form,
-#         "submit_btn_value": "Update",
-#     }
-#     return render(request, "quest_manager/quest_form.html", context)
-
 @staff_member_required
 def quest_copy(request, quest_id):
     new_quest = get_object_or_404(Quest, pk=quest_id)
