@@ -104,9 +104,17 @@ def detail(request, badge_id):
 ########### Badge Assertion Views #########################
 
 @staff_member_required
-def assertion_create(request, user_id):
-    user = get_object_or_404(User, pk=user_id)
-    form = BadgeAssertionForm(request.POST or None, initial={'user': user})
+def assertion_create(request, user_id, badge_id):
+
+    initial={}
+    if int(user_id) > 0:
+        user = get_object_or_404(User, pk=user_id)
+        initial['user'] = user
+    if int(badge_id) > 0:
+        badge = get_object_or_404(Badge, pk=badge_id)
+        initial['badge'] = badge
+
+    form = BadgeAssertionForm(request.POST or None, initial=initial)
 
     if form.is_valid():
         new_assertion = form.save(commit=False)

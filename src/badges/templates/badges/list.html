@@ -50,6 +50,9 @@
             <i class="fa fa-trash-o"></i>
           </a>
         </div>
+        <a class="btn btn-success pull-right" href="{% url 'badges:grant' badge.id 0 %}" role="button">
+          <i class="fa fa-share"></i>
+        </a>
         {% endif %}
         '>
         <div class="thumbnail thumbnail-badge">

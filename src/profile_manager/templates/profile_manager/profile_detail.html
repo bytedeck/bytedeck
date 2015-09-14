@@ -164,7 +164,7 @@
         <h3 class="panel-title">Badges
           {% if request.user.is_staff %}
             &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
-            href="{% url 'badges:grant' object.user.id %}" role="button">Grant</a>
+            href="{% url 'badges:grant' 0 object.user.id %}" role="button">Grant</a>
           {% endif %}
         </h3>
       </div>
