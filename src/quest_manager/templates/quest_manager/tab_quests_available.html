@@ -53,12 +53,16 @@
               <hr />
               <div class="row">
                 <div class="col-sm-6">
-                    Available Date: {{q.date_available}}<br/>
-                    Available Time: {{q.time_available}}<br/>
-                    Visible to Students: {{q.visible_to_students|yesno}}
+                  <ul class="list-unstyled">
+                    <li>Available Date: {{q.date_available}}</li>
+                    <li>Available Time: {{q.time_available}}</li>
+                    <li>Visible to Students: {{q.visible_to_students|yesno}}</li>
+                    <li>Requires Approval: {{q.verification_required|yesno}}</li>
+                  </ul>
                 </div>
                 <div class="col-sm-6">
-                  Repeatable: {% if q.max_repeats = 0 %}No
+                  <ul class="list-unstyled">
+                  <li>Repeatable: {% if q.max_repeats = 0 %}No
                          {% else %}
                            {% if q.max_repeats = -1 %} Unlimited
                            {% else %} {{q.max_repeats}} times max
@@ -66,15 +70,16 @@
                            {% if q.hours_between_repeats > 0 %}
                            - every {{ q.hours_between_repeats}} hrs
                            {% endif %}
-                        {% endif %}<br/>
-                  Requirements:
+                        {% endif %}</li>
+                  <li>Requirements:
                         {% for p in q.prereqs %}
                           {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
                           <li>{{ p }}</li>
                           {% if forloop.last %}</ul></small>{% endif %}
                         {% empty %}
                           None
-                        {% endfor %}
+                        {% endfor %}</li>
+                </ul>
               </div>
             </div>
             {% endif %}

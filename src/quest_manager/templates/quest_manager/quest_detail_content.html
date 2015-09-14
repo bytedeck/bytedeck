@@ -22,12 +22,14 @@
 
     <div class="row">
       <div class="col-sm-6">
-          <h4>XP: {{quest.xp}}</h4>
-          Campaigns: {% for c in quest.categories.all %}{{c}} {% empty %}-{% endfor %} <br/>
-          Expiry: {{quest.date_expired}}
+        <ul class="list-unstyled">
+          <li><h4>XP: {{quest.xp}}</h4></li>
+          <li>Campaigns: {% for c in quest.categories.all %}{{c}} {% empty %}-{% endfor %}</li>
+          <li>Expiry: {{quest.date_expired}}</li>
       </div>
       <div class="col-sm-6">
-          Repeatable: {% if quest.max_repeats = 0 %}No
+        <ul class="list-unstyled">
+          <li>Repeatable: {% if quest.max_repeats = 0 %}No
                  {% else %}
                    {% if quest.max_repeats = -1 %} Unlimited
                    {% else %} {{quest.max_repeats}} times max
@@ -35,15 +37,16 @@
                    {% if quest.hours_between_repeats > 0 %}
                    - every {{ quest.hours_between_repeats}} hrs
                    {% endif %}
-                {% endif %}<br/>
-          Requirements:
+                {% endif %}</li>
+          <li>Requirements:
                 {% for p in quest.prereqs %}
                   {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
                   <li>{{ p }}</li>
                   {% if forloop.last %}</ul></small>{% endif %}
                 {% empty %}
                   None
-                {% endfor %}
+                {% endfor %}</li>
+        </ul>
       </div>
     </div>
 
