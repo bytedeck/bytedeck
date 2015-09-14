@@ -283,13 +283,13 @@ def approvals(request):
                     "url": reverse('quests:approved'),
                 },]
 
-    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
-        "main_comment_form": main_comment_form,
+        # "main_comment_form": main_comment_form,
         "quick_reply_form": quick_reply_form,
     }
     return render(request, "quest_manager/quest_approval.html" , context)
@@ -303,13 +303,17 @@ def complete(request, submission_id):
 
     if request.method == "POST":
 
-        form = CommentForm(request.POST or None, wysiwyg=True, label="")
-        # form = SubmissionQuickReplyForm(request.POST)
+        # form = CommentForm(request.POST or None, wysiwyg=True, label="")
+        form = SubmissionQuickReplyForm(request.POST)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
             if not comment_text:
-                comment_text = ""
+                if submission.quest.verification_required:
+                    messages.error(request, "Please read the Submission Instructions more carefully.  You are expected to submit something to complete this quest!")
+                    return redirect(origin_path)
+                else:
+                    comment_text = "(submitted without comment)"
             comment_new = Comment.objects.create_comment(
                 user = request.user,
                 path = origin_path,
@@ -319,6 +323,11 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb="completed"
+                if submission.quest.verification_required:
+                    note_verb += ", awaiting approval."
+                else:
+                    note_verb += " and automatically approved."
+
                 icon="<i class='fa fa-shield fa-lg'></i>"
                 affected_users = None
                 submission.mark_completed() ###################
