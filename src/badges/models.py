@@ -9,7 +9,6 @@ from django.templatetags.static import static
 from django.utils import timezone
 
 from prerequisites.models import Prereq
-from notifications.signals import notify
 
 # Create your models here.
 
@@ -169,19 +168,6 @@ class BadgeAssertionManager(models.Manager):
             issued_by = issued_by,
         )
         new_assertion.save()
-
-        if issued_by==None:
-            issued_by=User.objects.filter(is_staff=True).first()
-
-        notify.send(
-            issued_by, #sender
-            # action=...,
-            target=new_assertion.badge,
-            recipient=user,
-            affected_users=[user,],
-            icon="<i class='fa fa-lg fa-fw fa-certificate text-warning'></i>",
-            verb='granted you the achievement')
-
         return new_assertion
 
     def check_for_new_assertions(self, user):
@@ -234,15 +220,31 @@ class BadgeAssertion(models.Model):
     def get_absolute_url(self):
         return reverse('badges:list')
 
-    # def grant(self, user):
-        # self.is_completed = True
-        # self.time_issued = timezone.now()
-        # self.save()
+from django.dispatch import receiver
+from django.db.models.signals import post_save
 
-    # def revoke(self):
-        # self.is_completed = False
-        # self.is_approved = False
-        # self.save()
+from notifications.signals import notify
 
-    # def get_comments(self):
-    #     return Comment.objects.all_with_target_object(self)
+#only receive signals from BadgeAssertion model
+@receiver(post_save, sender=BadgeAssertion)
+def post_save_receiver(sender, **kwargs):
+
+    assertion = kwargs["instance"]
+    if kwargs["created"]:
+        #need an issuing object, fix this better, should be generic something "Hackerspace or "Automatic".
+        sender = assertion.issued_by
+        if sender==None:
+            sender=User.objects.filter(is_staff=True).first()
+
+        icon = "<i class='text-warning fa fa-lg fa-fw "
+        icon += assertion.badge.badge_type.fa_icon
+        icon +="'></i>"
+
+        notify.send(
+            sender,
+            # action= action,
+            target=assertion.badge,
+            recipient=assertion.user,
+            affected_users=[assertion.user,],
+            icon= icon,
+            verb="granted you a")

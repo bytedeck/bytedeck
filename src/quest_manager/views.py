@@ -457,6 +457,3 @@ def submission(request, submission_id=None, quest_id=None):
 #     }
 #
 #     return render(request, "email_demo.html", context)
-
-
-##

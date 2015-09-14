@@ -114,18 +114,7 @@ def assertion_create(request, user_id):
         new_assertion.ordinal = BadgeAssertion.objects.get_assertion_ordinal(
                                     new_assertion.user, new_assertion.badge)
         new_assertion.save()
-
-        notify.send(
-            new_assertion.issued_by,
-            # action=...,
-            target=new_assertion,
-            recipient=new_assertion.user,
-            affected_users=[new_assertion.user,],
-            icon="<i class='fa fa-fw fa-lg fa-certificate text-warning'></i>",
-            verb='granted')
-
-        messages.success(request, ("Achievement " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-
+        messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
         return redirect('badges:list')
 
     context = {
