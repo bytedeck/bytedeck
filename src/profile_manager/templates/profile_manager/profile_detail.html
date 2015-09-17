@@ -23,13 +23,7 @@
                {{object.rank}}
              </div>
           </a>
-          {% if object.first_name %}
-            {{object.first_name}}
-            {% if object.preferred_name %} ({{ object.preferred_name}}) {% endif %}
-            {{object.last_name}}{% if object.alias %}, aka {{ object.alias}}{% endif %}
-          {% else %}
-            Nameless.  Click the Edit button above!
-          {% endif %}
+          {{object}}
         </h3>
 
       </div>

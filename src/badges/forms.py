@@ -1,8 +1,10 @@
 from django import forms
+from django.contrib.auth.models import User
 from django.db import models
 from django.forms.extras.widgets import SelectDateWidget
 
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
+
 
 from .models import Badge, BadgeAssertion
 
@@ -36,5 +38,10 @@ class BadgeForm(forms.ModelForm):
 class BadgeAssertionForm(forms.ModelForm):
     class Meta:
         model = BadgeAssertion
-        fields = '__all__'
+        # fields = '__all__'
         exclude = ['ordinal', 'issued_by']
+
+    def __init__(self, *args, **kwds):
+        super(BadgeAssertionForm, self).__init__(*args, **kwds)
+        self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
+        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile, obj.username)

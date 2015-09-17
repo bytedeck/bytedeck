@@ -47,7 +47,17 @@ class Profile(models.Model):
     objects = ProfileManager()
 
     def __str__(self):
-        return self.user.get_username()
+        profile = ""
+        if self.first_name:
+            profile = self.first_name
+            if self.preferred_name:
+                profile += " (" + self.preferred_name + ")"
+            profile += " " + self.last_name
+            if self.alias:
+                profile += ", aka " + self.alias
+        else:
+            profile = self.user.username
+        return profile
 
     class Meta:
         ordering = ['user__username']
