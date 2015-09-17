@@ -1,4 +1,4 @@
-#these files have production keys and passwords etc.
+#these files have might have production keys and passwords etc.
 production_*.py
 
 #to fill this directory if needed run:
@@ -9,7 +9,7 @@ bin/
 include/
 share/
 
-media_root/*
+media_root/
 
 *.sqlite3
 
