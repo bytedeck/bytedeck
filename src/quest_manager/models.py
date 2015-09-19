@@ -100,7 +100,6 @@ class QuestManager(models.Manager):
         return self.get_queryset().date_available().not_expired().visible()
 
     def get_available(self, user):
-
         qs = self.get_active().get_conditions_met(user)
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
@@ -228,6 +227,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def has_completion_date(self):
         return self.filter(time_completed__isnull=False)
 
+    def no_game_lab(self):
+        return self.filter(game_lab_transfer = False)
+
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self):
         return QuestSubmissionQuerySet(self.model, using=self._db)
@@ -312,8 +314,7 @@ class QuestSubmissionManager(models.Manager):
             return None
 
     def calculate_xp(self, user):
-
-        total_xp = self.all_approved(user).aggregate(Sum('quest__xp'))
+        total_xp = self.all_approved(user).no_game_lab().aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
         if xp is None:
             xp = 0
@@ -330,6 +331,7 @@ class QuestSubmission(models.Model):
     time_approved = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
     # rewards =
 
     class Meta:
