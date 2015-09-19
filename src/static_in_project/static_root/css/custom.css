@@ -82,6 +82,19 @@ ul.left-aligned, ol.left-aligned  {
   filter: none;
 }
 
+.hackerbadge-transfer {
+  -webkit-filter: grayscale(100%);
+  filter: grayscale(100%);
+  -webkit-transition: filter .5s;
+  transition: filter .5s;
+}
+
+.hackerbadge-transfer:hover {
+  -webkit-filter: none;
+  filter: none;
+}
+
+
 .col-badge {
   padding-right: 8px;
   padding-left: 8px;
@@ -414,6 +427,12 @@ to overlap borders ****/
 
 a.list-group-item-muted {
     color: #999;
+}
+
+.panel-muted {
+  color: #999;
+  background-color: #F5F5F5;
+  border-color: #ddd;
 }
 
 /***********Submission ********************************/

@@ -141,6 +141,9 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_type(self, badge_type):
         return self.filter(badge__badge_type = badge_type)
 
+    def no_game_lab(self):
+        return self.filter(game_lab_transfer = False)
+
 class BadgeAssertionManager(models.Manager):
     def get_queryset(self):
         return BadgeAssertionQuerySet(self.model, using=self._db)
@@ -159,24 +162,25 @@ class BadgeAssertionManager(models.Manager):
     def get_assertion_ordinal(self, user, badge):
         return self.num_assertions(user, badge) + 1
 
-    def create_assertion(self, user, badge, issued_by=None):
+    def create_assertion(self, user, badge, issued_by=None, transfer=False):
         ordinal = self.get_assertion_ordinal(user, badge)
         new_assertion = BadgeAssertion(
             badge = badge,
             user = user,
             ordinal = ordinal,
             issued_by = issued_by,
+            game_lab_transfer = transfer,
         )
         new_assertion.save()
         return new_assertion
 
-    def check_for_new_assertions(self, user):
+    def check_for_new_assertions(self, user, transfer=False):
 
         badges = Badge.objects.get_conditions_met(user)
         for badge in badges:
             #if the badge doesn't already exist
             if not self.all_for_user_badge(user, badge):
-                self.create_assertion(user, badge)
+                self.create_assertion(user, badge, None, transfer)
 
 
     def get_by_type_for_user(self, user):
@@ -193,7 +197,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
-        total_xp = self.get_queryset().get_user(user).aggregate(Sum('badge__xp'))
+        total_xp = self.get_queryset().no_game_lab().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
@@ -208,6 +212,7 @@ class BadgeAssertion(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
+    game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
 
     objects = BadgeAssertionManager()
 

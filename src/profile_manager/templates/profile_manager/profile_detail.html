@@ -183,7 +183,12 @@
             data-content='
             <img class="icon-xl center-block" src="{{assertion.badge.get_icon_url}}">
             <p>{{assertion.badge.short_description}}</p>
-            <p>XP: {{assertion.badge.xp}}</p>
+            <p>XP:
+            {% if assertion.game_lab_transfer %}
+              n/a (GameLab Transfer)
+            {% else %}
+              {{assertion.badge.xp}}
+            {% endif %}</p>
             <p>Requirements:
             {% for p in assertion.badge.prereqs %}
               {% if forloop.first %}<ul><small>{% endif %}
@@ -199,7 +204,9 @@
             </a>
             {% endif %}
             '>
-                <img class="icon-lg" src="{{assertion.badge.get_icon_url}}">
+                <img class="icon-lg
+                  {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
+                  src="{{assertion.badge.get_icon_url}}">
             </a>
           {% empty %}
             None.

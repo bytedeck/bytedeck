@@ -15,6 +15,7 @@
     <div class="panel
       {% if s.is_awaiting_approval %}panel-warning
       {% elif s.is_returned %}panel-danger
+      {% elif s.game_lab_transfer %}panel-muted
       {% else %}panel-default
       {% endif %}
       accordian {% if s.id == active_id %} active {% endif %}">

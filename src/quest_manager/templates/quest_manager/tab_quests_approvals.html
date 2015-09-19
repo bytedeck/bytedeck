@@ -12,8 +12,10 @@
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
     <div class="panel accordian
-      {% if s.id == active_id %} active {% endif %}
-      {% if object.sticky %}panel-info{% else %}panel-default{% endif %}">
+      {% if s.id == active_id %} active{% endif %}
+      {% if object.sticky %}panel-info
+      {% elif s.game_lab_transfer %}panel-muted
+      {% else %}panel-default{% endif %}">
       <div class="panel-heading accordian accordian-trigger panel-heading-tall
         {% if s.id == active_id %} active {% endif %}"
         role="tab" id="heading{{s.id}}"

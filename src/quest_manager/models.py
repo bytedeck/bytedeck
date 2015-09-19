@@ -361,11 +361,12 @@ class QuestSubmission(models.Model):
         self.game_lab_transfer = transfer
         self.save()
         #update badges
-        BadgeAssertion.objects.check_for_new_assertions(self.user)
+        BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
 
     def mark_returned(self):
         self.is_completed = False
         self.is_approved = False
+        self.game_lab_transfer = False
         self.save()
 
     def is_awaiting_approval(self):
