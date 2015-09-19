@@ -21,5 +21,8 @@
       <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
     {% endif %}
     <a class="btn btn-primary" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
+    {% if request.user.profile.game_lab_transfer_process_on %}
+      <a class="btn btn-warning" href="{% url 'quests:gamelabtransfer' q.id %}" role="button">GameLab Transfer</a>
+    {% endif %}
   {% endif %}
 </div>

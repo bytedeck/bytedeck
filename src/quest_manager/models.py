@@ -354,10 +354,11 @@ class QuestSubmission(models.Model):
         self.time_completed = timezone.now()
         self.save()
 
-    def mark_approved(self):
+    def mark_approved(self, transfer = False):
         self.is_completed = True #might have been false if returned
         self.is_approved = True
         self.time_approved = timezone.now()
+        self.game_lab_transfer = transfer
         self.save()
         #update badges
         BadgeAssertion.objects.check_for_new_assertions(self.user)

@@ -387,6 +387,42 @@ def start(request, quest_id):
     return render(request, 'quest_manager/submission.html', context)
 
 @login_required
+def gamelabtransfer(request, quest_id):
+    '''A combination of the start and complete views, but automatically approved
+    regardless, and game_lab_transfer = True'''
+    quest = get_object_or_404(Quest, pk=quest_id)
+    new_sub = QuestSubmission.objects.create_submission(request.user, quest)
+    if new_sub is None: #might be because quest was already started
+        #so try to get the started Quest
+        submission = QuestSubmission.objects.all_for_user_quest(request.user, quest).last()
+        if submission is None:
+            raise Http404
+    else:
+        submission = new_sub
+
+    #make sure another user isn't hacking in with urls
+    if submission.user != request.user and not request.user.is_staff:
+        return redirect('quests:quests')
+
+    #add default comment to submission
+    origin_path = submission.get_absolute_url()
+    comment_text = "(GameLab transfer)"
+    comment_new = Comment.objects.create_comment(
+        user = request.user,
+        path = origin_path,
+        text = comment_text,
+        target = submission,
+    )
+
+    #approve quest automatically, and mark as transfer.
+    submission.mark_completed() ###################
+    submission.mark_approved(transfer = True)
+
+    messages.success(request, ("Transfer Successful"))
+    return redirect("quests:quests")
+
+
+@login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"

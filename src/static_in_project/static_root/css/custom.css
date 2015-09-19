@@ -407,6 +407,15 @@ to overlap borders ****/
   padding-bottom: 3px;
 }
 
+.list-group-item-muted {
+    color: #999;
+    background-color: #F5F5F5;
+}
+
+a.list-group-item-muted {
+    color: #999;
+}
+
 /***********Submission ********************************/
 .panel-body-comments {
   padding: 0px;
