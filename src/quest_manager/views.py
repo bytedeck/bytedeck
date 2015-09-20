@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 
 from django.core.mail import send_mail
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy, reverse
 
 from django.http import HttpResponse, HttpResponseRedirect
@@ -223,6 +224,18 @@ def approve(request, submission_id):
     else:
         raise Http404
 
+def paginate(object_list, page, per_page = 15):
+    paginator = Paginator(object_list, per_page)
+    try:
+        object_list = paginator.page(page)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        object_list = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        object_list = paginator.page(paginator.num_pages)
+    return object_list
+
 @staff_member_required
 def approvals(request):
 
@@ -234,18 +247,22 @@ def approvals(request):
     returned_tab_active=False
     approved_tab_active=False
 
+    page = request.GET.get('page')
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if '/returned/' in request.path_info:
         returned_submissions = QuestSubmission.objects.all_returned()
         returned_tab_active = True
         submitted_tab_active= False
+        returned_submissions = paginate(returned_submissions, page)
     elif '/approved/' in request.path_info:
         approved_submissions = QuestSubmission.objects.all_approved()
         approved_tab_active = True
         submitted_tab_active= False
+        approved_submissions = paginate(approved_submissions, page)
     else:
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval()
+        submitted_submissions = paginate(submitted_submissions, page)
         # approval_submissions = QuestSubmission.objects.all_awaiting_approval()
         # approved_submissions = QuestSubmission.objects.all_approved()
         # returned_submissions = QuestSubmission.objects.all_returned()

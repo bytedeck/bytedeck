@@ -1,6 +1,6 @@
 {% load crispy_forms_tags %}
 
-  {% if tab.submissions %}
+{% if tab.submissions %}
   <div class="row panel-heading">
     <div class="col-xs-1 col-icon"></div>
     <div class="col-xs-4">Quest</div>
@@ -89,6 +89,24 @@
   {% endfor %}
   </div>
 
-  {% else %}
-    <p>None.</p>
+  {% if tab.submissions.paginator.num_pages > 1 %}
+  <ul class="pagination pagination-centered">
+      {% if tab.submissions.has_previous %}
+          <li><a href="{{request.path}}?page=1"><<</a></li>
+          <li><a href="{{request.path}}?page={{ tab.submissions.previous_page_number }}"><</a></li>
+      {% endif %}
+
+      {% for i in tab.submissions.paginator.page_range %}
+          <li {% if tab.submissions.number == i %} class="active" {% endif %}><a href="{{request.path}}?page={{i}}">{{i}}</a></li>
+      {% endfor %}
+
+      {% if tab.submissions.has_next %}
+          <li><a href="{{request.path}}?page={{ tab.submissions.next_page_number }}">></a></li>
+          <li><a href="{{request.path}}?page={{ tab.submissions.paginator.num_pages }}">>></a></li>
+      {% endif %}
+  </ul>
   {% endif %}
+
+{% else %}
+  <p>None.</p>
+{% endif %}
