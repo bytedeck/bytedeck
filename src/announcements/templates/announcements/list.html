@@ -31,7 +31,7 @@
           {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
           {{object.title}}
         <!-- </a> -->
-        <small class="pull-right">{{object.datetime_released.date}}</small>
+        <small class="pull-right">{{object.datetime_released.date|date:'D, N j, Y'}}</small>
       </h4>
     </div>
     <div id="collapse{{object.id}}"
