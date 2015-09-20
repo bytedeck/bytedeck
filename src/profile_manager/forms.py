@@ -5,7 +5,7 @@ from .models import Profile
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
-        exclude = ['user', 'intro_tour_completed']
+        exclude = ['user', 'intro_tour_completed', 'game_lab_transfer_process_on']
 
     # UNIQUE if NOT NULL
     def clean_alias(self):
