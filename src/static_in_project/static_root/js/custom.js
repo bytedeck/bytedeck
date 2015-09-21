@@ -1,23 +1,5 @@
 $(document).ready(function() {
 
-  //Formatting datePicker inputs
-  // $('.datePicker')
-  //     //this rwap
-  //     .wrap("<div class='input-group'>")
-  //     .datepicker({
-  //       showButtonPanel: true,
-  //       showOn: "both",
-  //       changeMonth: true,
-  //       changeYear: true,
-  //     });
-  //
-  // $('.ui-datepicker-trigger')
-  //   // http://getbootstrap.com/components/#input-groups-buttons
-  //   //.empty().append("<i class='fa fa-calendar'></i>") //font-awesome icons looks nicer
-  //   .empty().append('<span class="glyphicon glyphicon-calendar" aria-hidden="true"></span>')
-  //   .addClass("btn btn-default")
-  //   .wrap("<span class='input-group-btn'></span");
-
   /* off-canvas sidebar toggle */
   $('[data-toggle=offcanvas]').click(function() {
     $(this).toggleClass('visible-xs text-center');

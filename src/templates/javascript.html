@@ -31,15 +31,9 @@
     <script>
 
     $(document).ready(function() {
-      //attempt to fix left menu to top
-      // $('#sidebar_menu').affix({
-      //   offset: {
-      //     top: 100,
-      //     // bottom: function () {
-      //     //   return (this.bottom = $('.footer').outerHeight(true))
-      //     // }
-      //   }
-      // });
+
+      // http://stackoverflow.com/questions/2830542/prevent-double-submission-of-forms-in-jquery
+      $('form').preventDoubleSubmission();
 
       // Ensure external links open in new tabs by adding target="_blank"
       $("a[href^='http://']").attr("target","_blank");
@@ -49,9 +43,6 @@
       if ($('.dismiss-in-3').length) {
         setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
       }
-
-      // Prevent double submission of forms
-      // $('form').preventDoubleSubmission();
 
       //Update badge to show number of new Notifications
       $.ajax({
@@ -112,6 +103,9 @@
           }
         });
       });
-    });
+
+    }); //(document).ready(function(){
+
+
 
     </script>
