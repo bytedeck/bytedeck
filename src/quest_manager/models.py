@@ -34,26 +34,27 @@ class XPItem(models.Model):
     xp = models.PositiveIntegerField(default = 0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
-    tags = GenericRelation("TaggedItem", null=True, blank=True)
+    # tags = GenericRelation("TaggedItem", null=True, blank=True)
     # creator = models.CharField(max_length=250)
     # last_editor = models.CharField(max_length=250)
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default = True)
+    sort_order = models.IntegerField(default = 0)
     max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default = 0)
     date_available = models.DateField(default=timezone.now)
     time_available = models.TimeField(default=time().min) # midnight
     date_expired = models.DateField(blank=True, null=True)
     time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
-    minimum_XP = models.PositiveIntegerField(blank=True, null=True)
-    maximum_XP = models.PositiveIntegerField(blank=True, null=True)
+    # minimum_XP = models.PositiveIntegerField(blank=True, null=True)
+    # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
     # prerequisites_advanced = models.CharField(max_length=250)
     icon = models.ImageField(upload_to='icons/', blank=True, null=True) #needs Pillow for ImageField
 
     class Meta:
         abstract = True
-        ordering = ["-time_expired", "-date_expired", "name"]
+        ordering = ["-sort_order", "-time_expired", "-date_expired", "name"]
 
     def __str__(self):
         return self.name
