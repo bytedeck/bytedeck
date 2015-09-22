@@ -266,8 +266,8 @@ class QuestSubmissionManager(models.Manager):
         #completion date indicates the quest was submitted, but since completed
         #is false, it must have been returned.
         if user is None:
-            return self.get_queryset().not_completed().has_completion_date()
-        return self.get_queryset().get_user(user).not_completed().has_completion_date()
+            return self.get_queryset().not_completed().has_completion_date().order_by('updated')
+        return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('updated')
 
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)

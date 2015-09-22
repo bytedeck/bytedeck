@@ -18,7 +18,7 @@ class BadgeType(models.Model):
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     repeatable = models.BooleanField(default = True)
-    manual_only = models.BooleanField(default = False)
+    # manual_only = models.BooleanField(default = False)
     fa_icon = models.CharField(max_length=50, blank=True, null=True,
         help_text="Name of a font-awesome icon, e.g.'fa-gift'")
 
@@ -73,7 +73,8 @@ class BadgeManager(models.Manager):
     def get_conditions_met(self, user):
         pk_met_list = [
                 obj.pk for obj in self.get_queryset()
-                if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
+                if Prereq.objects.all_conditions_met(obj, user, False)
+                # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
                 ]
         return self.filter(pk__in = pk_met_list)
 
@@ -88,19 +89,19 @@ class Badge(models.Model):
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True) #needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default = True)
-    hours_between_repeats = models.PositiveIntegerField(default = 0)
-    date_available = models.DateField(default=timezone.now)
-    time_available = models.TimeField(default=time().min) # midnight
-    date_expired = models.DateField(blank=True, null=True)
-    time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
-    minimum_XP = models.PositiveIntegerField(blank=True, null=True)
-    maximum_XP = models.PositiveIntegerField(blank=True, null=True)
+    # hours_between_repeats = models.PositiveIntegerField(default = 0)
+    # date_available = models.DateField(default=timezone.now)
+    # time_available = models.TimeField(default=time().min) # midnight
+    # date_expired = models.DateField(blank=True, null=True)
+    # time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
+    # minimum_XP = models.PositiveIntegerField(blank=True, null=True)
+    # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
 
     objects = BadgeManager()
 
     class Meta:
         order_with_respect_to = 'badge_type'
-        ordering = ['name']
+        ordering = ['sort_order', 'name']
 
     def __str__(self):
         return self.name

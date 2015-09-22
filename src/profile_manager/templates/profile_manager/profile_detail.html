@@ -189,14 +189,12 @@
             {% else %}
               {{assertion.badge.xp}}
             {% endif %}</p>
-            <p>Requirements:
+            <p>Requirements:<ul><small>
             {% for p in assertion.badge.prereqs %}
-              {% if forloop.first %}<ul><small>{% endif %}
               <li>{{ p }}</li>
-              {% if forloop.last %}</ul></small>{% endif %}
             {% empty %}
-              None
-            {% endfor %}</p>
+              <li>None (granted manually)</li>
+            {% endfor %}</ul></small></p>
             <p>Granted on: <small>{{assertion.timestamp}}</small></p>
             {% if request.user.is_staff %}
             <a class="btn btn-danger" href="{% url 'badges:revoke' assertion.id %}" role="button">

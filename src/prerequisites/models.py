@@ -30,8 +30,12 @@ class PrereqManager(models.Manager):
     def all_parent(self, parent_object):
         return self.get_queryset().get_all_parent_object(parent_object)
 
-    def all_conditions_met(self, parent_object, user):
-        for prereq in self.all_parent(parent_object):
+    def all_conditions_met(self, parent_object, user, none_means = True):
+        '''If the parent_object has no prerequisites, then use none_means'''
+        prereqs = self.all_parent(parent_object)
+        if not prereqs:
+            return none_means
+        for prereq in prereqs:
             if not prereq.condition_met_as_prerequisite(user):
                 return False
         return True
