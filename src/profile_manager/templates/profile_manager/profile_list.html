@@ -32,7 +32,7 @@
   </thead>
   <tbody>
     {% for object in object_list %}
-    <tr>
+    <tr {% if object.game_lab_transfer_process_on %}class="danger"{% endif %}>
       {% if request.user.is_staff %}
       <td>
         <a href="{% url 'profiles:profile_detail' object.id %}">
