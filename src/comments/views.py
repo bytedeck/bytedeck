@@ -19,6 +19,15 @@ def unflag(request, id):
     return redirect(comment.path)
 
 @staff_member_required
+def delete(request, id, template_name='comments/confirm_delete.html'):
+    comment = get_object_or_404(Comment, pk=id)
+    path = comment.path
+    if request.method=='POST':
+        comment.delete()
+        return redirect(path)
+    return render(request, template_name, {'object':comment})
+
+@staff_member_required
 def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
     comment.flag()
