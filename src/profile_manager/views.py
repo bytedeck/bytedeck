@@ -1,8 +1,12 @@
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+
 from django.core.urlresolvers import reverse_lazy
 from django.utils.decorators import method_decorator
+
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
+
 from django.shortcuts import get_object_or_404, redirect
 
 from courses.models import CourseStudent
@@ -89,3 +93,10 @@ def tour_complete(request):
     print("*********TOUR COMPLETED**********")
     print("*********TOUR COMPLETED**********")
     return redirect('quests:quests')
+
+@staff_member_required
+def GameLab_toggle(request, profile_id):
+    profile = get_object_or_404(Profile, id=profile_id)
+    profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
+    profile.save()
+    return redirect('profiles:profile_list')

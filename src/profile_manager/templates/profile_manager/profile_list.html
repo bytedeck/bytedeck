@@ -26,6 +26,7 @@
       <th>Preferred</th>
       <th>Alias</th>
       <th></th>
+      <th></th>
       {% endif %}
     </tr>
   </thead>
@@ -43,6 +44,9 @@
       <td>{{object.last_name}}</td>
       <td>{{object.preferred_name}}</td>
       <td>{{object.alias}}</td>
+      <td><a href="{% url 'profiles:GameLab_toggle' object.id %}">
+        <small {% if object.game_lab_transfer_process_on %}class="text-danger"{% endif %}>
+          GameLab <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a></td>
       <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a></td>
       {% else %}
       <td>{{object.user}}</td>
