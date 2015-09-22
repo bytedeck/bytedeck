@@ -67,7 +67,6 @@ def quest_list(request, quest_id=None, submission_id=None):
     inprogress_tab_active=False
     completed_tab_active=False
 
-
     if quest_id is not None:
         active_quest_id = int(quest_id)
     elif submission_id is not None:
@@ -242,10 +241,12 @@ def approvals(request):
     submitted_submissions = []
     approved_submissions = []
     returned_submissions = []
+    gamelab_submissions = []
 
     submitted_tab_active=True
     returned_tab_active=False
     approved_tab_active=False
+    gamelab_tab_active=False
 
     page = request.GET.get('page')
     # if '/submitted/' in request.path_info:
@@ -260,6 +261,11 @@ def approvals(request):
         approved_tab_active = True
         submitted_tab_active= False
         approved_submissions = paginate(approved_submissions, page)
+    elif '/gamelab/' in request.path_info:
+        gamelab_submissions = QuestSubmission.objects.all_gamelab()
+        gamelab_tab_active = True
+        submitted_tab_active= False
+        gamelab_submissions = paginate(gamelab_submissions, page)
     else:
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval()
         submitted_submissions = paginate(submitted_submissions, page)
@@ -267,7 +273,7 @@ def approvals(request):
         # approved_submissions = QuestSubmission.objects.all_approved()
         # returned_submissions = QuestSubmission.objects.all_returned()
 
-    tab_list = [{   "name": "Awaiting Approval",
+    tab_list = [{   "name": "Submitted",
                     "submissions": submitted_submissions,
                     "active" : submitted_tab_active,
                     "time_heading": "Submitted",
@@ -284,6 +290,12 @@ def approvals(request):
                     "active" : approved_tab_active,
                     "time_heading": "Approved",
                     "url": reverse('quests:approved'),
+                },
+                {   "name": "GameLab",
+                    "submissions": gamelab_submissions,
+                    "active" : gamelab_tab_active,
+                    "time_heading": "Transfered",
+                    "url": reverse('quests:gamelab'),
                 },]
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")

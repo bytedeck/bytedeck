@@ -28,6 +28,7 @@ urlpatterns = [
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
     url(r'^approvals/returned/$', views.approvals, name='returned'),
     url(r'^approvals/approved/$', views.approvals, name='approved'),
+    url(r'^approvals/gamelab/$', views.approvals, name='gamelab'),
     url(r'^create/$', views.quest_create, name='quest_create'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),

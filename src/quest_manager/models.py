@@ -231,6 +231,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def no_game_lab(self):
         return self.filter(game_lab_transfer = False)
 
+    def game_lab(self):
+        return self.filter(game_lab_transfer = True)
+
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self):
         return QuestSubmissionQuerySet(self.model, using=self._db)
@@ -242,7 +245,12 @@ class QuestSubmissionManager(models.Manager):
 
     def all_approved(self, user=None):
         if user is None:
-            return self.get_queryset().approved().completed()
+            return self.get_queryset().approved().completed().no_game_lab()
+        return self.get_queryset().get_user(user).approved().completed()
+
+    def all_gamelab(self, user=None):
+        if user is None:
+            return self.get_queryset().approved().completed().game_lab()
         return self.get_queryset().get_user(user).approved().completed()
 
     def all_not_completed(self, user=None):
