@@ -47,26 +47,7 @@ class BadgeQuerySet(models.query.QuerySet):
 
 class BadgeManager(models.Manager):
     def get_queryset(self):
-        return BadgeQuerySet(self.model, using=self._db).order_by('-sort_order')
-
-    def user_earned_badges(self, user):
-        return list(
-                set(
-                  [
-                    ass.badge for ass in BadgeAssertion.objects.filter(user=user).all()
-                  ]
-                )
-               )
-
-    def get_type_dicts(self):
-        types = BadgeType.objects.all()
-        return [
-                    {
-                        'badge_type': t,
-                        'list': self.get_queryset().get_type(t)
-                    } for t in types
-                ]
-
+        return BadgeQuerySet(self.model, using=self._db).order_by('sort_order')
 
     #this should be generic and placed in the prerequisites app
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
@@ -100,7 +81,7 @@ class Badge(models.Model):
     objects = BadgeManager()
 
     class Meta:
-        order_with_respect_to = 'badge_type'
+        #order_with_respect_to = 'badge_type'
         ordering = ['sort_order', 'name']
 
     def __str__(self):
