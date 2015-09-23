@@ -82,8 +82,15 @@
          {% if courses %}
              {% for course in courses %}
                <li class="list-group-item {% if not course.semester.active_by_date %}text-muted{% endif %}">
-                 {{course.course}} {{course.grade}} <br/>
-                 <small>{{course.block}} Block, Semester {{course.semester.number}}, {{course.semester}}</small>
+                 {{course.course}} {{course.grade}}
+                 {% if request.user.is_staff %}(<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                 {% endif %}
+                 <br/>
+                 <small>{{course.block}} Block, Semester {{course.semester.number}}, {{course.semester}}
+                 {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
+                 (reason: {{course.xp_adjust_explanation}})
+                 {% endif %}
+                 </small>
                </li>
              {% endfor %}
          {% else %}

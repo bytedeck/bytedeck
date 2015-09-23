@@ -140,6 +140,15 @@ class CourseStudentManager(models.Manager):
     def all_for_user(self, user):
         return self.get_queryset().get_user(user)
 
+    #only works for latest course!
+    def calculate_xp(self, user):
+
+        current_course = self.all_for_user(user).order_by('semester').last()
+        if current_course and current_course.active:
+            return current_course.xp_adjustment
+        else:
+            return 0
+
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9,9),(10,10),(11,11),(12,12),(13, 'Adult'))
 
@@ -148,6 +157,8 @@ class CourseStudent(models.Model):
     block = models.ForeignKey(Block)
     course = models.ForeignKey(Course)
     grade = models.PositiveIntegerField(choices=GRADE_CHOICES)
+    xp_adjustment = models.IntegerField(default = 0)
+    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)
     final_grade = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
