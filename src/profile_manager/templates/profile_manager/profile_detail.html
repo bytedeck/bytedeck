@@ -50,7 +50,7 @@
         <div class="progress progress-xp">
           <div class="progress-bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"
               style="width: {% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}%;">
-            <span class="sr-only">60% Complete</span>
+            <span class="sr-only">{% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}% Complete</span>
           </div>
         </div>
 

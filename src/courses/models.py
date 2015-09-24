@@ -3,7 +3,9 @@ from django.core.urlresolvers import reverse
 from django.utils import timezone
 from django.db import models
 
-from datetime import timedelta
+from datetime import timedelta, date
+
+from workdays import networkdays
 
 # Create your models here.
 class RankQuerySet(models.query.QuerySet):
@@ -64,7 +66,6 @@ class SemesterManager(models.Manager):
         valid_ids = qs.values_list('pk', flat=True)[:1] #only the top one
         return qs.filter(pk__in=valid_ids)
 
-
 class Semester(models.Model):
     SEMESTER_CHOICES = ((1,1),(2,2),)
 
@@ -84,6 +85,21 @@ class Semester(models.Model):
 
     def active_by_date(self):
         return (self.last_day+timedelta(days=5)) > timezone.now().date() and (self.first_day-timedelta(days=20)) < timezone.now().date()
+
+    def num_days(self, upto_today = False):
+        '''The number of classes in the semester (from start date to end date
+        excluding weekends and ExcludedDates) '''
+        excluded_days = self.excludeddate_set.all().values_list('date', flat=True)
+        if upto_today:
+            last_day = date.today()
+        else:
+            last_day = self.last_day
+        return networkdays(self.first_day, last_day, excluded_days)
+
+    def fraction_complete(self):
+        current_days = self.num_days(True)
+        total_days = self.num_days()
+        return current_days/total_days
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -142,12 +158,14 @@ class CourseStudentManager(models.Manager):
 
     #only works for latest course!
     def calculate_xp(self, user):
-
-        current_course = self.all_for_user(user).order_by('semester').last()
+        current_course = self.current_course(user)
         if current_course and current_course.active:
             return current_course.xp_adjustment
         else:
             return 0
+
+    def current_course(self, user):
+        return self.all_for_user(user).order_by('semester').last()
 
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9,9),(10,10),(11,11),(12,12),(13, 'Adult'))
@@ -179,3 +197,6 @@ class CourseStudent(models.Model):
     def get_absolute_url(self):
         return reverse('courses:list')
         # return reverse('courses:detail', kwargs={'pk': self.pk})
+
+    def calc_mark(self, xp):
+        return xp/self.semester.fraction_complete()/10.0

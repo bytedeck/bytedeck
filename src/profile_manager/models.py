@@ -80,6 +80,10 @@ class Profile(models.Model):
         xp += CourseStudent.objects.calculate_xp(self.user)
         return xp
 
+    def mark(self):
+        course = CourseStudent.objects.current_course(self.user)
+        return course.calc_mark(self.xp())
+
     def rank(self):
         return Rank.objects.get_rank(self.xp())
 
