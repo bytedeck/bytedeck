@@ -82,7 +82,10 @@ class Profile(models.Model):
 
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
-        return course.calc_mark(self.xp())
+        if course:
+            return course.calc_mark(self.xp())
+        else:
+            return None
 
     def rank(self):
         return Rank.objects.get_rank(self.xp())

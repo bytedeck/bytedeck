@@ -15,18 +15,20 @@
 
 {% block content %}
 <!-- <table class="table table-striped"> -->
-<table data-toggle="table">
+<table data-toggle="table" data-sort-name='first' data-sort-order='desc'
+  data-icons-prefix='fa' data-search='true'>
   <thead>
     <tr>
-      <th>Username</th>
+      <th data-sortable='true' data-field='username'>Username</th>
       {% if request.user.is_staff %}
-      <th>XP</th>
-      <th>First Name</th>
-      <th>Last Name</th>
-      <th>Preferred</th>
-      <th>Alias</th>
-      <th></th>
-      <th></th>
+      <th data-sortable='true' data-field='xp'>XP</th>
+      <th data-field='mark'>Mark</th>
+      <th data-sortable='true' data-field='first'>First Name</th>
+      <th data-sortable='true' data-field='last'>Last Name</th>
+      <th data-sortable='true' data-field='pref'>Preferred</th>
+      <th data-sortable='true' data-field='alias'>Alias</th>
+      <th data-field='gamelab'></th>
+      <th data-field='pw'></th>
       {% endif %}
     </tr>
   </thead>
@@ -40,6 +42,7 @@
         </a>
       </th>
       <td>{{object.xp}}</th>
+      <td>{{object.mark|floatformat}}%</th>
       <td>{{object.first_name}}</td>
       <td>{{object.last_name}}</td>
       <td>{{object.preferred_name}}</td>
