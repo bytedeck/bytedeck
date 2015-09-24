@@ -6,6 +6,7 @@ from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 
 from .models import Quest
+from .formatChecker import RestrictedFileField
 
 def make_custom_datetimefield(f):
     formfield = f.formfield()
@@ -43,7 +44,13 @@ class QuestForm(forms.ModelForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='Submission', widget=SummernoteWidget())
+    comment_text = forms.CharField(label='', widget=SummernoteWidget())
+    docfile = forms.FileField(label='Add a file to your submission',
+                                        required=False)
+    # docfile = RestrictedFileField(label='Add a file to your submission',
+    #                                     required=False,
+    #                                     max_upload_size=20971520 )
+
 
 class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))

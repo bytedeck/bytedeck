@@ -126,6 +126,12 @@ class Comment(models.Model):
         else:
             return None
 
+##### Document Handler ############################################
+class Document(models.Model):
+    docfile = models.FileField(upload_to='documents/%Y/%m/%d')
+    comment = models.ForeignKey(Comment)
+    
+
 from notifications.models import Notification, deleted_object_receiver
 from django.db.models.signals import pre_delete
 pre_delete.connect(deleted_object_receiver, sender=Comment)

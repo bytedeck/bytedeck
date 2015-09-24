@@ -18,7 +18,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 
 from badges.models import BadgeAssertion
-from comments.models import Comment
+from comments.models import Comment, Document
 from comments.forms import CommentForm
 from notifications.signals import notify
 
@@ -319,7 +319,8 @@ def complete(request, submission_id):
     if request.method == "POST":
 
         # form = CommentForm(request.POST or None, wysiwyg=True, label="")
-        form = SubmissionQuickReplyForm(request.POST)
+        # form = SubmissionQuickReplyForm(request.POST)
+        form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
@@ -335,6 +336,11 @@ def complete(request, submission_id):
                 text = comment_text,
                 target = submission,
             )
+
+            if request.FILES:
+                newdoc = Document( docfile = request.FILES['docfile'],
+                                   comment = comment_new)
+                newdoc.save()
 
             if 'complete' in request.POST:
                 note_verb="completed"
@@ -374,7 +380,7 @@ def complete(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
-            messages.error(request, "There was an error with your comment.")
+            messages.error(request, "There was an error with your comment.  Maybe your attachment was too big? 20MB max!")
             return redirect(origin_path)
     else:
         raise Http404
@@ -402,8 +408,9 @@ def start(request, quest_id):
         return redirect('quests:quests')
 
     # comment_form = SubmissionForm(request.POST or None)
-    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    reply_comment_form = CommentForm(request.POST or None, label="")
+    main_comment_form = SubmissionForm(request.POST or None)
+    #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    #reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
@@ -471,9 +478,9 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 
-    # comment_form = SubmissionForm(request.POST or None)
-    main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    reply_comment_form = CommentForm(request.POST or None, label="")
+    main_comment_form = SubmissionForm(request.POST or None)
+    #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    #reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
 
     context = {

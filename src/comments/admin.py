@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import Comment
+from .models import Comment, Document
 
 class CommentAdmin(admin.ModelAdmin):
     list_display = ['id', '__str__', 'text']
@@ -9,3 +9,4 @@ class CommentAdmin(admin.ModelAdmin):
         model = Comment
 
 admin.site.register(Comment, CommentAdmin)
+admin.site.register(Document)
