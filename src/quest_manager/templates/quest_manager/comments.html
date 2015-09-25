@@ -7,7 +7,7 @@
           id="comment-{{comment.id}}">
         <div class="media">
           <div class="media-left">
-            <img class="media-object icon-md" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>
+            <img class="media-object icon-md img-rounded" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>
           </div>
           <div class="media-body">
             {% if request.user.is_staff %}

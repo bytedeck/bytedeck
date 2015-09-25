@@ -160,7 +160,8 @@ ul.left-aligned, ol.left-aligned  {
 /************ ICONS **********************/
 
 .icon-xs {
-  width: 16px
+  width: 16px;
+  border-radius: 2px;
 }
 
 .icon-sm {
