@@ -55,7 +55,7 @@
         {% with object.get_comments as target_comments %}
           {% if target_comments %}
             <li class="list-group-item list-group-item-info">Announcement Comments</li>
-            {% include "quest_manager/comments.html" %}
+            {% include "comments/comments.html" %}
           {% endif %}
         {% endwith %}
 
@@ -67,7 +67,7 @@
             <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
           </form>
           {% else %}
-            <p>Sorry Spammy McTrollerson, you've been banned from commenting on announcements.  If you would like this privilege back, you can grovel for forgiveness from Mr C.</p>
+            <p>Sorry Spammy McTrollson, you've been banned from commenting on announcements.  If you would like this privilege back, you can grovel for forgiveness from Mr C.</p>
           {% endif %}
         </li>
       </ul>

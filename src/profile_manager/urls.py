@@ -14,7 +14,8 @@ urlpatterns = [
     # url(r'^detail/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<pk>[0-9]+)/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<profile_id>[0-9]+)/GameLab$', views.GameLab_toggle, name='GameLab_toggle'),
-    url(r'^(?P<profile_id>[0-9]+)/comment_ban$', views.comment_ban_toggle, name='comment_ban_toggle'),
+    url(r'^(?P<profile_id>[0-9]+)/comment_ban_toggle$', views.comment_ban_toggle, name='comment_ban_toggle'),
+    url(r'^(?P<profile_id>[0-9]+)/comment_ban$', views.comment_ban, name='comment_ban'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
     # url(r'^edit/(?P<pk>[0-9]+)/$', views.ProfileEdit.as_view(), name='profile_edit'),
 

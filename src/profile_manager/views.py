@@ -1,5 +1,6 @@
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
 from django.core.urlresolvers import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -9,9 +10,10 @@ from django.views.generic import DetailView, ListView
 
 from django.shortcuts import get_object_or_404, redirect, render
 
-from courses.models import CourseStudent
-from quest_manager.models import QuestSubmission
 from badges.models import BadgeAssertion
+from courses.models import CourseStudent
+from notifications.signals import notify
+from quest_manager.models import QuestSubmission
 
 from .forms import ProfileForm
 from .models import Profile
@@ -106,4 +108,49 @@ def comment_ban_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.banned_from_comments = not profile.banned_from_comments
     profile.save()
+
+    if profile.banned_from_comments:
+        icon="<span class='fa-stack'>" + \
+            "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+            "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+            "</span>"
+
+
+        notify.send(
+            request.user,
+            # action=profile.user,
+            target= profile.user,
+            recipient=request.user,
+            affected_users=[profile.user,],
+            verb='banned you from making public comments',
+            icon=icon,
+        )
+
+        messages.success(request, profile.user.username + " banned from commenting publicly")
+
+    return redirect('profiles:profile_list')
+
+@staff_member_required
+def comment_ban(request, profile_id):
+    profile = get_object_or_404(Profile, id=profile_id)
+    profile.banned_from_comments = True
+    profile.save()
+
+    icon="<span class='fa-stack'>" + \
+        "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+        "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+        "</span>"
+
+    notify.send(
+        request.user,
+        # action=profile.user,
+        target= profile.user,
+        recipient=request.user,
+        affected_users=[profile.user,],
+        verb='banned you from making public comments',
+        icon=icon,
+    )
+
+    messages.success(request, profile.user.username + "banned from commenting publicly")
+
     return redirect('profiles:profile_list')

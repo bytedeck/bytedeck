@@ -57,7 +57,7 @@
           <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
           <li class="list-group-item list-group-item-info">Submission Comments</li>
           {% with s.get_comments as target_comments %}
-            {% include "quest_manager/comments.html" %}
+            {% include "comments/comments.html" %}
           {% endwith %}
           <li class="list-group-item list-group-item-info">
             Quick Reply Form
