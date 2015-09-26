@@ -61,10 +61,14 @@
 
         <li class="list-group-item list-group-item-info">Comment </li>
         <li class="list-group-item">
+          {% if not request.user.profile.banned_from_comments %}
           <form method="POST" action="{% url 'announcements:comment' object.id %}">{% csrf_token %}
             {{ comment_form | crispy }}
             <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
           </form>
+          {% else %}
+            <p>Sorry Spammy McTrollerson, you've been banned from commenting on announcements.  If you would like this privilege back, you can grovel for forgiveness from Mr C.</p>
+          {% endif %}
         </li>
       </ul>
 

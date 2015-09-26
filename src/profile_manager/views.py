@@ -7,7 +7,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
 
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 
 from courses.models import CourseStudent
 from quest_manager.models import QuestSubmission
@@ -98,5 +98,12 @@ def tour_complete(request):
 def GameLab_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
+    profile.save()
+    return redirect('profiles:profile_list')
+
+@staff_member_required
+def comment_ban_toggle(request, profile_id):
+    profile = get_object_or_404(Profile, id=profile_id)
+    profile.banned_from_comments = not profile.banned_from_comments
     profile.save()
     return redirect('profiles:profile_list')

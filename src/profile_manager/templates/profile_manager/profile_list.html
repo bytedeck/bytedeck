@@ -26,7 +26,8 @@
       <th data-sortable='true' data-field='first'>First Name</th>
       <th data-sortable='true' data-field='last'>Last Name</th>
       <th data-sortable='true' data-field='pref'>Preferred</th>
-      <th data-sortable='true' data-field='alias'>Alias</th>
+      <!-- <th data-sortable='true' data-field='alias'>Alias</th> -->
+      <th data-field='comment_ban'></th>
       <th data-field='gamelab'></th>
       <th data-field='pw'></th>
       {% endif %}
@@ -46,11 +47,17 @@
       <td>{{object.first_name}}</td>
       <td>{{object.last_name}}</td>
       <td>{{object.preferred_name}}</td>
-      <td>{{object.alias}}</td>
+      <!-- <td>{{object.alias}}</td> -->
+      <td><a href="{% url 'profiles:comment_ban_toggle' object.id %}">
+        <small {% if object.banned_from_comments %}class="text-danger"{% endif %}>
+          Comments <b>{{object.banned_from_comments|yesno:'BANNED,ON'}}</b></small></a>
+      </td>
       <td><a href="{% url 'profiles:GameLab_toggle' object.id %}">
         <small {% if object.game_lab_transfer_process_on %}class="text-danger"{% endif %}>
-          GameLab <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a></td>
-      <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a></td>
+          GameLab <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a>
+      </td>
+      <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a>
+      </td>
       {% else %}
       <td>{{object.user}}</td>
       {% endif %}
