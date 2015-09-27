@@ -87,6 +87,7 @@ INSTALLED_APPS = (
     'courses',
     'prerequisites',
     'badges',
+    # 'tours',
 )
 
 MIDDLEWARE_CLASSES = (
