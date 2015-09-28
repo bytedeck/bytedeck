@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
-from django.db.models import Max, Sum
+from django.db.models import Max, Sum, Count
 from django.templatetags.static import static
 from django.utils import timezone
 
@@ -133,6 +133,15 @@ class BadgeAssertionManager(models.Manager):
     def all_for_user_badge(self, user, badge):
         return self.get_queryset().get_user(user).get_badge(badge)
 
+    def all_for_user(self, user):
+        return self.get_queryset().get_user(user)
+
+    def all_for_user_distinct(self, user):
+        """This only works in a postgresql database"""
+        if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql_psycopg2':
+            return self.get_queryset().get_user(user).order_by('badge_id').distinct('badge')
+        return self.get_queryset().get_user(user)
+
     def num_assertions(self, user, badge):
         qs = self.all_for_user_badge(user, badge)
         if qs.exists():
@@ -199,19 +208,32 @@ class BadgeAssertion(models.Model):
     objects = BadgeAssertionManager()
 
     def __str__(self):
-        ordinal_str = ""
-        if self.ordinal > 1:
-            ordinal_str = " (" + str(self.ordinal) + ")"
-        return self.badge.name + ordinal_str
+        # ordinal_str = ""
+        # if self.ordinal > 1:
+        #     ordinal_str = " (" + str(self.ordinal) + ")"
+        return self.badge.name #+ ordinal_str
 
     def get_absolute_url(self):
         return reverse('badges:list')
 
+    def count(self):
+        """Get the number of assertions with the same badge and user."""
+        return BadgeAssertion.objects.num_assertions(self.user, self.badge)
+
+    def count_bootstrap_badge(self):
+        """Get the number of assertions with the same badge and user. But if
+        there is <2, return "" so that it won't appear when used in
+        Bootstrap Badges: http://getbootstrap.com/components/#badges
+        """
+        count = self.count()
+        if count < 2:
+            return ""
+        return count
+
+
 from django.dispatch import receiver
 from django.db.models.signals import post_save
-
 from notifications.signals import notify
-
 #only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
 def post_save_receiver(sender, **kwargs):

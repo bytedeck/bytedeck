@@ -64,6 +64,16 @@ ul.left-aligned, ol.left-aligned  {
   margin-right: -8px;
 }
 
+.badge-icon-lg {
+  position: absolute;
+  bottom: -23px;
+  left: 1px;
+}
+
+.icon-badge-container {
+   display: inline;
+   position: relative;
+}
 
 .hackerbadge {
   min-height:64px;

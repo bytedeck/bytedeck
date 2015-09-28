@@ -119,6 +119,7 @@ TEMPLATES = [
                 'allauth.account.context_processors.account',
                 'allauth.socialaccount.context_processors.socialaccount'
             ],
+            # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },
     },
 ]
