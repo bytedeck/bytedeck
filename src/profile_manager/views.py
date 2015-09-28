@@ -63,25 +63,19 @@ class ProfileDetail(DetailView):
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile_user)
         context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile_user)
 
-        # # badge_types = BadgeType.objects.all()
-        # #http://stackoverflow.com/questions/32421214/django-queryset-all-model1-objects-where-a-model2-exists-with-a-model1-and-the
-        # # earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
-        # assertion_dict = defaultdict(list)
-        # earned_assertions = BadgeAssertion.objects.all_for_user(profile_user)
-        #
-        # assertions = BadgeAssertion.objects.all_for_user_distinct(profile_user)
-        #
-        # for assertion in earned_assertions:
-        #     assertion_dict[assertion.badge.badge_type].append(assertion)
+
+        earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile_user)
+        assertion_dict = defaultdict(list)
+        for assertion in earned_assertions:
+            assertion_dict[assertion.badge.badge_type].append(assertion)
         #
         # # for key, value in ...
         # # for badge_type, assertions in assertion_dict.items():
         # #     print(badge_type.name)
         # #     for assertion in assertions:
         # #         print(assertion)
-        #
-        # context['data'] = assertion_dict
-        # context['dataitems'] = assertion_dict.items()
+
+        context['badge_assertions_dict_items']  = assertion_dict.items()
 
         return context
 

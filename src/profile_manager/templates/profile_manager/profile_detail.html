@@ -152,7 +152,8 @@
         </div>
        </div> <!--panel -->
   </div>
-  <!-- BADGES -->
+
+  <!-- BADGES NEW-->
   <div class="col-sm-6">
     <div class="panel panel-primary">
       <div class="panel-heading">
@@ -165,14 +166,14 @@
         </h3>
       </div>
       <div class="list-group">
-      {% for badges in badge_assertions_by_type %}
+      {% for badge_type, assertions in badge_assertions_dict_items %}
         <div class="list-group-item list-group-item-info">
             <i class="pull-right fa fa-fw {{badges.badge_type.fa_icon}}"></i>
-            {{badges.badge_type.name}}s
+            {{badge_type.name}}s
           </h3>
         </div>
         <div class="list-group-item">
-          {% for assertion in badges.list %}
+          {% for assertion in assertions %}
             <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
             data-trigger="hover focus" data-placement="left" data-html="true"
             title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
@@ -213,6 +214,9 @@
       </div> <!--list-group -->
     </div> <!-- panel -->
   </div> <!-- col -->
+
+
+
 </div> <!-- row -->
 
 {% endblock %}
