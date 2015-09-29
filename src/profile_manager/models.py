@@ -101,8 +101,10 @@ class Profile(models.Model):
         return self.next_rank().xp - self.rank().xp
 
     def xp_since_last_rank(self):
-
-        return self.xp() - self.rank().xp
+        try:
+            return self.xp() - self.rank().xp
+        except:
+            return 0
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
