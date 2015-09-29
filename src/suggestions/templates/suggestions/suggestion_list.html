@@ -1,0 +1,15 @@
+{% extends "suggestions/base.html" %}
+{% load crispy_forms_tags %}
+{% block heading_inner %}Suggestions{% endblock %}
+{% block content %}
+<ul>
+    {% for suggestion in object_list %}
+    <li>{{ suggestion.title }}  :
+    <a href="{% url "suggestions:edit" suggestion.id %}">edit</a>
+    <a href="{% url "suggestions:delete" suggestion.id %}">delete</a>
+    </li>
+    {% endfor %}
+</ul>
+
+<a href="{% url 'suggestions:create' %}">Make a new suggestions</a>
+{% endblock %}
