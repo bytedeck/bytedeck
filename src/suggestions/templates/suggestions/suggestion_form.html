@@ -1,0 +1,9 @@
+{% extends "suggestions/base.html" %}
+{% load crispy_forms_tags %}
+{% block heading_inner %}Make a suggestion{% endblock %}
+{% block content %}
+<form method="post">{% csrf_token %}
+    {{ form|crispy }}
+    <input type="submit" value="Submit" />
+</form>
+{% endblock %}

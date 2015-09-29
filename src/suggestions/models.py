@@ -1,0 +1,86 @@
+from django.conf import settings
+from django.db import models
+
+from django.utils import timezone
+
+# Create your models here.
+from comments.models import Comment
+
+class Suggestion(models.Model):
+    AWAITING_APPROVED = 1
+    APPROVED = 2
+    COMPLETED = 3
+    UNLIKELY = 4
+    NOT_APPROVED = 5
+    STATUSES = ((AWAITING_APPROVED,'awaiting approval'),
+                (APPROVED,'approved'),
+                (COMPLETED,'completed'),
+                (UNLIKELY,'unlikely'),
+                (NOT_APPROVED,'not approved'),
+    )
+
+    title = models.CharField(max_length=50, blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    description = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
+    status = models.PositiveIntegerField(choices=STATUSES, default=AWAITING_APPROVED)
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse('edit', kwargs={'pk': self.pk})
+
+
+class VoteQuerySet(models.query.QuerySet):
+    def all_user(self, user):
+        return self.filter(user=user)
+
+    def all_suggestion(self, suggestion):
+        return self.filter(suggestion=suggestion)
+
+class VoteManager(models.Manager):
+    def get_queryset(self):
+        return VoteQuerySet(self.model, using=self._db)
+
+    def record_vote(suggestion, user, vote):
+        """Need to check if user has voted yet today"""
+        if self.user_can_vote(user):
+            vote = self.model(
+                user = user,
+                suggestion = suggestion,
+                vote = vote,
+            )
+            vote.save(using=self._db)
+            return vote
+        else:
+            return None
+
+    def get_score(suggestion):
+        qs = self.get_queryset().all_suggestion().aggregate(Sum('vote'))
+        return qs['vote__sum']
+
+    def user_can_vote(user):
+        """Can vote once per day"""
+        most_recent = self.get_queryset().all_user(user).latest('timestamp')
+        if most_recent.date() < timezone.now().date():
+            return True
+        return False
+
+class Vote(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    suggestion = models.ForeignKey(Suggestion)
+    timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
+    vote = models.SmallIntegerField(help_text="up vote is +1, down vote is -1")
+
+    objects = VoteManager()
+
+    def is_upvote(self):
+        if vote > 0:
+            return True
+        return False
+
+    def is_downvote(self):
+        if vote < 0:
+            return True
+        return False
