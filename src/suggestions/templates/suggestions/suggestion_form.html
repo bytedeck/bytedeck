@@ -4,6 +4,8 @@
 {% block content %}
 <form method="post">{% csrf_token %}
     {{ form|crispy }}
+    <p>Your suggestion won't appear in the list untill Mr C has reviewed it.</p>
     <input type="submit" value="Submit" />
+
 </form>
 {% endblock %}
