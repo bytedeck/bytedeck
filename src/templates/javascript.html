@@ -35,9 +35,10 @@
       // http://stackoverflow.com/questions/2830542/prevent-double-submission-of-forms-in-jquery
       $('form').preventDoubleSubmission();
 
-      // Ensure external links open in new tabs by adding target="_blank"
+      // Ensure external links and media open in new tabs by adding target="_blank"
       $("a[href^='http://']").attr("target","_blank");
       $("a[href^='https://']").attr("target","_blank");
+      $("a[href^='hackerspace.sd.72.bc.ca/media/']").attr("target","_blank");
 
       // Dismiss bootstrap alerts
       if ($('.dismiss-in-3').length) {
