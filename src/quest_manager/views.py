@@ -218,7 +218,7 @@ def approve(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:approvals")
         else:
-            messages.error(request, "There was an error with your comment.")
+            messages.error(request, "There was an error with your comment. Maybe you need to type something?")
             return redirect(origin_path)
     else:
         raise Http404
@@ -380,7 +380,7 @@ def complete(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
-            messages.error(request, "There was an error with your comment.  Maybe your attachment was too big? 20MB max!")
+            messages.error(request, "There was an error with your comment.  Maybe you need to type something in the box? Maybe your attachment was too big? 20MB max!")
             return redirect(origin_path)
     else:
         raise Http404

@@ -144,7 +144,7 @@ def comment_create(request):
 
                 return HttpResponseRedirect(success_url)
         else:
-            messages.error(request, "There was an error with your comment.")
+            messages.error(request, "There was an error with your comment. Did you type anything in the box?")
             if origin_path is None:
                     return HttpResponseRedirect(parent_comment.get_absolute_url())
             return HttpResponseRedirect(origin_path)
