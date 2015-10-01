@@ -223,7 +223,7 @@ def approve(request, submission_id):
     else:
         raise Http404
 
-def paginate(object_list, page, per_page = 15):
+def paginate(object_list, page, per_page = 30):
     paginator = Paginator(object_list, per_page)
     try:
         object_list = paginator.page(page)

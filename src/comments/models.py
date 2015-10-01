@@ -130,7 +130,7 @@ class Comment(models.Model):
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     comment = models.ForeignKey(Comment)
-    
+
 
 from notifications.models import Notification, deleted_object_receiver
 from django.db.models.signals import pre_delete

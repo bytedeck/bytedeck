@@ -5,4 +5,4 @@ from .models import Suggestion
 class SuggestionForm(forms.ModelForm):
     class Meta:
         model = Suggestion
-        fields = ['title', 'description', 'user']
+        fields = ['title', 'description']

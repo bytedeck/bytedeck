@@ -4,12 +4,18 @@
 {% block content %}
 <p>Want to help improve the Hackerspace? Look through the list of suggestions
 below and vote on those you like and dislike!  Every student can vote once per day.</p>
-<p>Have your own idea that isn't already suggested below? <a href="{% url 'suggestions:create' %}">Make a new suggestion</a>.</p>
+<p>Have your own idea that isn't already suggested below?
+  <a class="btn btn-primary"
+  href="{% url 'suggestions:create' %}">Make a new suggestion</a></p>
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div class="panel accordian
     {% if object.id == active_id %} active {% endif %}
-    {% if object.status == 1 %}panel-info
+    {% if object.status == 1 %}panel-warning
+    {% elif object.status == 2 %}panel-default
+    {% elif object.status == 3 %}panel-success
+    {% elif object.status == 4 %}panel-info
+    {% elif object.status == 5 %}panel-danger
     {% else %}panel-default
     {% endif %}">
     <div
@@ -24,7 +30,9 @@ below and vote on those you like and dislike!  Every student can vote once per d
           {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
           {{object.title}}
         <!-- </a> -->
-        <small class="pull-right">{{object.timestamp.date|date:'D, N j, Y'}}</small>
+        <small class="pull-right">{{object.user}}</small><br />
+        <small class="pull-right">{{object.timestamp|timesince}} ago</small>
+
       </h4>
     </div>
     <div id="collapse{{object.id}}"
@@ -55,7 +63,7 @@ below and vote on those you like and dislike!  Every student can vote once per d
         <li class="list-group-item list-group-item-info">Comment </li>
         <li class="list-group-item">
           {% if not request.user.profile.banned_from_comments %}
-          <form method="POST" action="{% url 'announcements:comment' object.id %}">{% csrf_token %}
+          <form method="POST" action="{% url 'suggestions:comment' object.id %}">{% csrf_token %}
             {{ comment_form | crispy }}
             <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
           </form>

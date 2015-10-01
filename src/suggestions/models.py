@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.core.urlresolvers import reverse
 
 from django.utils import timezone
 
@@ -19,9 +20,9 @@ class Suggestion(models.Model):
                 (NOT_APPROVED,'not approved'),
     )
 
-    title = models.CharField(max_length=50, blank=True, null=True)
+    title = models.CharField(max_length=50)
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
     status = models.PositiveIntegerField(choices=STATUSES, default=AWAITING_APPROVED)
 
@@ -29,7 +30,10 @@ class Suggestion(models.Model):
         return self.title
 
     def get_absolute_url(self):
-        return reverse('edit', kwargs={'pk': self.pk})
+        return reverse('suggestions:list', kwargs={'id': self.pk})
+
+    def get_comments(self):
+        return Comment.objects.all_with_target_object(self)
 
 
 class VoteQuerySet(models.query.QuerySet):
