@@ -98,7 +98,24 @@ def suggestion_create(request):
         new_suggestion = form.save(commit=False)
         new_suggestion.user = request.user
         new_suggestion.save()
-        return redirect('suggestions:list')
+
+        icon="<i class='fa fa-lg fa-fw fa-lightbulb-o'></i>"
+
+        notify.send(
+            request.user,
+            # action=profile.user,
+            target= new_suggestion,
+            recipient=request.user,
+            affected_users=User.objects.filter(is_staff=True),
+            verb='suggested:',
+            icon=icon,
+        )
+
+        messages.success(request, "Thank you for your suggestion! Mr C \
+            has to it review before it will be publicly visible.")
+
+        return redirect(new_suggestion.get_absolute_url())
+
     return render(request, template_name, {'form':form})
 
 @staff_member_required
@@ -108,7 +125,7 @@ def suggestion_update(request, pk):
     form = SuggestionForm(request.POST or None, instance=server)
     if form.is_valid():
         form.save()
-        return redirect('suggestions:list')
+        return redirect(new_suggestion.get_absolute_url())
     return render(request, template_name, {'form':form})
 
 @staff_member_required
@@ -121,19 +138,27 @@ def suggestion_delete(request, pk):
     return render(request, template_name, {'object':suggestion})
 
 
-class SuggestionList(ListView):
-    model = Suggestion
+@staff_member_required
+def suggestion_approve(request, id):
+    suggestion = get_object_or_404(Suggestion, id=id)
+    suggestion.status = Suggestion.APPROVED
+    suggestion.save()
 
-class SuggestionCreate(CreateView):
-    model = Suggestion
-    success_url = reverse_lazy('suggestions:list')
-    fields = ['title', 'description', 'user']
+    icon="<span class='fa-stack'>" + \
+        "<i class='fa fa-lightbulb-o fa-stack-1x'></i>" + \
+        "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
+        "</span>"
 
-class SuggestionUpdate(UpdateView):
-    model = Suggestion
-    success_url = reverse_lazy('suggestions:list')
-    fields = ['title', 'description']
+    notify.send(
+        request.user,
+        # action=profile.user,
+        target= suggestion,
+        recipient=suggestion.user,
+        affected_users=[suggestion.user,],
+        verb='approved',
+        icon=icon,
+    )
 
-class SuggestionDelete(DeleteView):
-    model = Suggestion
-    success_url = reverse_lazy('suggestions:list')
+    messages.success(request, "Suggestion by " +  str(suggestion.user) + " approved.")
+
+    return redirect(suggestion.get_absolute_url())

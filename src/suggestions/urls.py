@@ -10,8 +10,5 @@ urlpatterns = [
     url(r'^delete/(?P<pk>\d+)$', views.suggestion_delete, name='delete'),
     url(r'^(?P<id>\d+)/comment/$', views.comment, name='comment'),
     url(r'^(?P<id>\d+)/$', views.suggestion_list, name='list'),
-    # url(r'^$', views.SuggestionList.as_view(), name='list'),
-    # url(r'^new$', views.SuggestionCreate.as_view(), name='create'),
-    # url(r'^edit/(?P<pk>\d+)$', views.SuggestionUpdate.as_view(), name='edit'),
-    # url(r'^delete/(?P<pk>\d+)$', views.SuggestionDelete.as_view(), name='delete'),
+    url(r'^(?P<id>[0-9]+)/approve/$', views.suggestion_approve, name='approve'),
 ]

@@ -44,7 +44,7 @@ below and vote on those you like and dislike!  Every student can vote once per d
           <div class="pull-right">
             <a class="btn btn-danger" href="{% url 'suggestions:delete' object.id %}" role="button">Delete</a>
             <a class="btn btn-warning" href="{% url 'suggestions:edit' object.id %}" role="button">Edit</a>
-            <a class="btn btn-primary" href="" role="button">Copy</a>
+            <a class="btn btn-success" href="{% url 'suggestions:approve' object.id %}" role="button">Approve</a>
           </div>
           {% endif %}
           <!-- <i class="fa fa-quote-left fa-2x pull-left"></i> -->
