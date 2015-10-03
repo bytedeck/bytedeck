@@ -25,7 +25,8 @@ class CommentQuerySet(models.query.QuerySet):
 
 class CommentManager(models.Manager):
     def get_queryset(self):
-        return CommentQuerySet(self.model, using=self._db)
+        qs = CommentQuerySet(self.model, using=self._db)
+        return qs.select_related('user')
 
     def all_with_target_object(self, object):
         return self.get_queryset().get_object_target(object).get_no_parents()
