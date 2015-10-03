@@ -295,7 +295,6 @@ class QuestSubmissionManager(models.Manager):
             return True
         # check if the quest is already in progress
         try:
-
             s = self.all_not_completed(user=user).get(quest=quest)
             #if no exception is thrown it means that an inprogress submission was found
             return False
@@ -304,10 +303,12 @@ class QuestSubmissionManager(models.Manager):
         except ObjectDoesNotExist:
             pass #nothing found, continue
 
-        latest_sub = self.all_for_user_quest(user, quest).latest('time_completed')
-        latest_dt = latest_sub.time_completed
-        # if latest_dt is None: # quest submission in progress already
-        #     return False
+        latest_sub = self.all_for_user_quest(user, quest).latest('first_time_completed')
+        latest_dt = latest_sub.first_time_completed
+
+        # to handle cases before first_time_completed existed as a property
+        if not latest_dt:
+            latest_dt = latest_sub.time_completed
         return quest.is_repeat_available(latest_dt, num_subs)
 
     def create_submission(self, user, quest):
@@ -336,6 +337,7 @@ class QuestSubmission(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
     ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
+    first_time_completed = models.DateTimeField(null=True, blank=True)
     time_completed = models.DateTimeField(null=True, blank=True)
     is_approved = models.BooleanField(default=False)
     time_approved = models.DateTimeField(null=True, blank=True)
@@ -362,6 +364,10 @@ class QuestSubmission(models.Model):
     def mark_completed(self):
         self.is_completed = True
         self.time_completed = timezone.now()
+        # this is only set the first time, so it can be referenced to
+        # when calculating repeatable quests
+        if self.first_time_completed == None:
+            self.first_time_completed = timezone.now()
         self.save()
 
     def mark_approved(self, transfer = False):
