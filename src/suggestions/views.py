@@ -72,7 +72,10 @@ def comment(request, id):
 @login_required
 def suggestion_list(request, id=None):
     template_name='suggestions/suggestion_list.html'
-    suggestions = Suggestion.objects.all()
+    if request.user.is_staff:
+        suggestions = Suggestion.objects.all()
+    else:
+        suggestions = Suggestion.objects.all_for_students()
 
     if id:
         active_id = int(id)

@@ -7,6 +7,35 @@ from django.utils import timezone
 # Create your models here.
 from comments.models import Comment
 
+class SuggestionQuerySet(models.query.QuerySet):
+    def all_user(self, user):
+        return self.filter(user=user)
+
+    def awaiting_approval(self):
+        return self.filter(status=Suggestion.AWAITING_APPROVAL)
+
+    def awaiting_approval_for_user(self, user):
+        return self.exclude(status=Suggestion.AWAITING_APPROVAL, user=user)
+
+    def approved(self):
+        return self.filter(status=Suggestion.APPROVED)
+
+    def completed(self):
+        return self.filter(status=Suggestion.COMPLETED)
+
+    def not_approved(self):
+        return self.filter(status=Suggestion.NOT_AOPPROVED)
+
+    def unlikely(self):
+        return self.filter(status=Suggestion.UNLIKELY)
+
+class SuggestionManager(models.Manager):
+    def get_queryset(self):
+        return SuggestionQuerySet(self.model, using=self._db)
+
+    def all_for_students(self):
+        return self.get_queryset().approved()
+
 class Suggestion(models.Model):
     AWAITING_APPROVED = 1
     APPROVED = 2
@@ -26,6 +55,8 @@ class Suggestion(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
     status = models.PositiveIntegerField(choices=STATUSES, default=AWAITING_APPROVED)
 
+    objects = SuggestionManager()
+
     def __str__(self):
         return self.title
 
@@ -34,6 +65,9 @@ class Suggestion(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
+
+    def get_score(self):
+        return Vote.objects.get_score(self)
 
 
 class VoteQuerySet(models.query.QuerySet):
@@ -47,7 +81,7 @@ class VoteManager(models.Manager):
     def get_queryset(self):
         return VoteQuerySet(self.model, using=self._db)
 
-    def record_vote(suggestion, user, vote):
+    def record_vote(self, suggestion, user, vote):
         """Need to check if user has voted yet today"""
         if self.user_can_vote(user):
             vote = self.model(
@@ -60,11 +94,15 @@ class VoteManager(models.Manager):
         else:
             return None
 
-    def get_score(suggestion):
-        qs = self.get_queryset().all_suggestion().aggregate(Sum('vote'))
+    def get_score(self, suggestion):
+        qs = self.get_queryset().all_suggestion(suggestion).aggregate(models.Sum('vote'))
+        # print("**********************GET SCORE *******************")
+        # print(qs)
+        if not qs['vote__sum']:
+            return 0
         return qs['vote__sum']
 
-    def user_can_vote(user):
+    def user_can_vote(self, user):
         """Can vote once per day"""
         most_recent = self.get_queryset().all_user(user).latest('timestamp')
         if most_recent.date() < timezone.now().date():
