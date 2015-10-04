@@ -3,6 +3,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 
+
 from django.http import HttpResponse
 
 from django.views.generic import TemplateView,ListView
@@ -11,14 +12,14 @@ from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.utils import timezone
 
 from django.core.urlresolvers import reverse_lazy, reverse
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect, get_object_or_404, Http404
 
 from notifications.signals import notify
 
 from comments.forms import CommentForm
 from comments.models import Comment
 
-from .models import Suggestion
+from .models import Suggestion, Vote
 from .forms import SuggestionForm
 
 @login_required
@@ -128,11 +129,11 @@ def suggestion_create(request):
 @staff_member_required
 def suggestion_update(request, pk):
     template_name='suggestions/suggestion_form.html'
-    server = get_object_or_404(Suggestion, pk=pk)
-    form = SuggestionForm(request.POST or None, instance=server)
+    suggestion = get_object_or_404(Suggestion, pk=pk)
+    form = SuggestionForm(request.POST or None, instance=suggestion)
     if form.is_valid():
         form.save()
-        return redirect(new_suggestion.get_absolute_url())
+        return redirect(suggestion.get_absolute_url())
     return render(request, template_name, {'form':form})
 
 @staff_member_required
@@ -172,11 +173,21 @@ def suggestion_approve(request, id):
     return redirect(suggestion.get_absolute_url())
 
 @login_required
-def vote(request, id, vote):
+def vote(request, id):
     suggestion = get_object_or_404(Suggestion, id=id)
-    vote = int(vote)
-    Vote.objects.record_vote(suggestion, request.user, vote)
 
-    messages.success(request, "Voted!")
+    if '/upvote/' in request.path_info:
+        vote = 1
+    elif '/downvote/' in request.path_info:
+        vote = -1
+    else:
+        raise Http404
+
+    success = Vote.objects.record_vote(suggestion, request.user, vote)
+
+    if not success:
+        messages.error(request, "You already voted today!")
+    else:
+        messages.success(request, "You voted " + str(vote) + " for " + str(suggestion))
 
     return redirect("suggestions:list")

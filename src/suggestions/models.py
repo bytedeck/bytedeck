@@ -91,14 +91,19 @@ class VoteManager(models.Manager):
 
     def record_vote(self, suggestion, user, vote):
         """Need to check if user has voted yet today"""
+        if vote > 0:
+            vote = 1
+        elif vote < 0:
+            vote = -1
+
         if self.user_can_vote(user):
-            vote = self.model(
+            new_vote = self.model(
                 user = user,
                 suggestion = suggestion,
                 vote = vote,
             )
-            vote.save(using=self._db)
-            return vote
+            new_vote.save(using=self._db)
+            return new_vote
         else:
             return None
 
@@ -112,8 +117,12 @@ class VoteManager(models.Manager):
 
     def user_can_vote(self, user):
         """Can vote once per day"""
-        most_recent = self.get_queryset().all_user(user).latest('timestamp')
-        if most_recent.date() < timezone.now().date():
+        qs = self.get_queryset().all_user(user)
+        if not qs:
+            return True
+
+        most_recent = qs.latest('timestamp')
+        if most_recent.timestamp.date() < timezone.now().date():
             return True
         return False
 

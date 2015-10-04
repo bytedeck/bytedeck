@@ -37,9 +37,13 @@ below and vote on those you like and dislike!  You can vote once per day.</p>
       <div class="row">
       <h4 class="panel-title">
         <div class="col-xs-2">
-          <a href="http://google.ca"><i class="fa fa-lg fa-thumbs-o-up"></i></a>
+          <a href="{% url 'suggestions:upvote' object.id %}">
+            <i class="fa fa-lg fa-thumbs-o-up"></i>
+          </a>
           &nbsp;&nbsp;
-          <a href="http://google.ca"><i class="fa fa-lg fa-thumbs-o-down"></i></a>
+          <a href="{% url 'suggestions:downvote' object.id %}">
+            <i class="fa fa-lg fa-thumbs-o-down"></i>
+          </a>
         </div>
         <div class="col-xs-1">{{ object.get_score }}</div>
         <div class="col-xs-6">{{object.title}}</div>
