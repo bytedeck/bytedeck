@@ -3,6 +3,9 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 from django.db import models
+from django.utils.html import urlize
+
+from bs4 import BeautifulSoup
 
 # from quest_manager.models import Quest
 
@@ -45,15 +48,32 @@ class CommentManager(models.Manager):
 
         soup = BeautifulSoup(text, "html.parser")
         # soup = BeautifulSoup(text)
+        print("*****BEFORE***")
+        print(soup)
+
+        # finalFragments = []
+        # textNodes = soup.findAll(text=True)
+        # for textNode in textNodes:
+        #     if getattr(textNode.parent, 'name') == 'a':
+        #         finalFragments.append(str(textNode.parent))
+        #     else:
+        #         finalFragments.append(urlize(textNode))
+        #
+        # text = str("".join(finalFragments))
 
         textNodes = soup.findAll(text=True)
         for textNode in textNodes:
             if textNode.parent and getattr(textNode.parent, 'name') == 'a':
                 continue  # skip already formatted links
-            urlizedText = urlize(textNode)
-            textNode.replaceWith(urlizedText)
-
+            urlizedText = urlize(textNode, trim_url_limit = 50)
+            textNode.replaceWith(BeautifulSoup(urlizedText, "html.parser"))
         text = str(soup)
+
+
+        print("*****AFTER***")
+        print(text)
+
+        # text = str(soup)
 
         comment = self.model(
             user = user,
