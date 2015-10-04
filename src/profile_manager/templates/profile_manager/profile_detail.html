@@ -133,7 +133,8 @@
                   (GameLab Transfer)
                 {% else %}
                   ({{s.quest.xp}} XP)
-                {% endif %}</small>
+                {% endif %}
+                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
              </a>
            {% endfor %}
          {% else %}
