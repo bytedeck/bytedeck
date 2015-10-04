@@ -12,6 +12,7 @@
     {% include 'sidebar.html' %}
   </nav>
   <div class="col-xs-11 col-sm-9" id="main"> <!-- These settings need to compliment the sidebar settings -->
+    {% block pre_heading %}{% endblock %}
     <h1>{% block heading %}{% endblock %}</h1>
     {% block content %}{% endblock %}
   </div>

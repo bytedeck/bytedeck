@@ -11,4 +11,6 @@ urlpatterns = [
     url(r'^(?P<id>\d+)/comment/$', views.comment, name='comment'),
     url(r'^(?P<id>\d+)/$', views.suggestion_list, name='list'),
     url(r'^(?P<id>[0-9]+)/approve/$', views.suggestion_approve, name='approve'),
+    url(r'^(?P<id>[0-9]+)/vote/(?P<vote>[0-9]+)$', views.vote, name='vote'),
+
 ]

@@ -8,6 +8,8 @@ from django.http import HttpResponse
 from django.views.generic import TemplateView,ListView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 
+from django.utils import timezone
+
 from django.core.urlresolvers import reverse_lazy, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 
@@ -49,6 +51,7 @@ def comment(request, id):
                     affected_users = None
                 else:  # student comment
                     affected_users = User.objects.filter(is_staff=True)
+                    #should student comments also be sent to original suggester?
             else:
                 raise Http404("unrecognized submit button")
 
@@ -56,7 +59,7 @@ def comment(request, id):
                 request.user,
                 action=comment_new,
                 target= suggestion,
-                recipient=request.user,
+                recipient=suggestion.user,
                 affected_users=affected_users,
                 verb=note_verb,
                 icon=icon,
@@ -75,7 +78,7 @@ def suggestion_list(request, id=None):
     if request.user.is_staff:
         suggestions = Suggestion.objects.all()
     else:
-        suggestions = Suggestion.objects.all_for_students()
+        suggestions = Suggestion.objects.all_for_student(request.user)
 
     if id:
         active_id = int(id)
@@ -100,6 +103,7 @@ def suggestion_create(request):
     if form.is_valid():
         new_suggestion = form.save(commit=False)
         new_suggestion.user = request.user
+        new_suggestion.status_timestamp = timezone.now()
         new_suggestion.save()
 
         icon="<i class='fa fa-lg fa-fw fa-lightbulb-o'></i>"
@@ -145,6 +149,7 @@ def suggestion_delete(request, pk):
 def suggestion_approve(request, id):
     suggestion = get_object_or_404(Suggestion, id=id)
     suggestion.status = Suggestion.APPROVED
+    suggestion.status_timestamp = timezone.now()
     suggestion.save()
 
     icon="<span class='fa-stack'>" + \
@@ -165,3 +170,13 @@ def suggestion_approve(request, id):
     messages.success(request, "Suggestion by " +  str(suggestion.user) + " approved.")
 
     return redirect(suggestion.get_absolute_url())
+
+@login_required
+def vote(request, id, vote):
+    suggestion = get_object_or_404(Suggestion, id=id)
+    vote = int(vote)
+    Vote.objects.record_vote(suggestion, request.user, vote)
+
+    messages.success(request, "Voted!")
+
+    return redirect("suggestions:list")
