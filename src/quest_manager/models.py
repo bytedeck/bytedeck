@@ -29,6 +29,14 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
+class CommonData(models.Model):
+    title = models.CharField(max_length=50, unique=True)
+    instructions = models.TextField()
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
+
 class XPItem(models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default = 0)
@@ -110,6 +118,7 @@ class QuestManager(models.Manager):
 class Quest(XPItem):
     verification_required = models.BooleanField(default = True, )
     categories = models.ManyToManyField(Category, blank=True)
+    common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
     prereq_parent = GenericRelation(Prereq,
@@ -166,6 +175,8 @@ class Quest(XPItem):
         num_approved = QuestSubmission.objects.all_for_user_quest(user, self).approved().count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
+
+
 
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')

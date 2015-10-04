@@ -62,6 +62,18 @@
   </div>
 </div>
 
+{% if quest.common_data %}
+<div id="quest-common-{{quest.id}}" class="panel panel-primary panel-top">
+  <div class="panel-heading">
+    <h3 class="panel-title">General Info</h3>
+  </div>
+  <div class="panel-body">
+    {{ quest.common_data.instructions | safe }}
+  </div>
+</div>
+{% endif %}
+
+
 <div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
     <h3 class="panel-title">Submission Instructions</h3>

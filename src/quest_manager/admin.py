@@ -8,7 +8,7 @@ from django_summernote.admin import SummernoteModelAdmin
 # Register your models here.
 from prerequisites.admin import PrereqInline
 
-from .models import Quest, Category, TaggedItem, QuestSubmission
+from .models import Quest, Category, TaggedItem, QuestSubmission, CommonData
 
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id','user', 'quest')
@@ -16,8 +16,12 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
+class CommonDataAdmin(SummernoteModelAdmin):
+    pass
+
+
 class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
-    list_display = ('id','name', 'xp','visible_to_students','max_repeats','date_expired')
+    list_display = ('id','name', 'xp','visible_to_students','max_repeats','date_expired', 'common_data')
     list_filter = ['visible_to_students','max_repeats','verification_required']
     search_fields = ['name']
     inlines = [
@@ -33,6 +37,7 @@ class QuestAdmin(SummernoteModelAdmin): #use SummenoteModelAdmin
 
 admin.site.register(Quest, QuestAdmin)
 admin.site.register(Category)
+admin.site.register(CommonData, CommonDataAdmin)
 admin.site.register(QuestSubmission)
 # admin.site.register(Prereq)
 # admin.site.register(Feedback, FeedbackAdmin)

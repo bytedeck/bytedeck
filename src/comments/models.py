@@ -44,22 +44,9 @@ class CommentManager(models.Manager):
             raise ValueError("Must include a user  when adding a comment")
 
         # format unformatted links
-        # https://djangosnippets.org/snippets/2072/
+        # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
 
         soup = BeautifulSoup(text, "html.parser")
-        # soup = BeautifulSoup(text)
-        print("*****BEFORE***")
-        print(soup)
-
-        # finalFragments = []
-        # textNodes = soup.findAll(text=True)
-        # for textNode in textNodes:
-        #     if getattr(textNode.parent, 'name') == 'a':
-        #         finalFragments.append(str(textNode.parent))
-        #     else:
-        #         finalFragments.append(urlize(textNode))
-        #
-        # text = str("".join(finalFragments))
 
         textNodes = soup.findAll(text=True)
         for textNode in textNodes:
@@ -68,12 +55,6 @@ class CommentManager(models.Manager):
             urlizedText = urlize(textNode, trim_url_limit = 50)
             textNode.replaceWith(BeautifulSoup(urlizedText, "html.parser"))
         text = str(soup)
-
-
-        print("*****AFTER***")
-        print(text)
-
-        # text = str(soup)
 
         comment = self.model(
             user = user,
@@ -96,7 +77,6 @@ class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
     parent = models.ForeignKey("self", null=True, blank=True)
     path = models.CharField(max_length=350)
-    # quest = models.ForeignKey(Quest, null=True, blank=True)
     text = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
