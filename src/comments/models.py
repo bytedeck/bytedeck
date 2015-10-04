@@ -40,6 +40,21 @@ class CommentManager(models.Manager):
         if not user:
             raise ValueError("Must include a user  when adding a comment")
 
+        # format unformatted links
+        # https://djangosnippets.org/snippets/2072/
+
+        soup = BeautifulSoup(text, "html.parser")
+        # soup = BeautifulSoup(text)
+
+        textNodes = soup.findAll(text=True)
+        for textNode in textNodes:
+            if textNode.parent and getattr(textNode.parent, 'name') == 'a':
+                continue  # skip already formatted links
+            urlizedText = urlize(textNode)
+            textNode.replaceWith(urlizedText)
+
+        text = str(soup)
+
         comment = self.model(
             user = user,
             path = path,

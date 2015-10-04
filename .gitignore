@@ -13,6 +13,8 @@ media_root/
 
 *.sqlite3
 
+pip-selfcheck.json
+
 migrations/
 
 # Byte-compiled / optimized / DLL files
