@@ -13,6 +13,7 @@ class RestrictedFileField(forms.FileField):
         2.5MB - 2621440
         5MB - 5242880
         10MB - 10485760
+        16MB -
         20MB - 20971520
         50MB - 5242880
         100MB - 104857600
@@ -28,7 +29,6 @@ class RestrictedFileField(forms.FileField):
 
     def clean(self, data, initial=None):
         file = super(RestrictedFileField, self).clean(data, initial)
-
         try:
             # content_type = file.content_type
             # if content_type in self.content_types:

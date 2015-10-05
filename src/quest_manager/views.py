@@ -325,7 +325,7 @@ def complete(request, submission_id):
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
             if not comment_text:
-                if submission.quest.verification_required:
+                if submission.quest.verification_required and not request.FILES:
                     messages.error(request, "Please read the Submission Instructions more carefully.  You are expected to submit something to complete this quest!")
                     return redirect(origin_path)
                 else:
@@ -380,7 +380,7 @@ def complete(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
-            messages.error(request, "There was an error with your comment.  Maybe you need to type something in the box? Maybe your attachment was too big? 20MB max!")
+            messages.error(request, "There was an error with your comment.  Maybe your image or attachment was too big? 16MB max!")
             return redirect(origin_path)
     else:
         raise Http404

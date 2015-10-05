@@ -291,7 +291,7 @@ SUMMERNOTE_CONFIG = {
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
 
-    'attachment_filesize_limit': 3096*3096,
+    'attachment_filesize_limit': 4096*4096,
 
     # Set `upload_to` function for attachments.
     #'attachment_upload_to': my_custom_upload_to_func(),

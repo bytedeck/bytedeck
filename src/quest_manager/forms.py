@@ -44,12 +44,12 @@ class QuestForm(forms.ModelForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', widget=SummernoteWidget())
-    docfile = forms.FileField(label='Add a file to your submission',
-                                        required=False)
-    # docfile = RestrictedFileField(label='Add a file to your submission',
-    #                                     required=False,
-    #                                     max_upload_size=20971520 )
+    comment_text = forms.CharField(label='', required=False, widget=SummernoteWidget())
+    # docfile = forms.FileField(label='Add a file to your submission',
+    #                                     required=False)
+    docfile = RestrictedFileField(label='Add a file to your submission (16MB limit)',
+                                        required=False,
+                                        max_upload_size=16777216 )
 
 
 class SubmissionReplyForm(forms.Form):
