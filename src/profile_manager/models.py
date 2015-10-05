@@ -45,6 +45,7 @@ class Profile(models.Model):
     intro_tour_completed = models.BooleanField(default = False)
     game_lab_transfer_process_on = models.BooleanField(default = False)
     banned_from_comments = models.BooleanField(default = False)
+    get_announcements_by_email = models.BooleanField(default = False)
 
     objects = ProfileManager()
 
