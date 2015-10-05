@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.mail import send_mail
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Q
@@ -58,6 +59,23 @@ class Announcement(models.Model):
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
 
+    def send_by_mail(self):
+        subject = "Test email from Hackerspace Online"
+        from_email = ("Timberline's Digital Hackerspace <" +
+            settings.EMAIL_HOST_USER +
+            ">")
+        to_emails = [from_email]
+        email_message = "from %s: %s via %s" %(
+            "Dear Bloggins", "sup", from_email)
+
+        html_email_message = "<h1> if this is showing you received an HTML messaage</h1>"
+
+        send_mail(subject,
+            email_message,
+            from_email,
+            to_emails,
+            html_message = html_email_message,
+            fail_silently=False)
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete

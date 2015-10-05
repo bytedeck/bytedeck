@@ -177,6 +177,8 @@ class Create(CreateView):
             icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
             verb='posted')
 
+        # new_announcement.send_by_mail()
+
         return super(Create, self).form_valid(form)
 
     def get_context_data(self, **kwargs):

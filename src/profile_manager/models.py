@@ -21,9 +21,15 @@ class ProfileQuerySet(models.query.QuerySet):
     def get_grad_year(self, year):
         return self.filter(grad_year = year)
 
+    def announcement_email(self):
+        return self.filter(get_announcements_by_email = True)
+
 class ProfileManager(models.Manager):
     def get_queryset(self):
         return ProfileQuerySet(self.model, using=self._db)
+
+    def get_mailing_list(self):
+        return self.get_queryset().announcement_email()
 
 class Profile(models.Model):
 

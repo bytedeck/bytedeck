@@ -491,36 +491,3 @@ def submission(request, submission_id=None, quest_id=None):
         # "reply_comment_form": reply_comment_form,
     }
     return render(request, 'quest_manager/submission.html', context)
-
-
-
-
-## Demo of sending email
-# @login_required
-# def email_demo(request):
-#     subject = "Test email from Hackerspace Online"
-#     from_email = ("Timberline's Digital Hackerspace <" +
-#         settings.EMAIL_HOST_USER +
-#         ">")
-#     to_emails = [from_email]
-#     email_message = "from %s: %s via %s" %(
-#         "Dear Bloggins", "sup", from_email)
-#
-#     html_email_message = "<h1> if this is showing you received an HTML messaage</h1>"
-#
-#     send_mail(subject,
-#         email_message,
-#         from_email,
-#         to_emails,
-#         html_message = html_email_message,
-#         fail_silently=False)
-#
-#     context = {
-#         "email_to" : to_emails,
-#         "email_from": from_email,
-#         "email_message":email_message,
-#         "html_email_message": html_email_message
-#
-#     }
-#
-#     return render(request, "email_demo.html", context)
