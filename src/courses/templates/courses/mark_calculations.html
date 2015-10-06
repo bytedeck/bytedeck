@@ -1,0 +1,100 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Mark Calculations{% endblock%}
+
+{% block content %}
+  <p class="lead">Hello {{request.user}},
+  {% if obj %}
+    your current mark is:
+    <strong>{{obj.user.profile.mark|floatformat}}%</strong>
+  {% else %}
+    I can't calculate your mark because you haven't joined a course yet.
+    Please <a href="{% url 'courses:create' %}">go here</a> and join your course.
+  {% endif %}</p>
+  <h3>Explanation</h3>
+  <p>
+    Here is an explanation of how I calculated your mark:
+  </p>
+  <div class="well">
+    <p>We are currently
+      <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
+        data-placement="top" data-html="true"
+        data-content="There are {{obj.semester.num_days}} days of class in the semester.
+          So far, we've had {{obj.semester.days_so_far}} days:<br/><br/>
+          <pre>{{obj.semester.days_so_far}}/{{obj.semester.num_days}} = {{obj.semester.fraction_complete|floatformat:3}} &times; 100 = {{obj.semester.percent_complete|floatformat}}%</pre>
+        ">
+        {{obj.semester.fraction_complete|floatformat:3}} or {{obj.semester.percent_complete|floatformat}}%</a>
+      of the way through the semester.</p>
+    <p>At this pace you will have
+      <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
+        data-placement="top" data-html="true"
+        data-content="You currently have {{obj.user.profile.xp}} XP, and the semester is
+          {{obj.semester.fraction_complete|floatformat:3}} complete:<br/><br/>
+          <pre>{{obj.user.profile.xp}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio obj.user.profile.xp obj.semester.fraction_complete 1 %} XP</pre>
+        ">
+      {% widthratio obj.user.profile.xp obj.semester.fraction_complete 1 %} XP</a>
+      by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%</p>
+  </div>
+  <h3>Some Stats</h3>
+  <p>
+    Here are a few other stats you might find interesting:
+  </p>
+  <div class="well">
+    <p>Average XP earned per day of class so far:
+      <strong>{{obj.xp_per_day_ave|floatformat }}</strong></p>
+    <p>Let Mr C know if there are other stats you are interested in and he will add them!</p>
+  </div>
+  <h3>Chillax Line</h3>
+  <p>{% if obj.semester.chillax_line_started %}
+    You are free to chillax if your XP is at or above: {{obj.semester.chillax_line|floatformat:"0"}} XP
+    {% else %}
+    The Chillax Line has not started yet.  It will begin the day after 1st Interim marks are taken.
+    {% endif %}
+  </p>
+  <h3>Report Cards</h3>
+  <p>
+    This table shows you the dates that marks will be taken for various report cards:
+  </p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Report</th>
+        <th>% Complete</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1st Interim</td>
+        <td>25%</td>
+        <td>{{obj.semester.get_interim1_date}}</td>
+      </tr>
+      <tr>
+        <td>Term</td>
+        <td>50%</td>
+        <td>{{obj.semester.get_term_date}}</td>
+      </tr>
+      <tr>
+        <td>2nd Interim</td>
+        <td>75%</td>
+        <td>{{obj.semester.get_interim2_date}}</td>
+      </tr>
+      <tr>
+        <td>Final</td>
+        <td>100%</td>
+        <td>{{obj.semester.get_final_date}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function() {
+  $('[data-toggle="popover"]').popover(
+  )
+});
+</script>
+{% endblock %}

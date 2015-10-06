@@ -5,7 +5,7 @@ from django.db import models
 
 from datetime import timedelta, date
 
-from workdays import networkdays
+from workdays import networkdays, workday
 
 # Create your models here.
 class RankQuerySet(models.query.QuerySet):
@@ -89,17 +89,50 @@ class Semester(models.Model):
     def num_days(self, upto_today = False):
         '''The number of classes in the semester (from start date to end date
         excluding weekends and ExcludedDates) '''
-        excluded_days = self.excludeddate_set.all().values_list('date', flat=True)
+        excluded_days = self.excluded_days()
         if upto_today:
             last_day = date.today()
         else:
             last_day = self.last_day
         return networkdays(self.first_day, last_day, excluded_days)
 
+    def excluded_days(self):
+        return self.excludeddate_set.all().values_list('date', flat=True)
+
+    def days_so_far(self):
+        return self.num_days(True)
+
     def fraction_complete(self):
         current_days = self.num_days(True)
         total_days = self.num_days()
         return current_days/total_days
+
+    def percent_complete(self):
+        return self.fraction_complete() * 100.0
+
+    def get_interim1_date(self):
+        return self.get_date(0.25)
+
+    def get_term_date(self):
+        return self.get_date(0.5)
+
+    def get_interim2_date(self):
+        return self.get_date(0.75)
+
+    def get_final_date(self):
+        return self.last_day
+
+    def get_date(self, fraction_complete):
+        days = self.num_days()
+        days_to_fraction = int(days * fraction_complete)
+        excluded_days = self.excluded_days()
+        return workday(self.first_day, days_to_fraction, excluded_days)
+
+    def chillax_line_started(self):
+        return timezone.now().date() > self.get_interim1_date()
+
+    def chillax_line(self):
+        return 725 * self.fraction_complete()
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -200,3 +233,6 @@ class CourseStudent(models.Model):
 
     def calc_mark(self, xp):
         return xp/self.semester.fraction_complete()/10.0
+
+    def xp_per_day_ave(self):
+        return self.user.profile.xp()/self.semester.days_so_far()
