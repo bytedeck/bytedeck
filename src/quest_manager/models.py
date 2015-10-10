@@ -286,8 +286,8 @@ class QuestSubmissionManager(models.Manager):
         #completion date indicates the quest was submitted, but since completed
         #is false, it must have been returned.
         if user is None:
-            return self.get_queryset().not_completed().has_completion_date().order_by('updated')
-        return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('updated')
+            return self.get_queryset().not_completed().has_completion_date().order_by('-time_returned')
+        return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest):
         return self.get_queryset().get_user(user).get_quest(quest)
@@ -352,6 +352,7 @@ class QuestSubmission(models.Model):
     time_completed = models.DateTimeField(null=True, blank=True)
     is_approved = models.BooleanField(default=False)
     time_approved = models.DateTimeField(null=True, blank=True)
+    time_returned = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
@@ -394,6 +395,7 @@ class QuestSubmission(models.Model):
         self.is_completed = False
         self.is_approved = False
         self.game_lab_transfer = False
+        self.time_returned = timezone.now()
         self.save()
 
     def is_awaiting_approval(self):

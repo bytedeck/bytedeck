@@ -46,7 +46,13 @@
                 <small>{{s.time_completed}}</small>
               {% elif s.is_returned %}
                 Returned<br/>
-                <small>{{s.updated|timesince}} ago</small>
+                <small>
+                  {% if s.time_returned %}
+                    {{s.time_returned|timesince}} ago
+                  {% else %}
+                    Unknown time ago
+                  {% endif %}
+                </small>
               {% else %}
                 In progress
               {% endif %}
