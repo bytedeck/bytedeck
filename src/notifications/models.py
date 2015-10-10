@@ -10,6 +10,10 @@ from django.utils.html import strip_tags
 from .signals import notify
 # Create your models here.
 
+class UserNotificationOptionSet(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL)
+    quest_approved_without_comment = models.BooleanField(default=True)
+
 class NotificationQuerySet(models.query.QuerySet):
     def get_user(self, recipient):
         return self.filter(recipient=recipient)
@@ -240,8 +244,6 @@ def new_notification(sender, **kwargs):
             new_note.save()
 
 notify.connect(new_notification)
-
-
 
 def deleted_object_receiver(sender, **kwargs):
     print("************delete signal ****************")

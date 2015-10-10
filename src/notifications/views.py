@@ -3,10 +3,11 @@ import json
 from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse
-from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
+from django import forms
+from django.shortcuts import render, Http404, HttpResponseRedirect, redirect, get_object_or_404
 from django.utils import timezone
 
-from .models import Notification
+from .models import Notification, UserNotificationOptionSet
 # Create your views here.
 
 @login_required
@@ -75,3 +76,31 @@ def ajax(request):
         return HttpResponse(json_data, content_type='application/json' )
     else:
         raise Http404
+
+
+# class NotifcationOptionsForm(ModelForm):
+#     class Meta:
+#         model = UserNotificationOptionSet
+#         fields = '__all__'
+#
+# def server_create(request, template_name='servers/server_form.html'):
+#     form = ServerForm(request.POST or None)
+#     if form.is_valid():
+#         form.save()
+#         return redirect('server_list')
+#     return render(request, template_name, {'form':form})
+#
+# def server_update(request, pk, template_name='servers/server_form.html'):
+#     server = get_object_or_404(Server, pk=pk)
+#     form = ServerForm(request.POST or None, instance=server)
+#     if form.is_valid():
+#         form.save()
+#         return redirect('server_list')
+#     return render(request, template_name, {'form':form})
+#
+# def server_delete(request, pk, template_name='servers/server_confirm_delete.html'):
+#     server = get_object_or_404(Server, pk=pk)
+#     if request.method=='POST':
+#         server.delete()
+#         return redirect('server_list')
+#     return render(request, template_name, {'object':server})
