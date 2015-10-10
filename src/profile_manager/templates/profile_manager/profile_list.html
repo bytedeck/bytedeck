@@ -15,14 +15,14 @@
 
 {% block content %}
 <!-- <table class="table table-striped"> -->
-<table data-toggle="table" data-sort-name='first' data-sort-order='desc'
+<table data-toggle="table" data-sort-name='first' data-sort-order='asc'
   data-icons-prefix='fa' data-search='true'>
   <thead>
     <tr>
       <th data-sortable='true' data-field='username'>Username</th>
       {% if request.user.is_staff %}
       <th data-sortable='true' data-field='xp'>XP</th>
-      <th data-field='mark'>Mark</th>
+      <th data-sortable='true' data-field='mark'>Mark</th>
       <th data-sortable='true' data-field='first'>First Name</th>
       <th data-sortable='true' data-field='last'>Last Name</th>
       <th data-sortable='true' data-field='pref'>Preferred</th>
