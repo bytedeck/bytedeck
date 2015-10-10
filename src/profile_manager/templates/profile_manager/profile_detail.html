@@ -120,7 +120,7 @@
                  {% if s.is_returned %}list-group-item-danger
                  {% endif %}">
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s.quest}} <small>({{s.quest.xp}} XP)</small>
+               {{s.quest|truncatechars:40}} <small>({{s.quest.xp}} XP)</small>
              </a>
            {% endfor %}
          {% else %}
