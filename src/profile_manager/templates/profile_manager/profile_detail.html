@@ -29,22 +29,6 @@
       </div>
       <div class="panel-body">
 
-        <div class="pull-right"> {{object.xp}} | 1000</div>
-        <div>
-          {% if courses %}
-            {{courses.0.course}} {{courses.0.grade}}
-          {% else %}
-            You  have not joined a course yet.
-            <a href="{% url 'courses:create' %}">Join a Course</a>
-          {% endif %}
-        </div>
-        <div class="progress progress-xp">&nbsp; {% widthratio object.xp 1000 100 %}&#37;
-          <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp}}" aria-valuemin="0" aria-valuemax="1000"
-              style="width: {% widthratio object.xp 1000 100 %}%;">
-            <span class="sr-only">{% widthratio object.xp 1000 100 %}% Complete</span>
-          </div>
-        </div>
-
         <div class="pull-right"> {{object.xp_since_last_rank}} | {{object.xp_to_next_rank}}</div>
         <div>Next Rank: {{object.next_rank}} </div>
         <div class="progress progress-xp">
@@ -53,6 +37,24 @@
             <span class="sr-only">{% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}% Complete</span>
           </div>
         </div>
+
+        {% if courses %}
+          {% for course in courses %}
+          <div class="pull-right"> {{object.xp_per_course|floatformat:0}} | 1000</div>
+          <div>
+              {{course.course}} {{course.grade}}
+          </div>
+          <div class="progress progress-xp">&nbsp; {% widthratio object.xp_per_course 1000 100 %}&#37;
+            <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
+                style="width: {% widthratio object.xp_per_course 1000 100 %}%;">
+              <span class="sr-only">{% widthratio object.xp_per_course 1000 100 %}% Complete</span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          You  have not joined a course yet.
+          <a href="{% url 'courses:create' %}">Join a Course</a>
+        {% endif %}
 
       </div>
 
@@ -134,7 +136,7 @@
                  {% elif s.game_lab_transfer %}list-group-item-muted
                  {% endif %}">
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s.quest}} <small>
+               {{s.quest|truncatechars:40}} <small>
                 {% if s.game_lab_transfer %}
                   (GameLab Transfer)
                 {% else %}

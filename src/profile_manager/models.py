@@ -88,6 +88,9 @@ class Profile(models.Model):
         xp += CourseStudent.objects.calculate_xp(self.user)
         return xp
 
+    def xp_per_course(self):
+        return self.xp()/CourseStudent.objects.all_for_user(self.user).count()
+
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
         courses = CourseStudent.objects.all_for_user(self.user)
