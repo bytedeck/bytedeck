@@ -76,14 +76,20 @@
      <div class="panel panel-primary">
        <div class="panel-heading">
          <i class="pull-right fa fa-fw fa-book"></i>
-         <h3 class="panel-title">Courses</h3>
+         <h3 class="panel-title">Courses
+           {% if request.user.is_staff %}
+             &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
+             href="{% url 'courses:add' object.user.id %}" role="button">Add</a>
+           {% endif %}
+         </h3>
        </div>
        <ul class="list-group">
          {% if courses %}
              {% for course in courses %}
                <li class="list-group-item {% if not course.semester.active_by_date %}text-muted{% endif %}">
                  {{course.course}} {{course.grade}}
-                 {% if request.user.is_staff %}(<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                 {% if request.user.is_staff %}
+                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
                  {% endif %}
                  <br/>
                  <small>{{course.block}} Block, Semester {{course.semester.number}}, {{course.semester}}

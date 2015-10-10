@@ -1,3 +1,4 @@
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
@@ -16,9 +17,19 @@ from .forms import CourseStudentForm
 def mark_calculations(request):
     template_name='courses/mark_calculations.html'
     course_student = CourseStudent.objects.current_course(request.user)
+    courses = CourseStudent.objects.all_for_user(request.user)
+    num_courses = courses.count()
+    if courses:
+        xp_per_course = course_student.user.profile.xp()/courses.count()
+    else:
+        xp_per_course = None
+
 
     context = {
         'obj': course_student,
+        'courses': courses,
+        'xp_per_course': xp_per_course,
+        'num_courses' : num_courses,
     }
     return render(request, template_name, context)
 
@@ -29,19 +40,29 @@ class RankList(ListView):
 class CourseStudentList(ListView):
     model = CourseStudent
 
-# @login_required
-# def course_student_create(request):
-#     template_name='courses/coursestudent_form.html'
-#     form = CourseStudentForm(request.POST or None)
-#     if form.is_valid():
-#         form.save()
-#         return redirect('quests:quests')
-#     context = {
-#         # "heading": "Create New Quest",
-#         "form": form,
-#         # "submit_btn_value": "Create",
-#     }
-#     return render(request, 'courses/coursestudent_form.html', context)
+@staff_member_required
+def add_course_student(request, user_id):
+
+    initial={}
+    if int(user_id) > 0:
+        user = get_object_or_404(User, pk=user_id)
+    else:
+        user = None
+
+    form = CourseStudentForm(request.POST or None)
+
+    if form.is_valid():
+        new_course_student = form.save(commit=False)
+        new_course_student.user = user
+        new_course_student.save()
+        # messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+        return redirect('profiles:profile_detail', pk = user.id)
+
+    context = {
+        "user": user,
+        "form": form,
+    }
+    return render(request, 'courses/coursestudent_form.html', context)
 
 class CourseStudentCreate(SuccessMessageMixin, CreateView):
     model = CourseStudent
@@ -54,6 +75,7 @@ class CourseStudentCreate(SuccessMessageMixin, CreateView):
         kwargs = super(CreateView, self).get_form_kwargs()
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
+
 
     # def get_initial(self):
     #     data = { 'user': self.request.user }

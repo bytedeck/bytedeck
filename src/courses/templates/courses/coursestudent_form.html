@@ -4,7 +4,11 @@
 {% block heading_inner %}Join a course{% endblock %}
 
 {% block content %}
-<p>Please enter information about your course as it appears on your schedule</p>
+
+<p>{% if user %}Adding a course for {{user}}
+{% else %}Please enter information about your course as it appears on your schedule
+{% endif %}
+</p>
 <div class="row">
   <div class="col-sm-6">
     <form method="post">{% csrf_token %}

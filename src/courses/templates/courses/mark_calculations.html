@@ -4,19 +4,42 @@
 {% block heading_inner %}Mark Calculations{% endblock%}
 
 {% block content %}
-  <p class="lead">Hello {{request.user}},
-  {% if obj %}
-    your current mark is:
-    <strong>{{obj.user.profile.mark|floatformat}}%</strong>
+  <p>Hello {{request.user}},
+  {% if not courses %}
+  I can't calculate your mark because you haven't joined a course yet.
+  Please <a href="{% url 'courses:create' %}">go here</a> and join your course.</p>
   {% else %}
-    I can't calculate your mark because you haven't joined a course yet.
-    Please <a href="{% url 'courses:create' %}">go here</a> and join your course.
-  {% endif %}</p>
+    {% if num_courses == 1 %}
+      your current mark is:
+    {% else %}
+      your current marks are:
+    {% endif %}</p>
+    <table class="table">
+      {% for course in courses %}
+      <tr>
+        <td>{{course.block}} Block</td>
+        <td>{{course.course}} {{course.grade}}</td>
+        <td><strong>{{course.user.profile.mark|floatformat}}%</strong></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
   <h3>Explanation</h3>
   <p>
-    Here is an explanation of how I calculated your mark:
+    Here is an explanation of how I calculated your mark. If you have any questions about this please ask Mr C!
   </p>
   <div class="well">
+    {% if num_courses > 1 %}
+    You are a multicourse student currently registered in {{num_courses}} courses.
+    Your XP must be divided among each of your courses.  This gives you
+    <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
+      data-placement="top" data-html="true"
+      data-content="You have a total of {{obj.user.profile.xp}} XP
+      to be divided among {{num_courses}} courses: <br/><br/>
+        <pre>{{obj.user.profile.xp}}/{{num_courses}} = {{xp_per_course|floatformat}} XP</pre>
+      ">
+    {{xp_per_course|floatformat}} XP</a> per course.</p>
+    {% endif %}
     <p>We are currently
       <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
         data-placement="top" data-html="true"
@@ -29,11 +52,11 @@
     <p>At this pace you will have
       <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
         data-placement="top" data-html="true"
-        data-content="You currently have {{obj.user.profile.xp}} XP, and the semester is
+        data-content="You currently have {{xp_per_course}} XP, and the semester is
           {{obj.semester.fraction_complete|floatformat:3}} complete:<br/><br/>
-          <pre>{{obj.user.profile.xp}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio obj.user.profile.xp obj.semester.fraction_complete 1 %} XP</pre>
+          <pre>{{xp_per_course|floatformat}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
         ">
-      {% widthratio obj.user.profile.xp obj.semester.fraction_complete 1 %} XP</a>
+      {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
       by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%</p>
   </div>
   <h3>Some Stats</h3>

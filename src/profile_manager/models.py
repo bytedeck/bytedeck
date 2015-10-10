@@ -90,8 +90,9 @@ class Profile(models.Model):
 
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
-        if course:
-            return course.calc_mark(self.xp())
+        courses = CourseStudent.objects.all_for_user(self.user)
+        if courses:
+            return course.calc_mark(self.xp())/courses.count()
         else:
             return None
 

@@ -9,6 +9,7 @@ from courses import views
 urlpatterns = [
     url(r'^$', views.CourseStudentList.as_view(), name='list'),
     url(r'^create/$', views.CourseStudentCreate.as_view(), name='create'),
+    url(r'^add/(?P<user_id>[0-9]+)/$', views.add_course_student, name='add'),
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),
     url(r'^marks/$', views.mark_calculations, name='marks'),
     # url(r'^create2/$', views.course_student_create, name='create2'),
