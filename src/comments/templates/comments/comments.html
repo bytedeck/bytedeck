@@ -27,7 +27,9 @@
             {% endif %}
             <h5 class="media-heading">  <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
               {% if request.user.is_staff %}
-              <small>({{comment.user.profile.first_name}} {{comment.user.profile.last_name}}) </small>
+              <small>({{comment.user.profile.first_name}} {{comment.user.profile.last_name}},
+              Current Mark: {{comment.user.profile.mark|floatformat:0}}%)
+              </small>
               {% endif %}
               <small>&ndash; {{comment.timestamp|timesince}} ago</small>
               {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
