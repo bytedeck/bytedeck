@@ -30,21 +30,9 @@
 
     <script>
 
-    $(document).ready(function() {
-
-      // http://stackoverflow.com/questions/2830542/prevent-double-submission-of-forms-in-jquery
-      $('form').preventDoubleSubmission();
-
-      // Ensure external links and media open in new tabs by adding target="_blank"
-      $("a[href^='http://']").attr("target","_blank");
-      $("a[href^='https://']").attr("target","_blank");
-      $("a[href^='/media/']").attr("target","_blank");
-
-      // Dismiss bootstrap alerts
-      if ($('.dismiss-in-3').length) {
-        setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
-      }
-
+    var timeout = 15000; //milliseconds
+    // this method contain your ajax request
+    function ajaxApprovalsBadge() { //function to ajax request
       //Update quests awaiting approval badge
       $.ajax({
         type: "POST",
@@ -59,8 +47,10 @@
           }
         }
       });
+    }
 
       //Update badge to show number of new Notifications
+    function ajaxNotificationsBadge() {
       $.ajax({
         type: "POST",
         url: "{% url 'notifications:ajax' %}",
@@ -84,6 +74,30 @@
           }
         }
       });
+    }
+
+    $(document).ready(function() {
+
+      // http://stackoverflow.com/questions/2830542/prevent-double-submission-of-forms-in-jquery
+      $('form').preventDoubleSubmission();
+
+      // Ensure external links and media open in new tabs by adding target="_blank"
+      $("a[href^='http://']").attr("target","_blank");
+      $("a[href^='https://']").attr("target","_blank");
+      $("a[href^='/media/']").attr("target","_blank");
+
+      // Dismiss bootstrap alerts
+      if ($('.dismiss-in-3').length) {
+        setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
+      }
+
+      ajaxNotificationsBadge()
+      setInterval(ajaxNotificationsBadge, timeout);
+
+      {% if request.user.is_staff %}
+        ajaxApprovalsBadge()
+        setInterval(ajaxApprovalsBadge, timeout);
+      {% endif %}
 
       // notifications dropdown
       $(".notification-toggle").click(function(e){
