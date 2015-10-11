@@ -45,6 +45,21 @@
         setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);
       }
 
+      //Update quests awaiting approval badge
+      $.ajax({
+        type: "POST",
+        url: "{% url 'quests:ajax' %}",
+        data: {
+          csrfmiddlewaretoken: "{{ csrf_token }}",
+        },
+        success: function(data){
+          var count = data.count;
+          if(count!=0) {
+            $("#approvals_badge").html(count);
+          }
+        }
+      });
+
       //Update badge to show number of new Notifications
       $.ajax({
         type: "POST",

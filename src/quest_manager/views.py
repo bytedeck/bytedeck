@@ -1,3 +1,4 @@
+import json
 from django.conf import settings
 
 from django.contrib import messages
@@ -490,3 +491,19 @@ def submission(request, submission_id=None, quest_id=None):
         # "reply_comment_form": reply_comment_form,
     }
     return render(request, 'quest_manager/submission.html', context)
+
+@login_required
+def ajax(request):
+
+
+    if request.is_ajax() and request.method == "POST":
+
+        submission_count = QuestSubmission.objects.all_awaiting_approval().count()
+        sub_data = {
+            "count": submission_count,
+        }
+        json_data = json.dumps(sub_data)
+
+        return HttpResponse(json_data, content_type='application/json' )
+    else:
+        raise Http404

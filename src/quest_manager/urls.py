@@ -20,6 +20,7 @@ from quest_manager import views
 
 urlpatterns = [
     url(r'^$', views.quest_list, name='quests'),
+    url(r'^ajax/$', views.ajax, name='ajax'),
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='submission_active'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
