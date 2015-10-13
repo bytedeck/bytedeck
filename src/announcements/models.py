@@ -19,6 +19,9 @@ class AnnouncementQuerySet(models.query.QuerySet):
         # "__lte" appended to the object means less than or equla to
         return self.filter(datetime_released__lte = timezone.now)
 
+    def not_draft(self):
+        return self.filter(draft=False)
+
     def not_expired(self):
         return self.filter(Q(datetime_expires = None) | Q(datetime_expires__gt = timezone.now) )
 
@@ -33,7 +36,11 @@ class AnnouncementManager(models.Manager):
         return self.get_active().not_sticky()
 
     def get_active(self):
-        return self.get_queryset().released().not_expired().order_by('-sticky','-datetime_released')
+        return self.get_queryset().released().order_by('-sticky','-datetime_released')
+
+    def get_for_students(self):
+        return self.get_active().not_draft().not_expired()
+
 
 class Announcement(models.Model):
     title = models.CharField(max_length=80)
@@ -46,6 +53,7 @@ class Announcement(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL)
     datetime_released = models.DateTimeField(default=timezone.now)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text = 'blank = never')
+    draft = models.BooleanField(default = False)
 
     objects = AnnouncementManager()
 

@@ -13,6 +13,7 @@
   <div class="panel accordian
     {% if object.id == active_id %} active {% endif %}
     {% if object|notification_unread:request.user %}panel-warning note-unread
+    {% elif object.draft %}panel-warning
     {% elif object.sticky %}panel-info
     {% else %}panel-default
     {% endif %}">
@@ -28,7 +29,9 @@
       data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{object.id}}">
       <h4 class="panel-title">
         <!-- <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{object.id}}" aria-expanded="true" aria-controls="collapse{{object.id}}"> -->
-          {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
+          {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>
+          {% elif object.draft %}<i class="fa fa-wrench">&nbsp;</i>
+          {% endif %}
           {{object.title}}
         <!-- </a> -->
         <small class="pull-right">{{object.datetime_released.date|date:'D, N j, Y'}}</small>
@@ -42,8 +45,12 @@
           {% if request.user.is_staff %}
           <div class="pull-right">
             <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
+            {% if object.draft %}
+            <a class="btn btn-success" href="{% url 'announcements:publish' object.id %}" role="button">Publish</a>
+            {% else %}
             <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
             <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
+            {% endif %}
           </div>
           {% endif %}
           <!-- <i class="fa fa-quote-left fa-2x pull-left"></i> -->

@@ -75,7 +75,11 @@ def comment(request, id):
 
 @login_required
 def list(request, id=None):
-    object_list = Announcement.objects.get_active()
+    if request.user.is_staff:
+        object_list = Announcement.objects.get_active()
+    else:
+        object_list = Announcement.objects.get_for_students()
+
     paginator = Paginator(object_list, 15)
     page = request.GET.get('page')
     active_id = 0
@@ -121,16 +125,10 @@ def copy(request, id):
         new_announcement.save()
         form.save()
 
-        affected_users = User.objects.all().filter(is_active=True)
-        notify.send(
-            request.user,
-            action=new_announcement,
-            target=new_announcement,
-            recipient=request.user,
-            affected_users=affected_users,
-            verb='posted')
-        # return redirect('announcements:list', id=new_announcement.id)
+        if not new_announcement.draft:
+            send_notifications(request, new_announcement)
         return redirect(new_announcement)
+
     context = {
         "title": "",
         "heading": "Copy an Announcement",
@@ -139,23 +137,24 @@ def copy(request, id):
     }
     return render(request, "announcements/form.html", context)
 
+@staff_member_required
+def publish(request, id):
+    announcement = get_object_or_404(Announcement, pk=id)
+    announcement.draft = False
+    announcement.save()
+    send_notifications(request, announcement)
+    return redirect(announcement)
 
-# class based views
-# class List(ListView):
-#     model = Announcement
-#     template_name = 'announcements/list.html'
-
-# def create(request):
-#     form = AnnouncementForm(request.POST or None)
-#
-#     context = {
-#         "form": form,
-#         "heading": "Create New Announcement",
-#         "action_value": "/",
-#         "submit_btn_value": "Publish"
-#     }
-#
-#     return render(request, "announcements/form.html", context)
+def send_notifications(request, announcement):
+        affected_users = User.objects.all().filter(is_active=True)
+        notify.send(
+            request.user,
+            # action=new_announcement,
+            target=announcement,
+            recipient=request.user,
+            affected_users=affected_users,
+            icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
+            verb='posted')
 
 class Create(CreateView):
     model = Announcement
@@ -167,15 +166,8 @@ class Create(CreateView):
         new_announcement.author = self.request.user
         new_announcement.save()
 
-        affected_users = User.objects.all().filter(is_active=True)
-        notify.send(
-            self.request.user,
-            # action=new_announcement,
-            target=new_announcement,
-            recipient=self.request.user,
-            affected_users=affected_users,
-            icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
-            verb='posted')
+        if not new_announcement.draft:
+            send_notifications(self.request, new_announcement)
 
         # new_announcement.send_by_mail()
 
