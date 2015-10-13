@@ -117,6 +117,7 @@ class Notification(models.Model):
 
 
     def __str__(self):
+        # print("***** NOTIFICATION.__str__ **********")
         try:
             target_url = self.target_object.get_absolute_url()
         except:
@@ -159,6 +160,7 @@ class Notification(models.Model):
         # return "%(sender)s %(verb)s" % context
 
     def get_url(self):
+        # print("***** NOTIFICATION.get_url **********")
         try:
             target_url = self.target_object.get_absolute_url()
         except:
@@ -173,6 +175,7 @@ class Notification(models.Model):
 
 
     def get_link(self):
+        # print("***** NOTIFICATION.get_link **********")
         # try:
         #     target_url = self.target_object.get_absolute_url()
         # except:

@@ -50,6 +50,14 @@ iframe {
   border-radius: 8px;
 }
 
+/*move anchor targets down so not covered by ifxed header*/
+:target:before {
+  content:"";
+  display:block;
+  height:60px; /* fixed header height*/
+  margin:-60px 0 0; /* negative fixed header height */
+}
+
 ul.left-aligned, ol.left-aligned  {
   padding-left:20px;
 }

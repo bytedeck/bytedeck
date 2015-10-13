@@ -71,6 +71,11 @@ class CommentManager(models.Manager):
             comment.parent = parent
 
         comment.save(using=self._db)
+
+        #add anchor target to Comment path now that id assigned when saved
+        comment.path += "#comment-" + str(comment.id)
+        comment.save(using=self._db)
+
         return comment
 
 class Comment(models.Model):
