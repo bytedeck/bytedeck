@@ -99,6 +99,15 @@ class Profile(models.Model):
         else:
             return None
 
+    def chillax(self):
+        course = CourseStudent.objects.current_course(self.user)
+        if course:
+            semester = course.semester
+            if semester and semester.chillax_line_started():
+                return self.xp_per_course() >= semester.chillax_line()
+        return False
+
+
     def rank(self):
         return Rank.objects.get_rank(self.xp())
 
