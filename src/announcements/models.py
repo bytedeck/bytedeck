@@ -53,7 +53,7 @@ class Announcement(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL)
     datetime_released = models.DateTimeField(default=timezone.now)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text = 'blank = never')
-    draft = models.BooleanField(default = False)
+    draft = models.BooleanField(default = False, help_text='note that announcements previously saved as drafts will only send out a notification if they are published using the Publish button on the Announcements main page')
 
     objects = AnnouncementManager()
 

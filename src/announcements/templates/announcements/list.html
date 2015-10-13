@@ -45,10 +45,10 @@
           {% if request.user.is_staff %}
           <div class="pull-right">
             <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
+            <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
             {% if object.draft %}
             <a class="btn btn-success" href="{% url 'announcements:publish' object.id %}" role="button">Publish</a>
             {% else %}
-            <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
             <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
             {% endif %}
           </div>
