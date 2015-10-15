@@ -2,6 +2,11 @@
   margin-bottom: 0px !important;
 }
 
+.navbar-fixed-top.chillax{
+  background-color: #BEFFFA;
+  color: white;
+}
+
 .navbar-text-large {
   font-size: 24px;
 }
