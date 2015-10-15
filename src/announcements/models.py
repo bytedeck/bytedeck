@@ -36,10 +36,10 @@ class AnnouncementManager(models.Manager):
         return self.get_active().not_sticky()
 
     def get_active(self):
-        return self.get_queryset().released().order_by('-sticky','-datetime_released')
+        return self.get_queryset().order_by('-sticky','-datetime_released')
 
     def get_for_students(self):
-        return self.get_active().not_draft().not_expired()
+        return self.get_active().not_draft().not_expired().released()
 
 
 class Announcement(models.Model):
@@ -66,6 +66,9 @@ class Announcement(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
+
+    def not_yet_released(self):
+        return self.datetime_released > timezone.now()
 
     def send_by_mail(self):
         subject = "Test email from Hackerspace Online"
