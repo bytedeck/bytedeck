@@ -104,7 +104,7 @@ class Profile(models.Model):
         if course:
             semester = course.semester
             if semester and semester.chillax_line_started():
-                return self.xp_per_course() >= semester.chillax_line()
+                return int(self.xp_per_course()) >= int(semester.chillax_line())
         return False
 
 
