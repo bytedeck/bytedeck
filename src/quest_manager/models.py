@@ -286,7 +286,11 @@ class QuestSubmissionManager(models.Manager):
         #completion date indicates the quest was submitted, but since completed
         #is false, it must have been returned.
         if user is None:
-            return self.get_queryset().not_completed().has_completion_date().order_by('-time_returned')
+            returned_qs = self.get_queryset().not_completed().has_completion_date().order_by('-time_returned')
+            # postgresql places null values at the beginning.  This will move them to the extend
+            # see: http://stackoverflow.com/questions/15121093/django-adding-nulls-last-to-query
+            q = returned_qs.extra(select={'date_null': 'time_returned is null'})
+            return q.extra(order_by=['date_null'])
         return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest):
