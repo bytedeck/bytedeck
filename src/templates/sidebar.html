@@ -54,10 +54,11 @@
     <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>
     <li><a href="#" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>
   </ul>
-
+  {% if request.user.is_staff %}
   <ul class="nav visible-xs" id="xs-menu-staff">
     <li><a href="{% url 'quests:approvals' %}"><i class="fa fa-shield fa-fw"></i></a></li>
   </ul>
+  {% endif %}
 </div>
 
 <!-- /sidebar -->
