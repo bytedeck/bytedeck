@@ -225,7 +225,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(quest=quest)
 
     def approved(self):
-        return self.filter(is_approved=True)
+        return self.filter(is_approved=True).order_by('-time_approved')
 
     def not_approved(self):
         return self.filter(is_approved=False)
@@ -257,8 +257,11 @@ class QuestSubmissionManager(models.Manager):
 
     def all_approved(self, user=None):
         if user is None:
-            return self.get_queryset().approved().completed().no_game_lab()
-        return self.get_queryset().get_user(user).approved().completed()
+            # Staff have a separate tab for gamelab transfers
+            return self.get_queryset().approved().no_game_lab()
+        return self.get_queryset().get_user(user).approved()
+        #     return self.get_queryset().approved().completed().no_game_lab()
+        # return self.get_queryset().get_user(user).approved().completed()
 
     def all_gamelab(self, user=None):
         if user is None:
@@ -279,18 +282,19 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None):
         if user is None:
-            return self.get_queryset().not_approved().completed().order_by('time_completed')
+            return self.get_queryset().not_approved().completed()
         return self.get_queryset().get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
         #completion date indicates the quest was submitted, but since completed
         #is false, it must have been returned.
         if user is None:
-            returned_qs = self.get_queryset().not_completed().has_completion_date().order_by('-time_returned')
+            returned_qs = self.get_queryset().not_completed().has_completion_date()
             # postgresql places null values at the beginning.  This will move them to the extend
             # see: http://stackoverflow.com/questions/15121093/django-adding-nulls-last-to-query
             q = returned_qs.extra(select={'date_null': 'time_returned is null'})
-            return q.extra(order_by=['date_null'])
+            return q.extra(order_by=['date_null','-time_returned'])
+            # return returned_qs
         return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest):
