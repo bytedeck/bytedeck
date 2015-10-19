@@ -251,7 +251,7 @@ td.notification-icons .fa-stack {
   /*height: 500px !important;*/
 }
 
-.panel-summernote div + input {
+.form-group-summernote, .panel-summernote #div_id_docfile {
   margin-left: 15px;
 }
 
