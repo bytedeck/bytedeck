@@ -52,52 +52,76 @@ class QuestUpdate(UpdateView):
 
 @login_required
 def quest_list(request, quest_id=None, submission_id=None):
-    if request.user.is_staff:
-        available_quests = Quest.objects.all()
-    else:
-        available_quests = Quest.objects.get_available(request.user)
 
-    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
-    completed_submissions = QuestSubmission.objects.all_completed(request.user)
+    available_quests = []
+    in_progress_submissions = []
+    completed_submissions = []
+
+    available_tab_active=False
+    in_progress_tab_active=False
+    completed_tab_active=False
 
     active_quest_id = 0
     active_submission_id=0
 
-    available_tab_active=True
-    inprogress_tab_active=False
-    completed_tab_active=False
-
+    # Figure out what tab we want.
     if quest_id is not None:
+        # if a quest_id was provided, got to the Available tab
         active_quest_id = int(quest_id)
+        available_tab_active=True
     elif submission_id is not None:
+        # if sub_id was provided, figure out which tab and go there
         active_submission_id = int(submission_id)
         active_sub = get_object_or_404(QuestSubmission, pk=submission_id)
         if active_sub in in_progress_submissions:
-            inprogress_tab_active = True
-            available_tab_active= False
+            in_progress_tab_active = True
         elif active_sub in completed_submissions:
             completed_tab_active = True
-            available_tab_active= False
+        else:
+            Http404("Couldn't find this Submission. Sorry!")
+    # otherwise look at the path
     elif '/inprogress/' in request.path_info:
-        inprogress_tab_active = True
-        available_tab_active= False
+        in_progress_tab_active = True
     elif '/completed/' in request.path_info:
         completed_tab_active = True
-        available_tab_active= False
+    else:
+        available_tab_active = True
+
+    page = request.GET.get('page')
+
+    if in_progress_tab_active:
+        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
+        in_progress_submissions = paginate(in_progress_submissions, page)
+    elif completed_tab_active:
+        completed_submissions = QuestSubmission.objects.all_completed(request.user)
+        completed_submissions = paginate(completed_submissions, page)
+    # else:
+    #need these anyway to count them.  get_available is not a queryset, cant use .count()
+    if request.user.is_staff:
+        available_quests = Quest.objects.all()
+        num_available = available_quests.count()
+    else:
+        available_quests = Quest.objects.get_available(request.user)
+        num_available = len(available_quests)
+    #paginate or no?
+    # available_quests = paginate(available_quests, page)
+
+    num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
+    num_completed = QuestSubmission.objects.all_completed(request.user).count()
 
     context = {
         "heading": "Quests",
         "available_quests": available_quests,
+        "num_available": num_available,
         "in_progress_submissions": in_progress_submissions,
+        "num_inprogress": num_inprogress,
         "completed_submissions": completed_submissions,
+        "num_completed": num_completed,
         "active_q_id": active_quest_id,
         "active_id": active_submission_id,
         "available_tab_active": available_tab_active,
-        "inprogress_tab_active": inprogress_tab_active,
+        "inprogress_tab_active": in_progress_tab_active,
         "completed_tab_active": completed_tab_active,
-
-        # "in_progress_quests": in_progress_quests,
-        # "completed_quests": completed_quests,
     }
     return render(request, "quest_manager/quests.html" , context)
 
@@ -223,7 +247,7 @@ def approve(request, submission_id):
     else:
         raise Http404
 
-def paginate(object_list, page, per_page = 30):
+def paginate(object_list, page, per_page = 10):
     paginator = Paginator(object_list, per_page)
     try:
         object_list = paginator.page(page)

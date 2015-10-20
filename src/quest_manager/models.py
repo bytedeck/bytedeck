@@ -280,6 +280,11 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset().get_user(user).completed().order_by(
                     'is_approved', '-time_approved')
 
+    def num_completed(self, user=None):
+        if user is None:
+            return self.get_queryset().completed().count()
+        return self.get_queryset().get_user(user).completed().count()
+
     def all_awaiting_approval(self, user=None):
         if user is None:
             return self.get_queryset().not_approved().completed()

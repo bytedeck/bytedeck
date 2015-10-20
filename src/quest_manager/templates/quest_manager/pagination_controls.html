@@ -1,0 +1,17 @@
+{% if items.paginator.num_pages > 1 %}
+<ul class="pagination pagination-centered">
+    {% if items.has_previous %}
+        <li><a href="{{request.path}}?page=1"><<</a></li>
+        <li><a href="{{request.path}}?page={{ items.previous_page_number }}"><</a></li>
+    {% endif %}
+
+    {% for i in items.paginator.page_range %}
+        <li {% if items.number == i %} class="active" {% endif %}><a href="{{request.path}}?page={{i}}">{{i}}</a></li>
+    {% endfor %}
+
+    {% if items.has_next %}
+        <li><a href="{{request.path}}?page={{ items.next_page_number }}">></a></li>
+        <li><a href="{{request.path}}?page={{ items.paginator.num_pages }}">>></a></li>
+    {% endif %}
+</ul>
+{% endif %}

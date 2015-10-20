@@ -11,22 +11,22 @@
 
 <ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
   <li role="presentation" {% if available_tab_active %}class="active"{% endif%}>
-    <a href="#available" role="tab" data-toggle="tab">
+    <a href="{% url 'quests:available' %}">
       Available
-      <span class="badge">{{available_quests|length}}</span>
+      <span class="badge">{{num_available}}</span>
     </a>
 
   </li>
   <li role="presentation" {% if inprogress_tab_active %}class="active"{% endif%}>
-    <a href="#inprogress" role="tab" data-toggle="tab">
+    <a href="{% url 'quests:inprogress' %}">
       In Progress
-      <span class="badge">{{in_progress_submissions|length}}</span>
+      <span class="badge">{{num_inprogress}}</span>
     </a>
   </li>
   <li role="presentation" {% if completed_tab_active %}class="active"{% endif%}>
-    <a href="#completed" role="tab" data-toggle="tab">
+    <a href="{% url 'quests:completed' %}">
       Completed
-      <span class="badge">{{completed_submissions|length}}</span>
+      <span class="badge">{{num_completed}}</span>
     </a>
   </li>
 </ul>
@@ -49,4 +49,5 @@
     {% endwith %}
   </div>
 </div>
+
 {% endblock %}

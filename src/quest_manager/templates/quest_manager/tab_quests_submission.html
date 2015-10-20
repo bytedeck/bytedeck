@@ -92,6 +92,10 @@
   {% endfor %}
   </div>
 
+  {% with items=submissions %}
+    {% include "quest_manager/pagination_controls.html" %}
+  {% endwith %}
+
 {% else %}
   <p>None.</p>
 {% endif %}
