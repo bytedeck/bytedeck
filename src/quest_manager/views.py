@@ -89,13 +89,6 @@ def quest_list(request, quest_id=None, submission_id=None):
 
     page = request.GET.get('page')
 
-    if in_progress_tab_active:
-        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
-        in_progress_submissions = paginate(in_progress_submissions, page)
-    elif completed_tab_active:
-        completed_submissions = QuestSubmission.objects.all_completed(request.user)
-        completed_submissions = paginate(completed_submissions, page)
-    # else:
     #need these anyway to count them.  get_available is not a queryset, cant use .count()
     if request.user.is_staff:
         available_quests = Quest.objects.all()
@@ -103,6 +96,17 @@ def quest_list(request, quest_id=None, submission_id=None):
     else:
         available_quests = Quest.objects.get_available(request.user)
         num_available = len(available_quests)
+
+    if in_progress_tab_active:
+        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
+        in_progress_submissions = paginate(in_progress_submissions, page)
+        available_quests = []
+    elif completed_tab_active:
+        completed_submissions = QuestSubmission.objects.all_completed(request.user)
+        completed_submissions = paginate(completed_submissions, page)
+        available_quests = []
+    # else:
+
     #paginate or no?
     # available_quests = paginate(available_quests, page)
 
