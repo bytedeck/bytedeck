@@ -90,37 +90,38 @@ def quest_list(request, quest_id=None, submission_id=None):
     page = request.GET.get('page')
 
     #need these anyway to count them.  get_available is not a queryset, cant use .count()
-    if request.user.is_staff:
-        available_quests = Quest.objects.all()
-        num_available = available_quests.count()
-    else:
-        available_quests = Quest.objects.get_available(request.user)
-        num_available = len(available_quests)
+
 
     if in_progress_tab_active:
         in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         in_progress_submissions = paginate(in_progress_submissions, page)
-        available_quests = []
+        # available_quests = []
     elif completed_tab_active:
         completed_submissions = QuestSubmission.objects.all_completed(request.user)
         completed_submissions = paginate(completed_submissions, page)
-        available_quests = []
-    # else:
+        # available_quests = []
+    else:
+        if request.user.is_staff:
+            available_quests = Quest.objects.all()
+            # num_available = available_quests.count()
+        else:
+            available_quests = Quest.objects.get_available(request.user)
+            # num_available = len(available_quests)
 
     #paginate or no?
     # available_quests = paginate(available_quests, page)
 
-    num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
-    num_completed = QuestSubmission.objects.all_completed(request.user).count()
+    # num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
+    # num_completed = QuestSubmission.objects.all_completed(request.user).count()
 
     context = {
         "heading": "Quests",
         "available_quests": available_quests,
-        "num_available": num_available,
+        # "num_available": num_available,
         "in_progress_submissions": in_progress_submissions,
-        "num_inprogress": num_inprogress,
+        # "num_inprogress": num_inprogress,
         "completed_submissions": completed_submissions,
-        "num_completed": num_completed,
+        # "num_completed": num_completed,
         "active_q_id": active_quest_id,
         "active_id": active_submission_id,
         "available_tab_active": available_tab_active,
@@ -251,7 +252,7 @@ def approve(request, submission_id):
     else:
         raise Http404
 
-def paginate(object_list, page, per_page = 10):
+def paginate(object_list, page, per_page = 30):
     paginator = Paginator(object_list, per_page)
     try:
         object_list = paginator.page(page)
