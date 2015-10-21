@@ -157,9 +157,8 @@ def assertion_delete(request, assertion_id):
     template_name='badges/assertion_confirm_delete.html'
     return render(request, template_name, {'object':assertion})
 
-
-@staff_member_required
-def grant(request, badge_id, user_id):
+#not a view!
+def grant_badge(request, badge_id, user_id):
 
     badge = get_object_or_404(Badge, pk=badge_id)
     user = get_object_or_404(User, pk=user_id)
@@ -168,4 +167,6 @@ def grant(request, badge_id, user_id):
     if new_assertion is None:
         print("This achievement is not available, why is it showing up?")
         raise Http404 #shouldn't get here
-    return redirect('profiles:profile_detail', pk = user_id)
+
+    messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+    return True

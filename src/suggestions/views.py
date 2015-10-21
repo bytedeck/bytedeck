@@ -18,6 +18,8 @@ from notifications.signals import notify
 
 from comments.forms import CommentForm
 from comments.models import Comment
+from badges.views import grant_badge
+from badges.models import Badge
 
 from .models import Suggestion, Vote
 from .forms import SuggestionForm
@@ -158,6 +160,9 @@ def suggestion_approve(request, id):
         "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
         "</span>"
 
+    suggestion_badge = get_object_or_404(Badge, name="Human Baby")
+    grant_badge(request, suggestion_badge.id ,suggestion.user.id)
+
     notify.send(
         request.user,
         # action=profile.user,
@@ -167,7 +172,6 @@ def suggestion_approve(request, id):
         verb='approved',
         icon=icon,
     )
-
     messages.success(request, "Suggestion by " +  str(suggestion.user) + " approved.")
 
     return redirect(suggestion.get_absolute_url())

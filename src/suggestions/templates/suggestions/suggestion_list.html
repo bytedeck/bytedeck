@@ -46,7 +46,7 @@ below and vote on those you like and dislike!  You can vote once per day.</p>
           </a>
         </div>
         <div class="col-xs-1">{{ object.get_score }}</div>
-        <div class="col-xs-6">{{object.title}}</div>
+        <div class="col-xs-6">{{object.title}}</br><small>{{object.user}} - {{object.user.profile}}</small></div>
         <!-- <div class="col-xs-2">{{object.user}}</div> -->
         <div class="col-xs-3">
           {% if object.status == 1 %}Awaiting Approval
