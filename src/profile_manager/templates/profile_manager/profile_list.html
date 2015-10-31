@@ -37,7 +37,6 @@
   </thead>
   <tbody>
     {% for object in object_list %}
-    {% if request.user.is_staff or request.user = object.user or object.visible_to_other_students %}
     <tr {% if object.game_lab_transfer_process_on and request.user.is_staff %}class="danger"{% endif %}>
       <td><img class="icon-md img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/></td>
       {% if object.preferred_name %}<td>{{object.preferred_name}}</td>
@@ -63,7 +62,6 @@
         </td>
       {% endif %}
     </tr>
-    {% endif %}
     {% endfor %}
   </tbody>
 </table>

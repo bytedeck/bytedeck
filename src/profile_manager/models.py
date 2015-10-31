@@ -24,12 +24,18 @@ class ProfileQuerySet(models.query.QuerySet):
     def announcement_email(self):
         return self.filter(get_announcements_by_email = True)
 
+    def visible(self):
+        return self.filter(visible_to_other_students = True)
+
 class ProfileManager(models.Manager):
     def get_queryset(self):
         return ProfileQuerySet(self.model, using=self._db)
 
     def get_mailing_list(self):
         return self.get_queryset().announcement_email()
+
+    def all_visible(self):
+        return self.get_queryset().visible()
 
 class Profile(models.Model):
 
