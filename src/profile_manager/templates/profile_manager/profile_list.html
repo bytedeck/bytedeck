@@ -57,7 +57,8 @@
       {% endif %}
       <td>{{object.mark|floatformat}}</td>
       {% if request.user.is_staff %}
-        <td><small>{{object.last_submission_completed.time_completed|date:'y-m-d'}} ago</small></td>
+        <td>{{object.last_submission_completed.time_completed|date:'y/m/d'}}
+          <br><small>{{object.last_submission_completed.time_completed|timesince}} ago</small></td>
         <td><a href="{% url 'profiles:profile_detail' object.id %}">
           {{object.user}}</a></td>
         <td><a href="{% url 'profiles:comment_ban_toggle' object.id %}">
