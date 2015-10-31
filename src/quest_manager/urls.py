@@ -38,6 +38,7 @@ urlpatterns = [
     url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
     url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     url(r'^(?P<quest_id>[0-9]+)/gamelabtransfer/$', views.gamelabtransfer, name='gamelabtransfer'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
     url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
     url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
     url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),

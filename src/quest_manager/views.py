@@ -451,6 +451,27 @@ def start(request, quest_id):
     }
     return render(request, 'quest_manager/submission.html', context)
 
+@staff_member_required
+def skip(request, submission_id):
+    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+
+    #add default comment to submission
+    origin_path = submission.get_absolute_url()
+    comment_text = "(GameLab transfer - no XP for this quest)"
+    comment_new = Comment.objects.create_comment(
+        user = request.user,
+        path = origin_path,
+        text = comment_text,
+        target = submission,
+    )
+
+    #approve quest automatically, and mark as transfer.
+    submission.mark_completed() ###################
+    submission.mark_approved(transfer = True)
+
+    messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
+    return redirect("quests:quests")
+
 @login_required
 def gamelabtransfer(request, quest_id):
     '''A combination of the start and complete views, but automatically approved
@@ -471,7 +492,7 @@ def gamelabtransfer(request, quest_id):
 
     #add default comment to submission
     origin_path = submission.get_absolute_url()
-    comment_text = "(GameLab transfer)"
+    comment_text = "(GameLab transfer - no XP for this quest)"
     comment_new = Comment.objects.create_comment(
         user = request.user,
         path = origin_path,
@@ -483,7 +504,7 @@ def gamelabtransfer(request, quest_id):
     submission.mark_completed() ###################
     submission.mark_approved(transfer = True)
 
-    messages.success(request, ("Transfer Successful"))
+    messages.success(request, ("Transfer Successful. No XP was granted for this quest."))
     return redirect("quests:quests")
 
 
