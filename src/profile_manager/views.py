@@ -25,11 +25,11 @@ class ProfileList(ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
 
-    def get_queryset(self):
-        if self.request.user.is_staff:
-            return Profile.objects.all()
-        else:
-            return Profile.objects.all_visible()
+    # def get_queryset(self):
+    #     if self.request.user.is_staff:
+    #         return Profile.objects.all()
+    #     else:
+    #         return Profile.objects.all_visible()
 
 class ProfileCreate(CreateView):
     model = Profile

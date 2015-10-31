@@ -20,7 +20,7 @@
   <thead>
     <tr>
       <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>Avatar</th>
-      <th data-sortable='true' data-field='first'>Preferred Name</th>
+      <th data-sortable='true' data-field='first'>Student</th>
       <th data-sortable='true' data-field='last'>Last Name</th>
       <th data-sortable='true' data-field='alias' data-visible="false">Alias</th>
       <th data-sortable='true' data-field='xp' data-visible="false">XP</th>
@@ -37,15 +37,25 @@
   </thead>
   <tbody>
     {% for object in object_list %}
+
     <tr {% if object.game_lab_transfer_process_on and request.user.is_staff %}class="danger"{% endif %}>
-      <td><img class="icon-md img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/></td>
-      {% if object.preferred_name %}<td>{{object.preferred_name}}</td>
-      {% else %}<td>{{object.first_name}}</td>{% endif %}
-      <td>{{object.last_name}}</td>
-      <td>{{object.alias}}</td>
-      <td>{{object.xp}}</td>
-      <td>{{object.num_courses}}</td>
-      <td>{{object.mark|floatformat}}%</td>
+      {% if request.user.is_staff or object.visible_to_other_students %}
+        <td><img class="icon-md img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/></td>
+        {% if object.preferred_name %}<td>{{object.preferred_name}}</td>
+          {% else %}<td>{{object.first_name}}</td>{% endif %}
+        <td>{{object.last_name}}</td>
+        <td>{{object.alias}}</td>
+        <td>{{object.xp}}</td>
+        <td>{{object.num_courses}}</td>
+      {% else %}
+        <td></td>
+        <td>*Private*</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      {% endif %}
+      <td>{{object.mark|floatformat}}</td>
       {% if request.user.is_staff %}
         <td><small>{{object.last_submission_completed.time_completed|timesince}} ago</small></td>
         <td><a href="{% url 'profiles:profile_detail' object.id %}">
