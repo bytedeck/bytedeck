@@ -11,12 +11,12 @@
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
-{% block heading %}Group <i class="fa fa-users pull-right"></i>{% endblock %}
+{% block heading %}Students <i class="fa fa-users pull-right"></i>{% endblock %}
 
 {% block content %}
 <!-- <table class="table table-striped"> -->
 <table data-toggle="table" data-sort-name='first' data-sort-order='asc'
-  data-icons-prefix='fa' data-search='true' data-show-columns='true'>
+ data-search='true' data-show-columns='true'>
   <thead>
     <tr>
       <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>Avatar</th>
@@ -57,7 +57,7 @@
       {% endif %}
       <td>{{object.mark|floatformat}}</td>
       {% if request.user.is_staff %}
-        <td><small>{{object.last_submission_completed.time_completed|timesince}} ago</small></td>
+        <td><small>{{object.last_submission_completed.time_completed|date:'y-m-d'}} ago</small></td>
         <td><a href="{% url 'profiles:profile_detail' object.id %}">
           {{object.user}}</a></td>
         <td><a href="{% url 'profiles:comment_ban_toggle' object.id %}">
