@@ -23,8 +23,8 @@
       <th data-sortable='true' data-field='first'>Student</th>
       <th data-sortable='true' data-field='last'>Last Name</th>
       <th data-sortable='true' data-field='alias' data-visible="false">Alias</th>
-      <th data-sortable='true' data-field='xp' data-visible="false">XP</th>
-      <th data-sortable='true' data-field='num_courses'># Blocks</th>
+      <th data-sortable='true' data-field='xp' {% if request.user.is_staff %}data-visible="false">{% endif %}XP</th>
+      <th data-sortable='true' data-field='num_courses' {% if request.user.is_staff %}data-visible="false">{% endif %}# Blocks</th>
       <th data-sortable='true' data-field='mark'>Mark</th>
       {% if request.user.is_staff %}
       <th data-sortable='true' data-field='last_sub'>Last Quest</th>
