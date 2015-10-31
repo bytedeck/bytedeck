@@ -52,6 +52,7 @@ class Profile(models.Model):
     game_lab_transfer_process_on = models.BooleanField(default = False)
     banned_from_comments = models.BooleanField(default = False)
     get_announcements_by_email = models.BooleanField(default = False)
+    visible_to_other_students = models.BooleanField(default = False)
 
     objects = ProfileManager()
 
@@ -89,7 +90,10 @@ class Profile(models.Model):
         return xp
 
     def xp_per_course(self):
-        return self.xp()/CourseStudent.objects.all_for_user(self.user).count()
+        return self.xp()/self.num_courses()
+
+    def num_courses(self):
+        return CourseStudent.objects.all_for_user(self.user).count()
 
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
