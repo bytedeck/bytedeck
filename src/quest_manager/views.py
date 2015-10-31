@@ -470,7 +470,7 @@ def skip(request, submission_id):
     submission.mark_approved(transfer = True)
 
     messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
-    return redirect("quests:quests")
+    return redirect("quests:approvals")
 
 @login_required
 def gamelabtransfer(request, quest_id):
