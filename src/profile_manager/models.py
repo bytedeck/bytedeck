@@ -126,6 +126,9 @@ class Profile(models.Model):
         except:
             return 0
 
+    def last_submission_completed(self):
+        return QuestSubmission.objects.user_last_submission_completed(self.user)
+
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:

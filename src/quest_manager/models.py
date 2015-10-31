@@ -355,6 +355,10 @@ class QuestSubmissionManager(models.Manager):
             xp = 0
         return xp
 
+    def user_last_submission_completed(self, user):
+        print( self.get_queryset().get_user(user).completed().latest('time_completed'))
+        return self.get_queryset().get_user(user).completed().latest('time_completed')
+
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)

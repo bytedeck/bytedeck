@@ -27,21 +27,18 @@
 
 
         {% if request.user.is_authenticated and request.user.is_staff %}
-        <li><a href="/admin">Django Admin</a></li>
         <li class="dropdown">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Admin <span class="caret"></span></a>
           <ul class="dropdown-menu">
-            <li class="dropdown-header">Content</li>
-            <li><a href="/admin/quest_manager/quest/add/">Build Quests</a></li>
-            <li><a href="#">Build Badges</a></li>
-            <li role="separator" class="divider"></li>
-            <li class="dropdown-header">Users</li>
-            <li><a href="#">Remove User</a></li>
+            <!-- <li class="dropdown-header">Content</li> -->
+            <!-- <li role="separator" class="divider"></li> -->
+            <!-- <li class="dropdown-header">Reports</li>
+            <li><a href="#">Remove User</a></li> -->
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Database</li>
             <li><a href="/admin">Django Admin</a></li>
             <li role="separator" class="divider"></li>
-            <li class="dropdown-header">Debug</li>
+            <!-- <li class="dropdown-header">Debug</li> -->
           </ul>
         </li>
         {% endif %}
