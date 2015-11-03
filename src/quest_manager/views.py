@@ -366,10 +366,19 @@ def complete(request, submission_id):
                 target = submission,
             )
 
+            # if request.FILES:
+            #     newdoc = Document( docfile = request.FILES['docfile'],
+            #                        comment = comment_new)
+            #     newdoc.save()
+
             if request.FILES:
-                newdoc = Document( docfile = request.FILES['docfile'],
-                                   comment = comment_new)
-                newdoc.save()
+                file_list = request.FILES.getlist('files')
+                for afile in file_list:
+                    print(afile)
+                    newdoc = Document( docfile = afile, comment = comment_new)
+                    newdoc.save()
+            else:
+                print ("NO FILES!")
 
             if 'complete' in request.POST:
                 note_verb="completed"
