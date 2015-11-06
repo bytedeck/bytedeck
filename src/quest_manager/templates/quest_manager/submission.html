@@ -80,6 +80,14 @@
     </div>
   </div>
 
-
-
 {% endblock %}
+{% block js %}
+<script>
+$(function () {
+    {% if anchor %}
+        $(document.body).animate({
+            'scrollTop':   $('#{{ anchor }}').offset().top
+        }, 1000);
+    {% endif %}
+});
+</script>{% endblock %}

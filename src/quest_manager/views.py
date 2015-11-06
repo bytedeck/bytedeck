@@ -345,6 +345,7 @@ def complete(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
 
+    #http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
     if request.method == "POST":
 
         # form = CommentForm(request.POST or None, wysiwyg=True, label="")
@@ -418,8 +419,18 @@ def complete(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
-            messages.error(request, "There was an error with your comment.  Maybe your image or attachment was too big? 16MB max!")
-            return redirect(origin_path)
+            # messages.error(request, "There was an error with your comment.  Maybe your image or attachment was too big? 16MB max!")
+            # return redirect(origin_path)
+
+            context = {
+                "heading": submission.quest.name,
+                "submission": submission,
+                # "comments": comments,
+                "submission_form": form,
+                "anchor": "submission-form-" + str(submission.quest.id),
+                # "reply_comment_form": reply_comment_form,
+            }
+            return render(request, 'quest_manager/submission.html', context)
     else:
         raise Http404
 
@@ -445,20 +456,25 @@ def start(request, quest_id):
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 
+    # Ideally do this!
+    # return redirect('sub')
+
     # comment_form = SubmissionForm(request.POST or None)
     main_comment_form = SubmissionForm(request.POST or None)
     #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     #reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
 
-    context = {
-        "heading": sub.quest.name,
-        "submission": sub,
-        # "comments": comments,
-        "submission_form": main_comment_form,
-        # "reply_comment_form": reply_comment_form,
-    }
-    return render(request, 'quest_manager/submission.html', context)
+
+    # Migth need this for the tour to work!
+    # context = {
+    #     "heading": sub.quest.name,
+    #     "submission": sub,
+    #     # "comments": comments,
+    #     "submission_form": main_comment_form,
+    #     # "reply_comment_form": reply_comment_form,
+    # }
+    # return render(request, 'quest_manager/submission.html', context)
 
 @staff_member_required
 def skip(request, submission_id):
