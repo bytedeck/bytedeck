@@ -48,6 +48,7 @@ from django.utils.translation import ugettext_lazy as _
 class MultiFileInput(forms.FileInput):
     def render(self, name, value, attrs={}):
         attrs['multiple'] = 'multiple'
+        # attrs['class'] += 'btn'
         return super(MultiFileInput, self).render(name, None, attrs=attrs)
     def value_from_datadict(self, data, files, name):
         if hasattr(files, 'getlist'):
@@ -99,10 +100,10 @@ class MultiFileField(forms.FileField):
             return
         elif self.max_num and num_files > self.max_num:
             raise ValidationError(self.error_messages['max_num'] % {'max_num': self.max_num, 'num_files': num_files})
-        for uploaded_file in data:
-            if uploaded_file.size > self.maximum_file_size:
-                raise ValidationError(self.error_messages['file_size'] % { 'uploaded_file_name': uploaded_file.name})
-
+        if num_files > 0:
+            for uploaded_file in data:
+                if uploaded_file.size > self.maximum_file_size:
+                    raise ValidationError(self.error_messages['file_size'] % { 'uploaded_file_name': uploaded_file.name})
         return data
 
     # def clean(self, data, initial=None):

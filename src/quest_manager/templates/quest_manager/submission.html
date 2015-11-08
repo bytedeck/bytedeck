@@ -83,9 +83,10 @@
 {% endblock %}
 {% block js %}
 <script>
-$(function () {
+$(document).ready(function() {
     {% if anchor %}
-        $(document.body).animate({
+        // http://stackoverflow.com/questions/8149155/animate-scrolltop-not-working-in-firefox
+        $('body,html').animate({
             'scrollTop':   $('#{{ anchor }}').offset().top
         }, 1000);
     {% endif %}

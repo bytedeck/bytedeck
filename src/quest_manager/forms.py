@@ -52,7 +52,10 @@ class SubmissionForm(forms.Form):
     # docfile = RestrictedFileField(label='Add a file to your submission (16MB limit)',
     #                                     required=False,
     #                                     max_upload_size=16777216 )
-    files = MultiFileField(max_num = 5, min_num = 0, maximum_file_size = 1024*1024*16)
+    files = MultiFileField(max_num = 5, min_num = 0, maximum_file_size = 1024*1024*16,
+                            label='Add files (hold Ctrl to select up to 5 files, 16MB limit per file)',
+                            required=False
+    )
 
 
 class SubmissionReplyForm(forms.Form):

@@ -186,7 +186,8 @@ def approve(request, submission_id):
 
     if request.method == "POST":
 
-        form = SubmissionQuickReplyForm(request.POST)
+        # form = SubmissionQuickReplyForm(request.POST)
+        form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
             blank_comment_text = ""
@@ -247,8 +248,19 @@ def approve(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:approvals")
         else:
-            messages.error(request, "There was an error with your comment. Maybe you need to type something?")
-            return redirect(origin_path)
+            # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
+            # return redirect(origin_path)
+
+            #rendering here with the context allows validation errors to be displayed
+            context = {
+                "heading": submission.quest.name,
+                "submission": submission,
+                # "comments": comments,
+                "submission_form": form,
+                "anchor": "submission-form-" + str(submission.quest.id),
+                # "reply_comment_form": reply_comment_form,
+            }
+            return render(request, 'quest_manager/submission.html', context)
     else:
         raise Http404
 
@@ -378,8 +390,6 @@ def complete(request, submission_id):
                     print(afile)
                     newdoc = Document( docfile = afile, comment = comment_new)
                     newdoc.save()
-            else:
-                print ("NO FILES!")
 
             if 'complete' in request.POST:
                 note_verb="completed"
@@ -457,13 +467,13 @@ def start(request, quest_id):
         return redirect('quests:quests')
 
     # Ideally do this!
-    # return redirect('sub')
+    return redirect(sub)
 
-    # comment_form = SubmissionForm(request.POST or None)
-    main_comment_form = SubmissionForm(request.POST or None)
-    #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    #reply_comment_form = CommentForm(request.POST or None, label="")
-    # comments = Comment.objects.all_with_target_object(sub)
+    # # comment_form = SubmissionForm(request.POST or None)
+    # main_comment_form = SubmissionForm(request.POST or None)
+    # #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
+    # #reply_comment_form = CommentForm(request.POST or None, label="")
+    # # comments = Comment.objects.all_with_target_object(sub)
 
 
     # Migth need this for the tour to work!
