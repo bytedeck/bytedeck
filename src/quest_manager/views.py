@@ -21,6 +21,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.forms import CommentForm
 from notifications.signals import notify
+from prerequisites.models import Prereq
 
 from .forms import QuestForm, SubmissionForm, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission, TaggedItem
@@ -155,7 +156,13 @@ def quest_copy(request, quest_id):
     form =  QuestForm(request.POST or None, instance = new_quest)
     if form.is_valid():
         form.save()
-        return redirect('quests:quests')
+
+        # make the copied quest a prerequisite for the new quest
+        copied_quest = get_object_or_404(Quest, pk=quest_id)
+        Prereq.objects.add_simple_prereq(new_quest, copied_quest)
+
+        return redirect(new_quest)
+
     context = {
         "heading": "Copy a Quest",
         "form": form,

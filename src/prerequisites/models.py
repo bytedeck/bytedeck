@@ -40,6 +40,18 @@ class PrereqManager(models.Manager):
                 return False
         return True
 
+    def add_simple_prereq(self, parent_object, prereq_object):
+        if not parent_object or not prereq_object:
+            return False
+        new_prereq = Prereq(
+            parent_content_type = ContentType.objects.get_for_model(parent_object),
+            parent_object_id = parent_object.id,
+            prereq_content_type = ContentType.objects.get_for_model(prereq_object),
+            prereq_object_id = prereq_object.id,
+        )
+
+        new_prereq.save()
+        return True
 
 class Prereq(models.Model):
     parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent')
