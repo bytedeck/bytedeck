@@ -1,15 +1,19 @@
 <div id='preview-btns-{{ q.id }}' class="pull-right">
   {% if  request.user.is_staff %}
-    <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">
+    <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button"
+      title = "View quest details" >
       <i class="fa fa-eye"></i>
     </a>
-    <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button">
+    <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
+      title = "Edit the quest" >
       <i class="fa fa-edit"></i>
     </a>
-    <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button">
+    <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button"
+      title = "Create a copy of this quest" >
       <i class="fa fa-copy"></i>
     </a>
-    <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button">
+    <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
+      title = "Delete this quest" >
       <i class="fa fa-trash-o"></i>
     </a>
 

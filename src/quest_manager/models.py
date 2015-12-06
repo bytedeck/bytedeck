@@ -251,6 +251,9 @@ class QuestSubmissionManager(models.Manager):
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         return qs.select_related('quest')
 
+    def all_for_quest(self, quest):
+        return self.get_queryset().get_quest(quest)
+
     def all_not_approved(self, user=None):
         if user is None:
             return self.get_queryset().not_approved()
