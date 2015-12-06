@@ -61,6 +61,8 @@
         <ul class="list-group">
           <li class="list-group-item list-group-item-info">Submission Details</li>
           <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
+          <li class="list-group-item list-group-item-info">Instructor Notes</li>
+          <li class="list-group-item list-group-item">{{s.quest.instructor_notes|safe}}</li>
           <li class="list-group-item list-group-item-info">Submission Comments</li>
           {% with s.get_comments as target_comments %}
             {% include "comments/comments.html" %}

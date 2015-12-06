@@ -116,11 +116,12 @@ class QuestManager(models.Manager):
         return available_quests
 
 class Quest(XPItem):
-    verification_required = models.BooleanField(default = True, )
+    verification_required = models.BooleanField(default = True)
     categories = models.ManyToManyField(Category, blank=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
+    instructor_notes = models.TextField(blank=True, null=True, help_text="This field is only visible to Staff.  Use it to place answer keys or other notes.")
     prereq_parent = GenericRelation(Prereq,
                               content_type_field='parent_content_type',
                               object_id_field='parent_object_id')

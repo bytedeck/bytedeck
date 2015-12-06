@@ -82,3 +82,14 @@
     {{ quest.submission_details | safe }}
   </div>
 </div>
+
+{% if user.is_staff %}
+<div id="instructor-notes-{{quest.id}}" class="panel panel-primary">
+  <div class="panel-heading">
+    <h3 class="panel-title">Instructor Notes <small>(visible to staff only)</small></h3>
+  </div>
+  <div class="panel-body">
+    {{ quest.instructor_notes | safe }}
+  </div>
+</div>
+{% endif %}
