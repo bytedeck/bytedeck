@@ -350,7 +350,7 @@ def submissions(request, quest_id):
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
-    heading = "Submission Summary: \n" + quest.name
+    heading = "Submission Summary: " + quest.name
 
     context = {
         "heading": heading,
