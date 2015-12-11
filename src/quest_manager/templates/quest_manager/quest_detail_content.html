@@ -41,7 +41,7 @@
           <li>Requirements:
                 {% for p in quest.prereqs %}
                   {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
-                  <li>{{ p }}</li>
+                  <li><a href="{{ p.get_prereq.get_absolute_url }}">{{ p }}</a></li>
                   {% if forloop.last %}</ul></small>{% endif %}
                 {% empty %}
                   None
