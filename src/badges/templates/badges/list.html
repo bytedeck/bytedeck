@@ -38,18 +38,18 @@
         {% endfor %}</ul></small></p>
         {% if request.user.is_staff %}
         <div class="btn-group block" role="group">
-          <a class="btn btn-warning " href="{% url 'badges:badge_update' badge.id %}" role="button">
+          <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}" role="button">
             <i class="fa fa-edit"></i>
           </a>
-          <a class="btn btn-primary" href="{% url 'badges:badge_copy' badge.id %}" role="button">
+          <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}" role="button">
             <i class="fa fa-copy"></i>
           </a>
-          <a class="btn btn-danger" href="{% url 'badges:badge_delete' badge.id %}" role="button">
+          <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}" role="button">
             <i class="fa fa-trash-o"></i>
           </a>
         </div>
-        <a class="btn btn-success pull-right" href="{% url 'badges:grant' badge.id 0 %}" role="button">
-          <i class="fa fa-share"></i>
+        <a class="btn btn-success pull-right" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}" role="button">
+          <i class="fa fa-send-o"></i>
         </a>
         {% endif %}
         '>
