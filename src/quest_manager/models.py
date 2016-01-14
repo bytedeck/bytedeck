@@ -17,6 +17,7 @@ from django.utils import timezone
 from prerequisites.models import Prereq
 from badges.models import BadgeAssertion
 from comments.models import Comment
+from courses.models import Semester
 
 class Category(models.Model):
     title = models.CharField(max_length=50, unique=True)
@@ -377,6 +378,8 @@ class QuestSubmission(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
+    #remove default after initial creation.
+    semester = models.ForeignKey(Semester, default = 1)
     # rewards =
 
     class Meta:
