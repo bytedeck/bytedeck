@@ -17,7 +17,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 
-from badges.models import BadgeAssertion
+from badges.models import BadgeAssertion, Badge
 from comments.models import Comment, Document
 from comments.forms import CommentForm
 from notifications.signals import notify
@@ -193,10 +193,22 @@ def approve(request, submission_id):
 
     if request.method == "POST":
 
-        # form = SubmissionQuickReplyForm(request.POST)
-        form = SubmissionForm(request.POST, request.FILES)
+        form = SubmissionQuickReplyForm(request.POST)
+        #form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
+
+            #handle badge assertion
+            comment_text_addition = ""
+            badge = form.cleaned_data.get('award')
+            if badge:
+                #badge = get_object_or_404(Badge, pk=badge_id)
+                new_assertion = BadgeAssertion.objects.create_assertion(submission.user, badge, request.user)
+                messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+                comment_text_addition = "<p></br><i class='fa fa-certificate text-warning'></i> The <b>"+ \
+                badge.name +"</b> badge was granted for this quest <i class='fa fa-certificate text-warning'></i></p>"
+
+            # handle with quest comments
             blank_comment_text = ""
             if 'approve_button' in request.POST:
                 note_verb="approved"
@@ -232,7 +244,7 @@ def approve(request, submission_id):
             comment_new = Comment.objects.create_comment(
                 user = request.user,
                 path = origin_path,
-                text = comment_text,
+                text = comment_text + comment_text_addition,
                 target = submission
             )
 
@@ -252,7 +264,13 @@ def approve(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
-            messages.success(request, ("Quest " + note_verb))
+
+            message_string = "<a href='"+ origin_path +"'>Submission of " + \
+                            submission.quest.name + "</a> " + note_verb + \
+                            " for <a href='" + submission.user.profile.get_absolute_url() + "'>" + submission.user.username + "</a>"
+            messages.success(request, message_string)
+
+
             return redirect("quests:approvals")
         else:
             # messages.error(request, "There was an error with your comment. Maybe you need to type something?")

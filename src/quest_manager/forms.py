@@ -5,6 +5,8 @@ from django.forms.extras.widgets import SelectDateWidget
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 
+from badges.models import Badge
+
 from .models import Quest
 from .formatChecker import RestrictedFileField, MultiFileField
 
@@ -63,3 +65,5 @@ class SubmissionReplyForm(forms.Form):
 
 class SubmissionQuickReplyForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows':2}))
+    awards = Badge.objects.all()
+    award = forms.ModelChoiceField(queryset = awards, label='Grant an Award', required = False)
