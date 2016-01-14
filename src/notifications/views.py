@@ -61,8 +61,12 @@ def ajax(request):
 
     if request.is_ajax() and request.method == "POST":
 
+        limit = 15
         notifications = Notification.objects.all_unread(request.user)
         count = notifications.count()
+        #limit number of items else the list in the menu will go off
+        # the bottom of the screen and can't get the links at the bottom...
+        notifications = notifications[:limit]
         notes = []
         for note in notifications:
             notes.append(str(note.get_link()))
@@ -70,6 +74,7 @@ def ajax(request):
         data = {
             "notifications":notes,
             "count": count,
+            "limit": limit,
         }
         json_data = json.dumps(data)
 

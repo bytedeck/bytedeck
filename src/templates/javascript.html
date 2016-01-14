@@ -117,17 +117,20 @@
             // console.log(count);
             if(count!=0) {
               // $("#notification_badge").html(count);
-              $("#notification_dropdown").append("<li class='dropdown-header'>New Notifications</li>")
+              $("#notification_dropdown").append("<li class='dropdown-header'>New Notifications</li>");
               $(data.notifications).each(function(){
                 var link = this;
-                $("#notification_dropdown").append("<li>"+link + "</li>")
+                $("#notification_dropdown").append("<li>"+link + "</li>");
               })
               // console.log(data.notifications);
-              $("#notification_dropdown").append("<li role='separator' class='divider'></li>")
+              $("#notification_dropdown").append("<li role='separator' class='divider'></li>");
             }
-
-            var url = "{% url 'notifications:list' %}"
-            $("#notification_dropdown").append("<li><a href='"+url+"'>View All Notifications</a></li>")
+            var overflow = "";
+            if(count > data.limit) {
+              overflow = "<i class='fa fa-fw fa-2x fa-stack-overflow text-danger'></i>";
+            }
+            var url = "{% url 'notifications:list' %}";
+            $("#notification_dropdown").append("<li><a href='"+url+"'>"+ overflow+" View All Notifications</a></li>");
 
           },
           error: function(rs, e) {
