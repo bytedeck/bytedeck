@@ -89,7 +89,9 @@
                     title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
                   <a class="btn btn-info" target="_blank"
                     href="{% url 'badges:grant' 0 s.user.id %}" role="button">Grant Badge</a>
-                  <a class="btn btn-default" href="{% url 'quests:skip' s.id %}" role="button">GameLab Transfer</a>
+                  <a class="btn btn-default" href="{% url 'quests:skip' s.id %}"
+                  title="Do not grant XP for this quest (or badges resulting) but mark as complete."
+                  role="button">Skip</a>
 
               </div>
             </form>
