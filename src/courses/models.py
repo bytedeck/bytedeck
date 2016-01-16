@@ -3,6 +3,8 @@ from django.core.urlresolvers import reverse
 from django.utils import timezone
 from django.db import models
 
+from djconfig import config
+
 from datetime import timedelta, date
 
 from workdays import networkdays, workday
@@ -59,12 +61,14 @@ class SemesterManager(models.Manager):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
     def get_current(self):
-        qs = self.get_queryset()
-        # create a list from the slice, then filter
-        #slicing can cause problems if the queryset gets filtered again
-        # see: http://stackoverflow.com/questions/27560131/assertionerror-cannot-filter-a-query-once-a-slice-has-been-taken
-        valid_ids = qs.values_list('pk', flat=True)[:1] #only the top one
-        return qs.filter(pk__in=valid_ids)
+        # qs = self.get_queryset()
+        # # create a list from the slice, then filter
+        # #slicing can cause problems if the queryset gets filtered again
+        # # see: http://stackoverflow.com/questions/27560131/assertionerror-cannot-filter-a-query-once-a-slice-has-been-taken
+        # valid_ids = qs.values_list('pk', flat=True)[:1] #only the top one
+        # return qs.filter(pk__in=valid_ids)
+
+        return self.get_queryset().filter(pk = config.hs_active_semester)
 
 class Semester(models.Model):
     SEMESTER_CHOICES = ((1,1),(2,2),)

@@ -39,6 +39,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # Application definition
 
 INSTALLED_APPS = (
+
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
 
@@ -78,6 +79,12 @@ INSTALLED_APPS = (
     # https://pypi.python.org/pypi/django-badgify
     #'badgify',
 
+    #django-djconfig.readthedocs.org/en/
+    'djconfig',
+
+    #hackerspace_online.apps.HackerspaceConfig
+    'hackerspace_online',
+
     #local apps
     'quest_manager',
     'profile_manager',
@@ -100,6 +107,7 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'djconfig.middleware.DjConfigMiddleware',
 )
 
 ROOT_URLCONF = 'hackerspace_online.urls'
@@ -118,7 +126,9 @@ TEMPLATES = [
 
                 # "allauth" specific context processors
                 'allauth.account.context_processors.account',
-                'allauth.socialaccount.context_processors.socialaccount'
+                'allauth.socialaccount.context_processors.socialaccount',
+
+                'djconfig.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },

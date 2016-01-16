@@ -1,0 +1,16 @@
+{% extends "base_sidebar.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title %}Site Settings | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}Site Settings<i class="fa fa-cog pull-right"></i>{% endblock %}
+{% block content %}
+<form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
+  {{ form|crispy }}
+  <input type="submit" value="Save" class="btn btn-primary" />
+</form>
+{% endblock %}
+
+{% block js %}{% endblock %}

@@ -26,6 +26,7 @@ admin.site.site_title = "Hackerspace Admin"
 urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')), # grappelli URLS
     url(r'^$', 'hackerspace_online.views.home', name='home'),
+    url(r'^config/$', 'hackerspace_online.views.config_view', name='config'),
     #quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     #profile_manager
