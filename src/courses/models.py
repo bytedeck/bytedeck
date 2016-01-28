@@ -70,13 +70,30 @@ class SemesterManager(models.Manager):
 
         return self.get_queryset().filter(pk = config.hs_active_semester)
 
+    def set_active(self, active_sem_id):
+        sems = self.get_queryset()
+        for sem in sems:
+            if sem.id == active_sem_id:
+                sem.active = True
+            else:
+                sem.active = False
+            sem.save()
+
+
+    def complete_active_semester(self):
+        #need to calculate all user XP and store in their Course
+        CourseStudent.objects.calc_semester_grades(self.get_current())
+        return active_sem
+
+
+
 class Semester(models.Model):
     SEMESTER_CHOICES = ((1,1),(2,2),)
 
     number = models.PositiveIntegerField(choices=SEMESTER_CHOICES)
     first_day = models.DateField(blank=True, null=True)
     last_day = models.DateField(blank=True, null=True)
-    active = models.BooleanField(default=True)
+    active = models.BooleanField(default=False)
 
     objects = SemesterManager()
 
@@ -136,7 +153,7 @@ class Semester(models.Model):
         return timezone.now().date() > self.get_interim1_date()
 
     def chillax_line(self):
-        return 725 * self.fraction_complete()
+        return 1000 * config.hs_chillax_line * self.fraction_complete()
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -183,6 +200,9 @@ class CourseStudentQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         return self.filter(semester=semester)
 
+    def get_not_semester(self, semester):
+        return self.exclude(semester=semester)
+
 class CourseStudentManager(models.Manager):
     def get_queryset(self):
         return CourseStudentQuerySet(self.model, using=self._db)
@@ -190,19 +210,35 @@ class CourseStudentManager(models.Manager):
     def all_for_user_semester(self, user, semester):
         return self.get_queryset().get_user(user).get_semester(semester)
 
+    def all_for_user_not_semester(self, user, semester):
+        return self.get_queryset().get_user(user).get_not_semester(semester)
+
     def all_for_user(self, user):
         return self.get_queryset().get_user(user)
 
-    #only works for latest course!
+    #for current active semester
     def calculate_xp(self, user):
-        current_course = self.current_course(user)
-        if current_course and current_course.active:
-            return current_course.xp_adjustment
-        else:
-            return 0
+        xp = 0
+        studentcourses = self.current_courses(user)
+        if studentcourses:
+            for studentcourse in studentcourses:
+                xp += studentcourse.xp_adjustment
+        return xp
 
+    #pick one of the courses...for now
     def current_course(self, user):
-        return self.all_for_user(user).order_by('semester').last()
+        return self.all_for_user(user).get_semester(config.hs_active_semester).first()
+
+    def current_courses(self, user):
+        return self.all_for_user(user).get_semester(config.hs_active_semester)
+
+    def calc_semester_grades(self, semester):
+        coursestudents = get_queryset().get_semester(semester)
+        for coursestudent in coursestudents:
+            coursestudent.final_xp = self.calculate_xp(coursestudent.user)
+            coursestudent.active = false
+            coursestudent.save()
+
 
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9,9),(10,10),(11,11),(12,12),(13, 'Adult'))

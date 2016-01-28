@@ -57,10 +57,12 @@ def quest_list(request, quest_id=None, submission_id=None):
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
+    past_submissions = []
 
     available_tab_active=False
     in_progress_tab_active=False
     completed_tab_active=False
+    past_tab_active = False
 
     active_quest_id = 0
     active_submission_id=0
@@ -72,6 +74,7 @@ def quest_list(request, quest_id=None, submission_id=None):
         available_tab_active=True
     elif submission_id is not None:
         # if sub_id was provided, figure out which tab and go there
+        #this isn't active
         active_submission_id = int(submission_id)
         active_sub = get_object_or_404(QuestSubmission, pk=submission_id)
         if active_sub in in_progress_submissions:
@@ -85,6 +88,8 @@ def quest_list(request, quest_id=None, submission_id=None):
         in_progress_tab_active = True
     elif '/completed/' in request.path_info:
         completed_tab_active = True
+    elif '/past/' in request.path_info:
+        past_tab_active = True
     else:
         available_tab_active = True
 
@@ -100,6 +105,10 @@ def quest_list(request, quest_id=None, submission_id=None):
     elif completed_tab_active:
         completed_submissions = QuestSubmission.objects.all_completed(request.user)
         completed_submissions = paginate(completed_submissions, page)
+        # available_quests = []
+    elif past_tab_active:
+        past_submissions = QuestSubmission.objects.all_completed_past(request.user)
+        past_submissions = paginate(past_submissions, page)
         # available_quests = []
     else:
         if request.user.is_staff:
@@ -122,12 +131,14 @@ def quest_list(request, quest_id=None, submission_id=None):
         "in_progress_submissions": in_progress_submissions,
         # "num_inprogress": num_inprogress,
         "completed_submissions": completed_submissions,
+        "past_submissions": past_submissions,
         # "num_completed": num_completed,
         "active_q_id": active_quest_id,
         "active_id": active_submission_id,
         "available_tab_active": available_tab_active,
         "inprogress_tab_active": in_progress_tab_active,
         "completed_tab_active": completed_tab_active,
+        "past_tab_active": past_tab_active,
     }
     return render(request, "quest_manager/quests.html" , context)
 
@@ -359,7 +370,7 @@ def submissions(request, quest_id):
                     "time_heading": "Approved",
                     "url": reverse('quests:approved_for_quest', kwargs={'quest_id': quest_id}),
                 },
-                {   "name": "GameLab",
+                {   "name": "Skipped",
                     "submissions": gamelab_submissions,
                     "active" : gamelab_tab_active,
                     "time_heading": "Transfered",
@@ -434,7 +445,7 @@ def approvals(request):
                     "time_heading": "Approved",
                     "url": reverse('quests:approved'),
                 },
-                {   "name": "GameLab",
+                {   "name": "Skipped",
                     "submissions": gamelab_submissions,
                     "active" : gamelab_tab_active,
                     "time_heading": "Transfered",

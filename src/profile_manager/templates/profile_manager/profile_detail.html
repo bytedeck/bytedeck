@@ -40,16 +40,18 @@
 
         {% if courses %}
           {% for course in courses %}
-          <div class="pull-right"> {{object.xp_per_course|floatformat:0}} | 1000</div>
-          <div>
-              {{course.course}} {{course.grade}}
-          </div>
-          <div class="progress progress-xp">&nbsp; {% widthratio object.xp_per_course 1000 100 %}&#37;
-            <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
-                style="width: {% widthratio object.xp_per_course 1000 100 %}%;">
-              <span class="sr-only">{% widthratio object.xp_per_course 1000 100 %}% Complete</span>
-            </div>
-          </div>
+            {% if course.semester.active %}
+              <div class="pull-right"> {{object.xp_per_course|floatformat:0}} | 1000</div>
+              <div>
+                  {{course.course}} {{course.grade}}
+              </div>
+              <div class="progress progress-xp">&nbsp; {% widthratio object.xp_per_course 1000 100 %}&#37;
+                <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
+                    style="width: {% widthratio object.xp_per_course 1000 100 %}%;">
+                  <span class="sr-only">{% widthratio object.xp_per_course 1000 100 %}% Complete</span>
+                </div>
+              </div>
+            {% endif %}
           {% endfor %}
         {% else %}
           You  have not joined a course yet.
@@ -75,6 +77,7 @@
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
       </div>
      </div> <!--panel -->
+     <!-- COURSES -->
      <div class="panel panel-primary">
        <div class="panel-heading">
          <i class="pull-right fa fa-fw fa-book"></i>
@@ -88,7 +91,7 @@
        <ul class="list-group">
          {% if courses %}
              {% for course in courses %}
-               <li class="list-group-item {% if not course.semester.active_by_date %}text-muted{% endif %}">
+               <li class="list-group-item {% if not course.semester.active %}text-muted{% endif %}">
                  {{course.course}} {{course.grade}}
                  {% if request.user.is_staff %}
                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
@@ -162,7 +165,7 @@
        </div> <!--panel -->
   </div>
 
-  <!-- BADGES NEW-->
+  <!-- BADGES -->
   <div class="col-sm-6">
     <div class="panel panel-primary">
       <div class="panel-heading">

@@ -26,6 +26,7 @@ urlpatterns = [
     url(r'^available/$', views.quest_list, name='available'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^completed/$', views.quest_list, name='completed'),
+    url(r'^past/$', views.quest_list, name='past'),
     url(r'^approvals/$', views.approvals, name='approvals'),
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
     url(r'^approvals/returned/$', views.approvals, name='returned'),

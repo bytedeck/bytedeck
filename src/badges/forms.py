@@ -39,7 +39,7 @@ class BadgeAssertionForm(forms.ModelForm):
     class Meta:
         model = BadgeAssertion
         # fields = '__all__'
-        exclude = ['ordinal', 'issued_by']
+        exclude = ['ordinal', 'issued_by', 'semester']
 
     def __init__(self, *args, **kwds):
         super(BadgeAssertionForm, self).__init__(*args, **kwds)

@@ -8,7 +8,10 @@ from django.db.models import Max, Sum, Count
 from django.templatetags.static import static
 from django.utils import timezone
 
+from djconfig import config
+
 from prerequisites.models import Prereq
+from courses.models import Semester
 
 # Create your models here.
 
@@ -108,7 +111,7 @@ class Badge(models.Model):
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
-        num_approved = BadgeAssertion.objects.all_for_user_badge(user, self).count()
+        num_approved = BadgeAssertion.objects.all_for_user_badge(user, self, False).count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
@@ -126,12 +129,19 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def no_game_lab(self):
         return self.filter(game_lab_transfer = False)
 
-class BadgeAssertionManager(models.Manager):
-    def get_queryset(self):
-        return BadgeAssertionQuerySet(self.model, using=self._db)
+    def get_semester(self, semester):
+        return self.filter(semester = semester)
 
-    def all_for_user_badge(self, user, badge):
-        return self.get_queryset().get_user(user).get_badge(badge)
+class BadgeAssertionManager(models.Manager):
+    def get_queryset(self, active_semester_only = True):
+        qs = BadgeAssertionQuerySet(self.model, using=self._db)
+        if active_semester_only:
+            return qs.get_semester(config.hs_active_semester)
+        else:
+            return qs
+
+    def all_for_user_badge(self, user, badge, active_semester_only):
+        return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
 
     def all_for_user(self, user):
         return self.get_queryset().get_user(user)
@@ -139,11 +149,11 @@ class BadgeAssertionManager(models.Manager):
     def all_for_user_distinct(self, user):
         """This only works in a postgresql database"""
         if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql_psycopg2':
-            return self.get_queryset().get_user(user).order_by('badge_id').distinct('badge')
-        return self.get_queryset().get_user(user)
+            return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
+        return self.get_queryset(False).get_user(user)
 
     def num_assertions(self, user, badge):
-        qs = self.all_for_user_badge(user, badge)
+        qs = self.all_for_user_badge(user, badge, False)
         if qs.exists():
             max_dict = qs.aggregate(Max('ordinal'))
             return max_dict.get('ordinal__max')
@@ -155,22 +165,23 @@ class BadgeAssertionManager(models.Manager):
 
     def create_assertion(self, user, badge, issued_by=None, transfer=False):
         ordinal = self.get_assertion_ordinal(user, badge)
+        print(badge)
         new_assertion = BadgeAssertion(
             badge = badge,
             user = user,
             ordinal = ordinal,
             issued_by = issued_by,
             game_lab_transfer = transfer,
+            semester = Semester.objects.get(id = config.hs_active_semester),
         )
         new_assertion.save()
         return new_assertion
 
     def check_for_new_assertions(self, user, transfer=False):
-
         badges = Badge.objects.get_conditions_met(user)
         for badge in badges:
             #if the badge doesn't already exist
-            if not self.all_for_user_badge(user, badge):
+            if not self.all_for_user_badge(user, badge, False):
                 self.create_assertion(user, badge, None, transfer)
 
 
@@ -204,6 +215,7 @@ class BadgeAssertion(models.Model):
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
+    semester = models.ForeignKey(Semester, default = 1)
 
     objects = BadgeAssertionManager()
 

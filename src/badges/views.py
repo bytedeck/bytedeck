@@ -114,12 +114,14 @@ def assertion_create(request, user_id, badge_id):
     form = BadgeAssertionForm(request.POST or None, initial=initial)
 
     if form.is_valid():
-        new_assertion = form.save(commit=False)
-        new_assertion.issued_by = request.user
-        new_assertion.ordinal = BadgeAssertion.objects.get_assertion_ordinal(
-                                    new_assertion.user, new_assertion.badge)
-        new_assertion.save()
-        messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+        new_ass = form.save(commit=False)
+        BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge)
+        # new_assertion.issued_by = request.user
+        # new_assertion.ordinal = BadgeAssertion.objects.get_assertion_ordinal(
+        #                             new_assertion.user, new_assertion.badge)
+        # new_assertion.semester = Semester.objects.get(id = config.hs_active_semester)
+        # new_assertion.save()
+        messages.success(request, ("Badge " + str(new_ass) + " granted to " + str(new_ass.user)))
         return redirect('badges:list')
 
     context = {

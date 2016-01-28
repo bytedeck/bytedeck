@@ -17,7 +17,7 @@ from .forms import CourseStudentForm
 def mark_calculations(request):
     template_name='courses/mark_calculations.html'
     course_student = CourseStudent.objects.current_course(request.user)
-    courses = CourseStudent.objects.all_for_user(request.user)
+    courses = CourseStudent.objects.current_courses(request.user)
     num_courses = courses.count()
     if courses:
         xp_per_course = course_student.user.profile.xp()/courses.count()

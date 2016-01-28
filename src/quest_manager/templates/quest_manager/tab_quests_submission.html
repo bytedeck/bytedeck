@@ -68,13 +68,13 @@
           <li class="list-group-item list-group-item-info">Submission Instructions</li>
           <li class="list-group-item list-group-item-buttons">
             <div class="pull-right">
-              {% if not completed %}
+              {% if not completed and not past %}
                 <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
                 <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
                 {% if request.user.profile.game_lab_transfer_process_on %}
                   <a class="btn btn-warning" href="{% url 'quests:gamelabtransfer' s.quest.id %}" role="button">GameLab Transfer</a>
                 {% endif %}
-              {% else %}
+              {% elif completed %}
                 <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
               {% endif %}
             </div>

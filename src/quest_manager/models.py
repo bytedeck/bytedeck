@@ -14,6 +14,8 @@ from django.templatetags.static import static
 from datetime import time, date, datetime
 from django.utils import timezone
 
+from djconfig import config
+
 from prerequisites.models import Prereq
 from badges.models import BadgeAssertion
 from comments.models import Comment
@@ -174,7 +176,7 @@ class Quest(XPItem):
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
-        num_approved = QuestSubmission.objects.all_for_user_quest(user, self).approved().count()
+        num_approved = QuestSubmission.objects.all_for_user_quest(user, self, False).approved().count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
@@ -247,10 +249,20 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def game_lab(self):
         return self.filter(game_lab_transfer = True)
 
+    def get_semester(self, semester):
+        return self.filter(semester=semester)
+
+    def get_not_semester(self, semester):
+        return self.exclude(semester=semester)
+
 class QuestSubmissionManager(models.Manager):
-    def get_queryset(self):
+    def get_queryset(self, active_semester_only=True):
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
-        return qs.select_related('quest')
+        qs = qs.select_related('quest')
+        if active_semester_only:
+            return qs.get_semester(config.hs_active_semester)
+        else:
+            return qs
 
     def all_for_quest(self, quest):
         return self.get_queryset().get_quest(quest)
@@ -278,6 +290,10 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset().not_completed()
         #only returned quests will have a time compelted, placing them on top
         return self.get_queryset().get_user(user).not_completed()
+
+    def all_completed_past(self, user):
+        qs = self.get_queryset(active_semester_only=False).get_user(user).completed()
+        return qs.get_not_semester(config.hs_active_semester).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None):
         if user is None:
@@ -307,11 +323,11 @@ class QuestSubmissionManager(models.Manager):
             # return returned_qs
         return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
-    def all_for_user_quest(self, user, quest):
-        return self.get_queryset().get_user(user).get_quest(quest)
+    def all_for_user_quest(self, user, quest, active_semester_only):
+        return self.get_queryset(active_semester_only).get_user(user).get_quest(quest)
 
     def num_submissions(self, user, quest):
-        qs = self.all_for_user_quest(user, quest)
+        qs = self.all_for_user_quest(user, quest, False)
         if qs.exists():
             max_dict = qs.aggregate(Max('ordinal'))
             return max_dict.get('ordinal__max')
@@ -332,7 +348,7 @@ class QuestSubmissionManager(models.Manager):
         except ObjectDoesNotExist:
             pass #nothing found, continue
 
-        latest_sub = self.all_for_user_quest(user, quest).latest('first_time_completed')
+        latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
         latest_dt = latest_sub.first_time_completed
 
         # to handle cases before first_time_completed existed as a property
@@ -347,6 +363,7 @@ class QuestSubmissionManager(models.Manager):
                 quest = quest,
                 user = user,
                 ordinal = ordinal,
+                semester = config.hs_active_semester,
             )
             new_submission.save()
             return new_submission
@@ -361,7 +378,7 @@ class QuestSubmissionManager(models.Manager):
         return xp
 
     def user_last_submission_completed(self, user):
-        print( self.get_queryset().get_user(user).completed().latest('time_completed'))
+        #print( self.get_queryset().get_user(user).completed().latest('time_completed'))
         return self.get_queryset().get_user(user).completed().latest('time_completed')
 
 
@@ -378,9 +395,8 @@ class QuestSubmission(models.Model):
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
-    #remove default after initial creation.
+    # remove default after initial creation.
     semester = models.ForeignKey(Semester, default = 1)
-    # rewards =
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

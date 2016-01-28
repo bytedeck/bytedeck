@@ -9,6 +9,8 @@ from notifications.signals import notify
 
 from datetime import datetime
 
+from djconfig import config
+
 from quest_manager.models import QuestSubmission
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
@@ -27,9 +29,15 @@ class ProfileQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_other_students = True)
 
+    def get_semester(self, semester):
+        return self.filter(active_in_current_semester = semester)
+
 class ProfileManager(models.Manager):
     def get_queryset(self):
-        return ProfileQuerySet(self.model, using=self._db)
+        qs = ProfileQuerySet(self.model, using=self._db)
+        if config.hs_view_active_semester_only:
+            qs = qs.get_semester(config.hs_active_semester)
+        return qs
 
     def get_mailing_list(self):
         return self.get_queryset().announcement_email()
@@ -46,10 +54,10 @@ class Profile(models.Model):
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
-    alias = models.CharField(max_length=50, unique=True, null=True, blank=True, default=None)
-    first_name = models.CharField(max_length=50, null=True, blank=False)
-    last_name = models.CharField(max_length=50, null=True, blank=False)
-    preferred_name = models.CharField(max_length=50, null=True, blank=True)
+    alias = models.CharField(max_length=20, unique=False, null=True, blank=True, default=None)
+    first_name = models.CharField(max_length=20, null=True, blank=False)
+    last_name = models.CharField(max_length=25, null=True, blank=False)
+    preferred_name = models.CharField(max_length=20, null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
@@ -59,6 +67,10 @@ class Profile(models.Model):
     banned_from_comments = models.BooleanField(default = False)
     get_announcements_by_email = models.BooleanField(default = False)
     visible_to_other_students = models.BooleanField(default = False)
+    # New students automatically active,
+    # all existing students should be changed to "inactive" at the end of the semester
+    # they should be reactivated when they join a new course in a new (active) semester
+    active_in_current_semester = models.BooleanField(default = True)
 
     objects = ProfileManager()
 
@@ -89,6 +101,15 @@ class Profile(models.Model):
         else:
             return static('img/default_avatar.jpg')
 
+    def has_past_courses(self):
+        semester = config.hs_active_semester
+        past_courses = CourseStudent.objects.all_for_user_not_semester(self.user, semester)
+        print (past_courses)
+        if past_courses:
+            return True
+        else:
+            return False
+
     def xp(self):
         xp = QuestSubmission.objects.calculate_xp(self.user)
         xp += BadgeAssertion.objects.calculate_xp(self.user)
@@ -104,7 +125,7 @@ class Profile(models.Model):
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
         courses = CourseStudent.objects.all_for_user(self.user)
-        if courses:
+        if courses and course:
             return course.calc_mark(self.xp())/courses.count()
         else:
             return None
