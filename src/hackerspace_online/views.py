@@ -11,7 +11,6 @@ from .forms import HackerspaceConfigForm
 
 
 def home(request):
-
     if request.user.is_staff:
         return redirect('quests:approvals')
 

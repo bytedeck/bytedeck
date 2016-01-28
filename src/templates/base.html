@@ -47,8 +47,13 @@
         </div>
         {% endfor %}
       {% endif %}
-
-      {% block content_outer %}{% endblock %}
+      {% if not config.hs_closed or request.user.is_staff %}
+        {% block content_outer %}{% endblock %}
+      {% else %}
+        <img class = "img-responsive jumbo-banner banner1"
+        src ="{% static 'img/banner_closed.jpg' %}"
+        alt="Timberline's Digital Hackerspace is Closed for Maintenance" />
+      {% endif %}
     </div> <!-- /container -->
 
     {% block content_last %}{% endblock %}
