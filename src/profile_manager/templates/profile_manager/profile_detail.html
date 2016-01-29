@@ -45,7 +45,7 @@
               <div>
                   {{course.course}} {{course.grade}}
               </div>
-              <div class="progress progress-xp">&nbsp; {% widthratio object.xp_per_course 1000 100 %}&#37;
+              <div class="progress progress-xp"><!--&nbsp; {% widthratio object.xp_per_course 1000 100 %}&#37;-->
                 <div class="progress-bar" role="progressbar" aria-valuenow="{{object.xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
                     style="width: {% widthratio object.xp_per_course 1000 100 %}%;">
                   <span class="sr-only">{% widthratio object.xp_per_course 1000 100 %}% Complete</span>
