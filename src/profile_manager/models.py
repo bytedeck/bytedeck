@@ -54,10 +54,10 @@ class Profile(models.Model):
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
-    alias = models.CharField(max_length=20, unique=False, null=True, blank=True, default=None)
-    first_name = models.CharField(max_length=20, null=True, blank=False)
-    last_name = models.CharField(max_length=25, null=True, blank=False)
-    preferred_name = models.CharField(max_length=20, null=True, blank=True)
+    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None)
+    first_name = models.CharField(max_length=50, null=True, blank=False)
+    last_name = models.CharField(max_length=50, null=True, blank=False)
+    preferred_name = models.CharField(max_length=50, null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
