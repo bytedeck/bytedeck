@@ -5,6 +5,8 @@ from django.db import models
 
 from djconfig import config
 
+from quest_manager.models import QuestSubmission
+
 from datetime import timedelta, date
 
 from workdays import networkdays, workday

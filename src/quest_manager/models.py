@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist,  MultipleObjectsReturned
 from django.db import models
@@ -19,7 +19,7 @@ from djconfig import config
 from prerequisites.models import Prereq
 from badges.models import BadgeAssertion
 from comments.models import Comment
-from courses.models import Semester
+#from courses.models import Semester
 
 class Category(models.Model):
     title = models.CharField(max_length=50, unique=True)
@@ -267,10 +267,10 @@ class QuestSubmissionManager(models.Manager):
     def all_for_quest(self, quest):
         return self.get_queryset().get_quest(quest)
 
-    def all_not_approved(self, user=None):
+    def all_not_approved(self, user=None, active_semester_only=True):
         if user is None:
-            return self.get_queryset().not_approved()
-        return self.get_queryset().get_user(user).not_approved()
+            return self.get_queryset(active_semester_only).not_approved()
+        return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
     def all_approved(self, user=None):
         if user is None:
@@ -285,11 +285,11 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset().approved().completed().game_lab()
         return self.get_queryset().get_user(user).approved().completed()
 
-    def all_not_completed(self, user=None):
+    def all_not_completed(self, user=None, active_semester_only=True):
         if user is None:
-            return self.get_queryset().not_completed()
+            return self.get_queryset(active_semester_only).not_completed()
         #only returned quests will have a time compelted, placing them on top
-        return self.get_queryset().get_user(user).not_completed()
+        return self.get_queryset(active_semester_only).get_user(user).not_completed()
 
     def all_completed_past(self, user):
         qs = self.get_queryset(active_semester_only=False).get_user(user).completed()
@@ -363,7 +363,7 @@ class QuestSubmissionManager(models.Manager):
                 quest = quest,
                 user = user,
                 ordinal = ordinal,
-                semester = config.hs_active_semester,
+                semester_id = config.hs_active_semester,
             )
             new_submission.save()
             return new_submission
@@ -381,6 +381,23 @@ class QuestSubmissionManager(models.Manager):
         #print( self.get_queryset().get_user(user).completed().latest('time_completed'))
         return self.get_queryset().get_user(user).completed().latest('time_completed')
 
+    def move_incomplete_to_active_semester(self):
+        active_sem = config.hs_active_semester
+        # submitted but not accepted
+        qs = self.all_not_approved(active_semester_only=False)
+        print("NOT APPROVED ********")
+        print(qs)
+        for sub in qs:
+            sub.semester_id = config.hs_active_semester
+            sub.save()
+
+        #started but not submitted
+        qs = self.all_not_completed(active_semester_only=False)
+        print("NOT COMPELTED ********")
+        print(qs)
+        for sub in qs:
+            sub.semester_id = config.hs_active_semester
+            sub.save()
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
@@ -396,7 +413,7 @@ class QuestSubmission(models.Model):
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
     # remove default after initial creation.
-    semester = models.ForeignKey(Semester, default = 1)
+    semester = models.ForeignKey('courses.Semester', default = 1)
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

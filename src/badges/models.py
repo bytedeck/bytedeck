@@ -11,7 +11,7 @@ from django.utils import timezone
 from djconfig import config
 
 from prerequisites.models import Prereq
-from courses.models import Semester
+#from courses.models import Semester
 
 # Create your models here.
 
@@ -172,7 +172,8 @@ class BadgeAssertionManager(models.Manager):
             ordinal = ordinal,
             issued_by = issued_by,
             game_lab_transfer = transfer,
-            semester = Semester.objects.get(id = config.hs_active_semester),
+            semester_id = config.hs_active_semester
+            #Semester.objects.get(id = config.hs_active_semester),
         )
         new_assertion.save()
         return new_assertion
@@ -215,7 +216,7 @@ class BadgeAssertion(models.Model):
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
-    semester = models.ForeignKey(Semester, default = 1)
+    semester = models.ForeignKey('courses.Semester', default = 1)
 
     objects = BadgeAssertionManager()
 

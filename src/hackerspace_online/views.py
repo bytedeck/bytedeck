@@ -6,6 +6,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from djconfig import config
 
 from courses.models import Semester
+from quest_manager.models import QuestSubmission
 
 from .forms import HackerspaceConfigForm
 
@@ -31,6 +32,7 @@ def config_view(request):
             active_sem_id = form.cleaned_data['hs_active_semester']
             Semester.objects.set_active(active_sem_id)
             form.save()
+            QuestSubmission.objects.move_incomplete_to_active_semester()
             messages.success(request, "Settings saved")
             #return redirect('/')
     else:
