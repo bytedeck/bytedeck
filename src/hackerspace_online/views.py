@@ -32,6 +32,7 @@ def config_view(request):
             active_sem_id = form.cleaned_data['hs_active_semester']
             # only do semester updates if semester changed
             if active_sem_id != config.hs_active_semester:
+                messages.warning(request, "Old sem: " + str(active_sem_id) + " New sem: " + str(config.hs_active_semester))
                 Semester.objects.set_active(active_sem_id)
                 QuestSubmission.objects.move_incomplete_to_active_semester()
 
