@@ -42,7 +42,14 @@
 <div class="tab-content">
   <div role="tabpanel"
   class="tab-pane fade {% if available_tab_active %}in active{% endif%}" id="available">
-    {% include 'quest_manager/tab_quests_available.html' %}
+    {% if request.user.profile.has_current_course %}
+      {% include 'quest_manager/tab_quests_available.html' %}
+    {% else %}
+      <p>
+        You have not joined a course yet for this semester.</p>
+        <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
+
+    {% endif %}
   </div>
   <div role="tabpanel"
   class="tab-pane fade {% if inprogress_tab_active %}in active{% endif%}" id="inprogress">

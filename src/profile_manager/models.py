@@ -104,11 +104,18 @@ class Profile(models.Model):
     def has_past_courses(self):
         semester = config.hs_active_semester
         past_courses = CourseStudent.objects.all_for_user_not_semester(self.user, semester)
-        print (past_courses)
         if past_courses:
             return True
         else:
             return False
+
+    def has_current_course(self):
+        current_courses = CourseStudent.objects.current_courses(self.user)
+        if current_courses:
+            return True
+        else:
+            return False
+
 
     def xp(self):
         xp = QuestSubmission.objects.calculate_xp(self.user)
