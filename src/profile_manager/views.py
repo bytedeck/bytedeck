@@ -64,7 +64,8 @@ class ProfileDetail(DetailView):
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
 
-        context['courses'] = CourseStudent.objects.all_for_user(profile_user)
+        context['courses'] = CourseStudent.objects.all_for_user_active(profile_user, True)
+        context['courses_old'] = CourseStudent.objects.all_for_user_active(profile_user, False)
         context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile_user)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile_user)
         context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile_user)

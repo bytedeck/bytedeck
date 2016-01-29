@@ -82,7 +82,8 @@ class SemesterManager(models.Manager):
 
     def complete_active_semester(self):
         #need to calculate all user XP and store in their Course
-        CourseStudent.objects.calc_semester_grades(self.get_current())
+        active_sem = self.get_current()
+        CourseStudent.objects.calc_semester_grades(active_sem)
         return active_sem
 
 
@@ -203,6 +204,12 @@ class CourseStudentQuerySet(models.query.QuerySet):
     def get_not_semester(self, semester):
         return self.exclude(semester=semester)
 
+    def get_active(self):
+        return self.filter(active=True)
+
+    def get_inactive(self):
+        return self.filter(active=False)
+
 class CourseStudentManager(models.Manager):
     def get_queryset(self):
         return CourseStudentQuerySet(self.model, using=self._db)
@@ -215,6 +222,12 @@ class CourseStudentManager(models.Manager):
 
     def all_for_user(self, user):
         return self.get_queryset().get_user(user)
+
+    def all_for_user_active(self, user, active):
+        if active:
+            return self.all_for_user(user).get_active()
+        else:
+            return self.all_for_user(user).get_inactive()
 
     #for current active semester
     def calculate_xp(self, user):
@@ -233,10 +246,10 @@ class CourseStudentManager(models.Manager):
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
     def calc_semester_grades(self, semester):
-        coursestudents = get_queryset().get_semester(semester)
+        coursestudents = self.get_queryset().get_semester(semester)
         for coursestudent in coursestudents:
-            coursestudent.final_xp = self.calculate_xp(coursestudent.user)
-            coursestudent.active = false
+            coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+            coursestudent.active = False
             coursestudent.save()
 
 

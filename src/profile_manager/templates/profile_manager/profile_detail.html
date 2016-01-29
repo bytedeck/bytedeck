@@ -54,7 +54,7 @@
             {% endif %}
           {% endfor %}
         {% else %}
-          You  have not joined a course yet.
+          You have not joined a course yet this semester.
           <a href="{% url 'courses:create' %}">Join a Course</a>
         {% endif %}
 
@@ -91,7 +91,7 @@
        <ul class="list-group">
          {% if courses %}
              {% for course in courses %}
-               <li class="list-group-item {% if not course.semester.active %}text-muted{% endif %}">
+               <li class="list-group-item">
                  {{course.course}} {{course.grade}}
                  {% if request.user.is_staff %}
                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
@@ -105,9 +105,23 @@
                </li>
              {% endfor %}
          {% else %}
-           <li class="list-group-item">You have not joined a course yet.
+           <li class="list-group-item">You have not joined a course yet for this semester.
              <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
            </li>
+         {% endif %}
+         {% if courses_old %}
+             {% for course in courses_old %}
+               <li class="list-group-item text-muted">
+                 {{course.course}} {{course.grade}}
+                 {% if request.user.is_staff %}
+                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                 {% endif %}
+                 <br/>
+                 <small>{{course.block}} Block, Semester {{course.semester.number}}, {{course.semester}}
+                 <br/>Final XP: {{course.final_xp}}
+                 </small>
+               </li>
+             {% endfor %}
          {% endif %}
        </ul>
       </div> <!--panel -->
