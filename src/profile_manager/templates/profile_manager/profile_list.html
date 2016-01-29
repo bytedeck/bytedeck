@@ -27,6 +27,7 @@
       <th data-sortable='true' data-field='num_courses' {% if request.user.is_staff %}data-visible="false"{% endif %}># Blocks</th>
       <th data-sortable='true' data-field='mark'>Mark</th>
       {% if request.user.is_staff %}
+      <th data-sortable='true' data-field='blocks'>Block</th>
       <th data-sortable='true' data-field='last_sub'>Last Quest</th>
       <th data-sortable='true' data-field='username'>Student #</th>
       <th data-field='comment_ban' data-switchable="false"></th>
@@ -54,9 +55,11 @@
         <td></td>
         <td></td>
         <td></td>
+        <td></td>
       {% endif %}
       <td>{{object.mark|floatformat}}</td>
       {% if request.user.is_staff %}
+        <td>{{object.blocks}}</td>
         <td>{{object.last_submission_completed.time_completed|date:'y/m/d'}}
           <br><small>{{object.last_submission_completed.time_completed|timesince}} ago</small></td>
         <td><a href="{% url 'profiles:profile_detail' object.id %}">

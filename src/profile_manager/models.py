@@ -116,6 +116,12 @@ class Profile(models.Model):
         else:
             return False
 
+    def blocks(self):
+        current_courses = CourseStudent.objects.current_courses(self.user)
+        if current_courses:
+            return current_courses.values_list('block__block', flat=True)
+        else:
+            return None
 
     def xp(self):
         xp = QuestSubmission.objects.calculate_xp(self.user)
