@@ -30,9 +30,12 @@ def config_view(request):
 
         if form.is_valid():
             active_sem_id = form.cleaned_data['hs_active_semester']
-            Semester.objects.set_active(active_sem_id)
+            # only do semester updates if semester changed
+            if active_sem_id != config.hs_active_semester:
+                Semester.objects.set_active(active_sem_id)
+                QuestSubmission.objects.move_incomplete_to_active_semester()
+
             form.save()
-            QuestSubmission.objects.move_incomplete_to_active_semester()
             messages.success(request, "Settings saved")
             #return redirect('/')
     else:
