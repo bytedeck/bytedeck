@@ -287,7 +287,15 @@ class CourseStudent(models.Model):
         # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     def calc_mark(self, xp):
-        return xp/self.semester.fraction_complete()/10.0
+        fraction_complete = self.semester.fraction_complete()
+        if fraction_complete > 0:
+            return xp/fraction_complete/10.0
+        else:
+            return 0
 
     def xp_per_day_ave(self):
-        return self.user.profile.xp()/self.semester.days_so_far()
+        days = self.semester.days_so_far()
+        if days > 0:
+            return self.user.profile.xp()/self.semester.days_so_far()
+        else:
+            return 0
