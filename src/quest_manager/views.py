@@ -82,7 +82,7 @@ def quest_list(request, quest_id=None, submission_id=None):
         elif active_sub in completed_submissions:
             completed_tab_active = True
         else:
-            Http404("Couldn't find this Submission. Sorry!")
+            raise Http404("Couldn't find this Submission. Sorry!")
     # otherwise look at the path
     elif '/inprogress/' in request.path_info:
         in_progress_tab_active = True
@@ -602,10 +602,11 @@ def start(request, quest_id):
 @login_required
 def skip(request, submission_id):
 
+    submission = get_object_or_404(QuestSubmission, pk=submission_id)
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
-    if request.user.profile.game_lab_transfer_process_on or request.user.is_staff:
-        submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    # also make sure it's the student who owns the submission
+    if (request.user.profile.game_lab_transfer_process_on and submission.user == request.user) or request.user.is_staff:
 
         #add default comment to submission
         origin_path = submission.get_absolute_url()
@@ -624,9 +625,9 @@ def skip(request, submission_id):
         messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
         if request.user.is_staff:
             return redirect("quests:approvals")
-        return redirect("quests:inprogress")
+        return redirect("quests:quests")
     else:
-        return Http404
+        raise Http404
 
 @login_required
 def gamelabtransfer(request, quest_id):
@@ -642,26 +643,28 @@ def gamelabtransfer(request, quest_id):
     else:
         submission = new_sub
 
-    #make sure another user isn't hacking in with urls
-    if submission.user != request.user and not request.user.is_staff:
-        return redirect('quests:quests')
+    return skip(request, submission.id)
 
-    #add default comment to submission
-    origin_path = submission.get_absolute_url()
-    comment_text = "(GameLab transfer - no XP for this quest)"
-    comment_new = Comment.objects.create_comment(
-        user = request.user,
-        path = origin_path,
-        text = comment_text,
-        target = submission,
-    )
-
-    #approve quest automatically, and mark as transfer.
-    submission.mark_completed() ###################
-    submission.mark_approved(transfer = True)
-
-    messages.success(request, ("Transfer Successful. No XP was granted for this quest."))
-    return redirect("quests:quests")
+    # #make sure another user isn't hacking in with urls
+    # if submission.user != request.user and not request.user.is_staff:
+    #     return redirect('quests:quests')
+    #
+    # #add default comment to submission
+    # origin_path = submission.get_absolute_url()
+    # comment_text = "(GameLab transfer - no XP for this quest)"
+    # comment_new = Comment.objects.create_comment(
+    #     user = request.user,
+    #     path = origin_path,
+    #     text = comment_text,
+    #     target = submission,
+    # )
+    #
+    # #approve quest automatically, and mark as transfer.
+    # submission.mark_completed() ###################
+    # submission.mark_approved(transfer = True)
+    #
+    # messages.success(request, ("Transfer Successful. No XP was granted for this quest."))
+    # return redirect("quests:quests")
 
 
 @login_required
