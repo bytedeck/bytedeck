@@ -130,14 +130,20 @@ class Profile(models.Model):
         return xp
 
     def xp_per_course(self):
-        return self.xp()/self.num_courses()
+        course_count = self.num_courses()
+        if not course_count or course_count == 0:
+            return 0
+        return self.xp()/course_count
 
     def num_courses(self):
-        return CourseStudent.objects.all_for_user(self.user).count()
+        return self.current_courses().count()
+
+    def current_courses(self):
+        return CourseStudent.objects.all_for_user_semester(self.user, config.hs_active_semester)
 
     def mark(self):
         course = CourseStudent.objects.current_course(self.user)
-        courses = CourseStudent.objects.all_for_user(self.user)
+        courses = self.current_courses()
         if courses and course:
             return course.calc_mark(self.xp())/courses.count()
         else:
