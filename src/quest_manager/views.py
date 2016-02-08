@@ -204,11 +204,13 @@ def approve(request, submission_id):
 
     if request.method == "POST":
 
-        form = SubmissionQuickReplyForm(request.POST)
-        #form = SubmissionForm(request.POST, request.FILES)
+        #currently only the big form has files.  Need a more robust way to determine...
+        if request.FILES:
+            form = SubmissionForm(request.POST, request.FILES)
+        else:
+            form = SubmissionQuickReplyForm(request.POST)
 
         if form.is_valid():
-
             #handle badge assertion
             comment_text_addition = ""
             badge = form.cleaned_data.get('award')
@@ -259,7 +261,15 @@ def approve(request, submission_id):
                 target = submission
             )
 
-            # don't say "with" if no comment was entered
+            #handle files
+            if request.FILES:
+                file_list = request.FILES.getlist('files')
+                for afile in file_list:
+                    print(afile)
+                    newdoc = Document( docfile = afile, comment = comment_new)
+                    newdoc.save()
+
+            # don't say "with" in notification if no comment was entered
             if not comment_text_form:
                 action = None
             else:
