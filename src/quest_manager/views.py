@@ -599,26 +599,34 @@ def start(request, quest_id):
     # }
     # return render(request, 'quest_manager/submission.html', context)
 
-@staff_member_required
+@login_required
 def skip(request, submission_id):
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    #add default comment to submission
-    origin_path = submission.get_absolute_url()
-    comment_text = "(GameLab transfer - no XP for this quest)"
-    comment_new = Comment.objects.create_comment(
-        user = request.user,
-        path = origin_path,
-        text = comment_text,
-        target = submission,
-    )
+    # student can only do this if the button is turned on by a teacher
+    # prevent students form skipping by guessing correct url
+    if request.user.profile.game_lab_transfer_process_on or request.user.is_staff:
+        submission = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    #approve quest automatically, and mark as transfer.
-    submission.mark_completed() ###################
-    submission.mark_approved(transfer = True)
+        #add default comment to submission
+        origin_path = submission.get_absolute_url()
+        comment_text = "(GameLab or Grade 9 transfer - no XP for this quest)"
+        comment_new = Comment.objects.create_comment(
+            user = request.user,
+            path = origin_path,
+            text = comment_text,
+            target = submission,
+        )
 
-    messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
-    return redirect("quests:approvals")
+        #approve quest automatically, and mark as transfer.
+        submission.mark_completed() ###################
+        submission.mark_approved(transfer = True)
+
+        messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
+        if request.user.is_staff:
+            return redirect("quests:approvals")
+        return redirect("quests:inprogress")
+    else:
+        return Http404
 
 @login_required
 def gamelabtransfer(request, quest_id):

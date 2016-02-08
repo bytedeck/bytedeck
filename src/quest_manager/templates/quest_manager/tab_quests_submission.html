@@ -72,7 +72,7 @@
                 <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
                 <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
                 {% if request.user.profile.game_lab_transfer_process_on %}
-                  <a class="btn btn-warning" href="{% url 'quests:gamelabtransfer' s.quest.id %}" role="button">GameLab Transfer</a>
+                  <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">GameLab or Grade 9 Transfer</a>
                 {% endif %}
               {% elif completed %}
                 <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
