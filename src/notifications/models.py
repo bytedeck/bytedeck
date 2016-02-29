@@ -249,9 +249,10 @@ def new_notification(sender, **kwargs):
 notify.connect(new_notification)
 
 def deleted_object_receiver(sender, **kwargs):
-    print("************delete signal ****************")
-    print(sender)
-    print(kwargs)
+    # Printing was causing and ASCII/Unicode error on the production server...I think
+    # print("************delete signal ****************")
+    # print(sender)
+    # print(kwargs)
     object = kwargs["instance"]
-    print(object)
+    # print(object)
     Notification.objects.get_queryset().get_object_anywhere(object).delete()
