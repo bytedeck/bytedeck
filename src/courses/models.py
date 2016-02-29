@@ -153,7 +153,8 @@ class Semester(models.Model):
         return workday(self.first_day, days_to_fraction, excluded_days)
 
     def chillax_line_started(self):
-        return timezone.now().date() > self.get_interim1_date()
+        #return timezone.now().date() > self.get_interim1_date()
+        return config.hs_chillax_line_active
 
     def chillax_line(self):
         return 1000 * config.hs_chillax_line * self.fraction_complete()
