@@ -56,7 +56,7 @@ class Rank(models.Model):
     def condition_met_as_prerequisite(self, user, num_required):
         #num_required is not used for this one
         # profile = Profile.objects.get(user=user)
-        return user.profile.xp() > self.xp
+        return user.profile.xp() >= self.xp
 
 class SemesterManager(models.Manager):
     def get_queryset(self):
