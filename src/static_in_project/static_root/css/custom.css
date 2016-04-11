@@ -255,8 +255,11 @@ td.notification-icons .fa-stack {
   /*height: 500px !important;*/
 }
 
-.form-group-summernote, .panel-summernote #div_id_docfile, .panel-summernote #div_id_files {
+.form-group-summernote, .panel-summernote #div_id_docfile,
+.panel-summernote #div_id_files, .panel-summernote #div_id_award
+{
   margin-left: 15px;
+  margin-right: 15px;
 }
 
 .multifileinput {

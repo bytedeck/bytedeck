@@ -23,7 +23,7 @@ from comments.forms import CommentForm
 from notifications.signals import notify
 from prerequisites.models import Prereq
 
-from .forms import QuestForm, SubmissionForm, SubmissionQuickReplyForm
+from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission, TaggedItem
 
 class QuestDelete(DeleteView):
@@ -697,7 +697,11 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 
-    main_comment_form = SubmissionForm(request.POST or None)
+    if request.user.is_staff:
+        # Staff form has additional fields such as award granting.
+        main_comment_form = SubmissionFormStaff(request.POST or None)
+    else:
+        main_comment_form = SubmissionForm(request.POST or None)
     #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     #reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)

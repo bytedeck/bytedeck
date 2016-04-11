@@ -59,6 +59,9 @@ class SubmissionForm(forms.Form):
                             required=False
     )
 
+class SubmissionFormStaff(SubmissionForm):
+    awards = Badge.objects.all()
+    award = forms.ModelChoiceField(queryset = awards, label='Grant an Award', required = False)
 
 class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows':2}))
