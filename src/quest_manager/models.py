@@ -27,7 +27,8 @@ class Category(models.Model):
     active = models.BooleanField(default=True)
 
     class Meta:
-        verbose_name_plural = "Categories"
+        verbose_name = "campaign"
+        ordering = ["title"]
 
     def __str__(self):
         return self.title

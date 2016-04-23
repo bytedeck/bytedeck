@@ -167,10 +167,12 @@ def quest_copy(request, quest_id):
     form =  QuestForm(request.POST or None, instance = new_quest)
     if form.is_valid():
         form.save()
-
         # make the copied quest a prerequisite for the new quest
         copied_quest = get_object_or_404(Quest, pk=quest_id)
         Prereq.objects.add_simple_prereq(new_quest, copied_quest)
+
+        #add same campaigns/categories as copied quest
+        new_quest.categories = copied_quest.categories.all()
 
         return redirect(new_quest)
 
