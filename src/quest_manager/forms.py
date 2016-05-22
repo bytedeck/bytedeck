@@ -68,5 +68,6 @@ class SubmissionReplyForm(forms.Form):
 
 class SubmissionQuickReplyForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows':2}))
-    awards = Badge.objects.all()
+    #awards = Badge.objects.all()
+    awards = Badge.objects.all_manually_granted()
     award = forms.ModelChoiceField(queryset = awards, label='Grant an Award', required = False)

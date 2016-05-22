@@ -62,6 +62,14 @@ class BadgeManager(models.Manager):
                 ]
         return self.filter(pk__in = pk_met_list)
 
+    def all_manually_granted(self):
+        # build a list of pk's for badges that have no prerequisites.
+        pk_manual_list = [
+                obj.pk for obj in self.get_queryset()
+                if Prereq.objects.all_parent(obj).count() == 0
+                ]
+        return self.filter(pk__in = pk_manual_list).order_by('name')
+
 class Badge(models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default = 0)
