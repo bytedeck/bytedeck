@@ -1,28 +1,33 @@
 
+/*
+Darkest: #272b30
+Med: #32383e
+Light: #3e444c
+Text: #c8c8c8
+*/
 
-.navbar-fixed-top.chillax{
-  background-color: #BEFFFA;
-  color: white;
+.navbar-fixed-top.chillax {
+  background-color: #337AB7;
+  background-image: none;
+  text-shadow: none;
 }
 
 .jumbotron {
-  background-color: white;
+  background-color: black;
 }
 
 
 #main-container {
-  background-color: #FFF;
+  background-color: #272b30;
   box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.075) ;
 }
 
-
-
 body {
-  background-color: #F8F8F8;
+  background-color: #32383e;
 }
 
 .footer {
-  background-color: #F8F8F8;
+  background-color: #32383e;
 }
 
 
@@ -65,13 +70,13 @@ tr.detail-view{
 /******* Accordian ***********************/
 
 .panel-default > .panel-heading {
-  background-color: #FFF;
+  /*background-color: #FFF;*/
   background-image: none;
 }
 
 .panel-default > .panel-heading:hover {
-    background-image: linear-gradient(to bottom, #F5F5F5 0px, #E8E8E8 100%);
-    background-repeat: repeat-x;
+  /*  background-image: linear-gradient(to bottom, #F5F5F5 0px, #E8E8E8 100%);
+    background-repeat: repeat-x;*/
 }
 
 .panel-default > .panel-heading.accordian-trigger.active {
@@ -87,6 +92,10 @@ tr.detail-view{
   color: #FFF !important;
 }
 
+.panel-danger > .panel-heading small {
+  color: #c6c9cc;
+}
+
 .panel-default.active {
   border-color: #2B669A;
 }
@@ -99,13 +108,16 @@ tr.detail-view{
   border-color: rgb(138, 109, 59);
 }
 
-
 .panel-group-packed .panel.active + .panel {
   border-top-color: #2B669A;
 }
 
 .panel-group-packed .panel.active:last-child {
   border-bottom-color: #2B669A;
+}
+
+.list-group-item-info {
+   background-color: #1c4466;
 }
 
 .list-group-item-muted {
@@ -125,6 +137,13 @@ a.list-group-item-muted {
 
 /***********Submission ********************************/
 
+.form-control {
+  background-color: #2e3338;
+}
+
+.form-control {
+  color: #c8c8c8;
+}
 
 /***********ACCORDIAN COMMENTS *******************************/
 
@@ -144,6 +163,6 @@ a.list-group-item-muted {
 }
 
 .nav-tabs a {
-  border-color: #DDD !important;
-  color: #555;
+  border-color: #111 !important;
+  color: #c8c8c8;
 }

@@ -9,7 +9,13 @@
 {% block content_first %}{% endblock %}
 
 {% block content_outer %}
-  <img class = "img-responsive jumbo-banner banner1" src ="{% static 'img/banner.png' %}" alt="Timberline's Digital Hackerspace Landing Page" />
+  <img class = "img-responsive jumbo-banner banner1"
+        src ="{% if config.hs_dark_theme %}
+                 {%static 'img/banner_slate.png' %}
+              {% else %}
+                 {%static 'img/banner.png' %}
+              {% endif %}"
+        alt="Timberline's Digital Hackerspace Landing Page" />
 {% endblock %}
 
 

@@ -10,7 +10,13 @@
 
     <!--so logo margins align with main div headings-->
    <h3 class="hidden-xs">
-    <img id="logo" src ="{% static 'img/banner.png' %}"  class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
+    <img id="logo"
+        src ="{% if config.hs_dark_theme %}
+                 {%static 'img/banner_slate.png' %}
+              {% else %}
+                 {%static 'img/banner.png' %}
+              {% endif %}"  
+        class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
   </h3>
   <div class="nav list-group hidden-xs" id="lg-menu">
       <a id="quests-menu" class="list-group-item

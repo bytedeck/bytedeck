@@ -16,6 +16,8 @@ class HackerspaceConfigForm(ConfigForm):
             required = True)
     hs_chillax_line_active = forms.BooleanField(label = "Activate Chillax Line",
         initial = False, required=False)
+    hs_dark_theme = forms.BooleanField(label = "Dark Theme (Experimental)",
+        initial = False, required=False)
 
     def clean_hs_active_semester(self):
         # Untested, may not even work
