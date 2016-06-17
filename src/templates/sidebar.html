@@ -11,11 +11,11 @@
     <!--so logo margins align with main div headings-->
    <h3 class="hidden-xs">
     <img id="logo"
-        src ="{% if config.hs_dark_theme %}
+        src ="{% if request.user.profile.dark_theme %}
                  {%static 'img/banner_slate.png' %}
               {% else %}
                  {%static 'img/banner.png' %}
-              {% endif %}"  
+              {% endif %}"
         class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
   </h3>
   <div class="nav list-group hidden-xs" id="lg-menu">

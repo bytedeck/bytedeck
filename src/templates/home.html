@@ -10,7 +10,7 @@
 
 {% block content_outer %}
   <img class = "img-responsive jumbo-banner banner1"
-        src ="{% if config.hs_dark_theme %}
+        src ="{% if request.user.profile.dark_theme %}
                  {%static 'img/banner_slate.png' %}
               {% else %}
                  {%static 'img/banner.png' %}

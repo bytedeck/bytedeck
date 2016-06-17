@@ -130,9 +130,15 @@ a.list-group-item-muted {
 }
 
 .panel-muted {
-  color: #999;
-  background-color: #F5F5F5;
-  border-color: #ddd;
+  /*color: #999;*/
+  background-color: #3e444c;
+  border-color: #111;
+  opacity: 0.5;
+  /*color: #FFF !important;
+  text-shadow: 0px -1px 0px #286090;
+  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
+  background-repeat: repeat-x;
+  border-color: #2B669A;*/
 }
 
 /***********Submission ********************************/

@@ -71,6 +71,7 @@ class Profile(models.Model):
     # all existing students should be changed to "inactive" at the end of the semester
     # they should be reactivated when they join a new course in a new (active) semester
     active_in_current_semester = models.BooleanField(default = True)
+    dark_theme = models.BooleanField(default = False)
 
     objects = ProfileManager()
 
