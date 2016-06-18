@@ -14,17 +14,20 @@
       <a class="navbar-brand" href="{% url 'home' %}"><i class="fa fa-home"></i></a>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
-
-
-
       <ul class="nav navbar-nav">
-        <!-- <li class="active"><a href="{% url 'home' %}">Home</a></li> -->
-        <!-- <li><a href="{% url 'home' %}">Announcements <span class="badge">23</span></a></li>
-        <li><a class="active" href="{% url 'quests:quests' %}">Quests</a></li>
-        <li><a href="{% url 'home' %}">Achievements</a></li> -->
 
-        <!-- XP Bar -->
-
+        {% if request.user.is_authenticated %}
+        <li>&nbsp;&nbsp;</li>
+        <li class="navbar-packed-listitem">
+          <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
+        <li class="navbar-packed-listitem">
+          <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a></li>
+        <li class="navbar-packed-listitem">
+          <a title="Students" href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></i></a></li>
+        <li class="navbar-packed-listitem">
+          <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i></i></a></li>
+        <li>&nbsp;&nbsp;&nbsp;&nbsp;</li>
+        {% endif %}
 
         {% if request.user.is_authenticated and request.user.is_staff %}
         <li class="dropdown">
@@ -71,14 +74,14 @@
           </a>
         </li>
         <li id="profile">
-          <a href="{% url 'profiles:profile_detail' request.user.id %}">
+          <a title="Profile" href="{% url 'profiles:profile_detail' request.user.id %}">
             <i class="{% if request.user.is_staff %}fa fa-user-secret
             {% else %} {{request.user.profile.rank.fa_icon}} {% endif %}"></i>
             &nbsp; {{ request.user }}
           </a>
         </li>
         <li id='notifications-menu' class="dropdown">
-          <a href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
+          <a title="Notifiations" href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-bell"></i>&nbsp;<span id="notification_badge" class="badge alert-danger"></span>
           </a>

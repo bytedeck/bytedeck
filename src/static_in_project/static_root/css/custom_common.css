@@ -10,6 +10,27 @@
   margin-bottom: -3px;
 }
 
+.navbar .navbar-nav > li > a {
+  border-left: none;
+  border-right: none;
+}
+
+.navbar-packed-listitem > a{
+ padding-left: 5px !important;
+ padding-right: 5px !important;
+}
+/*
+.navbar-packed-listitem:first-of-type > a{
+ padding-left: 10px !important;
+ padding-right: 5px !important;
+}
+
+
+.navbar-packed-listitem:last-of-type > a{
+ padding-left: 5px !important;
+ padding-right: 10px !important;
+}
+*/
 .jumbo-banner {
   padding-top: 20px;
 }
