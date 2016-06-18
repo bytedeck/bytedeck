@@ -30,6 +30,13 @@ body {
   background-color: #32383e;
 }
 
+a {
+  color: #91c8ff;
+}
+
+a:hover {
+  color: #2b669a;
+}
 
 /************ BADGES/Achievements **********************/
 
