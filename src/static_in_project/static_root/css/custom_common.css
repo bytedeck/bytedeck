@@ -47,6 +47,11 @@ body {
   padding-top: 50px;
 }
 
+blockquote {
+  font-size: 1em;
+  font-style: italic;
+}
+
 .footer {
   min-height: 50px;
   padding: 20px 0px;

@@ -25,6 +25,10 @@ body {
   background-color: #F8F8F8;
 }
 
+blockquote {
+  font-size: 1em;
+  font-style: italic;
+}
 
 /************ BADGES/Achievements **********************/
 
