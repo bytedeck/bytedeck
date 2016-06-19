@@ -38,6 +38,10 @@ a:hover {
   color: #2b669a;
 }
 
+b, strong {
+  color: white;
+}
+
 /************ BADGES/Achievements **********************/
 
 .thumbnail-badge:hover, .thumbnail-badge:focus {
