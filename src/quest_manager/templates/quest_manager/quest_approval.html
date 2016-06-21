@@ -33,8 +33,9 @@
 <script>
 $( document ).ready(function() {
     $('[id^=btn_quick_text]').on('click', function () {
+        var msg = ' Please read the submission instructions more carefully. Thanks! ';
         var textarea = $($(this).data('target')).find('textarea');
-        textarea.val(textarea.val() + ' Please read the submission instructions more carefully. Thanks!');
+        textarea.val(textarea.val() + msg);
     });
 });
 </script>
