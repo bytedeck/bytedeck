@@ -42,6 +42,20 @@ b, strong {
   color: white;
 }
 
+/************ SAMP PRE CODE KBD TAGS **********************/
+
+pre, code {
+  background-color: #3a3f44;
+  color: #f5f5f5;
+  border: none;
+}
+
+kbd {
+  background-color: #ffffff;
+  color: #333333;
+}
+
+
 /************ BADGES/Achievements **********************/
 
 .thumbnail-badge:hover, .thumbnail-badge:focus {
