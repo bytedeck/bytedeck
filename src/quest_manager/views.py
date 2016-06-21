@@ -239,6 +239,7 @@ def approve(request, submission_id):
                     "<i class='fa fa-shield fa-stack-1x'></i>" + \
                     "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
                     "</span>"
+                blank_comment_text="(no comment added)"
             elif 'return_button' in request.POST:
                 note_verb="returned"
                 icon="<span class='fa-stack'>" + \

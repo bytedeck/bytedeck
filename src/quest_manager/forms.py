@@ -61,6 +61,7 @@ class SubmissionForm(forms.Form):
 
 class SubmissionFormStaff(SubmissionForm):
     awards = Badge.objects.all()
+    awards = Badge.objects.all_manually_granted()
     award = forms.ModelChoiceField(queryset = awards, label='Grant an Award', required = False)
 
 class SubmissionReplyForm(forms.Form):
