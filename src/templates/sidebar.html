@@ -53,6 +53,20 @@
   </div>
   {% endif %}
 
+  <!-- COMMON DATA FOR QUEST SUBJECT -->
+  <div class="hidden-xs" id="common-data">
+    {% if q.common_data %}
+    <div id="quest-common-{{q.id}}" class="panel panel-primary panel-top">
+      <div class="panel-heading">
+        <h3 class="panel-title">{{q.common_data.title}} Quest <small>General Info</small></h3>
+      </div>
+      <div class="panel-body">
+        {{ q.common_data.instructions | safe }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
   <!-- tiny only nav-->
   <ul class="nav visible-xs" id="xs-menu">
     <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>

@@ -12,15 +12,6 @@
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
 
-  <!-- {% if q.tags.all %}
-  <div>
-    <ul>
-      {% for tag in q.tags.all %}
-      <li>{{tag}}</li>
-      {% endfor %}
-    <ul>
-  </div>
-  {% endif %} -->
   {% with no_details=True %}
     {% include "quest_manager/buttons.html" %}
   {% endwith %}

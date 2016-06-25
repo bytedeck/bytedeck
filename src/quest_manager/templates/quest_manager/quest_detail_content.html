@@ -1,10 +1,4 @@
 
-<!-- <div class="row">
-  <div class="col-xs-12">
-    <img class="pull-left quest-icon" src="{{ quest.icon_url|default_if_none:'#' }}" alt="icon" height="45px"/>
-    </p>{{ quest.short_description }}</p>
-  </div>
-</div> -->
 <div class="media">
   <div class="media-left">
     <img class="media-object icon-lg img-rounded" src="{{ quest.get_icon_url }}" alt="icon" />
@@ -61,18 +55,6 @@
     {{ quest.instructions | safe }}
   </div>
 </div>
-
-{% if quest.common_data %}
-<div id="quest-common-{{quest.id}}" class="panel panel-primary panel-top">
-  <div class="panel-heading">
-    <h3 class="panel-title">General Info</h3>
-  </div>
-  <div class="panel-body">
-    {{ quest.common_data.instructions | safe }}
-  </div>
-</div>
-{% endif %}
-
 
 <div id="submission-instructions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
