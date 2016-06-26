@@ -21,6 +21,8 @@ from quest_manager import views
 urlpatterns = [
     url(r'^$', views.quest_list, name='quests'),
     url(r'^ajax/$', views.ajax, name='ajax'),
+    url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
+    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='submission_active'),
     url(r'^available/$', views.quest_list, name='available'),

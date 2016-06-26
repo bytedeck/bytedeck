@@ -142,6 +142,20 @@ def quest_list(request, quest_id=None, submission_id=None):
     }
     return render(request, "quest_manager/quests.html" , context)
 
+@login_required
+def ajax_quest_info(request, quest_id = None):
+    if request.is_ajax() and request.method == "POST":
+        #print("###############################Woah! " + quest_id)
+        quest = get_object_or_404(Quest, pk=quest_id)
+        #json_data = json.dumps(sub_data)
+        context = {
+            "q": quest,
+        }
+        return render(request, "quest_manager/quest_preview_content.html", context)
+        #return HttpResponse(json_data, content_type='application/json' )
+    else:
+        raise Http404
+
 @staff_member_required
 def quest_create(request):
     form = QuestForm(request.POST or None, request.FILES or None)
@@ -720,7 +734,6 @@ def submission(request, submission_id=None, quest_id=None):
 
 @login_required
 def ajax(request):
-
 
     if request.is_ajax() and request.method == "POST":
 

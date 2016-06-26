@@ -31,6 +31,7 @@
     <script>
 
     var timeout = 30000; //milliseconds
+
     // this method contain your ajax request
     function ajaxApprovalsBadge() { //function to ajax request
       //Update quests awaiting approval badge
@@ -49,7 +50,7 @@
       });
     }
 
-      //Update badge to show number of new Notifications
+    //Update badge to show number of new Notifications
     function ajaxNotificationsBadge() {
       $.ajax({
         type: "POST",

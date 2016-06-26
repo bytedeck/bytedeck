@@ -73,3 +73,57 @@
   {% endif %}
 </div>
 {% endblock %}
+
+{% block js %}
+<script>
+  // this method contain your ajax request
+  function ajaxQuestInfo(quest_id) {
+    //Update hidden quest detail content that is displayed upon expansion
+    var ajax_url = "{% url 'quests:ajax_quest_root' %}" + quest_id + "/";
+    //
+    //console.log(ajax_url)
+    $.ajax({
+      type: "POST",
+      url: ajax_url,
+      data: {
+        csrfmiddlewaretoken: "{{ csrf_token }}",
+      },
+      success: function(data){
+        //var count = data.count;
+        //console.log(data);
+        //if(count!=0) {
+        $(".preview-content").html(data);
+        //}
+      }
+    });
+
+    //console.log("ajaxLoadQuestDetails...Loading Quest: " + quest_id)
+  }
+
+  $(document).ready(function() {
+      // when an quest is clicked, fetch content via Ajax
+      // $(".accordian-trigger").click(function() {
+      //   $('html, body').css("cursor", "wait");
+      //   var html_id = $(this).attr('id')
+      //   // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
+      //   // quest id is number at end of html_id
+      //   var quest_id = parseInt(html_id.match(/\d+$/)[0], 10);
+      //   ajaxQuestInfo(quest_id);
+      //   $('html, body').css("cursor", "auto");
+      // });
+
+      // cycle through each quest and add content to accordian panel
+      $(".accordian-trigger").each(function( index ) {
+        var html_id = $(this).attr('id')
+        // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
+        // quest id is number at end of html_id
+        var quest_id = parseInt(html_id.match(/\d+$/)[0], 10);
+        ajaxQuestInfo(quest_id);
+      });
+
+  });
+
+</script>
+
+
+{% endblock %}

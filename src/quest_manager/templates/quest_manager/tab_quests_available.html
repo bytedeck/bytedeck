@@ -1,5 +1,5 @@
 
-  {% if available_quests %}
+{% if available_quests %}
 
   <div class="row panel-heading">
     <div class="col-xs-1 col-icon"></div>
@@ -24,73 +24,44 @@
         data-parent="#accordion-available" data-toggle="collapse" data-target="#collapse-quest-{{q.id}}">
 
         <div class="row">
-        <h4 class="panel-title">
-          <div class="col-xs-1 col-icon">
-            <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
-          </div>
-          <div class="col-xs-5">{{q.name}}</div>
-          <div class="col-xs-1">{{q.xp}}  </div>
-          <div class="col-xs-2"><small>
-            {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
-          </small></div>
-          <div class="col-xs-3"><small>
-            {% if q.date_expired %}{{q.date_expired}}
-            {% else %}{{q.time_expired}}
-            {% endif %}
-          </small></div>
-        </h4>
-      </div>
+          <h4 class="panel-title">
+            <div class="col-xs-1 col-icon">
+              <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
+            </div>
+            <div class="col-xs-5">{{q.name}}</div>
+            <div class="col-xs-1">{{q.xp}}  </div>
+            <div class="col-xs-2"><small>
+              {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
+            </small></div>
+            <div class="col-xs-3"><small>
+              {% if q.date_expired %}{{q.date_expired}}
+              {% else %}{{q.time_expired}}
+              {% endif %}
+            </small></div>
+          </h4>
+        </div> <!-- row -->
+      </div> <!-- accordian section heading -->
 
-      </div>
       <div id="collapse-quest-{{q.id}}"
         class="panel-collapse collapse {% if q.id == active_q_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
         <ul class="list-group">
-          <li class="list-group-item list-group-item-buttons">
-            {% include "quest_manager/buttons.html" %}
-            {{q.short_description|safe}}
-            {% if request.user.is_staff %}
-              <hr />
-              <div class="row">
-                <div class="col-sm-6">
-                  <ul class="list-unstyled">
-                    <li>Available Date: {{q.date_available}}</li>
-                    <li>Available Time: {{q.time_available}}</li>
-                    <li>Visible to Students: {{q.visible_to_students|yesno}}</li>
-                    <li>Requires Approval: {{q.verification_required|yesno}}</li>
-                  </ul>
-                </div>
-                <div class="col-sm-6">
-                  <ul class="list-unstyled">
-                  <li>Repeatable: {% if q.max_repeats = 0 %}No
-                         {% else %}
-                           {% if q.max_repeats = -1 %} Unlimited
-                           {% else %} {{q.max_repeats}} times max
-                           {% endif %}
-                           {% if q.hours_between_repeats > 0 %}
-                           - every {{ q.hours_between_repeats}} hrs
-                           {% endif %}
-                        {% endif %}</li>
-                  <li>Requirements:
-                        {% for p in q.prereqs %}
-                          {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
-                          <li>{{ p }}</li>
-                          {% if forloop.last %}</ul></small>{% endif %}
-                        {% empty %}
-                          None
-                        {% endfor %}</li>
-                </ul>
-              </div>
-            </div>
-            {% endif %}
+          <li class="list-group-item list-group-item-buttons preview-content">
+              <p>
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Loading content...
+              </p>
           </li>
+
         </ul>
 
-      </div>
-    </div>
-  {% endfor %}
-  </div>
+      </div> <!-- accordian panel-collapse -->
 
-  {% else %}
-    <p>No quests are available.</p>
-  {% endif %}
+
+    </div> <!-- accordian -->
+  {% endfor %} <!-- for each quest -->
+  </div> <!-- accordian panel group -->
+
+{% else %}
+  <p>No quests are available.</p>
+{% endif %}
