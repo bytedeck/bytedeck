@@ -14,9 +14,9 @@
       <h3 class="hidden-xs"> <!--so logo margins align with main div headings-->
        <img id="logo"
          src ="{% if request.user.profile.dark_theme %}
-                  {%static 'img/banner_slate.png' %}
+                  {% static 'img/banner_slate.png' %}
                {% else %}
-                  {%static 'img/banner.png' %}
+                  {% static 'img/banner.png' %}
                {% endif %}"
           class="img-responsive" alt="Timberline's Digital Hackerspace Logo" />
       </h3>
