@@ -1,3 +1,10 @@
+<!--
+  Quests
+    > AVAILABLE (tab_quests_available.html)
+    > in progress (tab_quests_submission.html)
+    > completed (tab_quests_submission.html)
+    > past courses (tab_quests_submission.html)
+-->
 
 {% if available_quests %}
 
@@ -46,7 +53,7 @@
         class="panel-collapse collapse {% if q.id == active_q_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
         <ul class="list-group">
-          <li class="list-group-item list-group-item-buttons preview-content">
+          <li class="list-group-item list-group-item-buttons preview-content-{{q.id}}">
               <p>
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
                 &nbsp;Loading content...

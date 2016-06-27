@@ -1,3 +1,11 @@
+<!--
+  QUESTS
+    > available (tab_quests_available.html)
+    > in progress (tab_quests_submission.html)
+    > completed (tab_quests_submission.html)
+    > past courses (tab_quests_submission.html)
+-->
+
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
@@ -80,8 +88,9 @@
   function ajaxQuestInfo(quest_id) {
     //Update hidden quest detail content that is displayed upon expansion
     var ajax_url = "{% url 'quests:ajax_quest_root' %}" + quest_id + "/";
-    //
-    //console.log(ajax_url)
+    var preview_content_selector = ".preview-content-" + quest_id;
+
+    //console.log(preview_class)
     $.ajax({
       type: "POST",
       url: ajax_url,
@@ -89,11 +98,7 @@
         csrfmiddlewaretoken: "{{ csrf_token }}",
       },
       success: function(data){
-        //var count = data.count;
-        //console.log(data);
-        //if(count!=0) {
-        $(".preview-content").html(data);
-        //}
+        $(preview_content_selector).html(data);
       }
     });
 
