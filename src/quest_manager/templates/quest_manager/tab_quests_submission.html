@@ -71,27 +71,13 @@
       <div id="collapse-{{s.id}}"
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading-{{s.id}}">
-        <ul class="list-group">
-          <li class="list-group-item list-group-item-info">Submission Instructions</li>
+        <ul id="preview-content-{{s.id}}" class="list-group" data-completed="{{completed}}" data-past="{{past}}">
           <li class="list-group-item list-group-item-buttons">
-            <div class="pull-right">
-              {% if not completed and not past %}
-                <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
-                <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
-                {% if request.user.profile.game_lab_transfer_process_on %}
-                  <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">GameLab or Grade 9 Transfer</a>
-                {% endif %}
-              {% elif completed %}
-                <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
-              {% endif %}
-            </div>
-            {{s.quest.submission_details|safe}}
+              <p>
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Loading content...
+              </p>
           </li>
-          <li class="list-group-item list-group-item-info">Submission Comments</li>
-          {% with s.get_comments as target_comments %}
-            {% include "comments/comments.html" %}
-          {% endwith %}
-
         </ul>
       </div>
 

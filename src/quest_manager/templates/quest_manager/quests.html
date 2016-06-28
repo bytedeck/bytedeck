@@ -85,10 +85,10 @@
 {% block js %}
 <script>
   // this method contain your ajax request
-  function ajaxQuestInfo(quest_id) {
+  function ajaxQuestInfo(id) {
     //Update hidden quest detail content that is displayed upon expansion
-    var ajax_url = "{% url 'quests:ajax_quest_root' %}" + quest_id + "/";
-    var preview_content_selector = ".preview-content-" + quest_id;
+    var ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/";
+    var preview_content_selector = "#preview-content-" + id;
 
     //console.log(preview_class)
     $.ajax({
@@ -106,24 +106,65 @@
   }
 
   $(document).ready(function() {
-      // when an quest is clicked, fetch content via Ajax
-      // $(".accordian-trigger").click(function() {
-      //   $('html, body').css("cursor", "wait");
-      //   var html_id = $(this).attr('id')
-      //   // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
-      //   // quest id is number at end of html_id
-      //   var quest_id = parseInt(html_id.match(/\d+$/)[0], 10);
-      //   ajaxQuestInfo(quest_id);
-      //   $('html, body').css("cursor", "auto");
-      // });
 
-      // cycle through each quest and add content to accordian panel
+      // cycle through each quest/submission and add content to accordian panel
       $(".accordian-trigger").each(function( index ) {
+
+        // get the quest/submission id from the id of the accordian panel
         var html_id = $(this).attr('id')
         // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
-        // quest id is number at end of html_id
-        var quest_id = parseInt(html_id.match(/\d+$/)[0], 10);
-        ajaxQuestInfo(quest_id);
+        // quest/sub id is number at end of html_id
+        var id = parseInt(html_id.match(/\d+$/)[0], 10);
+
+        var is_submission = true; //in progress tab by default
+        var is_completed = false;
+        var is_past = false;
+
+        // if this is the available tab, then it will list quests, not submissions
+        // if submissions, need to determing which tab
+        if(window.location.href.indexOf("/available/") > -1) {
+          is_submission = false;
+        }
+        else if(window.location.href.indexOf("/completed/") > -1) {
+          is_completed = true;
+        }
+        else if(window.location.href.indexOf("/past/") > -1) {
+          is_past = true;
+        }
+
+        // get ajax url based on tab
+        if(!is_submission) { // available quests
+          var ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/";
+        }
+        else if(is_completed){
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/completed/";
+        }
+        else if(is_past){
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/past/";
+        }
+        else {
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/";
+        }
+
+        var preview_content_selector = "#preview-content-" + id;
+
+        console.log(preview_content_selector);
+        console.log(ajax_url);
+
+        $.ajax({
+          type: "POST",
+          url: ajax_url,
+          data: {
+            csrfmiddlewaretoken: "{{ csrf_token }}",
+          },
+          success: function(data){
+            console.log(data)
+            console.log(preview_content_selector);
+            console.log(ajax_url);
+            $(preview_content_selector).html(data);
+          }
+        });
+
       });
 
   });
