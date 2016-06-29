@@ -1,3 +1,11 @@
+<!--
+  Approvals
+    > SUBMITTED (tab_quests_available.html)
+    > RETURNED (tab_quests_submission.html)
+    > APPROVED (tab_quests_submission.html)
+    > SKIPPED (tab_quests_submission.html)
+-->
+
 {% load crispy_forms_tags %}
 
 {% if tab.submissions %}
@@ -18,7 +26,8 @@
       {% else %}panel-default{% endif %}">
       <div class="panel-heading accordian accordian-trigger panel-heading-tall
         {% if s.id == active_id %} active {% endif %}"
-        role="tab" id="heading{{s.id}}"
+        role="tab"
+        id="heading{{s.id}}"
         aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
         aria-controls="collapse{{s.id}}"
         data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{s.id}}">
@@ -58,43 +67,39 @@
       <div id="collapse{{s.id}}"
         class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
         role="tabpanel" aria-labelledby="heading{{s.id}}">
-        <ul class="list-group">
-          <li class="list-group-item list-group-item-info">Submission Details</li>
-          <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
-          <li class="list-group-item list-group-item-info">Instructor Notes</li>
-          <li class="list-group-item list-group-item">{{s.quest.instructor_notes|safe}}</li>
-          <li class="list-group-item list-group-item-info">Submission Comments</li>
-          {% with s.get_comments as target_comments %}
-            {% include "comments/comments.html" %}
-          {% endwith %}
-          <li class="list-group-item list-group-item-info">
-            Quick Reply Form
-            (
-            <a href="{% url 'quests:submission' s.id %}">Full Reply</a> |
-            <a href="{% url 'quests:quest_update' s.quest.id %}">Edit Quest</a>
-            )
-          </li>
-          <li class="list-group-item">
-            <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' s.id %}">{% csrf_token %}
-              {{ quick_reply_form | crispy }}
-              <div>
-                {% if s.is_approved %}
-                  <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
-                {% else %}
-                  <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
-                {% endif %}
-                  <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
-                  <a class="btn btn-warning" data-target="#quick_reply{{s.id}}"
-                    id= "btn_quick_text{{s.id}}" role="button"
-                    title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
-                  <a class="btn btn-default" href="{% url 'quests:skip' s.id %}"
-                  title="Do not grant XP for this quest (or badges resulting) but mark as complete."
-                  role="button">Skip</a>
+        <ul id="preview-content-{{s.id}}" class="list-group">
 
-              </div>
-            </form>
+          <li class="list-group-item list-group-item-buttons">
+              <p>
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Loading content...
+              </p>
           </li>
+
         </ul>
+
+        
+        <li class="list-group-item">
+          <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' s.id %}">{% csrf_token %}
+            {{ quick_reply_form | crispy }}
+            <div>
+              {% if s.is_approved %}
+                <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
+              {% else %}
+                <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
+              {% endif %}
+                <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
+                <a class="btn btn-warning" data-target="#quick_reply{{s.id}}"
+                  id= "btn_quick_text{{s.id}}" role="button"
+                  title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
+                <a class="btn btn-default" href="{% url 'quests:skip' s.id %}"
+                title="Do not grant XP for this quest (or badges resulting) but mark as complete."
+                role="button">Skip</a>
+            </div>
+          </form>
+        </li>
+
+
       </div>
 
     </div>

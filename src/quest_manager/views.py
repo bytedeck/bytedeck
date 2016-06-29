@@ -149,7 +149,23 @@ def ajax_quest_info(request, quest_id = None):
         context = {
             "q": quest,
         }
-        return render(request, "quest_manager/quest_preview_content.html", context)
+        return render(request,
+                "quest_manager/preview_content_quests_avail.html",
+                context)
+    else:
+        raise Http404
+
+@login_required
+def ajax_approval_info(request, submission_id = None):
+
+    if request.is_ajax() and request.method == "POST":
+        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        context = {
+            "s": sub,
+        }
+        return render(request,
+                "quest_manager/preview_content_approvals.html",
+                context)
     else:
         raise Http404
 
@@ -166,13 +182,15 @@ def ajax_submission_info(request, submission_id = None):
             sub = get_object_or_404(past_submissions, pk=submission_id)
         else:
             sub = get_object_or_404(QuestSubmission, pk=submission_id)
-            
+
         context = {
             "s": sub,
             "completed": completed,
             "past": past,
         }
-        return render(request, "quest_manager/submission_preview_content.html", context)
+        return render(request,
+                "quest_manager/preview_content_submissions.html",
+                context)
     else:
         raise Http404
 

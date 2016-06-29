@@ -1,0 +1,80 @@
+<script>
+
+  $(document).ready(function() {
+      // cycle through each quest/submission and add content to accordian panel
+      $(".accordian-trigger").each(function( index ) {
+
+        // get the quest/submission id from the id of the accordian panel
+        var html_id = $(this).attr('id')
+        // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
+        // quest/sub id is number at end of html_id
+        var id = parseInt(html_id.match(/\d+$/)[0], 10);
+
+        var is_inprogress = false;
+        var is_completed = false;
+        var is_past = false;
+        var is_approval = false;
+        var is_available_quest = false; // default
+
+        // if this is the available tab, then it will list quests, not submissions
+        // if submissions, need to determing which tab
+        // or could be approvals...
+        if(window.location.href.indexOf("/inprogress/") > -1) {
+          is_inprogress = true;
+        }
+        else if(window.location.href.indexOf("/completed/") > -1) {
+          is_completed = true;
+        }
+        else if(window.location.href.indexOf("/past/") > -1) {
+          is_past = true;
+        }
+        else if(window.location.href.indexOf("/approvals/") > -1) {
+          is_approval = true;
+        }
+        else
+          is_available_quest = true;
+
+        // get ajax url based on tab
+        if(is_inprogress) {
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/";
+        }
+        else if(is_completed){
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/completed/";
+        }
+        else if(is_past){
+          var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/past/";
+        }
+        else if(is_approval){
+          var ajax_url = "{% url 'quests:ajax_approval_root' %}" + id + "/";
+        }
+        else {
+          var ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/";
+        }
+
+        var preview_content_selector = "#preview-content-" + id;
+
+        //console.log(preview_content_selector);
+        //console.log(ajax_url);
+
+        $.ajax({
+          type: "POST",
+          url: ajax_url,
+          data: {
+            csrfmiddlewaretoken: "{{ csrf_token }}",
+          },
+          success: function(data){
+            console.log(data)
+            $(preview_content_selector).html(data);
+          },
+          error : function(xhr,errmsg,err) {
+                if(xhr.status == 500){
+                    console.log(xhr.responseText)
+                }
+          }
+        });
+
+      });
+
+  });
+
+</script>

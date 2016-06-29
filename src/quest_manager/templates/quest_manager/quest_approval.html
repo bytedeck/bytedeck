@@ -1,6 +1,5 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
-
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
@@ -39,5 +38,7 @@ $( document ).ready(function() {
     });
 });
 </script>
+
+{% include "quest_manager/ajax_content_loading.html" %}
 
 {% endblock %}

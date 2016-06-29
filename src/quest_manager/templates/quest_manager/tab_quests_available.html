@@ -15,7 +15,8 @@
     <div class="col-xs-2">Campaigns</div>
     <div class="col-xs-3">Expiry</div>
   </div>
-  <div class="panel-group panel-group-packed" id="accordion-available" role="tablist" aria-multiselectable="true">
+  <div class="panel-group panel-group-packed" id="accordion-available"
+    role="tablist" aria-multiselectable="true">
   {% for q in available_quests %}
     <div class="panel accordian
       {% if not q.visible_to_students %}panel-danger
@@ -25,15 +26,18 @@
       {% if q.id == active_q_id %} active {% endif %}">
       <div class="panel-heading accordian accordian-trigger panel-heading-tall
         {% if q.id == active_q_id %} active {% endif %}"
-        role="tab" id="heading-quest-{{q.id}}"
+        role="tab"
+        id="heading-quest-{{q.id}}"
         aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
         aria-controls="collapse-quest-{{q.id}}"
-        data-parent="#accordion-available" data-toggle="collapse" data-target="#collapse-quest-{{q.id}}">
+        data-parent="#accordion-available" data-toggle="collapse"
+        data-target="#collapse-quest-{{q.id}}">
 
         <div class="row">
           <h4 class="panel-title">
             <div class="col-xs-1 col-icon">
-              <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
+              <img class="img-responsive panel-title-img img-rounded"
+                src="{{ q.get_icon_url }}" alt="icon"/>
             </div>
             <div class="col-xs-5">{{q.name}}</div>
             <div class="col-xs-1">{{q.xp}}  </div>
