@@ -273,11 +273,20 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(active_semester_only).not_approved()
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
-    def all_approved(self, user=None):
+    def all_approved(self, user=None, quest=None):
+        qs = self.get_queryset().approved()
         if user is None:
             # Staff have a separate tab for gamelab transfers
-            return self.get_queryset().approved().no_game_lab()
-        return self.get_queryset().get_user(user).approved()
+            qs = qs.no_game_lab()
+        else:
+            qs = qs.get_user(user)
+
+        if quest is not None:
+            qs = qs.get_quest(quest)
+
+        return qs
+        #     return self.get_queryset().approved().no_game_lab()
+        # return self.get_queryset().get_user(user).approved()
         #     return self.get_queryset().approved().completed().no_game_lab()
         # return self.get_queryset().get_user(user).approved().completed()
 
