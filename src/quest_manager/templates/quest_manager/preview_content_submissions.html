@@ -8,7 +8,7 @@
       {% if request.user.profile.game_lab_transfer_process_on %}
         <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
       {% endif %}
-    {% elif completed %}
+    {% else %}
       <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
     {% endif %}
   </div>

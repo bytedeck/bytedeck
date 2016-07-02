@@ -257,7 +257,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.exclude(semester=semester)
 
 class QuestSubmissionManager(models.Manager):
-    def get_queryset(self, active_semester_only=True):
+    def get_queryset(self, active_semester_only=False):
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         qs = qs.select_related('quest')
         if active_semester_only:
@@ -266,7 +266,7 @@ class QuestSubmissionManager(models.Manager):
             return qs
 
     def all_for_quest(self, quest):
-        return self.get_queryset().get_quest(quest)
+        return self.get_queryset(True).get_quest(quest)
 
     def all_not_approved(self, user=None, active_semester_only=True):
         if user is None:
@@ -274,7 +274,7 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
     def all_approved(self, user=None, quest=None):
-        qs = self.get_queryset().approved()
+        qs = self.get_queryset(True).approved()
         if user is None:
             # Staff have a separate tab for skipped quests
             qs = qs.no_game_lab()
@@ -292,8 +292,8 @@ class QuestSubmissionManager(models.Manager):
 
     def all_skipped(self, user=None):
         if user is None:
-            return self.get_queryset().approved().completed().game_lab()
-        return self.get_queryset().get_user(user).approved().completed()
+            return self.get_queryset(True).approved().completed().game_lab()
+        return self.get_queryset(True).get_user(user).approved().completed()
 
     def all_not_completed(self, user=None, active_semester_only=True):
         if user is None:
@@ -301,37 +301,42 @@ class QuestSubmissionManager(models.Manager):
         #only returned quests will have a time compelted, placing them on top
         return self.get_queryset(active_semester_only).get_user(user).not_completed()
 
+        # if user is None:
+        #     return self.get_queryset(active_semester_only).not_completed()
+        # #only returned quests will have a time compelted, placing them on top
+        # return self.get_queryset(active_semester_only).get_user(user).not_completed()
+
     def all_completed_past(self, user):
-        qs = self.get_queryset(active_semester_only=False).get_user(user).completed()
+        qs = self.get_queryset().get_user(user).completed()
         return qs.get_not_semester(config.hs_active_semester).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None):
         if user is None:
-            return self.get_queryset().completed()
-        return self.get_queryset().get_user(user).completed().order_by(
+            return self.get_queryset(True).completed()
+        return self.get_queryset(True).get_user(user).completed().order_by(
                     'is_approved', '-time_approved')
 
     def num_completed(self, user=None):
         if user is None:
-            return self.get_queryset().completed().count()
-        return self.get_queryset().get_user(user).completed().count()
+            return self.get_queryset(True).completed().count()
+        return self.get_queryset(True).get_user(user).completed().count()
 
     def all_awaiting_approval(self, user=None):
         if user is None:
-            return self.get_queryset().not_approved().completed()
-        return self.get_queryset().get_user(user).not_approved().completed()
+            return self.get_queryset(True).not_approved().completed()
+        return self.get_queryset(True).get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
         #completion date indicates the quest was submitted, but since completed
         #is false, it must have been returned.
         if user is None:
-            returned_qs = self.get_queryset().not_completed().has_completion_date()
+            returned_qs = self.get_queryset(True).not_completed().has_completion_date()
             # postgresql places null values at the beginning.  This will move them to the extend
             # see: http://stackoverflow.com/questions/15121093/django-adding-nulls-last-to-query
             q = returned_qs.extra(select={'date_null': 'time_returned is null'})
             return q.extra(order_by=['date_null','-time_returned'])
             # return returned_qs
-        return self.get_queryset().get_user(user).not_completed().has_completion_date().order_by('-time_returned')
+        return self.get_queryset(True).get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest, active_semester_only):
         return self.get_queryset(active_semester_only).get_user(user).get_quest(quest)
@@ -389,7 +394,7 @@ class QuestSubmissionManager(models.Manager):
 
     def user_last_submission_completed(self, user):
         #print( self.get_queryset().get_user(user).completed().latest('time_completed'))
-        return self.get_queryset().get_user(user).completed().latest('time_completed')
+        return self.get_queryset(True).get_user(user).completed().latest('time_completed')
 
     def move_incomplete_to_active_semester(self):
         active_sem = config.hs_active_semester
