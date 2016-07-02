@@ -421,9 +421,9 @@ class QuestSubmission(models.Model):
     time_returned = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    #all references to gamelab changed to "skipped"
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
-    # remove default after initial creation.
-    semester = models.ForeignKey('courses.Semester', default = 1)
+    semester = models.ForeignKey('courses.Semester')
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

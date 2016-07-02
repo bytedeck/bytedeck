@@ -155,7 +155,7 @@
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
                {{s.quest|truncatechars:40}} <small>
                 {% if s.game_lab_transfer %}
-                  (GameLab Transfer)
+                  (Quest Skipped)
                 {% else %}
                   ({{s.quest.xp}} XP)
                 {% endif %}
@@ -208,7 +208,7 @@
             <p>{{assertion.badge.short_description}}</p>
             <p>XP:
             {% if assertion.game_lab_transfer %}
-              n/a (GameLab Transfer)
+              n/a (Badge Skipped)
             {% else %}
               {{assertion.badge.xp}}
             {% endif %}</p>

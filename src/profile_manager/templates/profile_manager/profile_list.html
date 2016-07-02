@@ -68,9 +68,11 @@
           <small {% if object.banned_from_comments %}class="text-danger"{% endif %}>
             Comments <b>{{object.banned_from_comments|yesno:'BANNED,ON'}}</b></small></a>
         </td>
-        <td><a href="{% url 'profiles:GameLab_toggle' object.id %}">
+        <td><a href="{% url 'profiles:GameLab_toggle' object.id %}"
+               title="Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP."
+               >
           <small {% if object.game_lab_transfer_process_on %}class="text-danger"{% endif %}>
-            GameLab <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a>
+            Skip <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a>
         </td>
         <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a>
         </td>

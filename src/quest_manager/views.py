@@ -691,7 +691,7 @@ def skip(request, submission_id):
 
         #add default comment to submission
         origin_path = submission.get_absolute_url()
-        comment_text = "(GameLab or Grade 9 transfer - no XP for this quest)"
+        comment_text = "(Quest skipped - no XP granted)"
         comment_new = Comment.objects.create_comment(
             user = request.user,
             path = origin_path,
