@@ -16,7 +16,7 @@
 {% block content %}
 <!-- <table class="table table-striped"> -->
 <table data-toggle="table" data-sort-name='first' data-sort-order='asc'
- data-search='true' data-show-columns='true'>
+ data-search='true' data-show-columns='true' data-icons-prefix='fa'>
   <thead>
     <tr>
       <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>Avatar</th>
@@ -51,7 +51,6 @@
       {% else %}
         <td></td>
         <td>*Private*</td>
-        <td></td>
         <td></td>
         <td></td>
         <td></td>

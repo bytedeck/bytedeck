@@ -42,6 +42,24 @@ b, strong {
   color: white;
 }
 
+.help-block {
+  color: #777777;
+}
+
+/************ TABLES **************************************/
+
+.fixed-table-container {
+  border: 1px solid black !important;
+}
+
+.bootstrap-table .table {
+  border-bottom: 1px solid black !important;
+}
+
+.bootstrap-table .table > thead > tr > th {
+  border-bottom: 1px solid black !important;
+}
+
 /************ SAMP PRE CODE KBD TAGS **********************/
 
 pre, code {

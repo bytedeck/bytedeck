@@ -54,10 +54,15 @@ class Profile(models.Model):
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
-    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None)
-    first_name = models.CharField(max_length=50, null=True, blank=False)
-    last_name = models.CharField(max_length=50, null=True, blank=False)
-    preferred_name = models.CharField(max_length=50, null=True, blank=True)
+    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
+        help_text = 'You can leave this blank, or enter anything you like here.')
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    first_name = models.CharField(max_length=50, null=True, blank=False,
+        help_text = 'Use the first name that matches your school records.')
+    last_name = models.CharField(max_length=50, null=True, blank=False,
+        help_text = 'Use the last name that matches your school records.')
+    preferred_name = models.CharField(max_length=50, null=True, blank=True,
+        help_text = 'If you would prefer your teacher to call you by a name other than the first name you entered above, put it here.')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
