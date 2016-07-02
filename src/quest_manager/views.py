@@ -386,12 +386,12 @@ def paginate(object_list, page, per_page = 30):
 #     submitted_submissions = []
 #     approved_submissions = []
 #     returned_submissions = []
-#     gamelab_submissions = []
+#     skipped_submissions = []
 #
 #     submitted_tab_active=True
 #     returned_tab_active=False
 #     approved_tab_active=False
-#     gamelab_tab_active=False
+#     skipped_tab_active=False
 #
 #     page = request.GET.get('page')
 #     # if '/submitted/' in request.path_info:
@@ -406,11 +406,11 @@ def paginate(object_list, page, per_page = 30):
 #         approved_tab_active = True
 #         submitted_tab_active= False
 #         approved_submissions = paginate(approved_submissions, page)
-#     elif '/gamelab/' in request.path_info:
-#         gamelab_submissions = QuestSubmission.objects.all_gamelab().get_quest(quest)
-#         gamelab_tab_active = True
+#     elif '/skipped/' in request.path_info:
+#         skipped_submissions = QuestSubmission.objects.all_skipped().get_quest(quest)
+#         skipped_tab_active = True
 #         submitted_tab_active= False
-#         gamelab_submissions = paginate(gamelab_submissions, page)
+#         skipped_submissions = paginate(skipped_submissions, page)
 #     else:
 #         submitted_submissions = QuestSubmission.objects.all_awaiting_approval().get_quest(quest)
 #         submitted_submissions = paginate(submitted_submissions, page)
@@ -437,10 +437,10 @@ def paginate(object_list, page, per_page = 30):
 #                     "url": reverse('quests:approved_for_quest', kwargs={'quest_id': quest_id}),
 #                 },
 #                 {   "name": "Skipped",
-#                     "submissions": gamelab_submissions,
-#                     "active" : gamelab_tab_active,
+#                     "submissions": skipped_submissions,
+#                     "active" : skipped_tab_active,
 #                     "time_heading": "Transfered",
-#                     "url": reverse('quests:gamelab_for_quest', kwargs={'quest_id': quest_id}),
+#                     "url": reverse('quests:skipped_for_quest', kwargs={'quest_id': quest_id}),
 #                 },]
 #
 #     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
@@ -457,14 +457,14 @@ def paginate(object_list, page, per_page = 30):
 
 @staff_member_required
 def approvals(request, quest_id = None):
-    """A view for the Quest Approvals section.
+    """A view for Teachers' Quest Approvals section.
 
     If a quest_id is provided, then filter the queryset to only include
     submissions for that quest.
 
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
-        Submitted (awaiting approval)
+        Submitted (i.e. awaiting approval)
         Returned
         Approved
         Skipped
@@ -481,7 +481,7 @@ def approvals(request, quest_id = None):
     returned_submissions = []
     skipped_submissions = []
 
-    submitted_tab_active=True
+    submitted_tab_active=False
     returned_tab_active=False
     approved_tab_active=False
     skipped_tab_active=False
@@ -492,19 +492,17 @@ def approvals(request, quest_id = None):
     if '/returned/' in request.path_info:
         returned_submissions = QuestSubmission.objects.all_returned()
         returned_tab_active = True
-        submitted_tab_active= False
         returned_submissions = paginate(returned_submissions, page)
     elif '/approved/' in request.path_info:
         approved_submissions = QuestSubmission.objects.all_approved(quest=quest)
         approved_tab_active = True
-        submitted_tab_active= False
         approved_submissions = paginate(approved_submissions, page)
     elif '/skipped/' in request.path_info:
-        skipped_submissions = QuestSubmission.objects.all_gamelab()
+        skipped_submissions = QuestSubmission.objects.all_skipped()
         skipped_tab_active = True
-        submitted_tab_active= False
         skipped_submissions = paginate(skipped_submissions, page)
     else: # default is /submitted/ (awaiting approval)
+        submitted_tab_active= True
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval()
         submitted_submissions = paginate(submitted_submissions, page)
 
@@ -530,22 +528,24 @@ def approvals(request, quest_id = None):
                     "submissions": skipped_submissions,
                     "active" : skipped_tab_active,
                     "time_heading": "Transfered",
-                    "url": reverse('quests:gamelab'),
+                    "url": reverse('quests:skipped'),
                 },]
 
-    # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
-        # "main_comment_form": main_comment_form,
         "quick_reply_form": quick_reply_form,
     }
     return render(request, "quest_manager/quest_approval.html" , context)
 
 
-########### QUEST SUBMISSION VIEWS ###############################
+#########################################
+#
+#   QUEST SUBMISSION - STUDENT VIEWS
+#
+#########################################
 @login_required
 def complete(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
@@ -703,7 +703,8 @@ def skip(request, submission_id):
         submission.mark_completed() ###################
         submission.mark_approved(transfer = True)
 
-        messages.success(request, ("Transfer Successful.  No XP was granted for this quest."))
+        messages.success(request,
+            ("Transfer Successful.  No XP was granted for this quest."))
         if request.user.is_staff:
             return redirect("quests:approvals")
         return redirect("quests:quests")
@@ -711,9 +712,10 @@ def skip(request, submission_id):
         raise Http404
 
 @login_required
-def gamelabtransfer(request, quest_id):
+def skipped(request, quest_id):
     '''A combination of the start and complete views, but automatically approved
-    regardless, and game_lab_transfer = True'''
+    regardless, and game_lab_transfer = True
+    '''
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None: #might be because quest was already started

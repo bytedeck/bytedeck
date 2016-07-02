@@ -30,7 +30,7 @@
     {% endif %}
     <a class="btn btn-primary" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
     {% if request.user.profile.game_lab_transfer_process_on %}
-      <a class="btn btn-warning" href="{% url 'quests:gamelabtransfer' q.id %}" role="button">Completed in GameLab</a>
+      <a class="btn btn-warning" href="{% url 'quests:skipped' q.id %}" role="button">Completed in GameLab</a>
     {% endif %}
   {% endif %}
 </div>
