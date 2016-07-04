@@ -70,7 +70,7 @@ class SemesterManager(models.Manager):
         # valid_ids = qs.values_list('pk', flat=True)[:1] #only the top one
         # return qs.filter(pk__in=valid_ids)
 
-        return self.get_queryset().filter(pk = config.hs_active_semester)
+        return self.get_queryset().get(pk = config.hs_active_semester)
 
     def set_active(self, active_sem_id):
         sems = self.get_queryset()
@@ -85,9 +85,14 @@ class SemesterManager(models.Manager):
     def complete_active_semester(self):
         #need to calculate all user XP and store in their Course
         active_sem = self.get_current()
-        CourseStudent.objects.calc_semester_grades(active_sem)
-        return active_sem
 
+        if active_sem.closed:
+            return False
+
+        CourseStudent.objects.calc_semester_grades(active_sem)
+        active_sem.closed = True
+        active_sem.save()
+        return active_sem
 
 
 class Semester(models.Model):
@@ -97,6 +102,9 @@ class Semester(models.Model):
     first_day = models.DateField(blank=True, null=True)
     last_day = models.DateField(blank=True, null=True)
     active = models.BooleanField(default=False)
+    closed = models.BooleanField(default=False,
+        help_text="All student courses in this semester have been closed \
+        and final marks recorded.")
 
     objects = SemesterManager()
 

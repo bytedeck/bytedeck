@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponse
 
 from djconfig import config
 
@@ -52,11 +53,14 @@ def config_view(request):
 @staff_member_required
 def end_active_semester(request):
     if not request.user.is_superuser:
-        raise Http404
+        return HttpResponse(status=401)
 
     from courses.models import Semester
     sem = Semester.objects.complete_active_semester()
-    messages.success(request, "Semester " + str(sem) + " has been closed")
+    if sem is False:
+        messages.warning(request, "Semester is already closed, no action taken.")
+    else:
+        messages.success(request, "Semester " + str(sem) + " has been closed.")
 
     form = HackerspaceConfigForm()
     return render(request, 'configuration.html', {'form': form, })
