@@ -3,10 +3,6 @@
 {% load staticfiles %}
 
 {% block head_css %}
-<!-- BOOTSTRAP TABLES -->
-<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
-<!-- Latest compiled and minified CSS -->
-<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.css">
 {% endblock %}
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
@@ -15,8 +11,13 @@
 
 {% block content %}
 <!-- <table class="table table-striped"> -->
-<table data-toggle="table" data-sort-name='first' data-sort-order='asc'
- data-search='true' data-show-columns='true' data-icons-prefix='fa'>
+<table data-toggle='table'
+        data-sort-name='first'
+        data-sort-order='asc'
+        data-search='true'
+        data-show-columns='true'
+        data-icons='icons'
+        data-icons-prefix='fa'>
   <thead>
     <tr>
       <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>Avatar</th>
@@ -84,8 +85,4 @@
 {% endblock %}
 
 {% block js %}
-<!-- BOOTSTRAP TABLES -->
-<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
-<!-- Latest compiled and minified JavaScript -->
-<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.js"></script>
 {% endblock %}

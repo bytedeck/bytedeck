@@ -49,15 +49,15 @@ b, strong {
 /************ TABLES **************************************/
 
 .fixed-table-container {
-  border: 1px solid black !important;
+  border: 1px solid black;
 }
 
 .bootstrap-table .table {
-  border-bottom: 1px solid black !important;
+  border-bottom: 1px solid black;
 }
 
 .bootstrap-table .table > thead > tr > th {
-  border-bottom: 1px solid black !important;
+  border-bottom: 1px solid black;
 }
 
 /************ SAMP PRE CODE KBD TAGS **********************/
@@ -204,7 +204,7 @@ a.list-group-item-muted {
 
 /*to match other elements, taken from .list-group-item.active in bootstrap-theme.css*/
 .nav-tabs > .active > a {
-  color: #FFF !important;
+  color: #FFF;
   text-shadow: 0px -1px 0px #286090;
   background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
   background-repeat: repeat-x;
@@ -212,6 +212,10 @@ a.list-group-item-muted {
 }
 
 .nav-tabs a {
-  border-color: #111 !important;
+  border-color: #111;
   color: #c8c8c8;
+}
+
+.nav-tabs > li > a {
+  border-color: #111;
 }

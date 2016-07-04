@@ -309,9 +309,9 @@ form .panel-body {
   border-left: 0px;
 }
 
-.fixed-table-container {
+/*.fixed-table-container {
   border: none;
-}
+}*/
 
 .fixed-table-container tbody td {
     border-left: none;
