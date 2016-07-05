@@ -35,8 +35,8 @@ A basic database to get started.  You can move to PostgreSQL later if you like
 #### Runniing the server!
 `./src/manage.py runserver`
 
-Segmentation Fault?  try running it again...
-got to 127.0.0.1:8000 to see if it worked!
+Segmentation Fault?  try running it again...  
+In your browser go to [127.0.0.1:8000] to see if it worked!
 
 
 
