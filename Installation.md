@@ -3,7 +3,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 
 ### Preparation
 1. Install Python 3: `sudo apt install python3`
-2. Install Git: `sudo apt install git`.  If working in Windows, install (git bash)[https://git-for-windows.github.io/]
+2. Install Git: `sudo apt install git`.  If working in Windows, install [git bash](https://git-for-windows.github.io/)
 2. Create a dir for project called `hackerspace`, e.g: `~/Developer/hackerspace`
 3. 
 
