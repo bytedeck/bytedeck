@@ -9,13 +9,20 @@ LMS for Timberline Secondary School's Digital Hackerspace
 #### Clone the repository
 1. Move to the parent directory of the project: `cd ~/Developer`
 2. `git clone https://github.com/timberline-secondary/hackerspace.git`
+3. This will download the project into ~/Developer/hackerspace/
 
 #### Python Virtual Environment
 1. If on Windows, open Git Bash as an administrator
 2. On Linux, ensure you are using Python 3.x: `python -V` (Some distros might have Python 2.7 installed)
 3. Install virtualenv: `pip install virtualenv`
 2. Move to the project directory: `cd ~/Developer/hackerspace`
-2. Create the virtual environment named env, venv or virtualenv (git will ignore these names per `.gitignore`): `virtualenv env`
+2. Create the virtual environment named env, venv or virtualenv (git will ignore these names per .gitignore): `virtualenv env`
+3.
+
+#### Installing required python packages
+dfdsgd
+
+
 
 
 
