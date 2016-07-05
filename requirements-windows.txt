@@ -18,7 +18,7 @@ path.py==7.6
 #pexpect==3.3
 pickleshare==0.5
 Pillow==2.4.0
-psycopg2==2.6.1
+#psycopg2==2.6.1
 python3-openid==3.0.5
 pytz==2015.4
 requests==2.7.0
