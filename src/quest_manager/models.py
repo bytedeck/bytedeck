@@ -400,16 +400,16 @@ class QuestSubmissionManager(models.Manager):
         active_sem = config.hs_active_semester
         # submitted but not accepted
         qs = self.all_not_approved(active_semester_only=False)
-        print("NOT APPROVED ********")
-        print(qs)
+        # print("NOT APPROVED ********")
+        # print(qs)
         for sub in qs:
             sub.semester_id = config.hs_active_semester
             sub.save()
 
         #started but not submitted
         qs = self.all_not_completed(active_semester_only=False)
-        print("NOT COMPELTED ********")
-        print(qs)
+        # print("NOT COMPELTED ********")
+        # print(qs)
         for sub in qs:
             sub.semester_id = config.hs_active_semester
             sub.save()

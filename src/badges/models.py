@@ -173,15 +173,13 @@ class BadgeAssertionManager(models.Manager):
 
     def create_assertion(self, user, badge, issued_by=None, transfer=False):
         ordinal = self.get_assertion_ordinal(user, badge)
-        print(badge)
         new_assertion = BadgeAssertion(
             badge = badge,
             user = user,
             ordinal = ordinal,
             issued_by = issued_by,
             game_lab_transfer = transfer,
-            semester_id = config.hs_active_semester
-            #Semester.objects.get(id = config.hs_active_semester),
+            semester_id = config.hs_active_semester,
         )
         new_assertion.save()
         return new_assertion

@@ -88,8 +88,8 @@ def suggestion_list(request, id=None):
     else:
         active_id = None
 
-    print("**********")
-    print(active_id)
+    # print("**********")
+    # print(active_id)
 
     comment_form = CommentForm(request.POST or None, label="")
     context = {

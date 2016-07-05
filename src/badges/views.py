@@ -70,9 +70,6 @@ def badge_copy(request, badge_id):
     new_badge = get_object_or_404(Badge, pk=badge_id)
     new_badge.pk = None # autogen a new primary key (quest_id by default)
     new_badge.name = "Copy of " + new_badge.name
-    # print(quest_to_copy)
-    # print(new_quest)
-    # new_quest.save()
 
     form =  BadgeForm(request.POST or None, instance = new_badge)
     if form.is_valid():

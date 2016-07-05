@@ -114,10 +114,10 @@ def tour_complete(request):
     profile = request.user.profile
     profile.intro_tour_completed = True
     profile.save()
-    print("*********TOUR COMPLETED**********")
-    print("*********TOUR COMPLETED**********")
-    print("*********TOUR COMPLETED**********")
-    print("*********TOUR COMPLETED**********")
+    # print("*********TOUR COMPLETED**********")
+    # print("*********TOUR COMPLETED**********")
+    # print("*********TOUR COMPLETED**********")
+    # print("*********TOUR COMPLETED**********")
     return redirect('quests:quests')
 
 @staff_member_required

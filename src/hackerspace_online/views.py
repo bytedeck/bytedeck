@@ -29,8 +29,11 @@ def config_view(request):
     if request.method == 'POST':
         form = HackerspaceConfigForm(data=request.POST)
 
+        print("############# POSTING ###########")
+
         if form.is_valid():
             active_sem_id = form.cleaned_data['hs_active_semester']
+            print("############# SAVING FORM ###########")
 
             #get semester before changed via save()
             past_sem = config.hs_active_semester
@@ -63,4 +66,5 @@ def end_active_semester(request):
         messages.success(request, "Semester " + str(sem) + " has been closed.")
 
     form = HackerspaceConfigForm()
-    return render(request, 'configuration.html', {'form': form, })
+    return redirect('config')
+    #return render(request, 'configuration.html', {'form': form, })

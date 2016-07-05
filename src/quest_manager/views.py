@@ -320,7 +320,7 @@ def approve(request, submission_id):
             if request.FILES:
                 file_list = request.FILES.getlist('files')
                 for afile in file_list:
-                    print(afile)
+                    # print(afile)
                     newdoc = Document( docfile = afile, comment = comment_new)
                     newdoc.save()
 
@@ -573,15 +573,10 @@ def complete(request, submission_id):
                 target = submission,
             )
 
-            # if request.FILES:
-            #     newdoc = Document( docfile = request.FILES['docfile'],
-            #                        comment = comment_new)
-            #     newdoc.save()
-
             if request.FILES:
                 file_list = request.FILES.getlist('files')
                 for afile in file_list:
-                    print(afile)
+                    # print(afile)
                     newdoc = Document( docfile = afile, comment = comment_new)
                     newdoc.save()
 
@@ -623,9 +618,6 @@ def complete(request, submission_id):
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
-            # messages.error(request, "There was an error with your comment.  Maybe your image or attachment was too big? 16MB max!")
-            # return redirect(origin_path)
-
             context = {
                 "heading": submission.quest.name,
                 "submission": submission,
