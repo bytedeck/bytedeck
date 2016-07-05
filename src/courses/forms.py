@@ -8,9 +8,8 @@ class CourseStudentForm(forms.ModelForm):
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
         super (CourseStudentForm, self).__init__(*args,**kwargs)
-        self.fields['semester'].queryset = Semester.objects.get_current()
+        self.fields['semester'].queryset = Semester.objects.get_current(as_queryset=True)
         self.fields['semester'].empty_label = None
-
 
     # http://stackoverflow.com/questions/32260785/django-validating-unique-together-constraints-in-a-modelform-with-excluded-fiel/32261039#32261039
     def full_clean(self):

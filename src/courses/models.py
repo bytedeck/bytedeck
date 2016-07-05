@@ -63,15 +63,11 @@ class SemesterManager(models.Manager):
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
-    def get_current(self):
-        # qs = self.get_queryset()
-        # # create a list from the slice, then filter
-        # #slicing can cause problems if the queryset gets filtered again
-        # # see: http://stackoverflow.com/questions/27560131/assertionerror-cannot-filter-a-query-once-a-slice-has-been-taken
-        # valid_ids = qs.values_list('pk', flat=True)[:1] #only the top one
-        # return qs.filter(pk__in=valid_ids)
-
-        return self.get_queryset().get(pk = config.hs_active_semester)
+    def get_current(self, as_queryset = False):
+        if as_queryset:
+            return self.get_queryset().filter(pk = config.hs_active_semester)
+        else:
+            return self.get_queryset().get(pk = config.hs_active_semester)
 
     def set_active(self, active_sem_id):
         sems = self.get_queryset()
