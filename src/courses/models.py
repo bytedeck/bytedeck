@@ -50,9 +50,10 @@ class Rank(models.Model):
     def autocomplete_search_fields():
         return ("name__icontains",)
 
-    # all models that want to act as a possible prerequisite need to have this method
-    # Create a default in the PrereqModel(models.Model) class that uses a default:
-    # prereq_met boolean field.  Use that or override the method like this
+    # all models that want to act as a possible prerequisite need to have this
+    # method. Create a default in the PrereqModel(models.Model) class that uses 
+    # a default prereq_met boolean field.  Use that or override the method like
+    # this
     def condition_met_as_prerequisite(self, user, num_required):
         #num_required is not used for this one
         # profile = Profile.objects.get(user=user)
