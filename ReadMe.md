@@ -23,9 +23,9 @@ LMS for Timberline Secondary School's Digital Hackerspace
 5. Later, when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. `pip install -r requirments.txt`
-2. If this gives errors on Windows, try downloading and running this script: https://bootstrap.pypa.io/ez_setup.py
-3. 
+1. `pip install -r requirments-basic.txt`
+2. This does not include what is needed for a PostGres database, and does not include Pillow, which we'll need to install now...
+3. Note pip install Pillow works in Git Bash... maybe just need to update version?
 
 
 
