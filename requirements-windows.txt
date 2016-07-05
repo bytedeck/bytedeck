@@ -7,7 +7,7 @@ django-crispy-forms==1.4.0
 django-datetime-widget==0.9.3
 django-grappelli==2.7.1
 django-haystack==2.4.0
-django-postgrespool==0.3.0
+#django-postgrespool==0.3.0
 django-summernote==0.6.8
 elasticsearch==1.6.0
 ipdb==0.8.1
