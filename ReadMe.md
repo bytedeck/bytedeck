@@ -1,4 +1,4 @@
-# Hackerspace installation from scratch (instructions for students)
+## Hackerspace installation from scratch (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
 #### Preparation
@@ -23,7 +23,9 @@ LMS for Timberline Secondary School's Digital Hackerspace
 5. Later, when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. pip install -r requirments.txt
+1. `pip install -r requirments.txt`
+2. If this gives errors on Windows, try downloading and running this script: https://bootstrap.pypa.io/ez_setup.py
+3. 
 
 
 
