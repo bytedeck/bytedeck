@@ -50,7 +50,7 @@
 <div class="tab-content">
   <div role="tabpanel"
   class="tab-pane fade {% if available_tab_active %}in active{% endif%}" id="available">
-    {% if request.user.profile.has_current_course %}
+    {% if request.user.is_staff or request.user.profile.has_current_course %}
       {% include 'quest_manager/tab_quests_available.html' %}
     {% else %}
       <p>
