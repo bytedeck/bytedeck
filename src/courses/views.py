@@ -94,8 +94,13 @@ def end_active_semester(request):
 
     from courses.models import Semester
     sem = Semester.objects.complete_active_semester()
-    if sem is False:
-        messages.warning(request, "Semester is already closed, no action taken.")
+    if sem is -1:
+        messages.warning(request,
+        "Semester is already closed, no action taken.")
+    if sem is -2:
+        messages.warning(request,
+        "There are still quests awaiting approval. Can't close the Semester \
+        until they are approved or returned")
     else:
         messages.success(request, "Semester " + str(sem) + " has been closed.")
 

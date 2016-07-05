@@ -8,7 +8,7 @@ class ExcludedDateInline(admin.TabularInline):
     model = ExcludedDate
 
 class SemesterAdmin(admin.ModelAdmin):
-    list_display = ('__str__','number','first_day','last_day','active')
+    list_display = ('__str__','number','first_day','last_day','active', 'closed')
     inlines = [
         ExcludedDateInline,
     ]

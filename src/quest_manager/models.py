@@ -295,16 +295,12 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(True).approved().completed().game_lab()
         return self.get_queryset(True).get_user(user).approved().completed()
 
+    # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True):
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
         #only returned quests will have a time compelted, placing them on top
         return self.get_queryset(active_semester_only).get_user(user).not_completed()
-
-        # if user is None:
-        #     return self.get_queryset(active_semester_only).not_completed()
-        # #only returned quests will have a time compelted, placing them on top
-        # return self.get_queryset(active_semester_only).get_user(user).not_completed()
 
     def all_completed_past(self, user):
         qs = self.get_queryset().get_user(user).completed()
@@ -397,6 +393,14 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset(True).get_user(user).completed().latest('time_completed')
 
     def move_incomplete_to_active_semester(self):
+        """ Called when changing Active Semesters, however should be uneccessary
+        as Closing a semester removes all incomplete quests.
+
+        Not sure why you would need to change active semester without having
+        closed other, perhaps to look at old quests?
+
+        Either way, this prevents them from getting stuck in an inactive semester
+        """
         active_sem = config.hs_active_semester
         # submitted but not accepted
         qs = self.all_not_approved(active_semester_only=False)
@@ -406,7 +410,7 @@ class QuestSubmissionManager(models.Manager):
             sub.semester_id = config.hs_active_semester
             sub.save()
 
-        #started but not submitted
+        # started but not submitted
         qs = self.all_not_completed(active_semester_only=False)
         # print("NOT COMPELTED ********")
         # print(qs)
@@ -414,10 +418,20 @@ class QuestSubmissionManager(models.Manager):
             sub.semester_id = config.hs_active_semester
             sub.save()
 
+    def remove_in_progress(self):
+        active_sem = config.hs_active_semester
+
+        # In Progress Quests
+        qs = self.all_not_completed(active_semester_only=False)
+        num_del = qs.delete()
+        return num_del
+
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
-    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating submissions beyond the first for repeatable quests')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
+        related_name="quest_submission_user")
+    ordinal = models.PositiveIntegerField(default = 1,
+        help_text = 'indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
     first_time_completed = models.DateTimeField(null=True, blank=True)
     time_completed = models.DateTimeField(null=True, blank=True)

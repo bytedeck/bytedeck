@@ -51,7 +51,7 @@ class Rank(models.Model):
         return ("name__icontains",)
 
     # all models that want to act as a possible prerequisite need to have this
-    # method. Create a default in the PrereqModel(models.Model) class that uses 
+    # method. Create a default in the PrereqModel(models.Model) class that uses
     # a default prereq_met boolean field.  Use that or override the method like
     # this
     def condition_met_as_prerequisite(self, user, num_required):
@@ -84,15 +84,25 @@ class SemesterManager(models.Manager):
 
 
     def complete_active_semester(self):
-        #need to calculate all user XP and store in their Course
+
         active_sem = self.get_current()
 
+        # This semester has already been closed
         if active_sem.closed:
-            return False
+            return -1
 
+        #There are still quests awaiting approval, can't close!
+        if QuestSubmission.objects.all_awaiting_approval():
+            return -2
+
+        # need to calculate all user XP and store in their Course
         CourseStudent.objects.calc_semester_grades(active_sem)
+
+        QuestSubmission.objects.remove_in_progress()
+
         active_sem.closed = True
         active_sem.save()
+
         return active_sem
 
 
