@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -116,12 +118,15 @@ def copy(request, id):
     new_ann = get_object_or_404(Announcement, pk=id)
     new_ann.pk = None # autogen a new primary key (quest_id by default)
     new_ann.title = "Copy of " + new_ann.title
+    new_ann.draft = True
+    new_ann.datetime_released = new_ann.datetime_released + timedelta(days=7)
 
     form = AnnouncementForm(request.POST or None, instance = new_ann)
     if form.is_valid():
         new_announcement = form.save(commit=False)
         new_announcement.author = request.user
         new_announcement.datetime_created = timezone.now
+
         new_announcement.save()
         form.save()
 
