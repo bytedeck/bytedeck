@@ -26,15 +26,24 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. `pip install -r requirments-basic.txt`
 2. This does not include what is needed for a PostGres database, and does not include Pillow, which we'll need to install now...
 3. Note pip install Pillow works in Git Bash... maybe just need to update version?
+4. Also missing django-djconfig in requirements.txt
+
+#### Creating the SQLite database
+A basic database to get started.  You can move to PostgreSQL later if you like
+`./src/manage.py migrate`
+
+#### Runniing the server!
+`./src/manage.py runserver`
+
+Segmentation Fault?  try running it again...
+got to 127.0.0.1:8000 to see if it worked!
 
 
 
 
 
 
-
-
-
+Old stuff below:
 
 ####Installing Pillow (Python Image Library):
 ```
