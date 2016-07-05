@@ -45,6 +45,7 @@
 body {
   /*padding to remove gap between navbar and jumbotron*/
   padding-top: 50px;
+  min-height: 660px; /* 660+50 = 720 */
 }
 
 blockquote {
