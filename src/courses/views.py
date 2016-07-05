@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -85,3 +86,17 @@ class CourseStudentCreate(SuccessMessageMixin, CreateView):
     #     form.instance.user = self.request.user
     #     return super(CourseStudentCreate, self).form_valid(form)
 #
+
+@staff_member_required
+def end_active_semester(request):
+    if not request.user.is_superuser:
+        return HttpResponse(status=401)
+
+    from courses.models import Semester
+    sem = Semester.objects.complete_active_semester()
+    if sem is False:
+        messages.warning(request, "Semester is already closed, no action taken.")
+    else:
+        messages.success(request, "Semester " + str(sem) + " has been closed.")
+
+    return redirect('config')

@@ -95,7 +95,8 @@ def quest_list(request, quest_id=None, submission_id=None):
 
     page = request.GET.get('page')
 
-    #need these anyway to count them.  get_available is not a queryset, cant use .count()
+    # need these anyway to count them.
+    # get_available is not a queryset, cant use .count()
 
 
     if in_progress_tab_active:
