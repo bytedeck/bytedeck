@@ -1,4 +1,4 @@
-# Hackerspace installation instructions for students
+# Hackerspace installation from scratch (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
 #### Preparation
@@ -14,13 +14,16 @@ LMS for Timberline Secondary School's Digital Hackerspace
 #### Python Virtual Environment
 1. If on Windows, open Git Bash as an administrator
 2. On Linux, ensure you are using Python 3.x: `python -V` (Some distros might have Python 2.7 installed)
-3. Install virtualenv: `pip install virtualenv`
-2. Move to the project directory: `cd ~/Developer/hackerspace`
-2. Create the virtual environment named env, venv or virtualenv (git will ignore these names per .gitignore): `virtualenv env`
-3.
+3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/): `pip install virtualenv`
+2. Move to the parent directory of the project: `cd ~/Developer`
+2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace`
+3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
+3. Activate your virtual environment: Linux: `source bin/activate` Windows w/Git Bash: `source Scripts/activate`
+4. You should now see "(hackerspace)" appear before your prompt.
+5. Later, when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-dfdsgd
+1. pip install -r requirments.txt
 
 
 
