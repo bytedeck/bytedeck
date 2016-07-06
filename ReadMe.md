@@ -38,6 +38,9 @@ A basic database to get started.  You can move to PostgreSQL later if you like
 Segmentation Fault?  try running it again...  
 In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
 
+Sign up to create a student account.
+
+Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
 
 
 
