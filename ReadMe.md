@@ -40,8 +40,11 @@ In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worke
 
 Sign up to create a student account.
 
+Stop running server (or any bash script in progress) with `Ctrl + C`
 Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
 Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
+
+Now log in with this admin account.
 
 
 
