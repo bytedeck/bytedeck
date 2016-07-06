@@ -29,23 +29,19 @@ LMS for Timberline Secondary School's Digital Hackerspace
 4. Also missing django-djconfig in requirements.txt
 
 #### Creating the SQLite database
-A basic database to get started.  You can move to PostgreSQL later if you like
+1. A basic database to get started.  You can move to PostgreSQL later if you like:
 `./src/manage.py migrate`
+2. Populate the database with some default data: `./src/manage.py loaddata initial_data`
+3. Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
+4. Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
 
 #### Runniing the server!
-`./src/manage.py runserver`
-
-Segmentation Fault?  try running it again...  
-In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
-
-Sign up to create a student account.
-
-Stop running server (or any bash script in progress) with `Ctrl + C`
-Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
-Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
-
-Now log in with this admin account.
-
+1. `./src/manage.py runserver`
+2. Segmentation Fault?  try running it again...  
+3. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+4. Log in as the superuser to see what a teacher/admin sees
+5. Sign up to create a student account.
+6. Stop running server (or any bash script in progress) with `Ctrl + C`
 
 
 
