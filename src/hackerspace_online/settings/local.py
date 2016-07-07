@@ -6,6 +6,11 @@ import os
 #root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# INSTALLED_APPS += (
+#     'debug_toolbar',
+# )
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
