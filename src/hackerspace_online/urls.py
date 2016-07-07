@@ -18,6 +18,8 @@ from django.conf.urls import include, url
 from django.conf.urls.static import static
 from django.contrib import admin
 
+from hackerspace_online import views
+
 # Admin site customizations
 
 admin.site.site_header = "Hackerspace Administration"
@@ -25,8 +27,8 @@ admin.site.site_title = "Hackerspace Admin"
 
 urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')), # grappelli URLS
-    url(r'^$', 'hackerspace_online.views.home', name='home'),
-    url(r'^config/$', 'hackerspace_online.views.config_view', name='config'),
+    url(r'^$', views.home, name='home'),
+    url(r'^config/$', views.config_view, name='config'),
     #quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     #profile_manager

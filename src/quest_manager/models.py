@@ -52,12 +52,14 @@ class XPItem(models.Model):
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default = True)
     sort_order = models.IntegerField(default = 0)
-    max_repeats = models.IntegerField(default = 0, help_text = '0 = not repeatable, enter -1 for unlimited')
+    max_repeats = models.IntegerField(default = 0,
+        help_text = '0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default = 0)
     date_available = models.DateField(default=timezone.now)
     time_available = models.TimeField(default=time().min) # midnight
     date_expired = models.DateField(blank=True, null=True)
-    time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
+    time_expired = models.TimeField(blank=True, null=True,
+        help_text= 'only used if date_expired is blank')
     # minimum_XP = models.PositiveIntegerField(blank=True, null=True)
     # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
     # prerequisites = generic.GenericRelation(Prerequisite)
@@ -85,13 +87,13 @@ class XPItem(models.Model):
 # Create your models here.
 class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
-        return self.filter(date_available__lte = timezone.now)
+        return self.filter(date_available__lte = timezone.now() )
 
     #doesn't worktime is UTC or something
     def not_expired(self):
-        qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gte = datetime.now) )
-        qs_date = qs_date.exclude( Q(date_expired = datetime.now) & Q(time_expired__gt = datetime.now ))
-        return qs_date.exclude( Q(date_expired = None) & Q(time_expired__lt = datetime.now) )
+        qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gte = datetime.now()) )
+        qs_date = qs_date.exclude( Q(date_expired = datetime.now()) & Q(time_expired__gt = datetime.now() ))
+        return qs_date.exclude( Q(date_expired = None) & Q(time_expired__lt = datetime.now()) )
 
     def visible(self):
         return self.filter(visible_to_students = True)
@@ -125,7 +127,8 @@ class Quest(XPItem):
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
-    instructor_notes = models.TextField(blank=True, null=True, help_text="This field is only visible to Staff.  Use it to place answer keys or other notes.")
+    instructor_notes = models.TextField(blank=True, null=True,
+        help_text="This field is only visible to Staff.  Use it to place answer keys or other notes.")
     prereq_parent = GenericRelation(Prereq,
                               content_type_field='parent_content_type',
                               object_id_field='parent_object_id')

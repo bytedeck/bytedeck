@@ -125,7 +125,7 @@ def copy(request, id):
     if form.is_valid():
         new_announcement = form.save(commit=False)
         new_announcement.author = request.user
-        new_announcement.datetime_created = timezone.now
+        new_announcement.datetime_created = timezone.now()
 
         new_announcement.save()
         form.save()

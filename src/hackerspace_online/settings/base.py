@@ -125,8 +125,9 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
 
                 # "allauth" specific context processors
-                'allauth.account.context_processors.account',
-                'allauth.socialaccount.context_processors.socialaccount',
+                # 0.22.0 http://django-allauth.readthedocs.io/en/latest/release-notes.html#id17
+                #'allauth.account.context_processors.account',
+                #'allauth.socialaccount.context_processors.socialaccount',
 
                 'djconfig.context_processors.config',
             ],

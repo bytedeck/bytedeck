@@ -16,14 +16,14 @@ class AnnouncementQuerySet(models.query.QuerySet):
         return self.filter(sticky=False)
 
     def released(self):
-        # "__lte" appended to the object means less than or equla to
-        return self.filter(datetime_released__lte = timezone.now)
+        # "__lte" appended to the object means less than or equal to
+        return self.filter(datetime_released__lte = timezone.now() )
 
     def not_draft(self):
         return self.filter(draft=False)
 
     def not_expired(self):
-        return self.filter(Q(datetime_expires = None) | Q(datetime_expires__gt = timezone.now) )
+        return self.filter(Q(datetime_expires = None) | Q(datetime_expires__gt = timezone.now()) )
 
 class AnnouncementManager(models.Manager):
     def get_queryset(self):
@@ -51,7 +51,7 @@ class Announcement(models.Model):
     sticky_until = models.DateTimeField(null=True, blank=True, help_text = 'blank = sticky never expires')
     icon = models.ImageField(upload_to='announcement_icons/', null=True, blank=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL)
-    datetime_released = models.DateTimeField(default=timezone.now)
+    datetime_released = models.DateTimeField(default=timezone.now )
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text = 'blank = never')
     draft = models.BooleanField(default = True, help_text='note that announcements previously saved as drafts will only send out a notification if they are published using the Publish button on the Announcements main page')
 

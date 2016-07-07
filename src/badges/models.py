@@ -82,7 +82,7 @@ class Badge(models.Model):
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default = True)
     # hours_between_repeats = models.PositiveIntegerField(default = 0)
-    # date_available = models.DateField(default=timezone.now)
+    # date_available = models.DateField(default=timezone.now())
     # time_available = models.TimeField(default=time().min) # midnight
     # date_expired = models.DateField(blank=True, null=True)
     # time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
@@ -217,7 +217,7 @@ class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
     ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time user has received this badge')
-    # time_issued = models.DateTimeField(default = timezone.now)
+    # time_issued = models.DateTimeField(default = timezone.now())
     timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
     updated = models.DateTimeField(auto_now=False, auto_now_add=True)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
