@@ -268,8 +268,8 @@ SUMMERNOTE_CONFIG = {
     'direction': 'ltr',
 
     # Change editor size
-    # 'width': '700',
-    # 'height': '300',
+    'width': '100%',
+    'height': '480',
 
     # Use proper language setting automatically (default)
     'lang': None,
