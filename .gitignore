@@ -5,9 +5,16 @@ production_*.py
 # python manage.py collectstatic
 static_in_venv/
 
+# Linux:
 bin/
 include/
 share/
+
+# Windows:
+Scripts/
+tcl/
+Include/
+Lib/
 
 media_root/
 
