@@ -75,7 +75,7 @@ INSTALLED_APPS = (
 
     # https://django-debug-toolbar.readthedocs.io/en/1.4/
     # For development only...
-    'debug_toolbar',
+    #'debug_toolbar',
 
     #hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
