@@ -46,7 +46,6 @@ urlpatterns = [
     url(r'^summernote/', include('django_summernote.urls')),
     #allauth
     url(r'^accounts/', include('allauth.urls')),
-    url(r'^search/', include('haystack.urls')),
 ]
 
 if settings.DEBUG:

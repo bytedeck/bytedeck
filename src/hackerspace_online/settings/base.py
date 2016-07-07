@@ -52,9 +52,6 @@ INSTALLED_APPS = (
     'django.contrib.sites', #for allauth
     'django.contrib.staticfiles',
 
-    #added django apps
-    'django.contrib.webdesign',
-
     #third party apps
 
     # https://django-allauth.readthedocs.org/en/latest/installation.html
@@ -70,14 +67,8 @@ INSTALLED_APPS = (
     # https://github.com/summernote/django-summernote
     'django_summernote',
 
-    #http://haystacksearch.org/
-    'haystack',
-
     # https://github.com/asaglimbeni/django-datetime-widget
     'datetimewidget',
-
-    # https://pypi.python.org/pypi/django-badgify
-    #'badgify',
 
     #django-djconfig.readthedocs.org/en/
     'djconfig',
@@ -256,15 +247,6 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL #(=”/”)
     # Dictionary containing provider specific settings.
 # SOCIALACCOUNT_STORE_TOKENS #(=True)
     # Indicates whether or not the access tokens are stored in the database.
-
-#Haystack Search app
-HAYSTACK_CONNECTIONS = {
-    'default': {
-        'ENGINE': 'haystack.backends.elasticsearch_backend.ElasticsearchSearchEngine',
-        'URL': 'http://127.0.0.1:9200/',
-        'INDEX_NAME': 'haystack',
-    },
-}
 
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode
