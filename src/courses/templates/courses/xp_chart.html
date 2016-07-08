@@ -1,0 +1,229 @@
+<!-- https://developers.google.com/chart/interactive/docs/basic_load_libs -->
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.1.6/Chart.min.js"></script>
+
+<script type="text/javascript">
+
+  /*jshint esversion: 6 */
+
+  var ctx = document.getElementById("myChart");
+  //var ctx = $("#myChart").get(0).getContext("2d");
+
+  class DataPoint {
+      constructor(x, y) {
+          this.x = x;
+          this.y = y;
+      }
+  }
+
+  var days = 85;
+  var chillax = 72.5;
+
+  // XP DATA SET
+  var XPData = {
+      label: 'XP Earned',
+      //fill: false,
+      //backgroundColor: "rgba(0,0,0,0)",
+      //borderColor: "rgba(0,0,0,0)",
+      pointBorderColor: "#444",
+      pointBackgroundColor: "#444",
+      data: [{x: 0, y: 0}],
+      showLines: false,
+  };
+
+  //XP Data generation
+  // var total = 0;
+  // for (var i = 0; i < 35; i++) {
+  //     total += 10 * Math.floor(Math.random() + 0.5);
+  //     total += 5 * Math.floor(Math.random() + 0.5);
+  //     total += 5 * Math.floor(Math.random() + 0.5);
+  //
+  //     var p = new DataPoint(i + 1, total);
+  //     XPData.data.push(p);
+  // }
+
+
+  // XP Trend Data
+  var XPTrendData = {
+      label: 'XP Trend',
+      fill: false,
+      pointRadius: 0,
+      lineTension: 0,
+      borderDash: [5, 5],
+      borderColor: "#ccc",
+      backgroundColor: "rgba(0,0,0,0)",
+      data: [{x: 0, y: 0}],
+  };
+
+  var GradeAData = {
+      label: 'A Line',
+      pointRadius: 0,
+      backgroundColor: "rgba(255,255,0,0)",
+      borderColor: "rgba(255, 236, 179,50)",
+      data: [],
+  };
+
+  var GradeFData = {
+      label: 'Pass Line',
+      pointRadius: 0,
+      backgroundColor: "rgba(255, 0, 0, 0)",
+      borderColor: "rgba(255, 179, 179, 50)",
+      data: [],
+  };
+
+  // Chillax Line Data Set = B
+  var ChillaxLineData = {
+      label: 'Chillax Line',
+      pointRadius: 0,
+      backgroundColor: "rgba(0,0,0,0)",
+      borderColor: "rgba(0,255,255,255)",
+      data: [],
+  };
+
+  // Mark Line Generation
+  for (i = 1; i <= days; i++) {
+      p = new DataPoint(i, Math.floor(i * chillax * 10 / days));
+      pA = new DataPoint(i, Math.floor(i * 855 / days));
+      pF = new DataPoint(i, Math.floor(i * 495 / days));
+      ChillaxLineData.data.push(p);
+      GradeAData.data.push(pA);
+      GradeFData.data.push(pF);
+
+  }
+
+
+
+  var options = {
+
+      scales: {
+
+          xAxes: [{
+              type: 'linear',
+              position: 'bottom',
+              ticks: {
+                  max: days,
+                  min: 0,
+                  stepSize: 5,
+              },
+              scaleLabel: {
+                  display: true,
+                  labelString: 'Days of Class'
+              },
+          }],
+
+          yAxes: [{
+                  id: "y-axis-XP",
+                  position: 'right',
+                  ticks: {
+                      max: 1000,
+                      min: 0,
+                      stepSize: 50,
+                  },
+
+                  scaleLabel: {
+                      display: true,
+                      labelString: 'XP'
+                  },
+
+                  gridLines: {},
+              }, {
+                  id: "y-axis-percent",
+                  position: 'left',
+
+                  ticks: {
+                      max: 100,
+                      min: 0,
+                      stepSize: 5,
+                  },
+
+                  scaleLabel: {
+                      display: true,
+                      labelString: 'Percent'
+                  },
+
+                  gridLines: {
+                      /*show: true,
+                      color: "rgba(255, 255, 255, 1)",
+                      lineWidth: 1,
+                      drawOnChartArea: true,
+                      drawTicks: true,
+                      zeroLineWidth: 1,
+                      zeroLineColor: "rgba(255,255,255,1)", */
+                  },
+              }
+
+
+          ],
+      },
+
+      title: {
+          text: 'A Map of Your Progress',
+          display: false,
+      },
+
+      legend: {
+          position: 'top',
+          labels: {
+
+          },
+      },
+
+  };
+
+  var data = {
+      datasets: [XPData,
+          XPTrendData,
+          ChillaxLineData,
+          GradeAData,
+          GradeFData,
+      ]
+  };
+
+  var myChart = new Chart(ctx, {
+      type: 'line',
+      data: data,
+      options: options,
+  });
+
+  function generate_trend() {
+    // XP Trend calculaion
+    var total = 0;
+    XPTrendData.data = [];
+    var days_so_far = XPData.data.length;
+    total = XPData.data[days_so_far - 1].y;
+    var average_per_day = total / days_so_far;
+
+    var trend_total = total;
+    for (i = days_so_far; i <= days; i++) {
+
+        p = new DataPoint(i, trend_total);
+        XPTrendData.data.push(p);
+        trend_total += average_per_day;
+
+    }
+  }
+
+
+  //get data fro plot and update
+  function ajax_update_plot() {
+    $.ajax({
+      type: "POST",
+      url: "{% url 'courses:ajax_progress_chart' %}",
+      data: {
+        csrfmiddlewaretoken: "{{ csrf_token }}",
+      },
+      success: function(data){
+        console.log(data.xp_data);
+        XPData.data = data.xp_data;
+        generate_trend();
+        myChart.update();
+
+      }
+    });
+  }
+
+  $(document).ready(function() {
+    ajax_update_plot();
+  });
+
+
+</script>

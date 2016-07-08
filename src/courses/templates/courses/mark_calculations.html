@@ -58,6 +58,7 @@
         {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
         by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%</p>
     </div>
+
     <h3>Some Stats</h3>
     <p>
       Here are a few other stats you might find interesting:
@@ -67,6 +68,17 @@
         <strong>{{obj.xp_per_day_ave|floatformat }}</strong></p>
       <p>Let us know if there are other stats you are interested in and we will add them!  Make your suggestion using the suggestion box which can be found in the <i class="fa fa-bars"></i> menu at the top right.</p>
     </div>
+
+
+    <h3>A Pretty Graph of Your Progress</h3>
+    <p>A chart that shows your XP compared to the chillax line throughout the course</p>
+    <div class="well">
+      <canvas id="myChart">
+        <!-- content will be set by js in xp_chart.html -->
+      </canvas>
+
+    </div>
+
     <h3>Chillax Line</h3>
     <p>{% if obj.semester.chillax_line_started %}
       You are free to chillax if your XP is at or above: {{obj.semester.chillax_line|floatformat:"0"}} XP
@@ -114,10 +126,11 @@
 {% endblock %}
 
 {% block js %}
-<script>
-$(document).ready(function() {
-  $('[data-toggle="popover"]').popover(
-  )
-});
-</script>
+  <script>
+  $(document).ready(function() {
+    $('[data-toggle="popover"]').popover(
+    )
+  });
+  </script>
+  {% include 'courses/xp_chart.html' %}
 {% endblock %}

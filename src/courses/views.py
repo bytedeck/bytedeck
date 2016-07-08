@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -7,7 +9,7 @@ from django.core.urlresolvers import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect, render, Http404, HttpResponse
 
 # from .forms import ProfileForm
 from .models import CourseStudent, Rank
@@ -105,3 +107,46 @@ def end_active_semester(request):
         messages.success(request, "Semester " + str(sem) + " has been closed.")
 
     return redirect('config')
+
+
+@login_required
+def ajax_progress_chart(request, user_id=0):
+    if user_id == 0:
+        user = request.user
+    else:
+        user = get_object_or_404(User, pk=user_id)
+
+
+    if request.is_ajax() and request.method == "POST":
+        xp_data = []
+        # generate an list of dictionary data:
+        #   x: day into course
+        #   y: XP earned so far
+
+        days_so_far = 35
+        import random
+        xp_total = 0;
+        for day in range(days_so_far):
+            #xp_today = profile.user.get_xp_upto_day(day)
+
+            # generate fake data
+
+            xp_total += random.randint(0,1)*10
+            xp_total += random.randint(0,1)*10
+            xp_total += random.randint(0,1)*5
+
+            xp_data.append(
+                { 'x': day, 'y': xp_total}
+            )
+
+        print(xp_data)
+
+
+        progress_chart = {
+            "xp_data": xp_data,
+        }
+        json_data = json.dumps(progress_chart)
+
+        return HttpResponse(json_data, content_type='application/json' )
+    else:
+        raise Http404
