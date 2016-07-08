@@ -241,10 +241,6 @@ td.notification-icons .fa-stack {
   border-radius: 0px;
 }
 
-.panel-summernote iframe, .list-group-item-summernote iframe {
-  /*height: 500px !important;*/
-}
-
 .form-group-summernote, .panel-summernote #div_id_docfile,
 .panel-summernote #div_id_files, .panel-summernote #div_id_award
 {

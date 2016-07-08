@@ -644,7 +644,7 @@ def start(request, quest_id):
 
     if new_sub is None: #might be because quest was already started
         #so try to get the started Quest
-        sub = QuestSubmission.objects.all_for_user_quest(request.user, quest).last()
+        sub = QuestSubmission.objects.all_for_user_quest(request.user, quest, True).last()
         if sub is None:
             raise Http404
     else:
