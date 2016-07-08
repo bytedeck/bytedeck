@@ -44,7 +44,7 @@
 
   // XP Trend Data
   var XPTrendData = {
-      label: 'XP Trend',
+      label: 'If you continue at your current rate',
       fill: false,
       pointRadius: 0,
       lineTension: 0,
@@ -55,7 +55,7 @@
   };
 
   var GradeAData = {
-      label: 'A Line',
+      label: 'A (86%)',
       pointRadius: 0,
       backgroundColor: "rgba(255,255,0,0)",
       borderColor: "rgba(255, 236, 179,50)",
@@ -63,7 +63,7 @@
   };
 
   var GradeFData = {
-      label: 'Pass Line',
+      label: 'Pass (50%)',
       pointRadius: 0,
       backgroundColor: "rgba(255, 0, 0, 0)",
       borderColor: "rgba(255, 179, 179, 50)",
@@ -72,7 +72,7 @@
 
   // Chillax Line Data Set = B
   var ChillaxLineData = {
-      label: 'Chillax Line',
+      label: 'Chillax Line (73%)',
       pointRadius: 0,
       backgroundColor: "rgba(0,0,0,0)",
       borderColor: "rgba(0,255,255,255)",
@@ -172,9 +172,9 @@
   var data = {
       datasets: [XPData,
           XPTrendData,
+          GradeFData,
           ChillaxLineData,
           GradeAData,
-          GradeFData,
       ]
   };
 
@@ -202,12 +202,11 @@
     }
   }
 
-
   //get data fro plot and update
   function ajax_update_plot() {
     $.ajax({
       type: "POST",
-      url: "{% url 'courses:ajax_progress_chart' %}",
+      url: "{% url 'courses:ajax_progress_chart_user' request.user.id %}",
       data: {
         csrfmiddlewaretoken: "{{ csrf_token }}",
       },

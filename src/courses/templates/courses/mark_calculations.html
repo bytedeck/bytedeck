@@ -6,14 +6,20 @@
 {% block content %}
   <p>Hello {{request.user}},
   {% if not courses %}
-  I can't calculate your mark because you haven't joined a course for this semester yet.
-  Please <a href="{% url 'courses:create' %}">go here</a> and join your course.</p>
+    I can't calculate your mark because you haven't joined a course for this
+    semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
+    and join your course.</p>
+  {% elif obj.semester.days_so_far < 1 %}
+    I can't calculate your mark because semester hasn't started yet!  According
+    to my records, the semester is scheduled to start on
+  </strong>{{obj.semester.first_day}}</strong>.</p>
   {% else %}
     {% if num_courses == 1 %}
       your current mark is:
     {% else %}
       your current marks are:
-    {% endif %}</p>
+    {% endif %}
+    </p>
     <table class="table">
       {% for course in courses %}
       <tr>
@@ -27,36 +33,75 @@
     <p>
       Here is an explanation of how I calculated your mark. If you have any questions about this please ask!
     </p>
-    <div class="well">
-      {% if num_courses > 1 %}
-      You are a multicourse student currently registered in {{num_courses}} courses.
-      Your XP must be divided among each of your courses.  This gives you
-      <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
-        data-placement="top" data-html="true"
-        data-content="You have a total of {{obj.user.profile.xp}} XP
-        to be divided among {{num_courses}} courses: <br/><br/>
-          <pre>{{obj.user.profile.xp}}/{{num_courses}} = {{xp_per_course|floatformat}} XP</pre>
-        ">
-      {{xp_per_course|floatformat}} XP</a> per course.</p>
-      {% endif %}
-      <p>We are currently
-        <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
+    <div>
+      <ul>
+        <li>
+        {% if num_courses > 1 %}
+          You are a multicourse student currently registered in {{num_courses}} courses.
+          Your XP must be divided among each of your courses.  This gives you
+          <a tabindex="0" data-toggle="popover" data-trigger="hover"
+            data-placement="top" data-html="true" href="#"
+            data-content="You have a total of {{obj.user.profile.xp}} XP
+            to be divided among {{num_courses}} courses: <br/><br/>
+              <pre>{{obj.user.profile.xp}}/{{num_courses}} = {{xp_per_course|floatformat}} XP</pre>
+            ">
+          <strong>{{xp_per_course|floatformat}}</strong> XP</a> per course.
+        {% else %}
+          So far, you have earned <strong>{{obj.user.profile.xp}}</strong> XP in your course.
+        {% endif %}
+      </li>
+      <li>We are currently
+        <a tabindex="0" data-toggle="popover" data-trigger="hover"
           data-placement="top" data-html="true"
           data-content="There are {{obj.semester.num_days}} days of class in the semester.
             So far, we've had {{obj.semester.days_so_far}} days:<br/><br/>
             <pre>{{obj.semester.days_so_far}}/{{obj.semester.num_days}} = {{obj.semester.fraction_complete|floatformat:3}} &times; 100 = {{obj.semester.percent_complete|floatformat}}%</pre>
           ">
           {{obj.semester.fraction_complete|floatformat:3}} or {{obj.semester.percent_complete|floatformat}}%</a>
-        of the way through the semester.</p>
-      <p>At this pace you will have
-        <a tabindex="0" role="button" data-toggle="popover" data-trigger="focus"
+        of the way through the semester.
+      </li>
+      <li>At this pace you will have
+        <a tabindex="0" data-toggle="popover" data-trigger="hover"
           data-placement="top" data-html="true"
-          data-content="You currently have {{xp_per_course}} XP, and the semester is
+          data-content="You currently have {{xp_per_course|floatformat}} XP, and the semester is
             {{obj.semester.fraction_complete|floatformat:3}} complete:<br/><br/>
             <pre>{{xp_per_course|floatformat}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
           ">
         {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
-        by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%</p>
+        by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%
+      </li>
+    </div>
+    <p>Another way to look at it:</p>
+    <ul>
+      <li>
+        On average you have earned
+        <a tabindex="0" data-toggle="popover" data-trigger="hover"
+          data-placement="top" data-html="true"
+          data-content="You currently have {{xp_per_course|floatformat}} XP, and we've had {{obj.semester.days_so_far}}
+            days of class so far.<br/><br/>
+            <pre>{{xp_per_course|floatformat}}/{{obj.semester.days_so_far}} = {{obj.xp_per_day_ave|floatformat }} XP per day</pre>
+          ">
+        {{obj.xp_per_day_ave|floatformat }} XP per day</a> so far.
+      </li>
+      <li>
+        If you continue at this pace, you will have
+        <a tabindex="0" data-toggle="popover" data-trigger="hover"
+          data-placement="top" data-html="true"
+          data-content="You are averaging {{obj.xp_per_day_ave|floatformat }}
+            XP per day XP, and there are a total of {{obj.semester.num_days}}
+            days of class in the semester.<br/><br/>
+            <pre>{{obj.xp_per_day_ave|floatformat }} x {{obj.semester.num_days}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
+          ">
+        {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
+        by the end of the semester.
+      </li>
+    </ul>
+    <p>Here's a pretty chart I made for you to visualize your progress so far:</p>
+    <div class="well">
+      <canvas id="myChart">
+        <!-- content will be set by js in xp_chart.html -->
+      </canvas>
+
     </div>
 
     <h3>Some Stats</h3>
@@ -67,16 +112,6 @@
       <p>Average XP earned per day of class so far:
         <strong>{{obj.xp_per_day_ave|floatformat }}</strong></p>
       <p>Let us know if there are other stats you are interested in and we will add them!  Make your suggestion using the suggestion box which can be found in the <i class="fa fa-bars"></i> menu at the top right.</p>
-    </div>
-
-
-    <h3>A Pretty Graph of Your Progress</h3>
-    <p>A chart that shows your XP compared to the chillax line throughout the course</p>
-    <div class="well">
-      <canvas id="myChart">
-        <!-- content will be set by js in xp_chart.html -->
-      </canvas>
-
     </div>
 
     <h3>Chillax Line</h3>

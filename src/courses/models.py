@@ -128,6 +128,7 @@ class Semester(models.Model):
     def num_days(self, upto_today = False):
         '''The number of classes in the semester (from start date to end date
         excluding weekends and ExcludedDates) '''
+
         excluded_days = self.excluded_days()
         if upto_today and date.today() < self.last_day:
             last_day = date.today()
