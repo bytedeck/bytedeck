@@ -320,7 +320,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
         os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
         os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
-
+    ),
 
     # You can add custom css/js for SummernoteWidget.
     'css': (
