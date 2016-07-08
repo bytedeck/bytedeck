@@ -160,6 +160,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images) ####################
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
 # Statics file settings are in the local and production files
+STATIC_URL = '/static/'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
@@ -296,14 +297,45 @@ SUMMERNOTE_CONFIG = {
     # Set custom storage class for attachments.
     #'attachment_storage_class': 'my.custom.storage.class.name',
 
-    # Set external media files for SummernoteInplaceWidget.
-    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    'inplacewidget_external_css': (
+    # Set custom model for attachments (default: 'django_summernote.Attachment')
+    #'attachment_model': 'my.custom.attachment.model',
+    # must inherit 'django_summernote.AbstractAttachment'
+
+    # Set common css/js media files
+    'external_css': (
         '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
-        '//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css',
+        '//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css',
     ),
-    'inplacewidget_external_js': (
+    'external_js': (
+        # Use already existing js?
         '//code.jquery.com/jquery-1.9.1.min.js',
         '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
     ),
+    'internal_css': (
+        os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
+        os.path.join(STATIC_URL, 'font-awesome.min.css'),
+    ),
+    'internal_js': (
+        os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
+        os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
+        os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
+        os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
+
+
+    # You can add custom css/js for SummernoteWidget.
+    'css': (
+        os.path.join(STATIC_URL, 'font-awesome.min.css'),
+    ),
+    'js': (
+    ),
+
+    # And also for SummernoteInplaceWidget.
+    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
+    'css_for_inplace': (
+    ),
+    'js_for_inplace': (
+    ),
+
+    # You can disable file upload feature.
+    #'disable_upload': False,
 }
