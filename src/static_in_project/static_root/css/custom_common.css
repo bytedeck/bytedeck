@@ -233,12 +233,12 @@ td.notification-icons .fa-stack {
   /*DOM height on load so doesn't grow when Summernote finishes loading */
   min-height: 544px;
 }
-
-.summernotewidget {
+#id_comment_text_iframe.summernotewidget {
   padding: 0px;
   border-top: none;
   border-left: none;
   border-bottom: none;
+  border-radius: 0px;
 }
 
 .panel-summernote iframe, .list-group-item-summernote iframe {

@@ -1,0 +1,23 @@
+/* Used in the summernote iframe whcih can't see the our other css files
+
+  See settings/base.py:
+
+  # You can add custom css/js for SummernoteWidget.
+  'css': (
+      os.path.join(STATIC_URL, 'custom_summernote_widget.css'),
+  ),
+
+*/
+
+.note-editor.note-frame {
+  border-radius: 0px;
+}
+
+.panel {
+  margin-bottom: 0px;
+}
+
+.note-editable {
+  /*need to override inline height which is 20px too short*/
+  height: 382px !important;
+}

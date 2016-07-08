@@ -270,7 +270,7 @@ SUMMERNOTE_CONFIG = {
 
     # Change editor size
     'width': '100%',
-    'height': '480',
+    'height': '460',
 
     # Use proper language setting automatically (default)
     'lang': None,
@@ -302,39 +302,39 @@ SUMMERNOTE_CONFIG = {
     # must inherit 'django_summernote.AbstractAttachment'
 
     # Set common css/js media files
-    'external_css': (
-        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
-        '//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css',
-    ),
-    'external_js': (
-        # Use already existing js?
-        '//code.jquery.com/jquery-1.9.1.min.js',
-        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
-    ),
-    'internal_css': (
-        os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
-        os.path.join(STATIC_URL, 'font-awesome.min.css'),
-    ),
-    'internal_js': (
-        os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
-        os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
-        os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
-        os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
-    ),
-
+    # 'external_css': (
+    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
+    #     '//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css',
+    # ),
+    # 'external_js': (
+    #     # Use already existing js?
+    #     '//code.jquery.com/jquery-1.9.1.min.js',
+    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
+    # ),
+    # 'internal_css': (
+    #     os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
+    #     os.path.join(STATIC_URL, 'font-awesome.min.css'),
+    # ),
+    # 'internal_js': (
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
+    # ),
+    #
     # You can add custom css/js for SummernoteWidget.
     'css': (
-        os.path.join(STATIC_URL, 'font-awesome.min.css'),
+        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
     ),
-    'js': (
-    ),
+    # 'js': (
+    # ),
 
     # And also for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    'css_for_inplace': (
-    ),
-    'js_for_inplace': (
-    ),
+    # 'css_for_inplace': (
+    # ),
+    # 'js_for_inplace': (
+    # ),
 
     # You can disable file upload feature.
     #'disable_upload': False,
