@@ -4,7 +4,7 @@
 {% block heading_inner %}Mark Calculations{% endblock%}
 
 {% block content %}
-  <p>Hello {{request.user}},
+  <p>Hello {{ user.profile.get_preferred_name }},
   {% if not courses %}
     I can't calculate your mark because you haven't joined a course for this
     semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
@@ -78,7 +78,7 @@
         <a tabindex="0" data-toggle="popover" data-trigger="hover"
           data-placement="top" data-html="true"
           data-content="You currently have {{xp_per_course|floatformat}} XP, and we've had {{obj.semester.days_so_far}}
-            days of class so far.<br/><br/>
+            days of class so far:<br/><br/>
             <pre>{{xp_per_course|floatformat}}/{{obj.semester.days_so_far}} = {{obj.xp_per_day_ave|floatformat }} XP per day</pre>
           ">
         {{obj.xp_per_day_ave|floatformat }} XP per day</a> so far.
@@ -89,29 +89,23 @@
           data-placement="top" data-html="true"
           data-content="You are averaging {{obj.xp_per_day_ave|floatformat }}
             XP per day XP, and there are a total of {{obj.semester.num_days}}
-            days of class in the semester.<br/><br/>
+            days of class in the semester:<br/><br/>
             <pre>{{obj.xp_per_day_ave|floatformat }} x {{obj.semester.num_days}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
           ">
         {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
         by the end of the semester.
       </li>
     </ul>
-    <p>Here's a pretty chart I made for you to visualize your progress so far:</p>
+    <p>Here's a pretty chart I made just for you, to help you visualize your progress so far:</p>
     <div class="well">
-      <canvas id="myChart">
+      <div class="loading">
+        <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+        &nbsp;Calculating data for chart...
+      </div>
+      <canvas id="myChart" style="display: none;">
         <!-- content will be set by js in xp_chart.html -->
       </canvas>
 
-    </div>
-
-    <h3>Some Stats</h3>
-    <p>
-      Here are a few other stats you might find interesting:
-    </p>
-    <div class="well">
-      <p>Average XP earned per day of class so far:
-        <strong>{{obj.xp_per_day_ave|floatformat }}</strong></p>
-      <p>Let us know if there are other stats you are interested in and we will add them!  Make your suggestion using the suggestion box which can be found in the <i class="fa fa-bars"></i> menu at the top right.</p>
     </div>
 
     <h3>Chillax Line</h3>

@@ -1,34 +1,47 @@
 import json
 
+from datetime import datetime, timedelta
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.urlresolvers import reverse_lazy
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, CreateView, DeleteView
 from django.views.generic import DetailView, ListView
 from django.shortcuts import get_object_or_404, redirect, render, Http404, HttpResponse
 
+from djconfig import config
+
 # from .forms import ProfileForm
-from .models import CourseStudent, Rank
+from .models import CourseStudent, Rank, Semester
 from .forms import CourseStudentForm
 # Create your views here.
 
 @login_required
-def mark_calculations(request):
+def mark_calculations(request, user_id = None):
     template_name='courses/mark_calculations.html'
-    course_student = CourseStudent.objects.current_course(request.user)
-    courses = CourseStudent.objects.current_courses(request.user)
+
+    #Only allow staff to see other student's mark page
+    if user_id is not None and request.user.is_staff:
+        user = get_object_or_404(User, pk=user_id)
+    else:
+        user = request.user
+
+    course_student = CourseStudent.objects.current_course(user)
+    courses = CourseStudent.objects.current_courses(user)
     num_courses = courses.count()
     if courses:
-        xp_per_course = course_student.user.profile.xp()/courses.count()
+        xp_per_course = user.profile.xp()/num_courses
     else:
         xp_per_course = None
 
 
     context = {
+        'user': user,
         'obj': course_student,
         'courses': courses,
         'xp_per_course': xp_per_course,
@@ -116,34 +129,34 @@ def ajax_progress_chart(request, user_id=0):
     else:
         user = get_object_or_404(User, pk=user_id)
 
-
     if request.is_ajax() and request.method == "POST":
+        sem = get_object_or_404(Semester, id = config.hs_active_semester)
+
+        # generate a list of dates, from first date of semester to today
+        datelist = []
+        weekend_adjusted = 0
+        for i in range(0, sem.days_so_far()):
+            # need to ignore weekends and non-class days
+            next_day_of_class = sem.get_datetime_by_days_since_start(i)
+            datelist.append(next_day_of_class)
+
         xp_data = []
-        # generate an list of dictionary data:
+        # generate an list of dictionary data for chart.js:
         #   x: day into course
         #   y: XP earned so far
 
-        days_so_far = 35
-        import random
-        xp_total = 0;
-        for day in range(days_so_far):
-            #xp_today = profile.user.get_xp_upto_day(day)
-
-            # generate fake data
-
-            xp_total += random.randint(0,1)*10
-            xp_total += random.randint(0,1)*10
-            xp_total += random.randint(0,1)*5
-
+        xp = 0;
+        #days_so_far == len(datelist)
+        for day in range(0, sem.days_so_far()):
+            xp = user.profile.xp_to_date(datelist[day])
             xp_data.append(
-                { 'x': day, 'y': xp_total}
+                # day 0-indexed
+                { 'x': day+1, 'y': xp}
             )
 
-        print(xp_data)
-
-
         progress_chart = {
-            "xp_data": xp_data,
+            "days_in_semester": 90, #sem.num_days(),
+            "xp_data":          xp_data,
         }
         json_data = json.dumps(progress_chart)
 

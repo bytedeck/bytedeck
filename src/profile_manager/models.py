@@ -96,6 +96,15 @@ class Profile(models.Model):
     class Meta:
         ordering = ['user__username']
 
+    def get_preferred_name(self):
+        # new students won't have name info yet
+        if self.preferred_name:
+            return self.preferred_name
+        elif self.first_name:
+            return self.first_name
+        else:
+            return user.username
+
     def get_absolute_url(self):
         return reverse('profiles:profile_detail', kwargs={'pk':self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
@@ -140,6 +149,12 @@ class Profile(models.Model):
         if not course_count or course_count == 0:
             return 0
         return self.xp()/course_count
+
+    def xp_to_date(self, date):
+        xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)
+        #xp += BadgeAssertion.objects.calculate_xp(self.user, date)
+        #xp += CourseStudent.objects.calculate_xp(self.user, date)
+        return xp
 
     def num_courses(self):
         return self.current_courses().count()

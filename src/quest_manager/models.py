@@ -259,6 +259,10 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_not_semester(self, semester):
         return self.exclude(semester=semester)
 
+    def get_completed_before(self, date):
+        print(date)
+        return self.filter(time_approved__lte=date)
+
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self, active_semester_only=False):
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
@@ -276,8 +280,9 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(active_semester_only).not_approved()
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
-    def all_approved(self, user=None, quest=None):
+    def all_approved(self, user=None, quest=None, up_to_date=None):
         qs = self.get_queryset(True).approved()
+
         if user is None:
             # Staff have a separate tab for skipped quests
             qs = qs.no_game_lab()
@@ -286,6 +291,10 @@ class QuestSubmissionManager(models.Manager):
 
         if quest is not None:
             qs = qs.get_quest(quest)
+
+        if up_to_date is not None:
+            qs = qs.get_completed_before(up_to_date)
+
 
         return qs
         #     return self.get_queryset().approved().no_game_lab()
@@ -386,6 +395,16 @@ class QuestSubmissionManager(models.Manager):
 
     def calculate_xp(self, user):
         total_xp = self.all_approved(user).no_game_lab().aggregate(Sum('quest__xp'))
+        xp = total_xp['quest__xp__sum']
+        if xp is None:
+            xp = 0
+        return xp
+
+    def calculate_xp_to_date(self, user, date):
+        # print("submission.calculate_xp_to_date date: " + str(date))
+        qs = self.all_approved(user, up_to_date=date).no_game_lab()
+
+        total_xp = qs.aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
         if xp is None:
             xp = 0

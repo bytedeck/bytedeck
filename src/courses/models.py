@@ -7,7 +7,7 @@ from djconfig import config
 
 from quest_manager.models import QuestSubmission
 
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 
 from workdays import networkdays, workday
 
@@ -167,6 +167,14 @@ class Semester(models.Model):
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
         return workday(self.first_day, days_to_fraction, excluded_days)
+
+    def get_datetime_by_days_since_start(self, class_days):
+        excluded_days = self.excluded_days()
+        date = workday(self.first_day, class_days, excluded_days)
+        # convert from date to datetime
+        dt = datetime.combine(date, datetime.max.time())
+        #make timezone aware
+        return timezone.make_aware(dt, timezone.get_default_timezone())
 
     def chillax_line_started(self):
         #return timezone.now().date() > self.get_interim1_date()

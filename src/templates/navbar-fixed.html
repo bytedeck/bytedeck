@@ -71,7 +71,8 @@
       <ul class="nav navbar-nav navbar-right">
         {% if request.user.is_authenticated %}
         <li id="menu-xp">
-          <a href="{% url 'courses:marks' %}" class="navbar-text-large-container">XP:
+          <a href="{% url 'courses:marks' request.user.id %}"
+            class="navbar-text-large-container">XP:
             <span class="navbar-text-large"> {{ request.user.profile.xp }}</span>
           </a>
         </li>
@@ -83,7 +84,8 @@
           </a>
         </li>
         <li id='notifications-menu' class="dropdown">
-          <a title="Notifiations" href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown"
+          <a title="Notifiations" href="#"
+            class="dropdown-toggle notification-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-bell"></i>&nbsp;<span id="notification_badge" class="badge alert-danger"></span>
           </a>
@@ -91,7 +93,7 @@
           </ul>
         </li>
 
-        <!-- <li class="dropdown">
+        <!-- <li class="dropdown" id="easteregg">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-user{% if request.user.is_staff %}-secret{%endif%}"></i>
@@ -117,7 +119,8 @@
             <li><a href="{% url 'suggestions:list' %}"><i class="fa fa-fw fa-lightbulb-o"></i>&nbsp;&nbsp;Suggestion Box BETA</a></li>
             <li><a href="https://docs.google.com/drawings/d/1IN1nFr00VI2BWaRvraiiRGgnYoKPs4ywt2rWevwHgXI/edit?usp=sharing">
                 <i class="fa fa-fw fa-map-o"></i>&nbsp;&nbsp;Quest Map</a></li>
-            <li><a href="{% url 'courses:ranks' %}"><i class="fa fa-fw fa-star-o"></i>&nbsp;&nbsp;Ranks List</a></li>
+            <li><a href="{% url 'courses:ranks' %}">
+                <i class="fa fa-fw fa-star-o"></i>&nbsp;&nbsp;Ranks List</a></li>
             <li><a href="https://docs.google.com/spreadsheets/d/1dICnxDSHkQV2HMuuYLNsQLdUGFrSMskdFe_vSz41_Zw/edit?usp=sharing">
                 <i class="fa fa-fw fa-dollar"></i>&nbsp;&nbsp;Hackerspace Budget</a></li>
             <!-- <li><a href="#">#</a></li> -->
