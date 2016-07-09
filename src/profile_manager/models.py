@@ -152,7 +152,7 @@ class Profile(models.Model):
 
     def xp_to_date(self, date):
         xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)
-        #xp += BadgeAssertion.objects.calculate_xp(self.user, date)
+        xp += BadgeAssertion.objects.calculate_xp_to_date(self.user, date)
         #xp += CourseStudent.objects.calculate_xp(self.user, date)
         return xp
 

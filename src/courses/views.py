@@ -155,7 +155,7 @@ def ajax_progress_chart(request, user_id=0):
             )
 
         progress_chart = {
-            "days_in_semester": 90, #sem.num_days(),
+            "days_in_semester": sem.num_days(),
             "xp_data":          xp_data,
         }
         json_data = json.dumps(progress_chart)

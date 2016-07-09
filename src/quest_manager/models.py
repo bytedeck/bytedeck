@@ -260,7 +260,6 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.exclude(semester=semester)
 
     def get_completed_before(self, date):
-        print(date)
         return self.filter(time_approved__lte=date)
 
 class QuestSubmissionManager(models.Manager):
@@ -460,8 +459,8 @@ class QuestSubmission(models.Model):
     is_approved = models.BooleanField(default=False)
     time_approved = models.DateTimeField(null=True, blank=True)
     time_returned = models.DateTimeField(null=True, blank=True)
-    timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
-    updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     #all references to gamelab changed to "skipped"
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
     semester = models.ForeignKey('courses.Semester')

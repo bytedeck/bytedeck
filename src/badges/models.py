@@ -140,6 +140,9 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         return self.filter(semester = semester)
 
+    def get_issued_before(self, date):
+        return self.filter(timestamp__lte=date)
+
 class BadgeAssertionManager(models.Manager):
     def get_queryset(self, active_semester_only = True):
         qs = BadgeAssertionQuerySet(self.model, using=self._db)
@@ -212,14 +215,27 @@ class BadgeAssertionManager(models.Manager):
             xp = 0
         return xp
 
+    def calculate_xp_to_date(self, user, date):
+        # self.check_for_new_assertions(user)
+        qs = self.get_queryset().no_game_lab().get_user(user)
+        qs = qs.get_issued_before(date)
+        total_xp = qs.aggregate(Sum('badge__xp'))
+        xp = total_xp['badge__xp__sum']
+        if xp is None:
+            xp = 0
+        # print("###########################" + str(xp))
+        # print(date)
+        # print(timezone.now())
+        return xp
+
 
 class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
     ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time user has received this badge')
     # time_issued = models.DateTimeField(default = timezone.now())
-    timestamp = models.DateTimeField(auto_now=True, auto_now_add=False)
-    updated = models.DateTimeField(auto_now=False, auto_now_add=True)
+    timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
     game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
     semester = models.ForeignKey('courses.Semester', default = 1)
