@@ -146,9 +146,10 @@ def ajax_progress_chart(request, user_id=0):
         #   y: XP earned so far
 
         xp = 0;
+        num_courses = user.profile.num_courses()
         #days_so_far == len(datelist)
         for day in range(0, sem.days_so_far()):
-            xp = user.profile.xp_to_date(datelist[day])
+            xp = user.profile.xp_to_date(datelist[day])/num_courses
             xp_data.append(
                 # day 0-indexed
                 { 'x': day+1, 'y': xp}
