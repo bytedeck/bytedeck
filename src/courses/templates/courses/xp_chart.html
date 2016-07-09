@@ -204,7 +204,7 @@
 
     $.ajax({
       type: "POST",
-      url: "{% url 'courses:ajax_progress_chart_user' user.id %}",
+      url: "{% url 'courses:ajax_progress_chart' user.id %}",
       data: {
         csrfmiddlewaretoken: "{{ csrf_token }}",
       },
@@ -215,9 +215,7 @@
         generate_mark_lines(data.days_in_semester);
         myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
 
-        console.log(myChart);
-
-
+        //console.log(myChart);
 
         $('div.loading').remove();
         $('#myChart').show("slow");
