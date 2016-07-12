@@ -3,7 +3,7 @@
 <!DOCTYPE html>
 
 <html lang="en">
-  <head>
+<head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,58 +18,58 @@
     {% block head %}{% endblock %}
 
     <style>{% block head_css %}{% endblock %}</style>
-  </head>
+</head>
 
-  <body>
-    <div id='popover-fake-orphan-anchor'></div>
+<body>
+<div id='popover-fake-orphan-anchor'></div>
 
-    {% block content_first %}{% endblock %}
-    {% include 'navbar-fixed.html' %}
-    <div class="container-fluid" id="main-container">
+{% block content_first %}{% endblock %}
+{% include 'navbar-fixed.html' %}
+<div class="container-fluid" id="main-container">
 
-      {% if messages %}
-        {% for message in messages %}
-          {% if 'error' in message.tags %}
-          <audio src="{% static 'sounds/error_small.mp3' %}" autoplay prelaod='auto'></audio>
-          {% elif 'warning' in message.tags %}
-          {% elif 'info' in message.tags %}
-          {% elif 'success' in message.tags %}
-          <audio src="{% static 'sounds/success_small.mp3' %}" autoplay prelaod='auto'></audio>
-        {% endif %}
-        <div role="alert" class="alert alert-dismissible fade in
+    {% if messages %}
+    {% for message in messages %}
+    {% if 'error' in message.tags %}
+    <audio src="{% static 'sounds/error_small.mp3' %}" autoplay prelaod='auto'></audio>
+    {% elif 'warning' in message.tags %}
+    {% elif 'info' in message.tags %}
+    {% elif 'success' in message.tags %}
+    <audio src="{% static 'sounds/success_small.mp3' %}" autoplay prelaod='auto'></audio>
+    {% endif %}
+    <div role="alert" class="alert alert-dismissible fade in
           {% if 'error' in message.tags %}alert-danger
           {% elif 'warning' in message.tags %}alert-warning
           {% elif 'info' in message.tags %}alert-info
           {% elif 'success' in message.tags %}alert-success
           {% endif %}
           dismiss-in-5">
-          <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
             <span aria-hidden="true">&times;</span>
-          </button>
-          {% if 'safe' in message.tags %}
-            {{ message|safe }}
-          {% else %}
-            {{ message|safe }}
-          {% endif %}
-        </div>
-        {% endfor %}
-      {% endif %}
-      {% if not config.hs_closed or request.user.is_staff %}
-        {% block content_outer %}{% endblock %}
-      {% else %}
-        <img class = "img-responsive jumbo-banner banner1"
-        src ="{% static 'img/banner_closed.jpg' %}"
-        alt="Timberline's Digital Hackerspace is Closed for Maintenance" />
-      {% endif %}
-    </div> <!-- /container -->
+        </button>
+        {% if 'safe' in message.tags %}
+        {{ message|safe }}
+        {% else %}
+        {{ message|safe }}
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if not config.hs_closed or request.user.is_staff %}
+    {% block content_outer %}{% endblock %}
+    {% else %}
+    <img class="img-responsive jumbo-banner banner1"
+         src="{% static 'img/banner_closed.jpg' %}"
+         alt="Timberline's Digital Hackerspace is Closed for Maintenance"/>
+    {% endif %}
+</div> <!-- /container -->
 
-    {% block content_last %}{% endblock %}
+{% block content_last %}{% endblock %}
 
-    {% include 'footer.html' %}
+{% include 'footer.html' %}
 
-    {% include 'javascript.html' %}
-    {% block js %}{% endblock %}
-    {% block tour_js %}{% endblock %}
+{% include 'javascript.html' %}
+{% block js %}{% endblock %}
+{% block tour_js %}{% endblock %}
 
-  </body>
+</body>
 </html>

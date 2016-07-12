@@ -2,12 +2,13 @@ from django import forms
 
 from .models import Profile
 
+
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
         exclude = ['user', 'intro_tour_completed', 'banned_from_comments',
-                    'game_lab_transfer_process_on', 'active_in_current_semester',
-                    'get_announcements_by_email']
+                   'game_lab_transfer_process_on', 'active_in_current_semester',
+                   'get_announcements_by_email']
 
     # UNIQUE if NOT NULL
     def clean_alias(self):

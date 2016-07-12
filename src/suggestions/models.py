@@ -1,12 +1,12 @@
 from django.conf import settings
-from django.db.models import Q
-from django.db import models
 from django.core.urlresolvers import reverse
-
+from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 # Create your models here.
 from comments.models import Comment
+
 
 class SuggestionQuerySet(models.query.QuerySet):
     def all_user(self, user):
@@ -30,6 +30,7 @@ class SuggestionQuerySet(models.query.QuerySet):
     def unlikely(self):
         return self.filter(status=Suggestion.UNLIKELY)
 
+
 class SuggestionManager(models.Manager):
     def get_queryset(self):
         return SuggestionQuerySet(self.model, using=self._db)
@@ -38,8 +39,9 @@ class SuggestionManager(models.Manager):
         return self.get_queryset().approved()
 
     def all_for_student(self, user):
-        #all suggestions from the user, but only approved ones from others
+        # all suggestions from the user, but only approved ones from others
         return self.get_queryset().filter(Q(status=Suggestion.APPROVED) | Q(user=user))
+
 
 class Suggestion(models.Model):
     AWAITING_APPROVED = 1
@@ -47,12 +49,12 @@ class Suggestion(models.Model):
     COMPLETED = 3
     UNLIKELY = 4
     NOT_APPROVED = 5
-    STATUSES = ((AWAITING_APPROVED,'awaiting approval'),
-                (APPROVED,'approved'),
-                (COMPLETED,'completed'),
-                (UNLIKELY,'unlikely'),
-                (NOT_APPROVED,'not approved'),
-    )
+    STATUSES = ((AWAITING_APPROVED, 'awaiting approval'),
+                (APPROVED, 'approved'),
+                (COMPLETED, 'completed'),
+                (UNLIKELY, 'unlikely'),
+                (NOT_APPROVED, 'not approved'),
+                )
 
     title = models.CharField(max_length=50, help_text="Briefly describes the suggestion")
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
@@ -85,6 +87,7 @@ class VoteQuerySet(models.query.QuerySet):
     def all_suggestion(self, suggestion):
         return self.filter(suggestion=suggestion)
 
+
 class VoteManager(models.Manager):
     def get_queryset(self):
         return VoteQuerySet(self.model, using=self._db)
@@ -98,9 +101,9 @@ class VoteManager(models.Manager):
 
         if self.user_can_vote(user):
             new_vote = self.model(
-                user = user,
-                suggestion = suggestion,
-                vote = vote,
+                user=user,
+                suggestion=suggestion,
+                vote=vote,
             )
             new_vote.save(using=self._db)
             return new_vote
@@ -125,6 +128,7 @@ class VoteManager(models.Manager):
         if most_recent.timestamp.date() < timezone.now().date():
             return True
         return False
+
 
 class Vote(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)

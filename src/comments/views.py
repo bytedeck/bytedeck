@@ -1,16 +1,16 @@
-from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
 
 # Create your views here.
 from notifications.signals import notify
-from quest_manager.models import Quest
 
 from .models import Comment
 from .forms import CommentForm
+
 
 @staff_member_required
 def unflag(request, id):
@@ -18,40 +18,43 @@ def unflag(request, id):
     comment.unflag()
     return redirect(comment.path)
 
+
 @staff_member_required
 def delete(request, id, template_name='comments/confirm_delete.html'):
     comment = get_object_or_404(Comment, pk=id)
     path = comment.path
-    if request.method=='POST':
+    if request.method == 'POST':
         comment.delete()
         return redirect(path)
-    return render(request, template_name, {'object':comment})
+    return render(request, template_name, {'object': comment})
+
 
 @staff_member_required
 def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
     comment.flag()
 
-    icon="<span class='fa-stack'>" + \
-        "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
-        "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
-        "</span>"
+    icon = "<span class='fa-stack'>" + \
+           "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+           "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+           "</span>"
 
     notify.send(
         request.user,
-        target= comment,
+        target=comment,
         recipient=comment.user,
-        affected_users= [comment.user,],
+        affected_users=[comment.user, ],
         verb='flagged',
         icon=icon,
-        )
+    )
 
     return redirect(comment.path)
+
 
 @login_required
 def comment_thread(request, id):
     comment = get_object_or_404(Comment, id=id)
-    form = CommentForm(label = "Reply")
+    form = CommentForm(label="Reply")
     context = {
         "comment": comment,
         "heading": "Comment Thread",
@@ -59,9 +62,9 @@ def comment_thread(request, id):
     }
     return render(request, "comments/comment_thread.html", context)
 
+
 @login_required
 def comment_create(request):
-
     if request.method == "POST" and request.user.is_authenticated():
         parent_id = request.POST.get('parent_id')
         # quest_id = request.POST.get('quest_id')
@@ -74,10 +77,9 @@ def comment_create(request):
         try:
             # quest = Quest.objects.get(id = quest_id)
             content_type = ContentType.objects.get_for_id(target_content_type_id)
-            target = content_type.get_object_for_this_type(id = target_object_id)
+            target = content_type.get_object_for_this_type(id=target_object_id)
         except:
             target = None
-
 
         parent_comment = None
         if parent_id is not None:
@@ -98,13 +100,13 @@ def comment_create(request):
             comment_text = form.cleaned_data.get('comment_text')
             if parent_comment is not None:
                 comment_new = Comment.objects.create_comment(
-                    user = request.user,
-                    path = parent_comment.get_origin,
-                    text = comment_text,
+                    user=request.user,
+                    path=parent_comment.get_origin,
+                    text=comment_text,
                     # quest = quest,
-                    target = target,
+                    target=target,
                     parent=parent_comment,
-                    )
+                )
                 affected_users = parent_comment.get_affected_users()
                 notify.send(
                     request.user,
@@ -114,29 +116,29 @@ def comment_create(request):
                     affected_users=affected_users,
                     verb='replied to',
                     icon=icon,
-                    )
+                )
                 # messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
                 messages.success(request, success_message)
                 return HttpResponseRedirect(success_url)
             else:
                 comment_new = Comment.objects.create_comment(
-                    user = request.user,
-                    path = origin_path,
-                    text = comment_text,
+                    user=request.user,
+                    path=origin_path,
+                    text=comment_text,
                     # quest = quest
-                    target = target,
-                    )
+                    target=target,
+                )
                 # Fix this to send to all staff
-                affected_users = [User.objects.get(username='90158'),]
+                affected_users = [User.objects.get(username='90158'), ]
                 notify.send(
                     request.user,
                     action=comment_new,
-                    target= target,
+                    target=target,
                     recipient=request.user,
                     affected_users=affected_users,
                     verb='commented on',
                     icon=icon,
-                    )
+                )
                 messages.success(request, success_message)
 
                 if success_url is None:
@@ -146,7 +148,7 @@ def comment_create(request):
         else:
             messages.error(request, "There was an error with your comment. Did you type anything in the box?")
             if origin_path is None:
-                    return HttpResponseRedirect(parent_comment.get_absolute_url())
+                return HttpResponseRedirect(parent_comment.get_absolute_url())
             return HttpResponseRedirect(origin_path)
 
     else:

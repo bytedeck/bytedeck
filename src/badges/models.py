@@ -1,35 +1,33 @@
-from datetime import time, date, datetime
+from prerequisites.models import Prereq
 
-from django.contrib.auth.models import User
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db import models
-from django.db.models import Max, Sum, Count
+from django.db.models import Max, Sum
 from django.templatetags.static import static
-from django.utils import timezone
-
 from djconfig import config
 
-from prerequisites.models import Prereq
-#from courses.models import Semester
+
+# from courses.models import Semester
 
 # Create your models here.
 
 class BadgeType(models.Model):
-
     name = models.CharField(max_length=50, unique=True)
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
-    repeatable = models.BooleanField(default = True)
+    repeatable = models.BooleanField(default=True)
     # manual_only = models.BooleanField(default = False)
     fa_icon = models.CharField(max_length=50, blank=True, null=True,
-        help_text="Name of a font-awesome icon, e.g.'fa-gift'")
+                               help_text="Name of a font-awesome icon, e.g.'fa-gift'")
 
     def __str__(self):
         return self.name
 
     class Meta:
         ordering = ['sort_order']
+
 
 class BadgeSeries(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -41,46 +39,49 @@ class BadgeSeries(models.Model):
         ordering = ["name"]
         verbose_name_plural = "Badge Series'"
 
+
 class BadgeQuerySet(models.query.QuerySet):
     def get_type(self, badge_type):
-        return self.filter(badge_type = badge_type)
+        return self.filter(badge_type=badge_type)
 
     def get_active(self):
-        return self.filter(active = True)
+        return self.filter(active=True)
+
 
 class BadgeManager(models.Manager):
     def get_queryset(self):
         return BadgeQuerySet(self.model, using=self._db).order_by('sort_order')
 
-    #this should be generic and placed in the prerequisites app
+    # this should be generic and placed in the prerequisites app
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
-                obj.pk for obj in self.get_queryset()
-                if Prereq.objects.all_conditions_met(obj, user, False)
-                # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
-                ]
-        return self.filter(pk__in = pk_met_list)
+            obj.pk for obj in self.get_queryset()
+            if Prereq.objects.all_conditions_met(obj, user, False)
+            # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
+            ]
+        return self.filter(pk__in=pk_met_list)
 
     def all_manually_granted(self):
         # build a list of pk's for badges that have no prerequisites.
         pk_manual_list = [
-                obj.pk for obj in self.get_queryset()
-                if Prereq.objects.all_parent(obj).count() == 0
-                ]
-        return self.filter(pk__in = pk_manual_list).order_by('name')
+            obj.pk for obj in self.get_queryset()
+            if Prereq.objects.all_parent(obj).count() == 0
+            ]
+        return self.filter(pk__in=pk_manual_list).order_by('name')
+
 
 class Badge(models.Model):
     name = models.CharField(max_length=50, unique=True)
-    xp = models.PositiveIntegerField(default = 0)
+    xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.TextField(blank=True, null=True)
     series = models.ForeignKey(BadgeSeries, blank=True, null=True)
     badge_type = models.ForeignKey(BadgeType)
-    icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True) #needs Pillow for ImageField
+    icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True)  # needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
-    active = models.BooleanField(default = True)
+    active = models.BooleanField(default=True)
     # hours_between_repeats = models.PositiveIntegerField(default = 0)
     # date_available = models.DateField(default=timezone.now())
     # time_available = models.TimeField(default=time().min) # midnight
@@ -92,7 +93,7 @@ class Badge(models.Model):
     objects = BadgeManager()
 
     class Meta:
-        #order_with_respect_to = 'badge_type'
+        # order_with_respect_to = 'badge_type'
         ordering = ['sort_order', 'name']
 
     def __str__(self):
@@ -126,25 +127,26 @@ class Badge(models.Model):
 
 class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_user(self, user):
-        return self.filter(user = user)
+        return self.filter(user=user)
 
     def get_badge(self, badge):
-        return self.filter(badge = badge)
+        return self.filter(badge=badge)
 
     def get_type(self, badge_type):
-        return self.filter(badge__badge_type = badge_type)
+        return self.filter(badge__badge_type=badge_type)
 
     def no_game_lab(self):
-        return self.filter(game_lab_transfer = False)
+        return self.filter(game_lab_transfer=False)
 
     def get_semester(self, semester):
-        return self.filter(semester = semester)
+        return self.filter(semester=semester)
 
     def get_issued_before(self, date):
         return self.filter(timestamp__lte=date)
 
+
 class BadgeAssertionManager(models.Manager):
-    def get_queryset(self, active_semester_only = True):
+    def get_queryset(self, active_semester_only=True):
         qs = BadgeAssertionQuerySet(self.model, using=self._db)
         if active_semester_only:
             return qs.get_semester(config.hs_active_semester)
@@ -177,12 +179,12 @@ class BadgeAssertionManager(models.Manager):
     def create_assertion(self, user, badge, issued_by=None, transfer=False):
         ordinal = self.get_assertion_ordinal(user, badge)
         new_assertion = BadgeAssertion(
-            badge = badge,
-            user = user,
-            ordinal = ordinal,
-            issued_by = issued_by,
-            game_lab_transfer = transfer,
-            semester_id = config.hs_active_semester,
+            badge=badge,
+            user=user,
+            ordinal=ordinal,
+            issued_by=issued_by,
+            game_lab_transfer=transfer,
+            semester_id=config.hs_active_semester,
         )
         new_assertion.save()
         return new_assertion
@@ -190,21 +192,20 @@ class BadgeAssertionManager(models.Manager):
     def check_for_new_assertions(self, user, transfer=False):
         badges = Badge.objects.get_conditions_met(user)
         for badge in badges:
-            #if the badge doesn't already exist
+            # if the badge doesn't already exist
             if not self.all_for_user_badge(user, badge, False):
                 self.create_assertion(user, badge, None, transfer)
-
 
     def get_by_type_for_user(self, user):
         self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
         qs = self.get_queryset().get_user(user)
-        by_type =  [
-                    {
-                        'badge_type': t,
-                        'list': qs.get_type(t)
-                    } for t in types
-                ]
+        by_type = [
+            {
+                'badge_type': t,
+                'list': qs.get_type(t)
+            } for t in types
+            ]
         return by_type
 
     def calculate_xp(self, user):
@@ -232,13 +233,13 @@ class BadgeAssertionManager(models.Manager):
 class BadgeAssertion(models.Model):
     badge = models.ForeignKey(Badge)
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
-    ordinal = models.PositiveIntegerField(default = 1, help_text = 'indicating the nth time user has received this badge')
+    ordinal = models.PositiveIntegerField(default=1, help_text='indicating the nth time user has received this badge')
     # time_issued = models.DateTimeField(default = timezone.now())
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
-    game_lab_transfer = models.BooleanField(default = False, help_text = 'XP not counted')
-    semester = models.ForeignKey('courses.Semester', default = 1)
+    game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
+    semester = models.ForeignKey('courses.Semester', default=1)
 
     objects = BadgeAssertionManager()
 
@@ -246,7 +247,7 @@ class BadgeAssertion(models.Model):
         # ordinal_str = ""
         # if self.ordinal > 1:
         #     ordinal_str = " (" + str(self.ordinal) + ")"
-        return self.badge.name #+ ordinal_str
+        return self.badge.name  # + ordinal_str
 
     def get_absolute_url(self):
         return reverse('badges:list')
@@ -269,26 +270,27 @@ class BadgeAssertion(models.Model):
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from notifications.signals import notify
-#only receive signals from BadgeAssertion model
+
+
+# only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
 def post_save_receiver(sender, **kwargs):
-
     assertion = kwargs["instance"]
     if kwargs["created"]:
-        #need an issuing object, fix this better, should be generic something "Hackerspace or "Automatic".
+        # need an issuing object, fix this better, should be generic something "Hackerspace or "Automatic".
         sender = assertion.issued_by
-        if sender==None:
-            sender=User.objects.filter(is_staff=True).first()
+        if sender == None:
+            sender = User.objects.filter(is_staff=True).first()
 
         icon = "<i class='text-warning fa fa-lg fa-fw "
         icon += assertion.badge.badge_type.fa_icon
-        icon +="'></i>"
+        icon += "'></i>"
 
         notify.send(
             sender,
             # action= action,
             target=assertion.badge,
             recipient=assertion.user,
-            affected_users=[assertion.user,],
-            icon= icon,
+            affected_users=[assertion.user, ],
+            icon=icon,
             verb="granted you a")

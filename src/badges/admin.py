@@ -11,14 +11,15 @@ class BadgeAssertionAdmin(admin.ModelAdmin):
 
 
 class BadgeTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sort_order', 'fa_icon' )
+    list_display = ('name', 'sort_order', 'fa_icon')
 
 
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'xp','active')
+    list_display = ('name', 'xp', 'active')
     inlines = [
         PrereqInline,
     ]
+
 
 admin.site.register(Badge, BadgeAdmin)
 admin.site.register(BadgeSeries)

@@ -1,36 +1,35 @@
+from badges.models import BadgeAssertion
+from courses.models import Rank, CourseStudent
+from notifications.signals import notify
+from quest_manager.models import QuestSubmission
+
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models.signals import post_save
-from django.contrib.auth.models import User
 from django.templatetags.static import static
-
-from notifications.signals import notify
-
-from datetime import datetime
-
+from django.utils import timezone
 from djconfig import config
 
-from quest_manager.models import QuestSubmission
-from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent
-
 GRAD_YEAR_CHOICES = []
-for r in range(datetime.now().year, datetime.now().year+4):
-        GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
+for r in range(timezone.now().year, timezone.now().year + 4):
+    GRAD_YEAR_CHOICES.append((r, r))  # (actual value, human readable name) tuples
+
 
 class ProfileQuerySet(models.query.QuerySet):
     def get_grad_year(self, year):
-        return self.filter(grad_year = year)
+        return self.filter(grad_year=year)
 
     def announcement_email(self):
-        return self.filter(get_announcements_by_email = True)
+        return self.filter(get_announcements_by_email=True)
 
     def visible(self):
-        return self.filter(visible_to_other_students = True)
+        return self.filter(visible_to_other_students=True)
 
     def get_semester(self, semester):
-        return self.filter(active_in_current_semester = semester)
+        return self.filter(active_in_current_semester=semester)
+
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
@@ -45,38 +44,38 @@ class ProfileManager(models.Manager):
     def all_visible(self):
         return self.get_queryset().visible()
 
-class Profile(models.Model):
 
+class Profile(models.Model):
     def get_grad_year_choices():
         grad_year_choices = []
-        for r in range(datetime.now().year, datetime.now().year+4):
-                grad_year_choices.append((r,r)) #(actual value, human readable name) tuples
+        for r in range(timezone.now().year, timezone.now().year + 4):
+            grad_year_choices.append((r, r))  # (actual value, human readable name) tuples
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
-        help_text = 'You can leave this blank, or enter anything you like here.')
+                             help_text='You can leave this blank, or enter anything you like here.')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     first_name = models.CharField(max_length=50, null=True, blank=False,
-        help_text = 'Use the first name that matches your school records.')
+                                  help_text='Use the first name that matches your school records.')
     last_name = models.CharField(max_length=50, null=True, blank=False,
-        help_text = 'Use the last name that matches your school records.')
+                                 help_text='Use the last name that matches your school records.')
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
-        help_text = 'If you would prefer your teacher to call you by a name other than the first name you entered above, put it here.')
+                                      help_text='If you would prefer your teacher to call you by a name other than the first name you entered above, put it here.')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
-    intro_tour_completed = models.BooleanField(default = False)
-    game_lab_transfer_process_on = models.BooleanField(default = False)
-    banned_from_comments = models.BooleanField(default = False)
-    get_announcements_by_email = models.BooleanField(default = False)
-    visible_to_other_students = models.BooleanField(default = False)
+    intro_tour_completed = models.BooleanField(default=False)
+    game_lab_transfer_process_on = models.BooleanField(default=False)
+    banned_from_comments = models.BooleanField(default=False)
+    get_announcements_by_email = models.BooleanField(default=False)
+    visible_to_other_students = models.BooleanField(default=False)
     # New students automatically active,
     # all existing students should be changed to "inactive" at the end of the semester
     # they should be reactivated when they join a new course in a new (active) semester
-    active_in_current_semester = models.BooleanField(default = True)
-    dark_theme = models.BooleanField(default = False)
+    active_in_current_semester = models.BooleanField(default=True)
+    dark_theme = models.BooleanField(default=False)
 
     objects = ProfileManager()
 
@@ -106,9 +105,9 @@ class Profile(models.Model):
             return user.username
 
     def get_absolute_url(self):
-        return reverse('profiles:profile_detail', kwargs={'pk':self.id})
+        return reverse('profiles:profile_detail', kwargs={'pk': self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
-        #return u'/some_url/%d' % self.id
+        # return u'/some_url/%d' % self.id
 
     def get_avatar_url(self):
         if self.avatar and hasattr(self.avatar, 'url'):
@@ -148,13 +147,13 @@ class Profile(models.Model):
         course_count = self.num_courses()
         if not course_count or course_count == 0:
             return 0
-        return self.xp()/course_count
+        return self.xp() / course_count
 
     def xp_to_date(self, date):
         xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)
         xp += BadgeAssertion.objects.calculate_xp_to_date(self.user, date)
-        #Manual adjustments I think...
-        #xp += CourseStudent.objects.calculate_xp(self.user, date)
+        # Manual adjustments I think...
+        # xp += CourseStudent.objects.calculate_xp(self.user, date)
         return xp
 
     def num_courses(self):
@@ -167,7 +166,7 @@ class Profile(models.Model):
         course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
         if courses and course:
-            return course.calc_mark(self.xp())/courses.count()
+            return course.calc_mark(self.xp()) / courses.count()
         else:
             return None
 
@@ -179,7 +178,6 @@ class Profile(models.Model):
                 return int(self.xp_per_course()) >= int(semester.chillax_line())
         return False
 
-
     def rank(self):
         return Rank.objects.get_rank(self.xp())
 
@@ -189,7 +187,7 @@ class Profile(models.Model):
     def xp_to_next_rank(self):
         next_rank = self.next_rank()
         if next_rank == None:
-            return 0 #maxed out!
+            return 0  # maxed out!
         return self.next_rank().xp - self.rank().xp
 
     def xp_since_last_rank(self):
@@ -201,6 +199,7 @@ class Profile(models.Model):
     def last_submission_completed(self):
         return QuestSubmission.objects.user_last_submission_completed(self.user)
 
+
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:
@@ -209,9 +208,10 @@ def create_profile(sender, **kwargs):
 
         notify.send(
             current_user,
-            recipient=User.objects.filter(is_staff=True).first(), #admin user
+            recipient=User.objects.filter(is_staff=True).first(),  # admin user
             affected_users=User.objects.filter(is_staff=True),
             icon="<i class='fa fa-fw fa-lg fa-user'></i>",
             verb='new user created')
+
 
 post_save.connect(create_profile, sender=User)

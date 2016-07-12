@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
-class HackerspaceConfig(AppConfig):
 
+class HackerspaceConfig(AppConfig):
     name = 'hackerspace_online'
     verbose_name = "HackerspaceOnline"
 

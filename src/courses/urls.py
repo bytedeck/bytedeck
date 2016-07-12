@@ -1,7 +1,8 @@
-from django.conf.urls import  url
 from courses import views
 
-#For TemplateView example
+from django.conf.urls import url
+
+# For TemplateView example
 # from django.views.generic import TemplateView
 
 # Admin site customizations

@@ -1,329 +1,329 @@
 [
-{
+  {
     "fields": {
-        "active": true,
-        "icon": "",
-        "title": "Introduction"
+      "active": true,
+      "icon": "",
+      "title": "Introduction"
     },
     "model": "quest_manager.category",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "hours_between_repeats": 0,
-        "datetime_last_edit": "2016-07-06T05:56:08.090Z",
-        "visible_to_students": true,
-        "time_expired": null,
-        "instructor_notes": "<p>These notes are only visible to teachers (or those with the \"staff\" permission).&nbsp; They can be used to put answers, links, examples, or other notes to help you easily determine if the student has properly completed the quest and fulfilled the submission instructions.<br></p>",
-        "date_expired": null,
-        "date_available": "2016-07-06",
-        "max_repeats": 0,
-        "instructions": "<h2>======== SAMPLE DATA ========</h2><p>This quest is part of the sample data you installed to help demonstrate how the works.<br></p><h2>======== SAMPLE DATA ========</h2><p><br></p><p>A <a href=\"https://en.wikipedia.org/wiki/Hackerspace\" target=\"_blank\">hackerspace</a> (also referred to as a hacklab, makerspace, or hackspace) is a community-operated workspace where people with common interests, often in <b>computers, technology, science, digital art or electronic art</b>, can meet, socialize and/or collaborate\u2026 Many hackerspaces, including this one, participate in the use and development of free software, open hardware, and alternative media.</p><h3>Hackerspace - Online Video Tour</h3><p>Put on your headphones and Mr C will give you a tour of this place!</p><div class=\"embed-responsive embed-responsive-16by9\">  <iframe class=\"embed-responsive-item\" src=\"https://www.youtube.com/embed/VtCZQ1NX3FU?rel=0\"></iframe></div><p>(<a href=\"https://www.youtube.com/embed/VtCZQ1NX3FU\" target=\"_blank\">fullscreen link</a>)</p><h3>I watched the tour, now what?</h3><p>Once you have read through the details of a quest, and followed any instructions it gives you, head down to the <i>Submission Instructions</i> which will explain what you need to do to complete the quest.</p>",
-        "datetime_created": "2016-07-06T01:44:17.283Z",
-        "icon": "",
-        "short_description": "What the heck is the Hackerspace Online? Let me take you on a tour! ",
-        "time_available": "00:00:00",
-        "categories": [],
-        "common_data": null,
-        "verification_required": false,
-        "xp": 5,
-        "submission_details": "<p>Each quest will have different submission criteria.&nbsp;For this quest, your task was to watch the Video Tour.&nbsp; </p><p>Often you will be required to attach a document or answer some questions in the Quest Submission Form below, as evidence for your learning. For this quest, however, you just have to hit the \"Submit Quest for Completion\" button below.&nbsp; After hitting the button:</p><ul><li>You will get a confirmation that your quest was successfully submitted, </li><li>This quest will move from your \"In Progress\" tab to your \"Completed\" tab, </li><li>You will be granted a badge for completing your first quest, </li><li>Your XP score will increase by 10 (5 for this quest and 5 for your first badge), and</li><li>Any quests that require this one as a prerequisite will become available to you!<br></li></ul><p></p>",
-        "sort_order": 0,
-        "name": "Welcome to the Hackerspace Online!"
+      "hours_between_repeats": 0,
+      "datetime_last_edit": "2016-07-06T05:56:08.090Z",
+      "visible_to_students": true,
+      "time_expired": null,
+      "instructor_notes": "<p>These notes are only visible to teachers (or those with the \"staff\" permission).&nbsp; They can be used to put answers, links, examples, or other notes to help you easily determine if the student has properly completed the quest and fulfilled the submission instructions.<br></p>",
+      "date_expired": null,
+      "date_available": "2016-07-06",
+      "max_repeats": 0,
+      "instructions": "<h2>======== SAMPLE DATA ========</h2><p>This quest is part of the sample data you installed to help demonstrate how the works.<br></p><h2>======== SAMPLE DATA ========</h2><p><br></p><p>A <a href=\"https://en.wikipedia.org/wiki/Hackerspace\" target=\"_blank\">hackerspace</a> (also referred to as a hacklab, makerspace, or hackspace) is a community-operated workspace where people with common interests, often in <b>computers, technology, science, digital art or electronic art</b>, can meet, socialize and/or collaborate\u2026 Many hackerspaces, including this one, participate in the use and development of free software, open hardware, and alternative media.</p><h3>Hackerspace - Online Video Tour</h3><p>Put on your headphones and Mr C will give you a tour of this place!</p><div class=\"embed-responsive embed-responsive-16by9\">  <iframe class=\"embed-responsive-item\" src=\"https://www.youtube.com/embed/VtCZQ1NX3FU?rel=0\"></iframe></div><p>(<a href=\"https://www.youtube.com/embed/VtCZQ1NX3FU\" target=\"_blank\">fullscreen link</a>)</p><h3>I watched the tour, now what?</h3><p>Once you have read through the details of a quest, and followed any instructions it gives you, head down to the <i>Submission Instructions</i> which will explain what you need to do to complete the quest.</p>",
+      "datetime_created": "2016-07-06T01:44:17.283Z",
+      "icon": "",
+      "short_description": "What the heck is the Hackerspace Online? Let me take you on a tour! ",
+      "time_available": "00:00:00",
+      "categories": [],
+      "common_data": null,
+      "verification_required": false,
+      "xp": 5,
+      "submission_details": "<p>Each quest will have different submission criteria.&nbsp;For this quest, your task was to watch the Video Tour.&nbsp; </p><p>Often you will be required to attach a document or answer some questions in the Quest Submission Form below, as evidence for your learning. For this quest, however, you just have to hit the \"Submit Quest for Completion\" button below.&nbsp; After hitting the button:</p><ul><li>You will get a confirmation that your quest was successfully submitted, </li><li>This quest will move from your \"In Progress\" tab to your \"Completed\" tab, </li><li>You will be granted a badge for completing your first quest, </li><li>Your XP score will increase by 10 (5 for this quest and 5 for your first badge), and</li><li>Any quests that require this one as a prerequisite will become available to you!<br></li></ul><p></p>",
+      "sort_order": 0,
+      "name": "Welcome to the Hackerspace Online!"
     },
     "model": "quest_manager.quest",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "hours_between_repeats": 0,
-        "datetime_last_edit": "2016-07-06T06:03:16.207Z",
-        "visible_to_students": true,
-        "time_expired": null,
-        "instructor_notes": "<br>",
-        "date_expired": null,
-        "date_available": "2016-07-06",
-        "max_repeats": 0,
-        "instructions": "<p><h3>What is Lorum Ipsum?</h3><p><b>Lorem Ipsum</b> is simply dummy text of the printing and \r\ntypesetting industry. Lorem Ipsum has been the industry's standard dummy\r\n text ever since the 1500s, when an unknown printer took a galley of \r\ntype and scrambled it to make a type specimen book. It has survived not \r\nonly five centuries, but also the leap into electronic typesetting, \r\nremaining essentially unchanged. It was popularised in the 1960s with \r\nthe release of Letraset sheets containing Lorem Ipsum passages, and more\r\n recently with desktop publishing software like Aldus PageMaker \r\nincluding versions of Lorem Ipsum.<br></p></p>",
-        "datetime_created": "2016-07-06T01:49:51.808Z",
-        "icon": "",
-        "short_description": "First quest++",
-        "time_available": "00:00:00",
-        "categories": [],
-        "common_data": null,
-        "verification_required": true,
-        "xp": 10,
-        "submission_details": "<p><h3>Why do we use it?</h3><p>It is a long established fact that a reader will be distracted by the\r\n readable content of a page when looking at its layout. The point of \r\nusing Lorem Ipsum is that it has a more-or-less normal distribution of \r\nletters, as opposed to using 'Content here, content here', making it \r\nlook like readable English. Many desktop publishing packages and web \r\npage editors now use Lorem Ipsum as their default model text, and a \r\nsearch for 'lorem ipsum' will uncover many web sites still in their \r\ninfancy. Various versions have evolved over the years, sometimes by \r\naccident, sometimes on purpose (injected humour and the like).<br></p></p>",
-        "sort_order": 0,
-        "name": "2nd Quest"
+      "hours_between_repeats": 0,
+      "datetime_last_edit": "2016-07-06T06:03:16.207Z",
+      "visible_to_students": true,
+      "time_expired": null,
+      "instructor_notes": "<br>",
+      "date_expired": null,
+      "date_available": "2016-07-06",
+      "max_repeats": 0,
+      "instructions": "<p><h3>What is Lorum Ipsum?</h3><p><b>Lorem Ipsum</b> is simply dummy text of the printing and \r\ntypesetting industry. Lorem Ipsum has been the industry's standard dummy\r\n text ever since the 1500s, when an unknown printer took a galley of \r\ntype and scrambled it to make a type specimen book. It has survived not \r\nonly five centuries, but also the leap into electronic typesetting, \r\nremaining essentially unchanged. It was popularised in the 1960s with \r\nthe release of Letraset sheets containing Lorem Ipsum passages, and more\r\n recently with desktop publishing software like Aldus PageMaker \r\nincluding versions of Lorem Ipsum.<br></p></p>",
+      "datetime_created": "2016-07-06T01:49:51.808Z",
+      "icon": "",
+      "short_description": "First quest++",
+      "time_available": "00:00:00",
+      "categories": [],
+      "common_data": null,
+      "verification_required": true,
+      "xp": 10,
+      "submission_details": "<p><h3>Why do we use it?</h3><p>It is a long established fact that a reader will be distracted by the\r\n readable content of a page when looking at its layout. The point of \r\nusing Lorem Ipsum is that it has a more-or-less normal distribution of \r\nletters, as opposed to using 'Content here, content here', making it \r\nlook like readable English. Many desktop publishing packages and web \r\npage editors now use Lorem Ipsum as their default model text, and a \r\nsearch for 'lorem ipsum' will uncover many web sites still in their \r\ninfancy. Various versions have evolved over the years, sometimes by \r\naccident, sometimes on purpose (injected humour and the like).<br></p></p>",
+      "sort_order": 0,
+      "name": "2nd Quest"
     },
     "model": "quest_manager.quest",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "hours_between_repeats": 0,
-        "datetime_last_edit": "2016-07-06T06:06:14.576Z",
-        "visible_to_students": true,
-        "time_expired": null,
-        "instructor_notes": "<p>These notes are only visible to teachers (or those with the \"staff\" permission).&nbsp; They can be used to put answers, links, examples, or other notes to help you easily determine if the student has properly completed the quest and fulfilled the submission instructions.<br></p>",
-        "date_expired": null,
-        "date_available": "2016-07-06",
-        "max_repeats": -1,
-        "instructions": "<h1>How this quest works</h1><p>You can use this quest however you want.&nbsp; It's main purpose is to allow you to communicate with [TEACHER].&nbsp; Here are some examples of how you might use it:</p><p style=\"padding-left: 30px;\">- Just to say, \"Hi.\"<br>- Send a file (using add attachment),<br>- Send an interesting link that you want [TEACHER] to check out,<br>- Report a problem with the website or a quest or the classroom etc.,<br>- As a reminder to [TEACHER] of something you told him, that you don't want him to forget,<br>- To claim a reward, like the Cabbage Moth, etc., or<br>- To send [TEACHER] suggestions, ideas, tips, tricks, constructive criticism, etc (check out the Human Baby award =).</p><p>This quest will always be available to you, either in your In Progress or in your Available quest list.</p>",
-        "datetime_created": "2016-07-06T06:06:14.576Z",
-        "icon": "",
-        "short_description": "Use this quest to communicate with [TEACHER].  Send him a file, link, message, question, reminder, complaint, etc.",
-        "time_available": "00:00:00",
-        "categories": [],
-        "common_data": null,
-        "verification_required": true,
-        "xp": 5,
-        "submission_details": "Send me your message!<br><p></p>",
-        "sort_order": 0,
-        "name": "Send [TEACHER] a Message"
+      "hours_between_repeats": 0,
+      "datetime_last_edit": "2016-07-06T06:06:14.576Z",
+      "visible_to_students": true,
+      "time_expired": null,
+      "instructor_notes": "<p>These notes are only visible to teachers (or those with the \"staff\" permission).&nbsp; They can be used to put answers, links, examples, or other notes to help you easily determine if the student has properly completed the quest and fulfilled the submission instructions.<br></p>",
+      "date_expired": null,
+      "date_available": "2016-07-06",
+      "max_repeats": -1,
+      "instructions": "<h1>How this quest works</h1><p>You can use this quest however you want.&nbsp; It's main purpose is to allow you to communicate with [TEACHER].&nbsp; Here are some examples of how you might use it:</p><p style=\"padding-left: 30px;\">- Just to say, \"Hi.\"<br>- Send a file (using add attachment),<br>- Send an interesting link that you want [TEACHER] to check out,<br>- Report a problem with the website or a quest or the classroom etc.,<br>- As a reminder to [TEACHER] of something you told him, that you don't want him to forget,<br>- To claim a reward, like the Cabbage Moth, etc., or<br>- To send [TEACHER] suggestions, ideas, tips, tricks, constructive criticism, etc (check out the Human Baby award =).</p><p>This quest will always be available to you, either in your In Progress or in your Available quest list.</p>",
+      "datetime_created": "2016-07-06T06:06:14.576Z",
+      "icon": "",
+      "short_description": "Use this quest to communicate with [TEACHER].  Send him a file, link, message, question, reminder, complaint, etc.",
+      "time_available": "00:00:00",
+      "categories": [],
+      "common_data": null,
+      "verification_required": true,
+      "xp": 5,
+      "submission_details": "Send me your message!<br><p></p>",
+      "sort_order": 0,
+      "name": "Send [TEACHER] a Message"
     },
     "model": "quest_manager.quest",
     "pk": 3
-},
-{
+  },
+  {
     "fields": {
-        "fa_icon": "fa fa-circle-o",
-        "xp": 0,
-        "icon": "",
-        "name": "Digital Noob"
+      "fa_icon": "fa fa-circle-o",
+      "xp": 0,
+      "icon": "",
+      "name": "Digital Noob"
     },
     "model": "courses.rank",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "fa_icon": "fa fa-angle-up",
-        "xp": 60,
-        "icon": "",
-        "name": "Digital Novice"
+      "fa_icon": "fa fa-angle-up",
+      "xp": 60,
+      "icon": "",
+      "name": "Digital Novice"
     },
     "model": "courses.rank",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "fa_icon": "fa fa-angle-double-up",
-        "xp": 125,
-        "icon": "",
-        "name": "Digital Novice II"
+      "fa_icon": "fa fa-angle-double-up",
+      "xp": 125,
+      "icon": "",
+      "name": "Digital Novice II"
     },
     "model": "courses.rank",
     "pk": 3
-},
-{
+  },
+  {
     "fields": {
-        "fa_icon": "fa fa-forward fa-rotate-270",
-        "xp": 185,
-        "icon": "",
-        "name": "Digita Amateur"
+      "fa_icon": "fa fa-forward fa-rotate-270",
+      "xp": 185,
+      "icon": "",
+      "name": "Digita Amateur"
     },
     "model": "courses.rank",
     "pk": 4
-},
-{
+  },
+  {
     "fields": {
-        "first_day": "2016-09-06",
-        "number": 1,
-        "last_day": "2017-01-20",
-        "active": false
+      "first_day": "2016-09-06",
+      "number": 1,
+      "last_day": "2017-01-20",
+      "active": false
     },
     "model": "courses.semester",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "date_type": "Holiday"
+      "date_type": "Holiday"
     },
     "model": "courses.datetype",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "date_type": "Pro D Day"
+      "date_type": "Pro D Day"
     },
     "model": "courses.datetype",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "date_type": "Misc"
+      "date_type": "Misc"
     },
     "model": "courses.datetype",
     "pk": 3
-},
-{
+  },
+  {
     "fields": {
-        "end_time": "10:00:00",
-        "block": "A",
-        "start_time": "09:00:00"
+      "end_time": "10:00:00",
+      "block": "A",
+      "start_time": "09:00:00"
     },
     "model": "courses.block",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "end_time": null,
-        "block": "B",
-        "start_time": null
+      "end_time": null,
+      "block": "B",
+      "start_time": null
     },
     "model": "courses.block",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "semester": 1,
-        "date_type": 1,
-        "date": "2016-12-25"
+      "semester": 1,
+      "date_type": 1,
+      "date": "2016-12-25"
     },
     "model": "courses.excludeddate",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "semester": 1,
-        "date_type": 1,
-        "date": "2017-01-01"
+      "semester": 1,
+      "date_type": 1,
+      "date": "2017-01-01"
     },
     "model": "courses.excludeddate",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "active": true,
-        "icon": "",
-        "title": "Computer Programming"
+      "active": true,
+      "icon": "",
+      "title": "Computer Programming"
     },
     "model": "courses.course",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "active": true,
-        "icon": "",
-        "title": "Digital Art & Design"
+      "active": true,
+      "icon": "",
+      "title": "Digital Art & Design"
     },
     "model": "courses.course",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "prereq_object_id": 1,
-        "parent_content_type": [
-            "quest_manager",
-            "quest"
-        ],
-        "or_prereq_content_type": null,
-        "or_prereq_count": 1,
-        "or_prereq_invert": false,
-        "or_prereq_object_id": null,
-        "prereq_invert": false,
-        "prereq_count": 1,
-        "prereq_content_type": [
-            "quest_manager",
-            "quest"
-        ],
-        "parent_object_id": 2
+      "prereq_object_id": 1,
+      "parent_content_type": [
+        "quest_manager",
+        "quest"
+      ],
+      "or_prereq_content_type": null,
+      "or_prereq_count": 1,
+      "or_prereq_invert": false,
+      "or_prereq_object_id": null,
+      "prereq_invert": false,
+      "prereq_count": 1,
+      "prereq_content_type": [
+        "quest_manager",
+        "quest"
+      ],
+      "parent_object_id": 2
     },
     "model": "prerequisites.prereq",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "prereq_object_id": 1,
-        "parent_content_type": [
-            "badges",
-            "badge"
-        ],
-        "or_prereq_content_type": null,
-        "or_prereq_count": 1,
-        "or_prereq_invert": false,
-        "or_prereq_object_id": null,
-        "prereq_invert": false,
-        "prereq_count": 1,
-        "prereq_content_type": [
-            "quest_manager",
-            "quest"
-        ],
-        "parent_object_id": 1
+      "prereq_object_id": 1,
+      "parent_content_type": [
+        "badges",
+        "badge"
+      ],
+      "or_prereq_content_type": null,
+      "or_prereq_count": 1,
+      "or_prereq_invert": false,
+      "or_prereq_object_id": null,
+      "prereq_invert": false,
+      "prereq_count": 1,
+      "prereq_content_type": [
+        "quest_manager",
+        "quest"
+      ],
+      "parent_object_id": 1
     },
     "model": "prerequisites.prereq",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "prereq_object_id": 1,
-        "parent_content_type": [
-            "quest_manager",
-            "quest"
-        ],
-        "or_prereq_content_type": null,
-        "or_prereq_count": 1,
-        "or_prereq_invert": false,
-        "or_prereq_object_id": null,
-        "prereq_invert": false,
-        "prereq_count": 1,
-        "prereq_content_type": [
-            "quest_manager",
-            "quest"
-        ],
-        "parent_object_id": 3
+      "prereq_object_id": 1,
+      "parent_content_type": [
+        "quest_manager",
+        "quest"
+      ],
+      "or_prereq_content_type": null,
+      "or_prereq_count": 1,
+      "or_prereq_invert": false,
+      "or_prereq_object_id": null,
+      "prereq_invert": false,
+      "prereq_count": 1,
+      "prereq_content_type": [
+        "quest_manager",
+        "quest"
+      ],
+      "parent_object_id": 3
     },
     "model": "prerequisites.prereq",
     "pk": 3
-},
-{
+  },
+  {
     "fields": {
-        "repeatable": true,
-        "description": "",
-        "fa_icon": "fa-hand-spock-o",
-        "sort_order": 1,
-        "name": "Talent"
+      "repeatable": true,
+      "description": "",
+      "fa_icon": "fa-hand-spock-o",
+      "sort_order": 1,
+      "name": "Talent"
     },
     "model": "badges.badgetype",
     "pk": 1
-},
-{
+  },
+  {
     "fields": {
-        "repeatable": true,
-        "description": "",
-        "fa_icon": "fa-trophy",
-        "sort_order": 2,
-        "name": "Achievement"
+      "repeatable": true,
+      "description": "",
+      "fa_icon": "fa-trophy",
+      "sort_order": 2,
+      "name": "Achievement"
     },
     "model": "badges.badgetype",
     "pk": 2
-},
-{
+  },
+  {
     "fields": {
-        "repeatable": true,
-        "description": "",
-        "fa_icon": "fa-diamond",
-        "sort_order": 3,
-        "name": "Award"
+      "repeatable": true,
+      "description": "",
+      "fa_icon": "fa-diamond",
+      "sort_order": 3,
+      "name": "Award"
     },
     "model": "badges.badgetype",
     "pk": 3
-},
-{
+  },
+  {
     "fields": {
-        "datetime_last_edit": "2016-07-06T06:01:57.032Z",
-        "series": null,
-        "icon": "",
-        "active": true,
-        "short_description": "Holy Crap! Congrats on completing your first quest.",
-        "name": "First Quest",
-        "badge_type": 2,
-        "datetime_created": "2016-07-06T06:01:18.555Z",
-        "sort_order": null,
-        "xp": 5
+      "datetime_last_edit": "2016-07-06T06:01:57.032Z",
+      "series": null,
+      "icon": "",
+      "active": true,
+      "short_description": "Holy Crap! Congrats on completing your first quest.",
+      "name": "First Quest",
+      "badge_type": 2,
+      "datetime_created": "2016-07-06T06:01:18.555Z",
+      "sort_order": null,
+      "xp": 5
     },
     "model": "badges.badge",
     "pk": 1
-}
+  }
 ]

@@ -1,8 +1,7 @@
 from django import forms
 
-from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
+from django_summernote.widgets import SummernoteWidget
 
-from .models import Comment
 
 # class CommentForm(forms.ModelForm):
 #     class Meta:
@@ -10,7 +9,6 @@ from .models import Comment
 #         fields = ('text',)
 
 class CommentForm(forms.Form):
-
     def __init__(self, *args, **kwargs):
         self.wysiwyg = kwargs.pop('wysiwyg', False)
         self.label = kwargs.pop('label', 'Comment')
@@ -21,7 +19,7 @@ class CommentForm(forms.Form):
         if self.wysiwyg:
             self.fields['comment_text'].widget = SummernoteWidget()
         else:
-            self.fields['comment_text'].widget = forms.Textarea(attrs={'rows':2})
+            self.fields['comment_text'].widget = forms.Textarea(attrs={'rows': 2})
 
         self.fields['comment_text'].label = self.label
 

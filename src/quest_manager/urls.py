@@ -13,8 +13,9 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
-from django.conf.urls import  url
 from quest_manager import views
+
+from django.conf.urls import url
 
 # Admin site customizations
 
@@ -26,7 +27,8 @@ urlpatterns = [
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
+        name='ajax_info_completed'),
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
@@ -51,7 +53,7 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
     url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
-    #url(r'^(?P<quest_id>[0-9]+)/skipped/$', views.skipped, name='skipped'),
+    # url(r'^(?P<quest_id>[0-9]+)/skipped/$', views.skipped, name='skipped'),
     url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
     url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
     url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),

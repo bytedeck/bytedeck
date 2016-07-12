@@ -1,5 +1,6 @@
-from django.conf.urls import  url
 from badges import views
+
+from django.conf.urls import url
 
 urlpatterns = [
     url(r'^$', views.list, name='list'),

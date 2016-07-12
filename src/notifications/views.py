@@ -3,11 +3,11 @@ import json
 from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse
-from django import forms
-from django.shortcuts import render, Http404, HttpResponseRedirect, redirect, get_object_or_404
+from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
+from .models import Notification
 
-from .models import Notification, UserNotificationOptionSet
+
 # Create your views here.
 
 @login_required
@@ -18,6 +18,7 @@ def list(request):
     }
     return render(request, "notifications/list.html", context)
 
+
 @login_required
 def list_unread(request):
     notifications = Notification.objects.all_unread(request.user)
@@ -25,6 +26,7 @@ def list_unread(request):
         "notifications": notifications,
     }
     return render(request, "notifications/list.html", context)
+
 
 @login_required
 def read_all(request):
@@ -56,15 +58,15 @@ def read(request, id):
     except:
         raise HttpResponseRedirect(reverse('notifications:list'))
 
+
 @login_required
 def ajax(request):
-
     if request.is_ajax() and request.method == "POST":
 
         limit = 15
         notifications = Notification.objects.all_unread(request.user)
         count = notifications.count()
-        #limit number of items else the list in the menu will go off
+        # limit number of items else the list in the menu will go off
         # the bottom of the screen and can't get the links at the bottom...
         notifications = notifications[:limit]
         notes = []
@@ -72,16 +74,15 @@ def ajax(request):
             notes.append(str(note.get_link()))
 
         data = {
-            "notifications":notes,
+            "notifications": notes,
             "count": count,
             "limit": limit,
         }
         json_data = json.dumps(data)
 
-        return HttpResponse(json_data, content_type='application/json' )
+        return HttpResponse(json_data, content_type='application/json')
     else:
         raise Http404
-
 
 # class NotifcationOptionsForm(ModelForm):
 #     class Meta:

@@ -1,14 +1,10 @@
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
-from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse
-
-from djconfig import config
-
 from courses.models import Semester
 from quest_manager.models import QuestSubmission
 
+from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import render, redirect
+from djconfig import config
 from .forms import HackerspaceConfigForm
 
 
@@ -21,6 +17,7 @@ def home(request):
 
     return render(request, "home.html", {})
 
+
 @staff_member_required
 def config_view(request):
     if not request.user.is_superuser:
@@ -32,7 +29,7 @@ def config_view(request):
         if form.is_valid():
             active_sem_id = form.cleaned_data['hs_active_semester']
 
-            #get semester before changed via save()
+            # get semester before changed via save()
             past_sem = config.hs_active_semester
 
             form.save()
@@ -44,8 +41,8 @@ def config_view(request):
                 QuestSubmission.objects.move_incomplete_to_active_semester()
 
             messages.success(request, "Settings saved")
-            #return redirect('/')
+            # return redirect('/')
     else:
         form = HackerspaceConfigForm()
 
-    return render(request, 'configuration.html', {'form': form, })
+    return render(request, 'configuration.html', {'form': form,})

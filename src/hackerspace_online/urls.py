@@ -13,12 +13,12 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
+from hackerspace_online import views
+
 from django.conf import settings
 from django.conf.urls import include, url
 from django.conf.urls.static import static
 from django.contrib import admin
-
-from hackerspace_online import views
 
 # Admin site customizations
 
@@ -26,12 +26,12 @@ admin.site.site_header = "Hackerspace Administration"
 admin.site.site_title = "Hackerspace Admin"
 
 urlpatterns = [
-    url(r'^grappelli/', include('grappelli.urls')), # grappelli URLS
+    url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^$', views.home, name='home'),
     url(r'^config/$', views.config_view, name='config'),
-    #quest_manager
+    # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
-    #profile_manager
+    # profile_manager
     url(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
     url(r'^announcements/', include('announcements.urls', namespace='announcements')),
     url(r'^comments/', include('comments.urls', namespace='comments')),
@@ -40,11 +40,11 @@ urlpatterns = [
     url(r'^achievements/', include('badges.urls', namespace='badges')),
     url(r'^suggestions/', include('suggestions.urls', namespace='suggestions')),
 
-    #admin
+    # admin
     url(r'^admin/', include(admin.site.urls)),
-    #summer_note
+    # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
-    #allauth
+    # allauth
     url(r'^accounts/', include('allauth.urls')),
 ]
 
