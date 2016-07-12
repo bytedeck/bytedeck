@@ -1,3 +1,5 @@
+{% load quest_tags %}
+
 <div id='preview-btns-{{ q.id }}' class="pull-right">
   {% if  request.user.is_staff %}
     <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button"
@@ -21,16 +23,22 @@
       <i class="fa fa-trash-o"></i>
     </a>
 
-    <!-- <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button">Edit</a>
-    <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button">Copy</a>
-    <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button">Delete</a> -->
   {% else %}
-    {% if not no_details %}
+
+    {% if not no_details %} <!-- no_details if you are already viewing the details =) -->
       <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
     {% endif %}
     <a class="btn btn-primary" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
+
     {% if request.user.profile.game_lab_transfer_process_on %}
       <a class="btn btn-warning" href="{% url 'quests:skipped' q.id %}" role="button">Skip Quest</a>
     {% endif %}
+
+    {% if q|is_hidden:request.user %}
+      <a class="btn btn-success" href="{% url 'quests:unhide' q.id %}" role="button">Unhide Quest</a>
+    {% else %}
+      <a class="btn btn-default" href="{% url 'quests:hide' q.id %}" role="button">Hide Quest</a>
+    {% endif %}
+
   {% endif %}
 </div>

@@ -52,6 +52,7 @@
         }
 
         var preview_content_selector = "#preview-content-" + id;
+        var hidden_selector = "#status-icon-" + id;
 
         //console.log(preview_content_selector);
         //console.log(ajax_url);
@@ -63,8 +64,10 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            //console.log(data)
-            $(preview_content_selector).html(data);
+            $(preview_content_selector).html(data.quest_info_html);
+            if(data.is_hidden) {
+                $(hidden_selector).html("<i title='This quest is normally hidden' class='fa fa-eye-slash'></i>");
+            }
           },
           error : function(xhr,errmsg,err) {
                 if(xhr.status == 500){

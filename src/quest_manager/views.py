@@ -11,8 +11,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy, reverse
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect, Http404
+from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView
 from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
@@ -58,6 +59,7 @@ def quest_list(request, quest_id=None, submission_id=None):
     in_progress_tab_active = False
     completed_tab_active = False
     past_tab_active = False
+    remove_hidden = True
 
     active_quest_id = 0
     active_submission_id = 0
@@ -87,12 +89,13 @@ def quest_list(request, quest_id=None, submission_id=None):
         past_tab_active = True
     else:
         available_tab_active = True
+        if '/all/' in request.path_info:
+            remove_hidden=False
 
     page = request.GET.get('page')
 
     # need these anyway to count them.
     # get_available is not a queryset, cant use .count()
-
 
     if in_progress_tab_active:
         in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
@@ -111,7 +114,7 @@ def quest_list(request, quest_id=None, submission_id=None):
             available_quests = Quest.objects.all()
             # num_available = available_quests.count()
         else:
-            available_quests = Quest.objects.get_available(request.user)
+            available_quests = Quest.objects.get_available(request.user, remove_hidden)
             # num_available = len(available_quests)
 
     # paginate or no?
@@ -123,6 +126,7 @@ def quest_list(request, quest_id=None, submission_id=None):
     context = {
         "heading": "Quests",
         "available_quests": available_quests,
+        "remove_hidden": remove_hidden,
         # "num_available": num_available,
         "in_progress_submissions": in_progress_submissions,
         # "num_inprogress": num_inprogress,
@@ -143,12 +147,21 @@ def quest_list(request, quest_id=None, submission_id=None):
 def ajax_quest_info(request, quest_id=None):
     if request.is_ajax() and request.method == "POST":
         quest = get_object_or_404(Quest, pk=quest_id)
-        context = {
-            "q": quest,
+        is_hidden = request.user.profile.is_quest_hidden(quest)
+
+        template = "quest_manager/preview_content_quests_avail.html"
+        quest_info_html = render_to_string(template, {"q": quest}, request=request)
+
+        data = {
+            "quest_info_html": quest_info_html,
+            "is_hidden": is_hidden,
         }
-        return render(request,
-                      "quest_manager/preview_content_quests_avail.html",
-                      context)
+
+        # JsonReponse new in Django 1.7 is equivalent to:
+        # return HttpResponse(json.dumps(data), content_type='application/json')
+        return JsonResponse(data)
+
+
     else:
         raise Http404
 
@@ -160,9 +173,7 @@ def ajax_approval_info(request, submission_id=None):
         context = {
             "s": sub,
         }
-        return render(request,
-                      "quest_manager/preview_content_approvals.html",
-                      context)
+        return render(request, "quest_manager/preview_content_approvals.html", context)
     else:
         raise Http404
 
@@ -578,7 +589,6 @@ def complete(request, submission_id):
             if request.FILES:
                 file_list = request.FILES.getlist('files')
                 for afile in file_list:
-                    # print(afile)
                     newdoc = Document(docfile=afile, comment=comment_new)
                     newdoc.save()
 
@@ -592,7 +602,7 @@ def complete(request, submission_id):
                 icon = "<i class='fa fa-shield fa-lg'></i>"
                 affected_users = None
                 submission.mark_completed()  ###################
-                if submission.quest.verification_required == False:
+                if not submission.quest.verification_required:
                     submission.mark_approved()
 
             elif 'comment' in request.POST:
@@ -674,6 +684,25 @@ def start(request, quest_id):
     # }
     # return render(request, 'quest_manager/submission.html', context)
 
+@login_required
+def hide(request, quest_id):
+    quest = get_object_or_404(Quest, pk=quest_id)
+    request.user.profile.hide_quest(quest_id)
+
+    messages.warning(request, "<strong>" + quest.name + "</strong> has been added to your list of hidden quests. \
+                                HOW TO UN-HIDE QUESTS?")
+
+    return redirect("quests:quests")
+
+
+@login_required
+def unhide(request, quest_id):
+    quest = get_object_or_404(Quest, pk=quest_id)
+    request.user.profile.unhide_quest(quest_id)
+
+    messages.success(request, "<strong>" + quest.name + "</strong> has been removed from your list of hidden quests.")
+
+    return redirect("quests:quests")
 
 @login_required
 def skip(request, submission_id):

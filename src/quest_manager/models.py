@@ -45,28 +45,23 @@ class CommonData(models.Model):
 
 
 class XPItem(models.Model):
+    """
+    Abstract class to gather common data required of all XP granting models
+    Need to get badges to use these...
+    """
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
-    # tags = GenericRelation("TaggedItem", null=True, blank=True)
-    # creator = models.CharField(max_length=250)
-    # last_editor = models.CharField(max_length=250)
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)
-    max_repeats = models.IntegerField(default=0,
-                                      help_text='0 = not repeatable, enter -1 for unlimited')
+    max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=timezone.now)
     time_available = models.TimeField(default=time().min)  # midnight
     date_expired = models.DateField(blank=True, null=True)
-    time_expired = models.TimeField(blank=True, null=True,
-                                    help_text='only used if date_expired is blank')
-    # minimum_XP = models.PositiveIntegerField(blank=True, null=True)
-    # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
-    # prerequisites = generic.GenericRelation(Prerequisite)
-    # prerequisites_advanced = models.CharField(max_length=250)
+    time_expired = models.TimeField(blank=True, null=True, help_text='only used if date_expired is blank')
     icon = models.ImageField(upload_to='icons/', blank=True, null=True)  # needs Pillow for ImageField
 
     class Meta:
@@ -78,7 +73,7 @@ class XPItem(models.Model):
 
     # allow us to handle iconless items.  Use with: <img src="{{ object.icon|default_if_none:'#' }}" />
     def icon_url(self):
-        if (self.icon and hasattr(self.icon, 'url')):
+        if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
 
     def get_absolute_url(self):
@@ -93,7 +88,7 @@ class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte=timezone.now())
 
-    # doesn't worktime is UTC or something
+    # doesn't work, time is UTC or something
     def not_expired(self):
         qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=timezone.now()))
         qs_date = qs_date.exclude(Q(date_expired=timezone.now()) & Q(time_expired__gt=timezone.now()))
@@ -119,23 +114,30 @@ class QuestManager(models.Manager):
     def get_active(self):
         return self.get_queryset().date_available().not_expired().visible()
 
-    def get_available(self, user):
+    def get_available(self, user, remove_hidden=True):
         qs = self.get_active().get_conditions_met(user)
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
+        if remove_hidden:
+            available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
 
 
 class Quest(XPItem):
-    verification_required = models.BooleanField(default=True)
+    verification_required = models.BooleanField(default=True,
+                                                help_text="Teacher must approve submissions of this quest.  If \
+                                                unchecked then submissions will automatically be approved and XP \
+                                                granted without the teacher seeing the submission.")
+    hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest form their list of \
+                                                 available quests. ")
     categories = models.ManyToManyField(Category, blank=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
     instructor_notes = models.TextField(blank=True, null=True,
-                                        help_text="This field is only visible to Staff.  \
-                                                  Use it to place answer keys or other notes.")
+                                        help_text="This field is only visible to Staff. \
+                                        Use it to place answer keys or other notes.")
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
                                     object_id_field='parent_object_id')
