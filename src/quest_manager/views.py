@@ -702,7 +702,7 @@ def unhide(request, quest_id):
 
     messages.success(request, "<strong>" + quest.name + "</strong> has been removed from your list of hidden quests.")
 
-    return redirect("quests:quests")
+    return redirect("quests:available_all")
 
 @login_required
 def skip(request, submission_id):

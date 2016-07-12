@@ -127,11 +127,9 @@ class Profile(models.Model):
     #
     #################################
 
-    def has_hidden_quests(self):
-        if self.hidden_quests:
-            return True
-        else:
-            return False
+    def num_hidden_quests(self):
+        hidden_quest_list = self.get_hidden_quests_as_list()
+        return len(hidden_quest_list)
 
     def is_quest_hidden(self, quest):
         hidden_quest_list = self.get_hidden_quests_as_list()

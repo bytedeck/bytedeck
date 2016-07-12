@@ -26,18 +26,27 @@
   {% else %}
 
     {% if not no_details %} <!-- no_details if you are already viewing the details =) -->
-      <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
+      <a title="View the content of this quest without starting it"
+         class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">View Details</a>
     {% endif %}
-    <a class="btn btn-primary" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
+    <a title="View the content of this quest and move it to 'In Progress', allowing you to complete it"
+       class="btn btn-primary" href="{% url 'quests:start' q.id %}" role="button">Start Quest</a>
 
     {% if request.user.profile.game_lab_transfer_process_on %}
-      <a class="btn btn-warning" href="{% url 'quests:skipped' q.id %}" role="button">Skip Quest</a>
+      <a title="Mark this quest as completed, but you won't get XP for it"
+         class="btn btn-warning" href="{% url 'quests:skipped' q.id %}" role="button">Skip Quest</a>
     {% endif %}
 
     {% if q|is_hidden:request.user %}
-      <a class="btn btn-success" href="{% url 'quests:unhide' q.id %}" role="button">Unhide Quest</a>
+      <a title="Remove this from your list of hidden quests"
+         class="btn btn-success" role="button" href="{% url 'quests:unhide' q.id %}" >
+        <i class="fa fa-eye"></i>
+      </a>
     {% else %}
-      <a class="btn btn-default" href="{% url 'quests:hide' q.id %}" role="button">Hide Quest</a>
+      <a title="Add this to your list of hidden quests"
+         class="btn btn-default" role="button" href="{% url 'quests:hide' q.id %}" >
+        <i class="fa fa-eye-slash"></i>
+      </a>
     {% endif %}
 
   {% endif %}
