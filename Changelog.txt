@@ -1,0 +1,4 @@
+Dark Theme
+Performance improvements (load accordian content in background
+XP Calculations graph
+Can hide quests
