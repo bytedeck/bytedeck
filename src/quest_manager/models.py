@@ -134,7 +134,8 @@ class Quest(XPItem):
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
     instructor_notes = models.TextField(blank=True, null=True,
-                                        help_text="This field is only visible to Staff.  Use it to place answer keys or other notes.")
+                                        help_text="This field is only visible to Staff.  \
+                                                  Use it to place answer keys or other notes.")
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
                                     object_id_field='parent_object_id')
@@ -159,8 +160,8 @@ class Quest(XPItem):
         return Prereq.objects.all_parent(self)
 
     def expired(self):
-        if self.date_expired == None:
-            if self.time_expired == None:
+        if self.date_expired is None:
+            if self.time_expired is None:
                 return False
             return timezone.now().time() > self.time_expired
 
@@ -228,7 +229,7 @@ class TaggedItem(models.Model):
         return self.tag
 
 
-##### QuestSubmission ###############################################
+# QuestSubmission ###############################################
 
 class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
