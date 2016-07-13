@@ -99,6 +99,11 @@ kbd {
   /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
 }
 
+.badge.badge-muted {
+    color: #fff;
+    background-color: #777;
+}
+
 .nav-tabs > .active .badge {
   color: #337ab7;
   background-color: #fff;

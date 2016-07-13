@@ -14,7 +14,7 @@
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button">New</a>
   {% elif available_tab_active and remove_hidden and request.user.profile.hidden_quests %}
     <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">
-      Show Hidden Quests <span class="badge">{{ request.user.profile.num_hidden_quests }}</span>
+      Show Hidden Quests <span class="badge badge-muted">{{ request.user.profile.num_hidden_quests }}</span>
     </a>
   {% endif %}
 {% endblock %}

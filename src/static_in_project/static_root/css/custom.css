@@ -1,84 +1,81 @@
 
-
-.navbar-fixed-top.chillax{
-  background-color: #BEFFFA;
-  color: white;
+.navbar-fixed-top.chillax {
+    background-color: #BEFFFA;
+    color: white;
 }
 
 .jumbotron {
-  background-color: white;
+    background-color: white;
 }
-
 
 #main-container {
-  background-color: #FFF;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.075) ;
+    background-color: #FFF;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.075);
 }
 
-
-
 body {
-  background-color: #F8F8F8;
+    background-color: #F8F8F8;
 }
 
 .footer {
-  background-color: #F8F8F8;
+    background-color: #F8F8F8;
 }
 
 /************ SAMP PRE CODE KBD TAGS **********************/
 
 code {
-  background-color: #f5f5f5;
-  color: #333;
-  border: 1px solid #ccc
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ccc
 }
 
 kbd {
 }
 
-
-
 /************ BADGES/Achievements **********************/
 
 .thumbnail-badge:hover, .thumbnail-badge:focus {
-  border-color: #337ab7;
-  color: #337ab7 !important;;
+    border-color: #337ab7;
+    color: #337ab7 !important;;
 }
 
-.badge-popover:hover, .badge-popover:focus{
-  text-decoration: none ;
-  color: #337ab7;
+.badge-popover:hover, .badge-popover:focus {
+    text-decoration: none;
+    color: #337ab7;
 }
 
 /*********** PROFILE PAGE ********************/
 
-
 /*********** Bootstrap BADGES **************************/
 
 .badge.alert-danger {
-  color: #FFF;
-  background-color: #D9534F;
-  border-color: #D43F3A;
-  background-image: none;
-  /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
+    color: #FFF;
+    background-color: #D9534F;
+    border-color: #D43F3A;
+    background-image: none;
+    /*background-image: linear-gradient(to bottom, #D9534F 0px, #D43F3A 100%);*/
+}
+
+.badge.badge-muted {
+    color: #fff;
+    background-color: #777;
 }
 
 .nav-tabs > .active .badge {
-  color: #337ab7;
-  background-color: #fff;
-  text-shadow: none;
+    color: #337ab7;
+    background-color: #fff;
+    text-shadow: none;
 }
 
-tr.detail-view{
-  background-color: #EEE;
+tr.detail-view {
+    background-color: #EEE;
 }
-
 
 /******* Accordian ***********************/
 
 .panel-default > .panel-heading {
-  background-color: #FFF;
-  background-image: none;
+    background-color: #FFF;
+    background-image: none;
 }
 
 .panel-default > .panel-heading:hover {
@@ -87,37 +84,36 @@ tr.detail-view{
 }
 
 .panel-default > .panel-heading.accordian-trigger.active {
-  /*background-color: #337AB7;*/
-  color: #FFF !important;
-  text-shadow: 0px -1px 0px #286090;
-  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
-  background-repeat: repeat-x;
-  border-color: #2B669A;
+    /*background-color: #337AB7;*/
+    color: #FFF !important;
+    text-shadow: 0px -1px 0px #286090;
+    background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
+    background-repeat: repeat-x;
+    border-color: #2B669A;
 }
 
 .panel-default > .panel-heading.accordian-trigger.active small {
-  color: #FFF !important;
+    color: #FFF !important;
 }
 
 .panel-default.active {
-  border-color: #2B669A;
+    border-color: #2B669A;
 }
 
 .panel-danger.active {
-  border-color: rgb(169, 68, 66);
+    border-color: rgb(169, 68, 66);
 }
 
 .panel-warning.active {
-  border-color: rgb(138, 109, 59);
+    border-color: rgb(138, 109, 59);
 }
 
-
 .panel-group-packed .panel.active + .panel {
-  border-top-color: #2B669A;
+    border-top-color: #2B669A;
 }
 
 .panel-group-packed .panel.active:last-child {
-  border-bottom-color: #2B669A;
+    border-bottom-color: #2B669A;
 }
 
 .list-group-item-muted {
@@ -130,32 +126,31 @@ a.list-group-item-muted {
 }
 
 .panel-muted {
-  color: #999;
-  background-color: #F5F5F5;
-  border-color: #ddd;
+    color: #999;
+    background-color: #F5F5F5;
+    border-color: #ddd;
 }
 
 /***********Submission ********************************/
-
 
 /***********ACCORDIAN COMMENTS *******************************/
 
 /************ TABS *****************************************/
 
 .nav-tabs > li > a {
-  border-bottom-color: #2B669A !important;
+    border-bottom-color: #2B669A !important;
 }
 
 /*to match other elements, taken from .list-group-item.active in bootstrap-theme.css*/
 .nav-tabs > .active > a {
-  color: #FFF !important;
-  text-shadow: 0px -1px 0px #286090;
-  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
-  background-repeat: repeat-x;
-  border-color: #2B669A !important;
+    color: #FFF !important;
+    text-shadow: 0px -1px 0px #286090;
+    background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
+    background-repeat: repeat-x;
+    border-color: #2B669A !important;
 }
 
 .nav-tabs a {
-  border-color: #DDD !important;
-  color: #555;
+    border-color: #DDD !important;
+    color: #555;
 }
