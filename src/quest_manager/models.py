@@ -97,9 +97,15 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students=True)
 
-    # this should be generic and placed in the prerequisites app
+    # TODO: this should be generic and placed in the prerequisites app
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
+        """
+        Takes a queryset and returns a subset of items which have had their prerequisite conditions met
+        by the user
+        :param user:
+        :return: A queryset of the prerequisite's that have been met so far
+        """
         pk_met_list = [
             obj.pk for obj in self
             if Prereq.objects.all_conditions_met(obj, user)
@@ -184,13 +190,27 @@ class Quest(XPItem):
     def autocomplete_search_fields():
         return ("name__icontains",)
 
-    # all models that want to act as a possible prerequisite need to have this method
+    # TODO: all models that want to act as a possible prerequisite need to have this method
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
+        """
+        Defines how this model's requirements are met as a prerequisite to other models
+        :param user:
+        :param num_required:
+        :return: True if the condition have been met for this object.
+        """
         num_approved = QuestSubmission.objects.all_for_user_quest(user, self, False).approved().count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
+
+    # TODO: should be part of the prerequisite interface
+    def is_prereq(self):
+        """
+        :return: True if this object has been assigned as a prerequisite to at least one another object.
+        """
+        return Prereq.objects.is_prerequisite(self)
+
 
 
 # class Feedback(models.Model):

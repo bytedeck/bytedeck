@@ -6,10 +6,20 @@ from django.db.models.base import ObjectDoesNotExist
 
 # Create your models here.
 class PrereqQuerySet(models.query.QuerySet):
-    def get_all_parent_object(self, parent_object):
+    def get_all_for_parent_object(self, parent_object):
         ct = ContentType.objects.get_for_model(parent_object)
         return self.filter(parent_content_type__pk=ct.id,
                            parent_object_id=parent_object.id)
+
+    def get_all_for_prereq_object(self, prereq_object):
+        ct = ContentType.objects.get_for_model(prereq_object)
+        return self.filter(prereq_content_type__pk=ct.id,
+                           prereq_object_id=prereq_object.id)
+
+    def get_all_for_or_prereq_object(self, prereq_object):
+        ct = ContentType.objects.get_for_model(prereq_object)
+        return self.filter(or_prereq_content_type__pk=ct.id,
+                           or_prereq_object_id=prereq_object.id)
 
         # object matching sender, target or action object
         # def get_object_anywhere(self, object):
@@ -28,10 +38,15 @@ class PrereqManager(models.Manager):
         return PrereqQuerySet(self.model, using=self._db)
 
     def all_parent(self, parent_object):
-        return self.get_queryset().get_all_parent_object(parent_object)
+        return self.get_queryset().get_all_for_parent_object(parent_object)
 
     def all_conditions_met(self, parent_object, user, none_means=True):
-        '''If the parent_object has no prerequisites, then use none_means'''
+        """If the parent_object has no prerequisites, then use none_means
+        :param parent_object:
+        :param user:
+        :param none_means: Good question.... I seriously don't remember...
+        :return:
+        """
         prereqs = self.all_parent(parent_object)
         if not prereqs:
             return none_means
@@ -41,6 +56,14 @@ class PrereqManager(models.Manager):
         return True
 
     def add_simple_prereq(self, parent_object, prereq_object):
+        """Adds a simple prereq to a parent object.
+
+        A simple prereq only has the prereq object without these options: or, count, invert.
+
+        :param parent_object: The owner of the prerequisite
+        :param prereq_object:
+        :return:
+        """
         if not parent_object or not prereq_object:
             return False
         new_prereq = Prereq(
@@ -52,6 +75,16 @@ class PrereqManager(models.Manager):
 
         new_prereq.save()
         return True
+
+    def is_prerequisite(self, prereq_obj):
+        """
+        :return: True if obj is a prerequisite to any other object
+        """
+        if self.get_queryset().get_all_for_prereq_object(prereq_obj):
+            return True
+        if self.get_queryset().get_all_for_or_prereq_object(prereq_obj):
+            return True
+        return False
 
 
 class Prereq(models.Model):
