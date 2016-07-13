@@ -160,12 +160,9 @@ def ajax_quest_info(request, quest_id=None):
             "is_repeatable": is_repeatable,
             "is_prerequisite": is_prerequisite,
         }
-
-        # JsonReponse new in Django 1.7 is equivalent to:
+        # JsonResponse new in Django 1.7 is equivalent to:
         # return HttpResponse(json.dumps(data), content_type='application/json')
         return JsonResponse(data)
-
-
     else:
         raise Http404
 
@@ -174,10 +171,10 @@ def ajax_quest_info(request, quest_id=None):
 def ajax_approval_info(request, submission_id=None):
     if request.is_ajax() and request.method == "POST":
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
-        context = {
-            "s": sub,
-        }
-        return render(request, "quest_manager/preview_content_approvals.html", context)
+        template = "quest_manager/preview_content_approvals.html"
+        quest_info_html = render_to_string(template, {"s": sub}, request=request)
+
+        return JsonResponse({"quest_info_html": quest_info_html})
     else:
         raise Http404
 
@@ -201,9 +198,10 @@ def ajax_submission_info(request, submission_id=None):
             "completed": completed,
             "past": past,
         }
-        return render(request,
-                      "quest_manager/preview_content_submissions.html",
-                      context)
+        template = "quest_manager/preview_content_submissions.html"
+        quest_info_html = render_to_string(template, context, request=request)
+
+        return JsonResponse({"quest_info_html": quest_info_html})
     else:
         raise Http404
 

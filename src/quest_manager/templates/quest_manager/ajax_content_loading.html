@@ -17,7 +17,7 @@
         var is_available_quest = false; // default
 
         // if this is the available tab, then it will list quests, not submissions
-        // if submissions, need to determing which tab
+        // if submissions, need to determine which tab
         // or could be approvals...
         if(window.location.href.indexOf("/inprogress/") > -1) {
           is_inprogress = true;
@@ -64,7 +64,10 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
+              console.log(data)
             $(preview_content_selector).html(data.quest_info_html);
+
+            // Quest status icons
             if(data.is_prerequisite) {
                 $(hidden_selector).append("<i title='Prerequisite: completing this will cause additional quests to become available' class='fa fa-fw fa-share-alt'></i>");
             }
