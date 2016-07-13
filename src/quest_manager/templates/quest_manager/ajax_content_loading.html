@@ -65,20 +65,20 @@
           },
           success: function(data){
             $(preview_content_selector).html(data.quest_info_html);
-            if(data.is_hidden) {
-                $(hidden_selector).html("<i title='This quest is on your hidden list' class='fa fa-fw fa-eye-slash'></i> ");
-            }
-            else {
-                $(hidden_selector).html("<i class='fa fa-fw'></i> ");
-            }
-            if(data.is_repeatable) {
-                $(hidden_selector).append("<i title='This quest is repeatable' class='fa fa-fw fa-undo'></i> ");
+            if(data.is_prerequisite) {
+                $(hidden_selector).append("<i title='Prerequisite: completing this will cause additional quests to become available' class='fa fa-fw fa-share-alt'></i>");
             }
             else {
                 $(hidden_selector).append("<i class='fa fa-fw'></i> ");
             }
-            if(data.is_prerequisite) {
-                $(hidden_selector).append("<i title='Completing this quest will cause additional quests to become available' class='fa fa-fw fa-share-alt'></i>");
+            if(data.is_repeatable) {
+                $(hidden_selector).append("<i title='Repeat: this quest is repeatable' class='fa fa-fw fa-undo'></i> ");
+            }
+            else {
+                $(hidden_selector).append("<i class='fa fa-fw'></i> ");
+            }
+            if(data.is_hidden) {
+                $(hidden_selector).append("<i title='Hidden: this quest is on your hidden list' class='fa fa-fw fa-eye-slash'></i> ");
             }
             else {
                 $(hidden_selector).append("<i class='fa fa-fw'></i> ");

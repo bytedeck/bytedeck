@@ -20,8 +20,6 @@ from badges.models import BadgeAssertion
 from comments.models import Comment
 
 
-# from courses.models import Semester
-
 class Category(models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
