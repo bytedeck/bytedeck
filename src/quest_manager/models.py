@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from djconfig import config
 
-from prerequisites.models import Prereq
+from prerequisites.models import Prereq, IsAPrereqMixin
 from badges.models import BadgeAssertion
 from comments.models import Comment
 #from courses.models import Semester
@@ -88,6 +88,7 @@ class QuestQuerySet(models.query.QuerySet):
         return self.filter(date_available__lte = timezone.now)
 
     #doesn't worktime is UTC or something
+    # TODO: use timezone.now
     def not_expired(self):
         qs_date = self.filter( Q(date_expired = None) | Q(date_expired__gte = datetime.now) )
         qs_date = qs_date.exclude( Q(date_expired = datetime.now) & Q(time_expired__gt = datetime.now ))
@@ -96,7 +97,7 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students = True)
 
-    #this should be generic and placed in the prerequisites app
+    # this should be generic and placed in the prerequisites app
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
@@ -119,13 +120,16 @@ class QuestManager(models.Manager):
         available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
         return available_quests
 
-class Quest(XPItem):
+
+class Quest(XPItem, IsAPrereqMixin):
     verification_required = models.BooleanField(default = True)
     categories = models.ManyToManyField(Category, blank=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
-    instructor_notes = models.TextField(blank=True, null=True, help_text="This field is only visible to Staff.  Use it to place answer keys or other notes.")
+    instructor_notes = models.TextField(blank=True, null=True,
+                                        help_text="This field is only visible to Staff.  \
+                                        Use it to place answer keys or other notes.")
     prereq_parent = GenericRelation(Prereq,
                               content_type_field='parent_content_type',
                               object_id_field='parent_object_id')
@@ -168,14 +172,6 @@ class Quest(XPItem):
                 return True
         return False
 
-    # to help with the prerequisite choices!
-    @staticmethod
-    def autocomplete_search_fields():
-        return ("name__icontains",)
-
-    # all models that want to act as a possible prerequisite need to have this method
-    # Create a default in the PrereqModel(models.Model) class that uses a default:
-    # prereq_met boolean field.  Use that or override the method like this
     def condition_met_as_prerequisite(self, user, num_required):
         num_approved = QuestSubmission.objects.all_for_user_quest(user, self, False).approved().count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))

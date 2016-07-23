@@ -4,8 +4,74 @@ from django.db import models
 from django.db.models.base import ObjectDoesNotExist
 
 
-class PrereqMixin:
-    pass
+class IsAPrereqMixin:
+    """
+    For models that act as a prerequisite.  Classes using this mixin need to implement
+    the method: condition_met_as_prerequisite(user, num_required)
+    """
+
+    # all models that want to act as a possible prerequisite need to have this method
+    # Create a default in the PrereqModel(models.Model) class that uses a default:
+    # prereq_met boolean field.  Use that or override the method like this
+    # TODO: Can I force implementing models to define this method?
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        """
+        Defines what it means for the user to meet this prerequisite.  For this Mixin to be any use, the implementing
+        model must override this method.
+        :param user: a django user
+        :param num_required:
+        :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
+
+        """
+        return False
+
+    # to help with the prerequisite choices!
+    # TODO: Why? link to grapelli docs and let implementing class choose field instead of static?
+    @staticmethod
+    def autocomplete_search_fields():
+        return ("name__icontains",)
+
+class HasPrereqsMixin:
+    """
+    For models that have prerequisites
+    """
+
+    # TODO: should this me a meta class?
+
+    def __init__(self, no_prereqs_means=True):
+        """
+        :param no_prereqs_means: If an instance of this model has no prereqs, what should happen?
+            True -> Make the object available
+            False -> The object is unavailable (and would have to be made available through some other mechanism)  I use
+            this for badges, which must be granted manually if they have no prerequisites.
+        """
+        self.no_prereqs_means = no_prereqs_means
+
+    def get_conditions_met(self, user, initial_query_set):
+        """
+        :param user:
+        :param initial_query_set: The queryset to filter.  I think this is a very inefficient method, so until I figure
+        out how to speed it up, make sure the provided query_set is already filtered down as small as possible.
+        :return: A queryset containing all objects (of the model implementing this mixin) for which the user has met
+        the prerequisites
+        """
+
+        # Initialize member variable in case the constructor wasn't called,
+        # which might happen if the class implementing this mixin doesn't call it explicitly or use super?
+        # If you're reading this and understand how python inheritance works with constructors, please let me know =)
+        # I could look it up myself, but I'm on the subway with no internet access while on vacation in London,
+        # and by the time I do get internet access, I'll probably be on to something else and forget about it.
+        # TODO: is this necessary?
+        if self.no_prereqs_means is None:
+            self.no_prereqs_means = True
+
+        # TODO: Make this more efficient, too slow!
+        # build a list of object pks to use in the filter.
+        pk_met_list = [
+            obj.pk for obj in initial_query_set
+            if Prereq.objects.all_conditions_met(obj, user, self.no_prereqs_means)
+            ]
+        return initial_query_set.filter(pk__in=pk_met_list)
 
 
 class PrereqQuerySet(models.query.QuerySet):
@@ -46,7 +112,12 @@ class PrereqManager(models.Manager):
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):
         """
         Checks if all the prerequisites for this parent_object and user have been met.
-        If the parent_object has no prerequisites, then return according to the no_prereq_means parameter
+        If the parent_object has no prerequisites, then return according to the no_prereq_means parameter,
+        this is because different models might want different behaviour if there are no prereqs, they can
+        either be available (default, no_prereq_means=True) or unavailable (no_prereq_means=False).
+        This should be set in the mixin constructor... I'd tell you how to do it here but I haven't figured it out yet.
+        I assume by the time this is published anywhere that someone is reading it other than myself, the mixin itself
+        will explain better...
         """
         prereqs = self.all_parent(parent_object)
         if not prereqs:
