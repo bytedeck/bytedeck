@@ -52,9 +52,6 @@ INSTALLED_APPS = (
     'django.contrib.sites', #for allauth
     'django.contrib.staticfiles',
 
-    #added django apps
-    'django.contrib.webdesign',
-
     #third party apps
 
     # https://django-allauth.readthedocs.org/en/latest/installation.html
@@ -70,17 +67,15 @@ INSTALLED_APPS = (
     # https://github.com/summernote/django-summernote
     'django_summernote',
 
-    #http://haystacksearch.org/
-    'haystack',
-
     # https://github.com/asaglimbeni/django-datetime-widget
     'datetimewidget',
 
-    # https://pypi.python.org/pypi/django-badgify
-    #'badgify',
-
     #django-djconfig.readthedocs.org/en/
     'djconfig',
+
+    # https://django-debug-toolbar.readthedocs.io/en/1.4/
+    # For development only...
+    #'debug_toolbar',
 
     #hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
@@ -125,8 +120,9 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
 
                 # "allauth" specific context processors
-                'allauth.account.context_processors.account',
-                'allauth.socialaccount.context_processors.socialaccount',
+                # 0.22.0 http://django-allauth.readthedocs.io/en/latest/release-notes.html#id17
+                #'allauth.account.context_processors.account',
+                #'allauth.socialaccount.context_processors.socialaccount',
 
                 'djconfig.context_processors.config',
             ],
@@ -164,6 +160,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images) ####################
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
 # Statics file settings are in the local and production files
+STATIC_URL = '/static/'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
@@ -256,15 +253,6 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL #(=”/”)
 # SOCIALACCOUNT_STORE_TOKENS #(=True)
     # Indicates whether or not the access tokens are stored in the database.
 
-#Haystack Search app
-HAYSTACK_CONNECTIONS = {
-    'default': {
-        'ENGINE': 'haystack.backends.elasticsearch_backend.ElasticsearchSearchEngine',
-        'URL': 'http://127.0.0.1:9200/',
-        'INDEX_NAME': 'haystack',
-    },
-}
-
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode
     'iframe': True,  # or set False to use SummernoteInplaceWidget - no iframe mode
@@ -281,8 +269,8 @@ SUMMERNOTE_CONFIG = {
     'direction': 'ltr',
 
     # Change editor size
-    # 'width': '700',
-    # 'height': '300',
+    'width': '100%',
+    'height': '460',
 
     # Use proper language setting automatically (default)
     'lang': None,
@@ -309,14 +297,45 @@ SUMMERNOTE_CONFIG = {
     # Set custom storage class for attachments.
     #'attachment_storage_class': 'my.custom.storage.class.name',
 
-    # Set external media files for SummernoteInplaceWidget.
+    # Set custom model for attachments (default: 'django_summernote.Attachment')
+    #'attachment_model': 'my.custom.attachment.model',
+    # must inherit 'django_summernote.AbstractAttachment'
+
+    # Set common css/js media files
+    # 'external_css': (
+    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
+    #     '//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css',
+    # ),
+    # 'external_js': (
+    #     # Use already existing js?
+    #     '//code.jquery.com/jquery-1.9.1.min.js',
+    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
+    # ),
+    # 'internal_css': (
+    #     os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
+    #     os.path.join(STATIC_URL, 'font-awesome.min.css'),
+    # ),
+    # 'internal_js': (
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
+    #     os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
+    # ),
+    #
+    # You can add custom css/js for SummernoteWidget.
+    'css': (
+        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+    ),
+    # 'js': (
+    # ),
+
+    # And also for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    'inplacewidget_external_css': (
-        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
-        '//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css',
-    ),
-    'inplacewidget_external_js': (
-        '//code.jquery.com/jquery-1.9.1.min.js',
-        '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
-    ),
+    # 'css_for_inplace': (
+    # ),
+    # 'js_for_inplace': (
+    # ),
+
+    # You can disable file upload feature.
+    #'disable_upload': False,
 }

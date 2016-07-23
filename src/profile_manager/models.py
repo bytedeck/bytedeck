@@ -1,36 +1,37 @@
+from ast import literal_eval
+
+from badges.models import BadgeAssertion
+from courses.models import Rank, CourseStudent
+from notifications.signals import notify
+from quest_manager.models import QuestSubmission
+
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models.signals import post_save
-from django.contrib.auth.models import User
 from django.templatetags.static import static
-
-from notifications.signals import notify
-
-from datetime import datetime
-
+from django.utils import timezone
 from djconfig import config
 
-from quest_manager.models import QuestSubmission
-from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent
-
 GRAD_YEAR_CHOICES = []
-for r in range(datetime.now().year, datetime.now().year+4):
-        GRAD_YEAR_CHOICES.append((r,r)) #(actual value, human readable name) tuples
+for r in range(timezone.now().year, timezone.now().year + 4):
+    GRAD_YEAR_CHOICES.append((r, r))  # (actual value, human readable name) tuples
+
 
 class ProfileQuerySet(models.query.QuerySet):
     def get_grad_year(self, year):
-        return self.filter(grad_year = year)
+        return self.filter(grad_year=year)
 
     def announcement_email(self):
-        return self.filter(get_announcements_by_email = True)
+        return self.filter(get_announcements_by_email=True)
 
     def visible(self):
-        return self.filter(visible_to_other_students = True)
+        return self.filter(visible_to_other_students=True)
 
     def get_semester(self, semester):
-        return self.filter(active_in_current_semester = semester)
+        return self.filter(active_in_current_semester=semester)
+
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
@@ -45,33 +46,42 @@ class ProfileManager(models.Manager):
     def all_visible(self):
         return self.get_queryset().visible()
 
-class Profile(models.Model):
 
+class Profile(models.Model):
     def get_grad_year_choices():
         grad_year_choices = []
-        for r in range(datetime.now().year, datetime.now().year+4):
-                grad_year_choices.append((r,r)) #(actual value, human readable name) tuples
+        for year in range(timezone.now().year, timezone.now().year + 4):
+            grad_year_choices.append((year, year))  # (actual value, human readable name) tuples
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
-    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None)
-    first_name = models.CharField(max_length=50, null=True, blank=False)
-    last_name = models.CharField(max_length=50, null=True, blank=False)
-    preferred_name = models.CharField(max_length=50, null=True, blank=True)
+    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
+                             help_text='You can leave this blank, or enter anything you like here.')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    first_name = models.CharField(max_length=50, null=True, blank=False,
+                                  help_text='Use the first name that matches your school records.')
+    last_name = models.CharField(max_length=50, null=True, blank=False,
+                                 help_text='Use the last name that matches your school records.')
+    preferred_name = models.CharField(max_length=50, null=True, blank=True,
+                                      help_text='If you would prefer your teacher to call you by a name other than \
+                                      the first name you entered above, put it here.')
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
-    intro_tour_completed = models.BooleanField(default = False)
-    game_lab_transfer_process_on = models.BooleanField(default = False)
-    banned_from_comments = models.BooleanField(default = False)
-    get_announcements_by_email = models.BooleanField(default = False)
-    visible_to_other_students = models.BooleanField(default = False)
+    intro_tour_completed = models.BooleanField(default=False)
+    game_lab_transfer_process_on = models.BooleanField(default=False)
+    banned_from_comments = models.BooleanField(default=False)
+
     # New students automatically active,
     # all existing students should be changed to "inactive" at the end of the semester
     # they should be reactivated when they join a new course in a new (active) semester
-    active_in_current_semester = models.BooleanField(default = True)
-    dark_theme = models.BooleanField(default = False)
+    active_in_current_semester = models.BooleanField(default=True)
+
+    # Student options
+    get_announcements_by_email = models.BooleanField(default=False)
+    visible_to_other_students = models.BooleanField(default=False)
+    dark_theme = models.BooleanField(default=False)
+    hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
 
     objects = ProfileManager()
 
@@ -91,16 +101,67 @@ class Profile(models.Model):
     class Meta:
         ordering = ['user__username']
 
+    def get_preferred_name(self):
+        # new students won't have name info yet
+        if self.preferred_name:
+            return self.preferred_name
+        elif self.first_name:
+            return self.first_name
+        else:
+            return self.user.username
+
     def get_absolute_url(self):
-        return reverse('profiles:profile_detail', kwargs={'pk':self.id})
+        return reverse('profiles:profile_detail', kwargs={'pk': self.id})
         # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
-        #return u'/some_url/%d' % self.id
+        # return u'/some_url/%d' % self.id
 
     def get_avatar_url(self):
         if self.avatar and hasattr(self.avatar, 'url'):
             return self.avatar.url
         else:
             return static('img/default_avatar.jpg')
+
+    #################################
+    #
+    #   HIDDEN QUEST MANAGEMENT
+    #
+    #################################
+
+    def num_hidden_quests(self):
+        hidden_quest_list = self.get_hidden_quests_as_list()
+        return len(hidden_quest_list)
+
+    def is_quest_hidden(self, quest):
+        hidden_quest_list = self.get_hidden_quests_as_list()
+        if str(quest.id) in hidden_quest_list:
+            return True
+        else:
+            return False
+
+    def get_hidden_quests_as_list(self):
+        if self.hidden_quests is None:
+            return []
+        else:
+            return smart_list(self.hidden_quests)
+
+    def save_hidden_quests_from_list(self, hidden_quest_list):
+        hidden_quest_csv = ",".join(hidden_quest_list)
+        self.hidden_quests = hidden_quest_csv
+        self.save()
+
+    def hide_quest(self, quest_id):
+        hidden_quest_list = self.get_hidden_quests_as_list()
+        if str(quest_id) not in hidden_quest_list:
+            hidden_quest_list.append(quest_id)
+            self.save_hidden_quests_from_list(hidden_quest_list)
+
+    def unhide_quest(self, quest_id):
+        hidden_quest_list = self.get_hidden_quests_as_list()
+        if str(quest_id) in hidden_quest_list:
+            hidden_quest_list.remove(quest_id)
+            self.save_hidden_quests_from_list(hidden_quest_list)
+
+    # END HIDDEN QUEST MANAGEMENT
 
     def has_past_courses(self):
         semester = config.hs_active_semester
@@ -134,7 +195,15 @@ class Profile(models.Model):
         course_count = self.num_courses()
         if not course_count or course_count == 0:
             return 0
-        return self.xp()/course_count
+        return self.xp() / course_count
+
+    def xp_to_date(self, date):
+        # TODO: Combine this with xp()
+        xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)
+        xp += BadgeAssertion.objects.calculate_xp_to_date(self.user, date)
+        # TODO: Add manual adjustments to calculation
+        # xp += CourseStudent.objects.calculate_xp(self.user, date)
+        return xp
 
     def num_courses(self):
         return self.current_courses().count()
@@ -146,7 +215,7 @@ class Profile(models.Model):
         course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
         if courses and course:
-            return course.calc_mark(self.xp())/courses.count()
+            return course.calc_mark(self.xp()) / courses.count()
         else:
             return None
 
@@ -158,7 +227,6 @@ class Profile(models.Model):
                 return int(self.xp_per_course()) >= int(semester.chillax_line())
         return False
 
-
     def rank(self):
         return Rank.objects.get_rank(self.xp())
 
@@ -167,11 +235,12 @@ class Profile(models.Model):
 
     def xp_to_next_rank(self):
         next_rank = self.next_rank()
-        if next_rank == None:
-            return 0 #maxed out!
+        if next_rank is None:
+            return 0  # maxed out!
         return self.next_rank().xp - self.rank().xp
 
     def xp_since_last_rank(self):
+        # TODO: Fix this laziness
         try:
             return self.xp() - self.rank().xp
         except:
@@ -179,6 +248,7 @@ class Profile(models.Model):
 
     def last_submission_completed(self):
         return QuestSubmission.objects.user_last_submission_completed(self.user)
+
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
@@ -188,9 +258,61 @@ def create_profile(sender, **kwargs):
 
         notify.send(
             current_user,
-            recipient=User.objects.filter(is_staff=True).first(), #admin user
+            recipient=User.objects.filter(is_staff=True).first(),  # admin user
             affected_users=User.objects.filter(is_staff=True),
             icon="<i class='fa fa-fw fa-lg fa-user'></i>",
             verb='new user created')
 
+
 post_save.connect(create_profile, sender=User)
+
+
+def smart_list(value, delimiter=",", func=None):
+    """Convert a value to a list, if possible.
+    http://tech.yunojuno.com/working-with-django-s-commaseparatedintegerfield
+
+    Args:
+        value: the value to be parsed. Ideally a string of comma separated
+            values - e.g. "1,2,3,4", but could be a list, a tuple, ...
+
+    Kwargs:
+        delimiter: string, the delimiter used to split the value argument,
+            if it's a string / unicode. Defaults to ','.
+        func: a function applied to each individual element in the list
+            once the value arg is split. e.g. lambda x: int(x) would return
+            a list of integers. Defaults to None - in which case you just
+            get the list.
+
+    Returns: a list if one can be parsed out of the input value. If the
+             value input is an empty string or None, returns an empty
+             list. If the split or func parsing fails, raises a ValueError.
+
+    This is mainly used for ensuring the CSV model fields are properly
+    formatted. Use this function in the save() model method and post_init()
+    model signal to ensure that you always get a list back from the field.
+
+    """
+    if value in ["", u"", "[]", u"[]", u"[ ]", None]:
+        return []
+
+    if isinstance(value, list):
+        l = value
+    elif isinstance(value, tuple):
+        l = list(value)
+    elif isinstance(value, str):
+        # TODO: regex this.
+        value = value.lstrip('[').rstrip(']').strip(' ')
+        if len(value) == 0:
+            return []
+        else:
+            l = value.split(delimiter)
+    elif isinstance(value, int):
+        l = [value]
+    else:
+        raise ValueError("Unparseable smart_list value: %s" % value)
+
+    try:
+        func = func or (lambda x: x)
+        return [func(e) for e in l]
+    except Exception as ex:
+        raise ValueError("Unable to parse value '%s': %s" % (value, ex))

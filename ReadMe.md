@@ -1,4 +1,4 @@
-## Hackerspace installation from scratch (instructions for students)
+## Hackerspace test environment installation (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
 #### Preparation
@@ -43,8 +43,4 @@ LMS for Timberline Secondary School's Digital Hackerspace
 5. Sign up to create a student account.
 6. Stop running server (or any bash script in progress) with `Ctrl + C`
 
-VOILA!
-# enter virtual env then:
-pip install Pillow
-```
 

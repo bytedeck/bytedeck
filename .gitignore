@@ -16,6 +16,10 @@ tcl/
 Include/
 Lib/
 
+# PyCharm
+.idea
+
+# user uploaded media files
 media_root/
 
 *.sqlite3

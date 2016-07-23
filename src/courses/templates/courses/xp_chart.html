@@ -1,0 +1,288 @@
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.1.6/Chart.min.js"></script>
+<!-- https://github.com/chartjs/Chart.Zoom.js/blob/master/samples/zoom.html -->
+<!-- <script type="text/javascript" src="https://raw.githubusercontent.com/chartjs/Chart.Zoom.js/master/Chart.Zoom.min.js"></script></script> -->
+
+<script type="text/javascript">
+
+  /*jshint esversion: 6 */
+
+  var ctx = document.getElementById("myChart");
+
+  class DataPoint {
+      constructor(x, y) {
+          this.x = x;
+          this.y = y;
+      }
+  }
+
+  var days = 85;
+  var chillax = 72.5;
+
+  // XP DATA SET
+  var XPData = {
+      label: 'XP Earned',
+      fill: false,
+      backgroundColor: "#aaa", //used for legend
+      borderColor: "#1c1e22", //used for legend
+      showLine: false,
+      pointBorderColor: "#1c1e22",
+      pointBackgroundColor: "#aaa",
+      data: [{x: 0, y: 0}],
+  };
+
+
+  // XP Trend Data
+  var XPTrendData = {
+      label: 'If you continue at your current rate',
+      fill: false,
+      pointRadius: 0,
+      lineTension: 0,
+      borderDash: [5, 5],
+      borderColor: "#aaa",
+      backgroundColor: "rgba(150,150,150,0)",
+      data: [{x: 0, y: 0}],
+  };
+
+  var GradeAData = {
+      label: 'A (86%)',
+      pointRadius: 0,
+      lineTension: 0,
+      backgroundColor: "rgba(255,255,0,0)",
+      borderColor: "rgba(255, 236, 179,50)",
+      data: [{x: 0, y: 0}],
+  };
+
+  var GradeFData = {
+      label: 'Pass (50%)',
+      pointRadius: 0,
+      backgroundColor: "rgba(255, 0, 0, 0)",
+      borderColor: "rgba(255, 179, 179, 50)",
+      data: [{x: 0, y: 0}],
+  };
+
+  // Chillax Line Data Set = B
+  var ChillaxLineData = {
+      label: 'Chillax Line (73%)',
+      pointRadius: 0,
+      backgroundColor: "rgba(0,255,255,0)",
+      borderColor: "rgba(0,255,255,255)",
+      data: [{x: 0, y: 0}],
+  };
+
+  var data = {
+      datasets: [XPData,
+          XPTrendData,
+          GradeFData,
+          ChillaxLineData,
+          GradeAData,
+      ]
+  };
+
+  // need some starting data for the animation to work it seems..
+  generate_mark_lines(100)
+
+  var options = {
+      scales: {
+
+          xAxes: [{
+              type: 'linear',
+              position: 'bottom',
+              ticks: {
+                  max: 5,
+                  min: 0,
+                  stepSize: 5,
+              },
+              scaleLabel: {
+                  display: true,
+                  labelString: 'Days of Class'
+              },
+          }], //xaxes
+
+          yAxes: [{
+                  id: "y-axis-XP",
+                  position: 'left',
+                  ticks: {
+                      max: 1000,
+                      min: 0,
+                      stepSize: 50,
+                  },
+
+                  scaleLabel: {
+                      display: true,
+                      labelString: 'XP'
+                  },
+
+                  gridLines: {},
+              }, {
+                  id: "y-axis-percent",
+                  position: 'right',
+
+                  ticks: {
+                      max: 100,
+                      min: 0,
+                      stepSize: 5,
+                  },
+
+                  scaleLabel: {
+                      display: true,
+                      labelString: 'Percent'
+                  },
+
+                  gridLines: {
+                      /*show: true,
+                      color: "rgba(255, 255, 255, 1)",
+                      lineWidth: 1,
+                      drawOnChartArea: true,
+                      drawTicks: true,
+                      zeroLineWidth: 1,
+                      zeroLineColor: "rgba(255,255,255,1)", */
+                  },
+              }
+
+
+          ], //yaxes
+      }, //scales
+
+      title: {
+          text: 'A Map of Your Progress',
+          display: false,
+      }, //title
+
+      legend: {
+          position: 'top',
+          labels: {
+
+          },
+      }, //legend
+
+      tooltips: {
+          //mode: 'label', //too slow!
+          callbacks: {
+
+          },
+      },
+
+
+      // Pan & Zoom option not working well, try again when the libraries have progressed
+      //https://github.com/chartjs/Chart.Zoom.js
+      // pan: {
+      //     // Boolean to enable panning
+      //     enabled: true,
+      //
+      //     // Panning directions. Remove the appropriate direction to disable
+      //     // Eg. 'y' would only allow panning in the y direction
+      //     mode: 'xy'
+      // },
+      //
+      // // Container for zoom options
+      // zoom: {
+      //     // Boolean to enable zooming
+      //     enabled: true,
+      //
+      //     // Zooming directions. Remove the appropriate direction to disable
+      //     // Eg. 'y' would only allow zooming in the y direction
+      //     mode: 'xy',
+      //     limits: {
+      //       max: 1.5,
+      //       min: 0.5,
+      //     },
+      // },
+
+  };
+
+
+  function generate_trend(days_in_semester) {
+    // XP Trend calculaion
+    // Just a linear extrapolation of the average XP per day
+    var total = 0;
+    XPTrendData.data = [];
+    var days_so_far = XPData.data.length;
+    total = XPData.data[days_so_far - 1].y;
+    var average_per_day = total / days_so_far;
+
+    var trend_total = total;
+    for (i = days_so_far; i <= days_in_semester; i++) {
+
+        p = new DataPoint(i, trend_total);
+        XPTrendData.data.push(p);
+        trend_total += average_per_day;
+
+    }
+  }
+
+  function generate_mark_lines(days) {
+    // Mark Line Generation
+    ChillaxLineData.data = [];
+    GradeAData.data = [];
+    GradeFData.data = [];
+    for (i = 1; i <= days; i++) {
+        p = new DataPoint(i, Math.floor(i * 725 / days));
+        pA = new DataPoint(i, Math.floor(i * 855 / days));
+        pF = new DataPoint(i, Math.floor(i * 495 / days));
+        ChillaxLineData.data.push(p);
+        GradeAData.data.push(pA);
+        GradeFData.data.push(pF);
+
+    }
+  }
+
+  var myChart = new Chart(ctx, {
+      type: 'line',
+      data: data,
+      options: options,
+  });
+
+  //get data for plot and update
+  function ajax_update_plot() {
+
+    // user in this view is the request.user, if a student,
+    // or the user matching the id in the url
+
+    $.ajax({
+      type: "POST",
+      url: "{% url 'courses:ajax_progress_chart' user.id %}",
+      data: {
+        csrfmiddlewaretoken: "{{ csrf_token }}",
+      },
+      success: function(data){
+        // console.log(data.xp_data);
+        XPData.data = data.xp_data;
+        generate_trend(data.days_in_semester);
+        generate_mark_lines(data.days_in_semester);
+        myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
+
+        //console.log(myChart);
+
+        $('div.loading').remove();
+        $('#myChart').show("slow");
+        myChart.update();
+
+      }
+    });
+  }
+
+  // prevent page from scrolling when scrolling to zoom chart
+  //http://stackoverflow.com/questions/1459676/prevent-scroll-bubbling-from-element-to-window
+  // here we store the window scroll position to lock; -1 means unlocked
+  var forceWindowScrollY = -1;
+
+  $(window).scroll(function(event) {
+    if(forceWindowScrollY != -1 && window.scrollY != forceWindowScrollY) {
+      $(window).scrollTop(forceWindowScrollY);
+    }
+  });
+
+  $("#myChart").hover(function() {
+    if(forceWindowScrollY == -1) {
+      forceWindowScrollY = $(window).scrollTop();
+    }
+  }, function() {
+    forceWindowScrollY = -1;
+  });
+
+  $(document).ready(function() {
+    ajax_update_plot();
+  });
+
+
+</script>

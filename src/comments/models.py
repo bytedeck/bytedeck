@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -5,7 +6,6 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils.html import urlize
 
-from bs4 import BeautifulSoup
 
 # from quest_manager.models import Quest
 
@@ -16,8 +16,8 @@ class CommentQuerySet(models.query.QuerySet):
 
     def get_object_target(self, object):
         object_type = ContentType.objects.get_for_model(object)
-        return self.filter(target_content_type__pk = object_type.id,
-                            target_object_id = object.id)
+        return self.filter(target_content_type__pk=object_type.id,
+                           target_object_id=object.id)
 
     def get_no_parents(self):
         return self.filter(parent=None)
@@ -52,14 +52,14 @@ class CommentManager(models.Manager):
         for textNode in textNodes:
             if textNode.parent and getattr(textNode.parent, 'name') == 'a':
                 continue  # skip already formatted links
-            urlizedText = urlize(textNode, trim_url_limit = 50)
+            urlizedText = urlize(textNode, trim_url_limit=50)
             textNode.replaceWith(BeautifulSoup(urlizedText, "html.parser"))
         text = str(soup)
 
         comment = self.model(
-            user = user,
-            path = path,
-            text = text,
+            user=user,
+            path=path,
+            text=text,
         )
         if target is not None:
             comment.target_content_type = ContentType.objects.get_for_model(target)
@@ -72,11 +72,12 @@ class CommentManager(models.Manager):
 
         comment.save(using=self._db)
 
-        #add anchor target to Comment path now that id assigned when saved
+        # add anchor target to Comment path now that id assigned when saved
         comment.path += "#comment-" + str(comment.id)
         comment.save(using=self._db)
 
         return comment
+
 
 class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
@@ -89,21 +90,21 @@ class Comment(models.Model):
     flagged = models.BooleanField(default=False)
 
     target_content_type = models.ForeignKey(ContentType, related_name='comment_target',
-        null=True, blank=True)
+                                            null=True, blank=True)
     target_object_id = models.PositiveIntegerField(null=True, blank=True)
     target_object = GenericForeignKey("target_content_type", "target_object_id")
 
     objects = CommentManager()
 
     class Meta:
-        ordering  = ['-timestamp']
+        ordering = ['-timestamp']
 
     def __str__(self):
         return self.text
 
     def get_target_object(self):
         if self.target_object_id is not None:
-            return self.target_content_type.get_object_for_this_type(id = self.target_object_id)
+            return self.target_content_type.get_object_for_this_type(id=self.target_object_id)
         else:
             return None
 
@@ -120,11 +121,11 @@ class Comment(models.Model):
             return False
 
     def flag(self):
-        self.flagged=True;
+        self.flagged = True;
         self.save()
 
     def unflag(self):
-        self.flagged=False;
+        self.flagged = False;
         self.save()
 
     def get_children(self):
@@ -137,7 +138,7 @@ class Comment(models.Model):
         # it needs to be a parent and have children, which are the affected users
         comment_children = self.get_children()
         if comment_children is not None:
-            users=[]
+            users = []
             for comment in comment_children:
                 if comment.user in users:
                     pass
@@ -147,12 +148,14 @@ class Comment(models.Model):
         else:
             return None
 
+
 ##### Document Handler ############################################
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     comment = models.ForeignKey(Comment)
 
 
-from notifications.models import Notification, deleted_object_receiver
+from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
+
 pre_delete.connect(deleted_object_receiver, sender=Comment)

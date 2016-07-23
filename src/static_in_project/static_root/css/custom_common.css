@@ -1,24 +1,25 @@
 .navbar-fixed-top {
-  margin-bottom: 0px !important;
+    margin-bottom: 0px !important;
 }
 
 .navbar-text-large {
-  font-size: 24px;
+    font-size: 24px;
 }
 
 .navbar-text-large-container {
-  margin-bottom: -3px;
+    margin-bottom: -3px;
 }
 
 .navbar .navbar-nav > li > a {
-  border-left: none;
-  border-right: none;
+    border-left: none;
+    border-right: none;
 }
 
-.navbar-packed-listitem > a{
- padding-left: 5px !important;
- padding-right: 5px !important;
+.navbar-packed-listitem > a {
+    padding-left: 5px !important;
+    padding-right: 5px !important;
 }
+
 /*
 .navbar-packed-listitem:first-of-type > a{
  padding-left: 10px !important;
@@ -32,185 +33,185 @@
 }
 */
 .jumbo-banner {
-  padding-top: 20px;
+    padding-top: 20px;
 }
 
 #main-container {
-  min-height: 950px;
-  border-radius: 0px 0px 10px 10px;
-  padding-bottom: 30px;
-  margin-bottom: 5px;
+    min-height: 950px;
+    border-radius: 0px 0px 10px 10px;
+    padding-bottom: 30px;
+    margin-bottom: 5px;
 }
 
 body {
-  /*padding to remove gap between navbar and jumbotron*/
-  padding-top: 50px;
+    /*padding to remove gap between navbar and jumbotron*/
+    padding-top: 50px;
+    min-height: 660px; /* 660+50 = 720 */
 }
 
 blockquote {
-  font-size: 1em;
-  font-style: italic;
+    font-size: 1em;
+    font-style: italic;
 }
 
 .footer {
-  min-height: 50px;
-  padding: 20px 0px;
-  /*text-align: center;*/
-  margin-top:0px
+    min-height: 50px;
+    padding: 20px 0px;
+    /*text-align: center;*/
+    margin-top: 0px
 }
 
 .footer img {
-  width: 80px;
-  margin: 5px;
+    width: 80px;
+    margin: 5px;
 }
 
 iframe {
-  border-radius: 8px;
+    border-radius: 8px;
 }
 
 /*move anchor targets down so not covered by ifxed header*/
 :target:before {
-  content:"";
-  display:block;
-  height:60px; /* fixed header height*/
-  margin:-60px 0 0; /* negative fixed header height */
+    content: "";
+    display: block;
+    height: 60px; /* fixed header height*/
+    margin: -60px 0 0; /* negative fixed header height */
 }
 
-ul.left-aligned, ol.left-aligned  {
-  padding-left:20px;
+ul.left-aligned, ol.left-aligned {
+    padding-left: 20px;
 }
 
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
-  padding-bottom: 0px;
+    padding-bottom: 0px;
 }
 
 .panel-body-badge > .row {
-  margin-left: -8px;
-  margin-right: -8px;
+    margin-left: -8px;
+    margin-right: -8px;
 }
 
 .badge-icon-lg {
-  position: absolute;
-  bottom: -23px;
-  left: 1px;
+    position: absolute;
+    bottom: -23px;
+    left: 1px;
 }
 
 .icon-badge-container {
-   display: inline;
-   position: relative;
+    display: inline;
+    position: relative;
 }
 
 .hackerbadge {
-  min-height:64px;
-  height:64px !important;
+    min-height: 64px;
+    height: 64px !important;
 }
 
 .hackerbadge-unearned {
-  -webkit-filter: grayscale(100%) blur(3px) opacity(.5);
-  filter: grayscale(100%) blur(3px) opacity(.5);
-  -webkit-transition: filter .5s;
-  transition: filter .5s;
+    -webkit-filter: grayscale(100%) blur(3px) opacity(.5);
+    filter: grayscale(100%) blur(3px) opacity(.5);
+    -webkit-transition: filter .5s;
+    transition: filter .5s;
 }
 
 .hackerbadge-unearned:hover {
-  -webkit-filter: none;
-  filter: none;
+    -webkit-filter: none;
+    filter: none;
 }
 
 .hackerbadge-transfer {
-  -webkit-filter: grayscale(100%);
-  filter: grayscale(100%);
-  -webkit-transition: filter .5s;
-  transition: filter .5s;
+    -webkit-filter: grayscale(100%);
+    filter: grayscale(100%);
+    -webkit-transition: filter .5s;
+    transition: filter .5s;
 }
 
 .hackerbadge-transfer:hover {
-  -webkit-filter: none;
-  filter: none;
+    -webkit-filter: none;
+    filter: none;
 }
 
-
 .col-badge {
-  padding-right: 8px;
-  padding-left: 8px;
+    padding-right: 8px;
+    padding-left: 8px;
 }
 
 .caption-badge {
-  height: 58px;
-  padding-left: 0px !important;
-  padding-right: 0px !important;
+    height: 58px;
+    padding-left: 0px !important;
+    padding-right: 0px !important;
 }
 
 .popover {
-  width: 400px;
-  /*width: auto;*/
+    width: 400px;
+    /*width: auto;*/
 }
 
 /*********** PROFILE PAGE ********************/
 
 .progress-xp {
-  /*margin-left: 10px;
-  margin-right: 10px;*/
-  margin-bottom:10px;
+    /*margin-left: 10px;
+    margin-right: 10px;*/
+    margin-bottom: 10px;
 }
 
 /*********** Bootstrap BADGES **************************/
 #notification_badge {
-  margin-top:0px;
+    margin-top: 0px;
 }
 
 .badge.alert-danger {
-  margin-top: 3px;
+    margin-top: 3px;
 }
 
 .nav-tabs .badge {
-  margin-top: -2px;
-  margin-left: 10px;
+    margin-top: -2px;
+    margin-left: 10px;
 }
 
 /************ ICONS **********************/
 
 .icon-xs {
-  width: 16px;
-  border-radius: 2px;
+    width: 16px;
+    border-radius: 2px;
 }
 
 .icon-sm {
-  width: 24px
+    width: 24px
 }
 
 .icon-md {
-  width: 32px
+    width: 32px
 }
 
 .icon-md2 {
-  width: 48px
+    width: 48px
 }
 
 .icon-lg {
-  width: 64px
+    width: 64px
 }
 
 .icon-xl {
-  width: 80px
+    width: 80px
 }
 
 .icon-xxl {
-  width: 128px
+    width: 128px
 }
 
 .icon-avatar {
-  width: 170px;
+    width: 170px;
 }
 
 .quest-icon {
-  margin-right: 10px;
+    margin-right: 10px;
 }
 
 td.notification-icons {
-  text-align: center;
-  padding-bottom: 0px !important;
+    text-align: center;
+    padding-bottom: 0px !important;
 }
 
 /*td.notification-icons .fa {
@@ -218,49 +219,50 @@ td.notification-icons {
 }*/
 
 td.notification-icons .fa-stack {
-  margin-top: -4px;
+    margin-top: -4px;
 }
 
 td.notification-icons .fa-stack {
-  margin-top: -4px;
+    margin-top: -4px;
 }
 
-/************ SUMMERNOTE WIDGET **************/
+/********************************************
+ *
+ *          SUMMERNOTE WIDGET
+ *
+ ********************************************/
+
 .panel-summernote, .list-group-item-summernote {
-  padding: 0px;
-  border-radius: 0px;
-  /*DOM height on load so doesn't grow when Summernote finishes loading */
-  min-height: 544px;
+    padding: 0px;
+    border-radius: 0px;
+    /*DOM height on load so doesn't grow when Summernote finishes loading */
+    min-height: 544px;
 }
 
-.summernotewidget {
-  padding: 0px;
-  border-top: none;
-  border-left: none;
-  border-bottom: none;
-}
-
-.panel-summernote iframe, .list-group-item-summernote iframe {
-  /*height: 500px !important;*/
+iframe.summernotewidget.form-control {
+    padding: 0px;
+    /*border: none;*/
+    border-top: none;
+    border-left: none;
+    border-bottom: none;
+    border-radius: 0px;
 }
 
 .form-group-summernote, .panel-summernote #div_id_docfile,
-.panel-summernote #div_id_files, .panel-summernote #div_id_award
-{
-  margin-left: 15px;
-  margin-right: 15px;
+.panel-summernote #div_id_files, .panel-summernote #div_id_award {
+    margin-left: 15px;
+    margin-right: 15px;
 }
 
 .multifileinput {
-  border: none;
-  box-shadow: none !important;
-  -webkit-box-shadow: none !important;
-  height: auto;
+    border: none;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    height: auto;
 }
 
-
 form .panel-body {
-  padding-top: 0px;
+    padding-top: 0px;
 }
 
 /*Doesn't reach inside the iframe*/
@@ -270,18 +272,17 @@ form .panel-body {
   border-left: none;
 }*/
 
-
 /************ALERTS *************************/
 #main-container > .alert:first-of-type {
-  margin-top: 10px;
+    margin-top: 10px;
 }
 
 #main-container > .alert {
-  margin-bottom: 0px;
+    margin-bottom: 0px;
 }
 
 .alert-block ul {
-  padding-left: 20px;
+    padding-left: 20px;
 }
 
 /******** Bootstrap Tables ******************************/
@@ -291,27 +292,27 @@ form .panel-body {
 }*/
 
 .bootstrap-table .table thead > tr > th {
-  /*padding-right: 20px;*/
-  border-bottom-width: 1px;
-  border-left: none;
+    /*padding-right: 20px;*/
+    border-bottom-width: 1px;
+    border-left: none;
 }
 
 .bootstrap-table .table {
-  border-bottom: 0px;
-  /*border-collapse: separate !important;*/
-  /*border-spacing: 0px 10px !important;*/
+    border-bottom: 0px;
+    /*border-collapse: separate !important;*/
+    /*border-spacing: 0px 10px !important;*/
 }
 
-.bootstrap-table .table td{
-  /*border-bottom: 0px;*/
-  border-collapse: separate !important;
-  border-spacing: 0px 10px !important;
-  border-left: 0px;
+.bootstrap-table .table td {
+    /*border-bottom: 0px;*/
+    border-collapse: separate !important;
+    border-spacing: 0px 10px !important;
+    border-left: 0px;
 }
 
-.fixed-table-container {
+/*.fixed-table-container {
   border: none;
-}
+}*/
 
 .fixed-table-container tbody td {
     border-left: none;
@@ -324,130 +325,122 @@ td {
 }
 */
 
-
-
 /******* Accordian ***********************/
 
-
 .panel-heading-tall {
-  min-height: 65px;
+    min-height: 65px;
 }
 
 .panel-title > img, .panel-title-img {
-  max-height: 48px;
+    max-height: 48px;
 }
 
 .panel-heading > .col-icon {
-  margin-right: -5px;
+    margin-right: -5px;
 }
 
 .panel-title > .col-icon {
-  padding-right: 0px;
-  padding-left: 10px;
-  margin-top: -5px;
-  margin-bottom: -5px;
-  margin-right: -5px;
+    padding-right: 0px;
+    padding-left: 10px;
+    margin-top: -5px;
+    margin-bottom: -5px;
+    margin-right: -5px;
 }
 
 /*Make clickable accordian tabs change to pointer cursor*/
 .accordian-trigger {
-  cursor: pointer;
+    cursor: pointer;
 }
 
 .panel-top {
-  margin-top: 15px;
+    margin-top: 15px;
 }
 
 /**** panel packed together: add packed class to panel group div ***/
 /**** INSTEAD OF THIS FANCY CRAP, TRY changing the top or bottom margin to -1px
 to overlap borders ****/
 .panel-group-packed > .panel {
-  margin-top: 0px !important;
-  border-radius: 0px ;
-  border-bottom-style: none;
+    margin-top: 0px !important;
+    border-radius: 0px;
+    border-bottom-style: none;
 }
 
-.panel-group-packed > .panel > .panel-heading{
-  padding-top: 15px;
-  padding-bottom: 15px;
+.panel-group-packed > .panel > .panel-heading {
+    padding-top: 15px;
+    padding-bottom: 15px;
 }
 
-.panel-group-packed > .panel:first-child{
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+.panel-group-packed > .panel:first-child {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
 }
 
 .panel-group-packed > .panel:last-child {
-  border-bottom-left-radius: 4px;
-  border-bottom-right-radius: 4px;
-  border-bottom-style: solid;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    border-bottom-style: solid;
 }
 
-
 .panel-group-packed .panel-heading.active {
-  border-radius: 0px ;
+    border-radius: 0px;
 }
 
 .list-group-item-buttons {
-  min-height: 55px;
+    min-height: 55px;
 }
 
 .list-group-item-buttons > .pull-right {
-  margin-left: 15px;
-  margin-bottom: 15px;
+    margin-left: 15px;
+    margin-bottom: 15px;
 }
 
 .list-group-item-packed {
-  padding-top: 3px;
-  padding-bottom: 3px;
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
 
 /***********Submission ********************************/
 .panel-body-comments {
-  padding: 0px;
+    padding: 0px;
 }
 
 .panel-body-comments .panel {
-  margin: 0px;
-  border-style: none;
+    margin: 0px;
+    border-style: none;
 }
 
 .panel-body-comments .list-group-item {
-  border-style: none none solid none;
-  margin: 0px;
+    border-style: none none solid none;
+    margin: 0px;
 }
 
 .avatar-left-sm {
-  padding-left: 70px;
-  min-height: 70px;
+    padding-left: 70px;
+    min-height: 70px;
 }
 
 .avatar-left-sm > .avatar {
-  position: absolute;
-  /*top: 10px;*/
-  left: 10px;
-  height: 48px;
-  width: 48px;
+    position: absolute;
+    /*top: 10px;*/
+    left: 10px;
+    height: 48px;
+    width: 48px;
 }
 
 .comment-heading hr {
-  margin-top: 10px;
-  margin-bottom: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
-
-
 
 /***********ACCORDIAN COMMENTS *******************************/
 
-.panel>.list-group>.list-group-item>.list-group {
-  margin-bottom: 0px
+.panel > .list-group > .list-group-item > .list-group {
+    margin-bottom: 0px
 }
-
 
 .reply_comment {
-  display: none;
+    display: none;
 }
-
 
 /*Make the container act like container-fluid at small and medium sizes*/
 
@@ -463,41 +456,44 @@ to overlap borders ****/
 @media (max-width: 767px) {
 
 }
+
 /*small and up*/
 @media (min-width: 768px) {
 
 }
+
 /*sm only*/
 @media (min-width: 768px) and (max-width: 991px) {
 
 }
+
 /*md and up*/
 @media (min-width: 992px) {
 
 }
+
 /*md only*/
 @media (min-width: 992px) and (max-width: 1199px) {
 
 }
+
 /*lg and up*/
 @media (min-width: 1200px) {
-  .container-fluid {
-    width: 1170px;
-  }
+    .container-fluid {
+        width: 1170px;
+    }
 
 }
-
-
 
 /************ TABS *****************************************/
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
 already distinguished*/
 .nav-tabs > .active > a, .nav-tabs > .active > a:hover {
-  outline: 0;
+    outline: 0;
 }
 
 .nav-tabs a {
-  font-size: 125%;
+    font-size: 125%;
 }
 
 .tab-content {
@@ -515,14 +511,18 @@ already distinguished*/
 /*******************************************************/
 
 /*#input-group-unified { width: 100%;}*/
-.input-group-unified input {width: 50% !important;}
-.input-group-unified input:last-of-type { border-left: 0;}
+.input-group-unified input {
+    width: 50% !important;
+}
+
+.input-group-unified input:last-of-type {
+    border-left: 0;
+}
 
 /*.banner1 {
   margin-left: -4%;
   margin-right: 8%;
 }*/
-
 
 /*
  * off canvas sidebar
@@ -534,9 +534,9 @@ already distinguished*/
 }*/
 
 #lg-menu a, #lg-menu-staff a {
-  font-size: 125%;
-  /*display:inline-block
-  .text-overflow();*/
+    font-size: 125%;
+    /*display:inline-block
+    .text-overflow();*/
 
 }
 
@@ -546,40 +546,41 @@ already distinguished*/
 }
 
 .shrinktext {
-  letter-spacing: -1px;
+    letter-spacing: -1px;
 }
+
 .shrinktextmore {
-  letter-spacing: -2px;
+    letter-spacing: -2px;
 }
 
 @media screen and (max-width: 768px) {
 
-  .row-offcanvas {
-    position: relative;
-    -webkit-transition: all 0.25s ease-out;
-    -moz-transition: all 0.25s ease-out;
-    transition: all 0.25s ease-out;width:
-  }
+    .row-offcanvas {
+        position: relative;
+        -webkit-transition: all 0.25s ease-out;
+        -moz-transition: all 0.25s ease-out;
+        transition: all 0.25s ease-out;
+    }
 
-  .row-offcanvas-left.active {
-    left: 60%;
-  }
+    .row-offcanvas-left.active {
+        left: 60%;
+    }
 
-  .row-offcanvas-left.active .sidebar-offcanvas {
-    left: -60%;
-    position: absolute;
-    top: 0;
-    width: 60%;
-    margin-left: 5px;
-  }
+    .row-offcanvas-left.active .sidebar-offcanvas {
+        left: -60%;
+        position: absolute;
+        top: 0;
+        width: 60%;
+        margin-left: 5px;
+    }
 
-  #sidebar {
-    /*padding-left:3px;*/
-    padding-left: 5px;
-  }
+    #sidebar {
+        /*padding-left:3px;*/
+        padding-left: 5px;
+    }
 
-  #sidebar a, #sidebar-footer a {
-    padding-left: 10px;
-  }
+    #sidebar a, #sidebar-footer a {
+        padding-left: 10px;
+    }
 
 }

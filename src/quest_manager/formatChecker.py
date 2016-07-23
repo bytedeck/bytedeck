@@ -1,10 +1,9 @@
 from django import forms
-from django.template.defaultfilters import filesizeformat
-from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.template.defaultfilters import filesizeformat
 
 
-#http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
+# http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 class RestrictedFileField(forms.FileField):
     """
     Same as FileField, but you can specify:
@@ -35,33 +34,37 @@ class RestrictedFileField(forms.FileField):
             if file._size > self.max_upload_size:
                 raise ValidationError(_('Please keep filesize under %s. Current filesize %s') % (
                     filesizeformat(self.max_upload_size), filesizeformat(file._size)))
-            # else:
+                # else:
                 # raise ValidationError(_('Filetype not supported.'))
         except AttributeError:
             pass
 
         return data
 
-#http://koensblog.eu/blog/7/multiple-file-upload-django/
+
+# http://koensblog.eu/blog/7/multiple-file-upload-django/
 from django.utils.translation import ugettext_lazy as _
+
 
 class MultiFileInput(forms.FileInput):
     def render(self, name, value, attrs={}):
         attrs['multiple'] = 'multiple'
         # attrs['class'] += 'btn'
         return super(MultiFileInput, self).render(name, None, attrs=attrs)
+
     def value_from_datadict(self, data, files, name):
         if hasattr(files, 'getlist'):
             return files.getlist(name)
         else:
             return [files.get(name)]
 
+
 class MultiFileField(forms.FileField):
     widget = MultiFileInput
     default_error_messages = {
         'min_num': u"Ensure at least %(min_num)s files are uploaded (received %(num_files)s).",
         'max_num': u"Ensure at most %(max_num)s files are uploaded (received %(num_files)s).",
-        'file_size' : u"File: %(uploaded_file_name)s, exceeded maximum upload size."
+        'file_size': u"File: %(uploaded_file_name)s, exceeded maximum upload size."
     }
 
     def __init__(self, *args, **kwargs):
@@ -103,21 +106,20 @@ class MultiFileField(forms.FileField):
         if num_files > 0:
             for uploaded_file in data:
                 if uploaded_file.size > self.maximum_file_size:
-                    raise ValidationError(self.error_messages['file_size'] % { 'uploaded_file_name': uploaded_file.name})
+                    raise ValidationError(self.error_messages['file_size'] % {'uploaded_file_name': uploaded_file.name})
         return data
 
-    # def clean(self, data, initial=None):
-    #     super(MultiFileField, self).clean(data, initial)
-    #     try:
-    #         # content_type = file.content_type
-    #         # if content_type in self.content_types:
-    #         if file._size > self.max_upload_size:
-    #             raise ValidationError(_('Please keep filesize under %s. Current filesize %s') % (
-    #                 filesizeformat(self.max_upload_size), filesizeformat(file._size)))
-    #         # else:
-    #             # raise ValidationError(_('Filetype not supported.'))
-    #     except AttributeError:
-    #         pass
+        # def clean(self, data, initial=None):
+        #     super(MultiFileField, self).clean(data, initial)
+        #     try:
+        #         # content_type = file.content_type
+        #         # if content_type in self.content_types:
+        #         if file._size > self.max_upload_size:
+        #             raise ValidationError(_('Please keep filesize under %s. Current filesize %s') % (
+        #                 filesizeformat(self.max_upload_size), filesizeformat(file._size)))
+        #         # else:
+        #             # raise ValidationError(_('Filetype not supported.'))
+        #     except AttributeError:
+        #         pass
 
-
-#http://k
+# http://k

@@ -1,3 +1,11 @@
+// https://github.com/wenzhixin/bootstrap-table-examples/blob/master/issues/337.html
+// http://jsfiddle.net/djhvscf/e3nk137y/1619/
+window.icons = {
+    refresh: 'fa-refresh',
+    toggle: 'fa-toggle-on',
+    columns: 'fa-th-list'
+};
+
 $(document).ready(function() {
 
   /* off-canvas sidebar toggle */

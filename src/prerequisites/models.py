@@ -107,7 +107,7 @@ class PrereqManager(models.Manager):
         return PrereqQuerySet(self.model, using=self._db)
 
     def all_parent(self, parent_object):
-        return self.get_queryset().get_all_parent_object(parent_object)
+        return self.get_queryset().get_all_for_parent_object(parent_object)
 
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):
         """
@@ -126,6 +126,16 @@ class PrereqManager(models.Manager):
             if not prereq.condition_met_as_prerequisite(user):
                 return False
         return True
+
+    def is_prerequisite(self, prereq_obj):
+        """
+        :return: True if obj is a prerequisite to any other object
+        """
+        if self.get_queryset().get_all_for_prereq_object(prereq_obj):
+            return True
+        if self.get_queryset().get_all_for_or_prereq_object(prereq_obj):
+            return True
+        return False
 
 
 class Prereq(models.Model):
@@ -232,6 +242,7 @@ class Prereq(models.Model):
         if or_prereq_object is None:
             return False
         or_condition_met = or_prereq_object.condition_met_as_prerequisite(user, self.or_prereq_count)
+
 
         # invert alternate if required (NOT OR)
         if self.or_prereq_invert:

@@ -1,5 +1,6 @@
-from django.conf.urls import url
 from comments import views
+
+from django.conf.urls import url
 
 urlpatterns = [
     url(r'^(?P<id>\d+)/thread/$', views.comment_thread, name='threads'),

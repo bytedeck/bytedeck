@@ -9,19 +9,25 @@
 {% block content %}
 <h3>Site Settings</h3>
 <form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
-  {{ form|crispy }}
-  <input type="submit" value="Save" class="btn btn-primary" />
+    {{ form|crispy }}
+    <input type="submit" value="Save" class="btn btn-primary"/>
 </form>
 <h3>Management Functions</h3>
 <div class="row">
-  <div class="col-sm-4">
-      <a href="{% url 'end_active_semester' %}" class="btn btn-danger">End current semester</a>
-  </div>
-  <div class="col-sm-8">
-      This will record a
-       copy of all student marks for the semester.  Which means changing or deleting
-       quests will no longer affect their marks for that semester.
-  </div>
+    <div class="col-sm-12">
+        <p>
+            <a class="btn btn-default"
+               href="/admin/courses/semester/">Semester Admin</a>
+        </p>
+    </div>
+    <div class="col-sm-4">
+        <a href="{% url 'courses:end_active_semester' %}" class="btn btn-danger">End current semester</a>
+    </div>
+    <div class="col-sm-8">
+        <p>This will permanently record all student marks for the semester.
+            Which means changing or deleting quests, submissions, or badges
+            will no longer affect their marks for that semester.</p>
+    </div>
 </div>
 
 {% endblock %}

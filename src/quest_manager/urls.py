@@ -13,19 +13,22 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
-from django.conf.urls import  url
 from quest_manager import views
+
+from django.conf.urls import url
 
 # Admin site customizations
 
 urlpatterns = [
     url(r'^$', views.quest_list, name=''),
+    url(r'^create/$', views.quest_create, name='quest_create'),
     url(r'^ajax/$', views.ajax, name='ajax'),
     url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
+        name='ajax_info_completed'),
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
@@ -33,6 +36,7 @@ urlpatterns = [
     url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='submission_active'),
     url(r'^available/$', views.quest_list, name='quests'),
     url(r'^available/$', views.quest_list, name='available'),
+    url(r'^available/all/$', views.quest_list, name='available_all'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^completed/$', views.quest_list, name='completed'),
     url(r'^past/$', views.quest_list, name='past'),
@@ -40,23 +44,25 @@ urlpatterns = [
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
     url(r'^approvals/returned/$', views.approvals, name='returned'),
     url(r'^approvals/approved/$', views.approvals, name='approved'),
-    url(r'^approvals/gamelab/$', views.approvals, name='gamelab'),
-    url(r'^create/$', views.quest_create, name='quest_create'),
+    url(r'^approvals/skipped/$', views.approvals, name='skipped'),
+    url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),
+    url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'),
+    url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
+    url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
-    url(r'^(?P<quest_id>[0-9]+)/submitted/$', views.submissions, name='submitted_for_quest'),
-    url(r'^(?P<quest_id>[0-9]+)/returned/$', views.submissions, name='returned_for_quest'),
-    url(r'^(?P<quest_id>[0-9]+)/approved/$', views.submissions, name='approved_for_quest'),
-    url(r'^(?P<quest_id>[0-9]+)/gamelab/$', views.submissions, name='gamelab_for_quest'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),
     url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
     url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
-    url(r'^(?P<quest_id>[0-9]+)/gamelabtransfer/$', views.gamelabtransfer, name='gamelabtransfer'),
+    url(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
+    url(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
+    # url(r'^(?P<quest_id>[0-9]+)/skipped/$', views.skipped, name='skipped'),
     url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
     url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
     url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
     url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
     url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
+    url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]

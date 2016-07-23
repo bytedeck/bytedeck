@@ -1,15 +1,23 @@
 {% extends "profile_manager/base.html" %}
 
-{% block heading_inner %}{{ object.user.username }}'s Profile
-  <a class="btn btn-info btn-sm" href="{% url 'profiles:profile_update' object.id %}" role="button">Edit</a>
-  <a class="btn btn-default btn-sm" href="{% url 'account_change_password' %}" role="button">Change Password</a>
+{% block heading_inner %}{{ object.get_preferred_name }}'s Profile
+  <a class="btn btn-info btn-sm"
+    href="{% url 'profiles:profile_update' object.id %}"
+    role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
+  <a class="btn btn-default btn-sm"
+    href="{% url 'account_change_password' %}"
+    role="button"><i class="fa fa-key"></i>&nbsp;&nbsp;Change Password</a>
+  <a class= "btn btn-default btn-sm"
+    href="{% url 'courses:marks' object.user.id %}"
+    role="button"><i class="fa fa-line-chart"></i>&nbsp;&nbsp;View Mark Calculations</a>
 {% endblock %}
 
 {% block content %}
 
 <div class="row">
   <div class="col-sm-3">
-    <img class="icon-avatar img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/>
+    <img class="icon-avatar img-rounded" src="{{object.get_avatar_url}}"
+        alt="avatar"/>
   </div>
   <div class="col-sm-9">
 
@@ -155,7 +163,7 @@
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
                {{s.quest|truncatechars:40}} <small>
                 {% if s.game_lab_transfer %}
-                  (GameLab Transfer)
+                  (Quest Skipped)
                 {% else %}
                   ({{s.quest.xp}} XP)
                 {% endif %}
@@ -208,7 +216,7 @@
             <p>{{assertion.badge.short_description}}</p>
             <p>XP:
             {% if assertion.game_lab_transfer %}
-              n/a (GameLab Transfer)
+              n/a (Badge Skipped)
             {% else %}
               {{assertion.badge.xp}}
             {% endif %}</p>

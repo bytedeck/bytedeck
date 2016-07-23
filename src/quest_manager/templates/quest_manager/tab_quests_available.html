@@ -10,14 +10,16 @@
 
   <div class="row panel-heading">
     <div class="col-xs-1 col-icon"></div>
-    <div class="col-xs-5">Quest</div>
-    <div class="col-xs-1">XP   </div>
-    <div class="col-xs-2">Campaigns</div>
-    <div class="col-xs-3">Expiry</div>
+    <div class="col-xs-6">Quest</div>
+    <div class="col-xs-1 text-right">XP   </div>
+    <div class="col-xs-2 text-right">Expiry</div>
+    <div class="col-xs-2"><!-- status_icons --></div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion-available"
     role="tablist" aria-multiselectable="true">
+
   {% for q in available_quests %}
+
     <div class="panel accordian
       {% if not q.visible_to_students %}panel-danger
       {% elif q.expired %}panel-warning
@@ -39,16 +41,20 @@
               <img class="img-responsive panel-title-img img-rounded"
                 src="{{ q.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-xs-5">{{q.name}}</div>
-            <div class="col-xs-1">{{q.xp}}  </div>
-            <div class="col-xs-2"><small>
-              {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
-            </small></div>
-            <div class="col-xs-3"><small>
+            <div class="col-xs-6">{{q.name}}</div>
+            <div class="col-xs-1 text-right">{{q.xp}}  </div>
+            {% comment %}
+              <div class="col-xs-2"><small>
+               {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
+              </small></div>
+            {% endcomment %}
+            <div class="col-xs-2 text-right"><small>
               {% if q.date_expired %}{{q.date_expired}}
               {% else %}{{q.time_expired}}
               {% endif %}
             </small></div>
+            <div id="status-icon-{{q.id}}" class="col-xs-2  text-muted"></div>
+
           </h4>
         </div> <!-- row -->
       </div> <!-- accordian section heading -->
@@ -61,16 +67,17 @@
               <p>
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
                 &nbsp;Loading content...
+                <!-- preview_content_quests_avail.html via AJAX -->
               </p>
           </li>
-
         </ul>
-
       </div> <!-- accordian panel-collapse -->
 
 
     </div> <!-- accordian -->
+
   {% endfor %} <!-- for each quest -->
+
   </div> <!-- accordian panel group -->
 
 {% else %}

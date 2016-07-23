@@ -1,28 +1,28 @@
+from datetime import timedelta
+
+from comments.forms import CommentForm
+from comments.models import Comment
+from notifications.signals import notify
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.core.urlresolvers import reverse_lazy, reverse
-from django.shortcuts import render, get_object_or_404, redirect
+from django.core.urlresolvers import reverse_lazy
+from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django.views.generic import ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
-
-from notifications.signals import notify
-
-from comments.forms import CommentForm
-from comments.models import Comment
-
-from .models import Announcement
 from .forms import AnnouncementForm
+from .models import Announcement
 
-#function based views..
+
+# function based views..
 
 @login_required
-def comment(request, id):
-    announcement = get_object_or_404(Announcement, pk=id)
+def comment(request, ann_id):
+    announcement = get_object_or_404(Announcement, pk=ann_id)
     origin_path = announcement.get_absolute_url()
 
     if request.method == "POST":
@@ -34,21 +34,21 @@ def comment(request, id):
             if not comment_text:
                 comment_text = ""
             comment_new = Comment.objects.create_comment(
-                user = request.user,
-                path = origin_path,
-                text = comment_text,
-                target = announcement,
+                user=request.user,
+                path=origin_path,
+                text=comment_text,
+                target=announcement,
             )
 
             if 'comment_button' in request.POST:
-                note_verb="commented on"
+                note_verb = "commented on"
                 # icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
-                icon="<span class='fa-stack'>" + \
-                    "<i class='fa fa-newspaper-o fa-stack-1x'></i>" + \
-                    "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
-                    "</span>"
+                icon = "<span class='fa-stack'>" + \
+                       "<i class='fa fa-newspaper-o fa-stack-1x'></i>" + \
+                       "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
+                       "</span>"
                 if request.user.is_staff:
-                    #get other commenters on this announcement
+                    # get other commenters on this announcement
                     affected_users = None
                 else:  # student comment
                     affected_users = User.objects.filter(is_staff=True)
@@ -58,7 +58,7 @@ def comment(request, id):
             notify.send(
                 request.user,
                 action=comment_new,
-                target= announcement,
+                target=announcement,
                 recipient=request.user,
                 affected_users=affected_users,
                 verb=note_verb,
@@ -111,17 +111,21 @@ def list(request, id=None):
     }
     return render(request, 'announcements/list.html', context)
 
-@staff_member_required
-def copy(request, id):
-    new_ann = get_object_or_404(Announcement, pk=id)
-    new_ann.pk = None # autogen a new primary key (quest_id by default)
-    new_ann.title = "Copy of " + new_ann.title
 
-    form = AnnouncementForm(request.POST or None, instance = new_ann)
+@staff_member_required
+def copy(request, ann_id):
+    new_ann = get_object_or_404(Announcement, pk=ann_id)
+    new_ann.pk = None  # autogen a new primary key (quest_id by default)
+    new_ann.title = "Copy of " + new_ann.title
+    new_ann.draft = True
+    new_ann.datetime_released = new_ann.datetime_released + timedelta(days=7)
+
+    form = AnnouncementForm(request.POST or None, instance=new_ann)
     if form.is_valid():
         new_announcement = form.save(commit=False)
         new_announcement.author = request.user
-        new_announcement.datetime_created = timezone.now
+        new_announcement.datetime_created = timezone.now()
+
         new_announcement.save()
         form.save()
 
@@ -137,24 +141,27 @@ def copy(request, id):
     }
     return render(request, "announcements/form.html", context)
 
+
 @staff_member_required
-def publish(request, id):
-    announcement = get_object_or_404(Announcement, pk=id)
+def publish(request, ann_id):
+    announcement = get_object_or_404(Announcement, pk=ann_id)
     announcement.draft = False
     announcement.save()
     send_notifications(request, announcement)
     return redirect(announcement)
 
+
 def send_notifications(request, announcement):
-        affected_users = User.objects.all().filter(is_active=True)
-        notify.send(
-            request.user,
-            # action=new_announcement,
-            target=announcement,
-            recipient=request.user,
-            affected_users=affected_users,
-            icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
-            verb='posted')
+    affected_users = User.objects.all().filter(is_active=True)
+    notify.send(
+        request.user,
+        # action=new_announcement,
+        target=announcement,
+        recipient=request.user,
+        affected_users=affected_users,
+        icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
+        verb='posted')
+
 
 class Create(CreateView):
     model = Announcement
@@ -178,13 +185,14 @@ class Create(CreateView):
         context = super(Create, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         context['heading'] = "Create New Announcement"
-        context['action_value']= ""
-        context['submit_btn_value']= "Publish"
+        context['action_value'] = ""
+        context['submit_btn_value'] = "Publish"
         return context
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(Create, self).dispatch(*args, **kwargs)
+
 
 class Update(UpdateView):
     model = Announcement
@@ -196,13 +204,14 @@ class Update(UpdateView):
         context = super(Update, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         context['heading'] = "Edit Announcement"
-        context['action_value']= ""
-        context['submit_btn_value']= "Update"
+        context['action_value'] = ""
+        context['submit_btn_value'] = "Update"
         return context
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(Update, self).dispatch(*args, **kwargs)
+
 
 class Delete(DeleteView):
     model = Announcement
