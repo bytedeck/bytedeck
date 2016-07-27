@@ -14,12 +14,12 @@ class IsAPrereqMixin:
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
     # TODO: Can I force implementing models to define this method?
-    def condition_met_as_prerequisite(self, user, num_required=1):
+    def condition_met_as_prerequisite(self, user, num_required):
         """
         Defines what it means for the user to meet this prerequisite.  For this Mixin to be any use, the implementing
         model must override this method.
         :param user: a django user
-        :param num_required:
+        :param num_required - recommend to default this to when overriding
         :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
 
         """
@@ -30,6 +30,7 @@ class IsAPrereqMixin:
     @staticmethod
     def autocomplete_search_fields():
         return ("name__icontains",)
+
 
 class HasPrereqsMixin:
     """
@@ -123,7 +124,7 @@ class PrereqManager(models.Manager):
         if not prereqs:
             return no_prereq_means
         for prereq in prereqs:
-            if not prereq.condition_met_as_prerequisite(user):
+            if not prereq.condition_met(user):
                 return False
         return True
 
@@ -138,9 +139,10 @@ class PrereqManager(models.Manager):
         return False
 
 
-class Prereq(models.Model):
+class Prereq(models.Model, IsAPrereqMixin):
     """
-    Links two (or three) objects (of any registered content type) in a prerequisite relationship
+    Links two (or three) objects (of any registered content type) in a prerequisite relationship.
+    Note that a Prereq can itself be a prereq (in combination with AND OR NOT, this allows for arbitrary complexity)
     parent: The owner of the prerequisite. Generally, for the parent to become 'active' the prereq_object conditions
         must be met.  'active' can mean whatever the user of this app wants it to mean.  It's a generic trigger.
     prereq: The object whose conditions must be met in order for the parent to become 'active', which optional
@@ -218,16 +220,23 @@ class Prereq(models.Model):
         except ObjectDoesNotExist:
             return None
 
-    def condition_met_as_prerequisite(self, user):
+    # A Prereq can itself be a prereq_object
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        return self.condition_met(user)
+
+    def condition_met(self, user):
         """
         :param user:
-        :return: True if the conditions for this prerequisite have been met by the user
+        :return: True if the conditions for this complex Prereq have been met by the user
         """
 
         # the first of two possible alternate prereq conditions
         prereq_object = self.get_prereq()
         if prereq_object is None:
             return False
+
+        print(type(prereq_object))
+        print("**********************************")
         main_condition_met = prereq_object.condition_met_as_prerequisite(user, self.prereq_count)
 
         # invert the requirement if needed (NOT)
@@ -242,7 +251,6 @@ class Prereq(models.Model):
         if or_prereq_object is None:
             return False
         or_condition_met = or_prereq_object.condition_met_as_prerequisite(user, self.or_prereq_count)
-
 
         # invert alternate if required (NOT OR)
         if self.or_prereq_invert:

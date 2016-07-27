@@ -86,7 +86,7 @@ class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte=timezone.now())
 
-    #doesn't worktime is UTC or something
+    # doesn't worktime is UTC or something
     # TODO: use timezone.now
     def not_expired(self):
         qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=timezone.now()))
@@ -184,7 +184,7 @@ class Quest(XPItem, IsAPrereqMixin):
                 return True
         return False
 
-    def condition_met_as_prerequisite(self, user, num_required):
+    def condition_met_as_prerequisite(self, user, num_required=1):
         """
         Defines how this model's requirements are met as a prerequisite to other models
         :param user:
@@ -201,7 +201,6 @@ class Quest(XPItem, IsAPrereqMixin):
         :return: True if this object has been assigned as a prerequisite to at least one another object.
         """
         return Prereq.objects.is_prerequisite(self)
-
 
 
 # class Feedback(models.Model):
@@ -357,7 +356,7 @@ class QuestSubmissionManager(models.Manager):
         # is false, it must have been returned.
         if user is None:
             returned_qs = self.get_queryset(True).not_completed().has_completion_date()
-            # postgresql places null values at the beginning.  This will move them to the extend
+            # postgres places null values at the beginning.  This will move them to the extend
             # see: http://stackoverflow.com/questions/15121093/django-adding-nulls-last-to-query
             q = returned_qs.extra(select={'date_null': 'time_returned is null'})
             return q.extra(order_by=['date_null', '-time_returned'])
@@ -441,7 +440,6 @@ class QuestSubmissionManager(models.Manager):
 
         Either way, this prevents them from getting stuck in an inactive semester
         """
-        active_sem = config.hs_active_semester
         # submitted but not accepted
         qs = self.all_not_approved(active_semester_only=False)
         # print("NOT APPROVED ********")
@@ -452,15 +450,13 @@ class QuestSubmissionManager(models.Manager):
 
         # started but not submitted
         qs = self.all_not_completed(active_semester_only=False)
-        # print("NOT COMPELTED ********")
+        # print("NOT COMPLETED ********")
         # print(qs)
         for sub in qs:
             sub.semester_id = config.hs_active_semester
             sub.save()
 
     def remove_in_progress(self):
-        active_sem = config.hs_active_semester
-
         # In Progress Quests
         qs = self.all_not_completed(active_semester_only=False)
         num_del = qs.delete()
@@ -505,7 +501,7 @@ class QuestSubmission(models.Model):
         self.time_completed = timezone.now()
         # this is only set the first time, so it can be referenced to
         # when calculating repeatable quests
-        if self.first_time_completed == None:
+        if self.first_time_completed is not None:
             self.first_time_completed = timezone.now()
         self.save()
 
@@ -526,10 +522,10 @@ class QuestSubmission(models.Model):
         self.save()
 
     def is_awaiting_approval(self):
-        return (self.is_completed and not self.is_approved)
+        return self.is_completed and not self.is_approved
 
     def is_returned(self):
-        return (self.time_completed != None and not self.is_completed)
+        return self.time_completed is not None and not self.is_completed
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
