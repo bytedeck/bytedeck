@@ -56,10 +56,13 @@ class XPItem(models.Model):
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default=0)
-    date_available = models.DateField(default=timezone.now)
-    time_available = models.TimeField(default=time().min)  # midnight
-    date_expired = models.DateField(blank=True, null=True)
-    time_expired = models.TimeField(blank=True, null=True, help_text='only used if date_expired is blank')
+    date_available = models.DateField(default=timezone.now)  # timezone aware!
+    time_available = models.TimeField(default=time().min)  # midnight local time
+    date_expired = models.DateField(blank=True, null=True,
+                                    help_text='If both Date and Time expired are blank, then the quest never expires')
+    time_expired = models.TimeField(blank=True, null=True,  # local time
+                                    help_text='If Date expired is blank, expire at this time every day \
+                                    and reappear at midnight. If this is blank, then midnight assumed.')
     icon = models.ImageField(upload_to='icons/', blank=True, null=True)  # needs Pillow for ImageField
 
     class Meta:
@@ -81,7 +84,6 @@ class XPItem(models.Model):
         #     return "/images/s.jpg"
 
 
-# Create your models here.
 class QuestQuerySet(models.query.QuerySet):
     def date_available(self):
         return self.filter(date_available__lte=timezone.now())
@@ -89,9 +91,28 @@ class QuestQuerySet(models.query.QuerySet):
     # doesn't worktime is UTC or something
     # TODO: use timezone.now
     def not_expired(self):
-        qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=timezone.now()))
-        qs_date = qs_date.exclude(Q(date_expired=timezone.now()) & Q(time_expired__gt=timezone.now()))
-        return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=timezone.now()))
+        """
+        If date_expired and time_expired are null: quest never expires
+        If date_expired exists, but time_expired is null: quest expires after the date (midnight)
+        If date_expired and time_expired exist: thing expires on that date, after the time
+        If only time_expired exists: thing expires after the time, daily
+            (so would become not expired again at midnight when time = 00:00:00)
+        :return:
+        """
+        # TODO: Note that these dates and times are not timezone aware!  Maybe check out the widget to fix this
+        # https://docs.djangoproject.com/en/1.9/topics/i18n/timezones/
+
+        now_tz = timezone.now()
+        now_local = now_tz.astimezone(timezone.get_default_timezone())
+
+        # Filter for quests that have EITHER no expiry date, OR an expiry date that is after today
+        qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=now_local.date()))
+
+        # Remove quests that have the current date AND past expiry time
+        qs_date = qs_date.exclude(Q(date_expired=now_local.date()) & Q(time_expired__lt=now_local.time()))
+
+        # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
+        return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
 
     def visible(self):
         return self.filter(visible_to_students=True)
@@ -143,6 +164,8 @@ class Quest(XPItem, IsAPrereqMixin):
     instructor_notes = models.TextField(blank=True, null=True,
                                         help_text="This field is only visible to Staff. \
                                         Use it to place answer keys or other notes.")
+
+    # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
                                     object_id_field='parent_object_id')
@@ -166,13 +189,25 @@ class Quest(XPItem, IsAPrereqMixin):
     def prereqs(self):
         return Prereq.objects.all_parent(self)
 
+    # TODO: Repeat of queryset code logic, how to combine?
     def expired(self):
-        if self.date_expired is None:
-            if self.time_expired is None:
-                return False
-            return timezone.now().time() > self.time_expired
 
-        return timezone.now().date() > self.date_expired
+        now_tz = timezone.now()
+        now_local = now_tz.astimezone(timezone.get_default_timezone())
+
+        # quests that have the current date AND past expiry time
+        if self.date_expired and self.date_expired == now_local.date() \
+                and self.time_expired and self.time_expired < now_local.time():
+            return True
+
+        # quests with no expiry date AND past expiry time (i.e.daily expiration at set time)
+        if self.date_expired is None and self.time_expired and self.time_expired < now_local.time():
+            return True
+
+        if self.date_expired and self.date_expired < now_local.date():
+            return True
+
+        return False
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
@@ -328,7 +363,7 @@ class QuestSubmissionManager(models.Manager):
     def all_not_completed(self, user=None, active_semester_only=True):
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
-        # only returned quests will have a time compelted, placing them on top
+        # only returned quests will have a time completed, placing them on top
         return self.get_queryset(active_semester_only).get_user(user).not_completed()
 
     def all_completed_past(self, user):
@@ -380,7 +415,7 @@ class QuestSubmissionManager(models.Manager):
             return True
         # check if the quest is already in progress
         try:
-            s = self.all_not_completed(user=user).get(quest=quest)
+            self.all_not_completed(user=user).get(quest=quest)
             # if no exception is thrown it means that an inprogress submission was found
             return False
         except MultipleObjectsReturned:

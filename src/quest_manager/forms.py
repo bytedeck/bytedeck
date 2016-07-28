@@ -10,7 +10,7 @@ from .models import Quest
 
 def make_custom_datetimefield(f):
     formfield = f.formfield()
-    dateTimeOptions = {
+    date_time_options = {
         'showMeridian': False,
         # 'todayBtn': True,
         'todayHighlight': True,
@@ -19,22 +19,21 @@ def make_custom_datetimefield(f):
     }
 
     if isinstance(f, models.DateTimeField):
-        formfield.widget = DateTimeWidget(usel10n=True, options=dateTimeOptions, bootstrap_version=3)
+        formfield.widget = DateTimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
     elif isinstance(f, models.DateField):
-        formfield.widget = DateWidget(usel10n=True, options=dateTimeOptions, bootstrap_version=3)
+        formfield.widget = DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
         # formfield.widget = SelectDateWidget()
     elif isinstance(f, models.TimeField):
-        formfield.widget = TimeWidget(usel10n=True, options=dateTimeOptions, bootstrap_version=3)
+        formfield.widget = TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
     elif isinstance(f, models.TextField):
         formfield.widget = SummernoteWidget()
     return formfield
 
 
-## Demo of how to create a form without using a model
+# Demo of how to create a form without using a model
 # class QuestFormCustom(forms.Form):
 #     quest = forms.CharField()  # default is required = True
 #     xp = forms.IntegerField()
-##
 
 class QuestForm(forms.ModelForm):
     formfield_callback = make_custom_datetimefield

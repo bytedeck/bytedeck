@@ -49,8 +49,9 @@
               </small></div>
             {% endcomment %}
             <div class="col-xs-2 text-right"><small>
-              {% if q.date_expired %}{{q.date_expired}}
-              {% else %}{{q.time_expired}}
+              {% if q.date_expired %}{{q.date_expired}}<br>{% endif %}
+              {% if q.time_expired %}{{q.time_expired}}
+                {% if not q.date_expired %} (daily){% endif %}
               {% endif %}
             </small></div>
             <div id="status-icon-{{q.id}}" class="col-xs-2  text-muted"></div>

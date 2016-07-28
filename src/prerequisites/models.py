@@ -32,14 +32,13 @@ class IsAPrereqMixin:
         return ("name__icontains",)
 
 
-class HasPrereqsMixin:
+class PrereqQuerySet(models.query.QuerySet):
     """
     For models that have prerequisites
+    NOT CURRENTLY USED
     """
 
-    # TODO: should this me a meta class?
-
-    def __init__(self, no_prereqs_means=True):
+    def __init__(self, no_prereqs_means=False):
         """
         :param no_prereqs_means: If an instance of this model has no prereqs, what should happen?
             True -> Make the object available
@@ -47,8 +46,9 @@ class HasPrereqsMixin:
             this for badges, which must be granted manually if they have no prerequisites.
         """
         self.no_prereqs_means = no_prereqs_means
+        super(PrereqQuerySet, self).__init__()
 
-    def get_conditions_met(self, user, initial_query_set):
+    def get_conditions_met(self, user):
         """
         :param user:
         :param initial_query_set: The queryset to filter.  I think this is a very inefficient method, so until I figure
@@ -58,7 +58,7 @@ class HasPrereqsMixin:
         """
 
         # Initialize member variable in case the constructor wasn't called,
-        # which might happen if the class implementing this mixin doesn't call it explicitly or use super?
+        # which might happen if the class implementing this mixin doesn't call the constructor?
         # If you're reading this and understand how python inheritance works with constructors, please let me know =)
         # I could look it up myself, but I'm on the subway with no internet access while on vacation in London,
         # and by the time I do get internet access, I'll probably be on to something else and forget about it.
@@ -69,10 +69,10 @@ class HasPrereqsMixin:
         # TODO: Make this more efficient, too slow!
         # build a list of object pks to use in the filter.
         pk_met_list = [
-            obj.pk for obj in initial_query_set
-            if Prereq.objects.all_conditions_met(obj, user, self.no_prereqs_means)
+            obj.pk for obj in self
+            if Prereq.objects.all_conditions_met(obj, user)
             ]
-        return initial_query_set.filter(pk__in=pk_met_list)
+        return self.filter(pk__in=pk_met_list)
 
 
 class PrereqQuerySet(models.query.QuerySet):
@@ -234,9 +234,6 @@ class Prereq(models.Model, IsAPrereqMixin):
         prereq_object = self.get_prereq()
         if prereq_object is None:
             return False
-
-        print(type(prereq_object))
-        print("**********************************")
         main_condition_met = prereq_object.condition_met_as_prerequisite(user, self.prereq_count)
 
         # invert the requirement if needed (NOT)
