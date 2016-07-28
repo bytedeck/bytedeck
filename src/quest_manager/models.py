@@ -85,11 +85,15 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
-    def date_available(self):
-        return self.filter(date_available__lte=timezone.now())
+    def datetime_available(self):
+        now_local = timezone.now().astimezone(timezone.get_default_timezone())
 
-    # doesn't worktime is UTC or something
-    # TODO: use timezone.now
+        # Filter quests with available date on or before today
+        qs = self.filter(date_available__lte=now_local.date())
+
+        # Exclude quests that become available today but haven't reached the time
+        return qs.exclude(Q(date_available=now_local.date()) & Q(time_available__gt=now_local.time()))
+
     def not_expired(self):
         """
         If date_expired and time_expired are null: quest never expires
@@ -138,7 +142,7 @@ class QuestManager(models.Manager):
         return QuestQuerySet(self.model, using=self._db)
 
     def get_active(self):
-        return self.get_queryset().date_available().not_expired().visible()
+        return self.get_queryset().datetime_available().not_expired().visible()
 
     def get_available(self, user, remove_hidden=True):
         qs = self.get_active().get_conditions_met(user)
