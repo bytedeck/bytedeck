@@ -84,6 +84,8 @@ class XPItem(models.Model):
         #     return "/images/s.jpg"
 
 
+# Github error didn't recognize push but says uptodate?
+
 class QuestQuerySet(models.query.QuerySet):
     def datetime_available(self):
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
