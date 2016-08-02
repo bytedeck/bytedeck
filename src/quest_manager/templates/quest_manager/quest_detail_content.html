@@ -18,8 +18,9 @@
       <div class="col-sm-6">
         <ul class="list-unstyled">
           <li><h4>XP: {{quest.xp}}</h4></li>
-          <li>Campaigns: {% for c in quest.categories.all %}{{c}} {% empty %}-{% endfor %}</li>
+          <li>Campaign: {% if quest.campaign %}{{ quest.campaign }} {% else %}-{% endif %}</li>
           <li>Expiry: {{quest.date_expired}}</li>
+        </ul>
       </div>
       <div class="col-sm-6">
         <ul class="list-unstyled">

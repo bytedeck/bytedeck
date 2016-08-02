@@ -163,7 +163,8 @@ class Quest(XPItem, IsAPrereqMixin):
                                                 granted without the teacher seeing the submission.")
     hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest form their list of \
                                                  available quests. ")
-    categories = models.ManyToManyField(Category, blank=True)
+    # categories = models.ManyToManyField(Category, blank=True)
+    campaign = models.ForeignKey(Category, blank=True, null=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)

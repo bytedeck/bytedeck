@@ -237,7 +237,7 @@ def quest_copy(request, quest_id):
         Prereq.add_simple_prereq(new_quest, copied_quest)
 
         # add same campaigns/categories as copied quest
-        new_quest.categories = copied_quest.categories.all()
+        # new_quest.categories = copied_quest.categories.all()
 
         return redirect(new_quest)
 
