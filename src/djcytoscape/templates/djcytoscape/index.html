@@ -1,0 +1,26 @@
+{% extends "djcytoscape/base.html" %}
+
+{% block content %}
+
+{% if scape_list %}
+    <ul>
+    {% for scape in scape_list %}
+        <li><a href="{% url 'djcytoscape:detail' scape.id %}">{{ scape.name }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No polls are available.</p>
+{% endif %}
+
+<a href="{% url 'djcytoscape:generate_map' %}">Generate MAP</a><br>
+<br>
+<a href="{% url 'djcytoscape:generate' 50 %}">Generate new Scape with 50 nodes</a><br>
+<br>
+<a href="{% url 'djcytoscape:generate_tree' 50 %}">Generate new Tree Scape with 50 nodes</a><br>
+<a href="{% url 'djcytoscape:generate_tree' 100 %}">Generate new Tree Scape with 100 nodes</a><br>
+<a href="{% url 'djcytoscape:generate_tree' 200 %}">Generate new Tree Scape with 200 nodes</a><br>
+<a href="{% url 'djcytoscape:generate_tree' 400 %}">Generate new Tree Scape with 400 nodes</a><br>
+
+{% endblock %}
+
+

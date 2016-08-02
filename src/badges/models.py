@@ -1,4 +1,4 @@
-from prerequisites.models import Prereq
+from prerequisites.models import Prereq, IsAPrereqMixin
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -71,7 +71,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(models.Model):
+class Badge(models.Model, IsAPrereqMixin):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -111,15 +111,15 @@ class Badge(models.Model):
         else:
             return static('img/default_icon.png')
 
-    # to help with the prerequisite choices!
-    @staticmethod
-    def autocomplete_search_fields():
-        return ("name__icontains",)
+    # # to help with the prerequisite choices!
+    # @staticmethod
+    # def autocomplete_search_fields():
+    #     return ("name__icontains",)
 
     # all models that want to act as a possible prerequisite need to have this method
     # Create a default in the PrereqModel(models.Model) class that uses a default:
     # prereq_met boolean field.  Use that or override the method like this
-    def condition_met_as_prerequisite(self, user, num_required):
+    def condition_met_as_prerequisite(self, user, num_required=1):
         num_approved = BadgeAssertion.objects.all_for_user_badge(user, self, False).count()
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required

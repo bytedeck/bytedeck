@@ -10,9 +10,6 @@ class IsAPrereqMixin:
     the method: condition_met_as_prerequisite(user, num_required)
     """
 
-    # all models that want to act as a possible prerequisite need to have this method
-    # Create a default in the PrereqModel(models.Model) class that uses a default:
-    # prereq_met boolean field.  Use that or override the method like this
     # TODO: Can I force implementing models to define this method?
     def condition_met_as_prerequisite(self, user, num_required):
         """
@@ -24,6 +21,25 @@ class IsAPrereqMixin:
 
         """
         return False
+
+    def get_reliant_qs(self):
+        """
+        :return: a queryset containing the objects that require this as a prereq
+        """
+        return Prereq.objects.all_reliant_on(self)
+
+    def get_reliant_objects(self):
+        """
+        :return: a list containing the objects that require this as a prereq
+        """
+        reliant_qs = self.get_reliant_qs()
+        reliant_objects = []
+        for prereq in reliant_qs:
+            parent_obj = prereq.parent()
+            # Why would this be None?  It's happening in testing, perhaps deleted objects?
+            if parent_obj is not None:
+                reliant_objects.append(parent_obj)
+        return reliant_objects
 
     # to help with the prerequisite choices!
     # TODO: Why? link to grapelli docs and let implementing class choose field instead of static?
@@ -109,6 +125,10 @@ class PrereqManager(models.Manager):
 
     def all_parent(self, parent_object):
         return self.get_queryset().get_all_for_parent_object(parent_object)
+
+    # TODO: Add in alternate prereqs to!
+    def all_reliant_on(self, prereq_object):
+        return self.get_queryset().get_all_for_prereq_object(prereq_object)
 
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):
         """

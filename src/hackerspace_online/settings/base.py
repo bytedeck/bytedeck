@@ -89,6 +89,7 @@ INSTALLED_APPS = (
     'prerequisites',
     'badges',
     'suggestions',
+    'djcytoscape',
     # 'tours',
 )
 
