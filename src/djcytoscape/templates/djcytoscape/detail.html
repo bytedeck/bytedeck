@@ -2,27 +2,26 @@
 {% load staticfiles %}
 {% block head_css %}
     #cy {
-        width: 90%;
+        width: 100%;
         height: 600px;
         position: absolute;
 
-        left: 100px;
+        left: 0px;
     }
 {% endblock %}
 {% block content %}
-<div id="cy"></div>
-
 <h3>{{ scape.name }}</h3>
 <ul>
     <li><a href="{% url 'djcytoscape:index' %}">Home</a></li>
     <li><a href="{% url 'djcytoscape:update' scape.id %}">Edit</a></li>
     <li><a href="{% url 'djcytoscape:delete' scape.id %}">Delete</a></li>
 </ul>
-<ul>
+    <div id="cy"></div>
+<!--<ul>
 {% for element in scape.cytoelement_set.all %}
     <li>{{ element.id }}</li>
 {% endfor %}
-</ul>
+</ul>-->
 
 {%  endblock %}
 {% block js %}
