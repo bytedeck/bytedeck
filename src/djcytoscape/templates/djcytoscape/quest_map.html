@@ -1,0 +1,50 @@
+{% extends "djcytoscape/base.html" %}
+{% load staticfiles %}
+{% block head_css %}
+    #cy {
+        width: 100%;
+        height: 800px;
+        position: absolute;
+
+        left: 0px;
+    }
+{% endblock %}
+{% block heading_inner %}{{ scape.name }} Quest Map{% endblock%}
+{% block content %}
+    {% if user.is_staff %}
+        <p>
+            <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
+              title = "Recalculate this Map.  This may take a few minutes." >
+              <i class="fa fa-refresh"></i>
+            </a>
+            <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
+              title = "Edit the Map" >
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-danger" href="{% url 'djcytoscape:delete' scape.id %}" role="button"
+              title = "Delete this Map" >
+              <i class="fa fa-trash-o"></i>
+            </a>
+        &nbsp;&nbsp;&nbsp;Generated on {{ scape.last_regeneration }}
+        </p>
+
+    {%  endif %}
+    <div id="cy"></div>
+
+{%  endblock %}
+{% block js %}
+<script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>
+<script src="{% static 'djcytoscape/js/cytoscape.min.js' %}"></script>
+
+<script src="{% static 'djcytoscape/js/dagre.js' %}"></script>
+<script src="{% static 'djcytoscape/js/cytoscape-dagre.js' %}"></script>
+
+<script src="{% static 'djcytoscape/js/cola.v3.min.js' %}"></script>
+<script src="{% static 'djcytoscape/js/cytoscape-cola.js' %}"></script>
+
+
+<script>
+    var cy = {{ cytoscape_json|safe }}
+</script>
+
+{%  endblock %}

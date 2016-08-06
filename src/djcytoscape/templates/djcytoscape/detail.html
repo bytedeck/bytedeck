@@ -3,32 +3,35 @@
 {% block head_css %}
     #cy {
         width: 100%;
-        height: 600px;
+        height: 800px;
         position: absolute;
 
         left: 0px;
     }
 {% endblock %}
 {% block content %}
-<h3>{{ scape.name }}</h3>
-<ul>
-    <li><a href="{% url 'djcytoscape:index' %}">Home</a></li>
-    <li><a href="{% url 'djcytoscape:update' scape.id %}">Edit</a></li>
-    <li><a href="{% url 'djcytoscape:delete' scape.id %}">Delete</a></li>
-</ul>
+    <h3>{{ scape.name }}</h3>
+    {% if user.is_staff %}
+    <ul>
+        <li><a href="{% url 'djcytoscape:index' %}">Home</a></li>
+        <li><a href="{% url 'djcytoscape:update' scape.id %}">Edit</a></li>
+        <li><a href="{% url 'djcytoscape:quest_map' scape.initial_quest_id %}">Quest Map</a></li>
+        <li><a href="{% url 'djcytoscape:delete' scape.id %}">Delete</a></li>
+    </ul>
+    {% endif %}
     <div id="cy"></div>
-<!--<ul>
-{% for element in scape.cytoelement_set.all %}
-    <li>{{ element.id }}</li>
-{% endfor %}
-</ul>-->
 
 {%  endblock %}
 {% block js %}
 <script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>
-<script src="{% static 'djcytoscape/js/dagre.js' %}"></script>
 <script src="{% static 'djcytoscape/js/cytoscape.min.js' %}"></script>
+
+<script src="{% static 'djcytoscape/js/dagre.js' %}"></script>
 <script src="{% static 'djcytoscape/js/cytoscape-dagre.js' %}"></script>
+
+<script src="{% static 'djcytoscape/js/cola.v3.min.js' %}"></script>
+<script src="{% static 'djcytoscape/js/cytoscape-cola.js' %}"></script>
+
 
 <script>
     var cy = {{ cytoscape_json|safe }}
