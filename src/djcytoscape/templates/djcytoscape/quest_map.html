@@ -29,6 +29,10 @@
         </p>
 
     {%  endif %}
+
+    {% if scape.parent_scape %}
+        <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
+    {% endif %}
     <div id="cy"></div>
 
 {%  endblock %}
@@ -45,6 +49,21 @@
 
 <script>
     var cy = {{ cytoscape_json|safe }}
+
+    // change mouse cursor and label style on hover to indicate link
+    cy.on('mouseover', 'node.link', function(){
+        $('html,body').css('cursor', 'pointer');
+        this.addClass('link_hover')
+    });
+    cy.on('mouseout', 'node.link', function(){
+        $('html,body').css('cursor', 'default');
+        this.removeClass('link_hover')
+    });
+
+    // redirect to linked quest map
+    cy.on('tap', 'node.link', function(){
+        window.location.href = this.data('href');
+    });
 </script>
 
 {%  endblock %}
