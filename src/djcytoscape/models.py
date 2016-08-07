@@ -3,9 +3,11 @@ import json
 
 import random
 from badges.models import Badge
+from django.core.exceptions import ObjectDoesNotExist
 
 from django.core.urlresolvers import reverse
 from django.db import models
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from quest_manager.models import Quest
@@ -179,6 +181,14 @@ class TempCampaign(object):
         else:
             return None
 
+    def get_next_node_id(self, current_node_id):
+        next_loc = self.child_node_ids.index(current_node_id) + 1
+        if len(self.child_node_ids) > next_loc:
+            return self.child_node_ids[next_loc]
+
+    def is_non_sequential(self):
+        return self.get_common_prereq_node_ids() is True
+
     def get_common_reliant_node_ids(self):
         """
         :return: return nodes that are reliant on ALL nodes within the campaign
@@ -301,11 +311,14 @@ class CytoScape(models.Model):
     parent_styles = models.TextField(null=True, blank=True, help_text="key1: value1, key2: value2, ...")
 
     quest_styles = ""
-    badge_styles = quest_styles
+    badge_styles = "'border-width': 3,"
 
-    hidden_styles = "'opacity': 0.25,"
-    link_styles = "'color':'#337ab7', "
-    link_hover_styles = "'color':'#23527c',"
+    hidden_styles = "'opacity': 0,"
+    link_styles = "'color':'#337ab7', 'border-color': '#337ab7', 'border-width': 1,"
+    link_hover_styles = "'color':'#23527c', " \
+                        "'background-opacity': 0.25, " \
+                        "'background-color': '#000000'," \
+                        "'border-color': '#23527c',"
 
     def __str__(self):
         return self.name
@@ -345,9 +358,10 @@ class CytoScape(models.Model):
             if element.id_styles:
                 json_str += self.get_selector_styles_json('#'+str(element.id), element.id_styles)
         json_str += "  ], \n"
-        # json_str += "  minZoom: 0.5, \n"
-        # json_str += "  maxZoom: 1.5, \n"
+        json_str += "  minZoom: 0.5, \n"
+        json_str += "  maxZoom: 1.5, \n"
         # json_str += "  userZoomingEnabled: false, \n"
+        json_str += "  wheelSensitivity: 0.1, \n"
         json_str += "});"
 
         return json_str
@@ -460,82 +474,96 @@ class CytoScape(models.Model):
 
         return campaign_node, campaign_created
 
-    def add_campaign_edges(self):
+    def fix_nonsequential_campaign_edges(self):
         """
-        cyto dagre layout doesn't support compound/parent nodes, so we need to add invisible edges between parent nodes
-        and first node in the campaign, for non-directed campaigns (i.e. all quests become available simultaneously)
+        cyto dagre layout doesn't support compound/parent nodes, so for non-sequential/non-directed campaigns
+        (i.e. all quests are available concurrently) we need to:
+         1. add invisible edges joining the quests
+         2. remove edges between common prereqs and quests
+         3. remove edges between quests and common reliants
+         4. add edges between common prereqs and campaign/compound/parent node
+         5. add edges between campaign/compound/parent node and common reliants
+         6. add invisible edge (for structure) from prereqs to first node
+         7. add invisible edge (for structure) from last node to reliants
         """
+
         for campaign in self.campaign_list:
 
-            # If required, add the invisible edge connecting a prereq node to the campaign to help structure of map
-            parent_node = CytoElement.objects.get(id=campaign.node_id)
-            first_node_id = campaign.get_first_node_id()
-            first_node = CytoElement.objects.get(id=first_node_id)
-            prereq_node_ids = campaign.get_common_prereq_node_ids()
-            if prereq_node_ids:
-                for node_id in prereq_node_ids:
-                    source_node = CytoElement.objects.get(id=node_id)
-                    CytoElement.objects.get_or_create(
-                        scape=self,
-                        group=CytoElement.EDGES,
-                        data_source=source_node,
-                        data_target=first_node,
-                        classes="hidden",
-                        # defaults={'attribute': value},
-                    )
-                    # and add the visible node from prereq to campaign/compound/parent node
-                    CytoElement.objects.get_or_create(
-                        scape=self,
-                        group=CytoElement.EDGES,
-                        data_source=source_node,
-                        data_target=parent_node,
-                        # defaults={'attribute': value},
-                    )
-            else:  # add a visible edge between the first prereq and first child
-                prereq_node_id = campaign.get_first_prereq_id()
-                prereq_node = CytoElement.objects.get(id=prereq_node_id)
-                CytoElement.objects.get_or_create(
-                    scape=self,
-                    group=CytoElement.EDGES,
-                    data_source=prereq_node,
-                    data_target=first_node,
-                    # defaults={'attribute': value},
-                )
+            common_prereq_ids = campaign.get_common_prereq_node_ids()
+            if common_prereq_ids:  # then the campaign is non-sequential and quests have a common ancestor
 
-            # If required, add the invisible edge connecting last campaign node to next node to help structure of map
-            last_node_id = campaign.get_last_node_id()
-            last_node = CytoElement.objects.get(id=last_node_id)
-            reliant_node_ids = campaign.get_common_reliant_node_ids()
-            if reliant_node_ids:
-                for node_id in reliant_node_ids:
-                    target_node = CytoElement.objects.get(id=node_id)
+                # 1. add invisible edges joining the quests
+                for current_node_id in campaign.child_node_ids:
+                    next_node_id = campaign.get_next_node_id(current_node_id)
+                    if next_node_id:
+                        CytoElement.objects.get_or_create(
+                            scape=self,
+                            group=CytoElement.EDGES,
+                            data_source_id=current_node_id,
+                            data_target_id=next_node_id,
+                            defaults={'classes': 'hidden', 'min_len': 1, },
+                        )
+
+                first_node_id = campaign.get_first_node_id()
+                for prereq_node_id in common_prereq_ids:
+
+                    # 2. remove edges between common prereqs and quests
+                    for quest_node_id in campaign.child_node_ids:
+                        # we already know all quests have this prereq node in common, so the edges should all exist
+                        edge_node = get_object_or_404(CytoElement,
+                                                      data_source_id=prereq_node_id,
+                                                      data_target_id=quest_node_id)
+                        edge_node.delete()
+
+                    # 4. add edges between common prereqs and campaign/compound/parent node
                     CytoElement.objects.get_or_create(
                         scape=self,
                         group=CytoElement.EDGES,
-                        data_source=last_node,
-                        data_target=target_node,
-                        classes="hidden",
+                        data_source_id=prereq_node_id,
+                        data_target_id=campaign.node_id,
                         # defaults={'attribute': value},
                     )
-                    # and add the visible node from campaign to next node
+
+                    # 6. add invisible edge (for structure) from prereqs to first node
                     CytoElement.objects.get_or_create(
                         scape=self,
                         group=CytoElement.EDGES,
-                        data_source=parent_node,
-                        data_target=target_node,
-                        # defaults={'attribute': value},
+                        data_source_id=prereq_node_id,
+                        data_target_id=first_node_id,
+                        defaults={'classes': 'hidden', }
                     )
-            else:  # add a visible edge between the last in campaign prereq and next node (if it exists)
-                reliant_node_id = campaign.get_last_reliant_id()
-                if reliant_node_id:
-                    reliant_node = CytoElement.objects.get(id=reliant_node_id)
-                    CytoElement.objects.get_or_create(
-                        scape=self,
-                        group=CytoElement.EDGES,
-                        data_source=last_node,
-                        data_target=reliant_node,
-                        # defaults={'attribute': value},
-                    )
+
+                last_node_id = campaign.get_last_node_id()
+                reliant_node_ids = campaign.get_common_reliant_node_ids()
+                if reliant_node_ids:
+                    for reliant_node_id in reliant_node_ids:
+
+                        # 3 remove edges between quests and common reliants
+                        for quest_node_id in campaign.child_node_ids:
+                            # we already know all quests have this reliant node in common, so the edges should all exist
+                            edge_node = get_object_or_404(CytoElement,
+                                                          data_source_id=quest_node_id,
+                                                          data_target_id=reliant_node_id)
+                            edge_node.delete()
+
+                        # 5. add edges between campaign/compound/parent node and common reliants
+                        CytoElement.objects.get_or_create(
+                            scape=self,
+                            group=CytoElement.EDGES,
+                            data_source_id=campaign.node_id,
+                            data_target_id=reliant_node_id,
+                            # defaults={'attribute': value},
+                        )
+
+                        # 7. add invisible edge (for structure) from last node to reliants
+                        CytoElement.objects.get_or_create(
+                            scape=self,
+                            group=CytoElement.EDGES,
+                            data_source_id=last_node_id,
+                            data_target_id=reliant_node_id,
+                            defaults={'classes': 'hidden', }
+                            # defaults={'attribute': value},
+                        )
 
     def add_reliant(self, current_obj, mother_node):
         reliant_objects = current_obj.get_reliant_objects()
@@ -547,46 +575,23 @@ class CytoScape(models.Model):
 
             # create the new reliant node if it doesn't already exist
             new_node, created = self.add_node_from_object(obj)
-            source_node = mother_node
-            classes = ""
-            min_len = 4
-
-            add_edge = True
 
             # if mother node is in a campaign/parent, add new_node as a reliant in the temp_campaign
             if mother_node.data_parent:
                 temp_campaign = self.get_temp_campaign(mother_node.data_parent.id)
                 temp_campaign.add_reliant(new_node.id)
-                add_edge = False
+                # add_edge = False
 
             # add new_node to a campaign/compound/parent, if required
-            campaign_node, campaign_created = self.add_to_campaign(obj, new_node, mother_node)
+            self.add_to_campaign(obj, new_node, mother_node)
 
-            if campaign_created:
-                add_edge = False  # edges will be added later to connect campaigns
-
-            if campaign_node and not campaign_created:  # Indicates an addition to an existing campaign
-                add_edge = True
-                # if this new node has a direct prereq from within the campaign, add edge, else add invisible edge
-                temp_campaign = self.get_temp_campaign(new_node.data_parent.id)
-                if temp_campaign.prereq_is_within(mother_node.id):  # mother = prereq
-                    source_node = mother_node
-                else:
-                    source_node = self.get_last_node_in_campaign(campaign_node, 1)
-                    classes = "hidden"
-                    min_len = 1
-
-            # if new campaign, or mother_node is ina campaign, edges will be added later with .add_campaign_edges()
-            if add_edge:
-                CytoElement.objects.get_or_create(
-                    scape=self,
-                    group=CytoElement.EDGES,
-                    data_source=source_node,
-                    data_target=new_node,
-                    classes=classes,
-                    min_len=min_len,
-                    # defaults={'attribute': value},
-                )
+            CytoElement.objects.get_or_create(
+                scape=self,
+                group=CytoElement.EDGES,
+                data_source=mother_node,
+                data_target=new_node,
+                # defaults={'attribute': value},
+            )
 
             # If repeatable, add circular edge
             if hasattr(obj, 'max_repeats'):
@@ -609,10 +614,9 @@ class CytoScape(models.Model):
     @staticmethod
     def generate_map(initial_quest, name, container_element_id="cy", layout_name="dagre"):
 
-        layout_options = "'nodeSep': 25, "\
-                         "'rankSep': 10, "\
-                         "'minLen': function( edge ){ return edge.data('minLen'); }," \
-                         "" \
+        layout_options = "'nodeSep': 25, \n"\
+                         "'rankSep': 10, \n"\
+                         "'minLen': function( edge ){ return edge.data('minLen'); }, \n" \
                          "" \
                          ""
 
@@ -620,47 +624,32 @@ class CytoScape(models.Model):
         # "'spacingFactor': '1.5', " \
         # "'padding': '100', " \
 
-        node_styles = "label: 'data(label)'," \
-                      "'text-valign': 'center', " \
-                      "'text-halign': 'right', " \
-                      "'background-fit': 'cover'," \
-                      "'shape': 'rectangle'," \
-                      "'background-opacity': 0," \
-                      "'padding-right':10," \
-                      "'padding-left':5," \
-                      "'padding-top':5," \
-                      "'padding-bottom':5," \
-                      "'text-events':'yes'," \
+        node_styles = "label: 'data(label)', \n" \
+                      "'text-valign':   'center', 'text-halign': 'right', \n" \
+                      "'text-margin-x': '-260', \n" \
+                      "'background-fit':'contain', \n" \
+                      "'shape':         'roundrectangle', \n" \
+                      "'background-opacity': 0, \n" \
+                      "'background-position-x': 0, \n" \
+                      "'width':         290, \n" \
+                      "'border-width':  1, \n" \
+                      "'padding-right': 5, 'padding-left':5, 'padding-top':5, 'padding-bottom':5, \n" \
+                      "'text-events':   'yes'," \
                       ""
-
-        # node_styles = "label: 'data(label)'," \
-        #               "'shape': 'roundrectangle'," \
-        #               "'background-opacity': '1'," \
-        #               "'background-color':'lightgray'," \
-        #               "'border-color': 'black', " \
-        #               "'border-width': '1', " \
-        #               "'padding-top': '10px', " \
-        #               "'padding-bottom': '10px', " \
-        #               "'padding-left': '10px', " \
-        #               "'padding-right': '10px', " \
-        #               "'text-valign': 'center', "\
-        #               "'width': '245px', " \
-        #               "'height': 'label', " \
-        #               ""
 
         edge_styles = "'width': 1, "\
-                      "'curve-style':'bezier', " \
-                      "'line-color': 'black', " \
-                      "'line-style': 'solid', "\
-                      "'target-arrow-shape': 'triangle-backcurve', "\
-                      "'target-arrow-color':'black', "\
-                      "'text-rotation': 'autorotate', "\
+                      "'curve-style':'bezier', \n" \
+                      "'line-color': 'black', \n" \
+                      "'line-style': 'solid', \n"\
+                      "'target-arrow-shape': 'triangle-backcurve', \n"\
+                      "'target-arrow-color':'black', \n"\
+                      "'text-rotation': 'autorotate', \n"\
                       ""
 
-        parent_styles = "'text-rotation': '-90deg'," \
-                        "'text-halign': 'left'," \
-                        "'text-margin-x': -10," \
-                        "'text-margin-y': -50," \
+        parent_styles = "'text-rotation': '-90deg', \n" \
+                        "'text-halign': 'left', \n" \
+                        "'text-margin-x': -10, \n" \
+                        "'text-margin-y': -50, \n" \
                         ""
 
         scape = CytoScape(
@@ -696,7 +685,7 @@ class CytoScape(models.Model):
         # Endpoints... not sure yet, but probably quests starting with '~' tilde character, or add a new field?
         self.add_reliant(self.initial_quest, mother_node)
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
-        self.add_campaign_edges()
+        self.fix_nonsequential_campaign_edges()
         self.last_regeneration = timezone.now()
         self.save()
 
