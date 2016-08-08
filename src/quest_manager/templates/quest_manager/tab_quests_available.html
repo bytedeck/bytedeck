@@ -10,9 +10,10 @@
 
   <div class="row panel-heading">
     <div class="col-xs-1 col-icon"></div>
-    <div class="col-xs-6">Quest</div>
-    <div class="col-xs-1 text-right">XP   </div>
-    <div class="col-xs-2 text-right">Expiry</div>
+    <div class="col-xs-5">Quest</div>
+    <div class="col-xs-1 text-right">XP</div>
+    <div class="col-xs-2 text-center">Campaign</div>
+    <div class="col-xs-1 text-center">Expiry</div>
     <div class="col-xs-2"><!-- status_icons --></div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion-available"
@@ -37,24 +38,23 @@
 
         <div class="row">
           <h4 class="panel-title">
+            <!-- COLUMNS -->
             <div class="col-xs-1 col-icon">
               <img class="img-responsive panel-title-img img-rounded"
                 src="{{ q.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-xs-6">{{q.name}}</div>
+            <div class="col-xs-5">{{q.name}}</div>
             <div class="col-xs-1 text-right">{{q.xp}}  </div>
-            {% comment %}
-              <div class="col-xs-2"><small>
-               {% for c in q.categories.all %}{{c}} {% empty %}-{% endfor %}
-              </small></div>
-            {% endcomment %}
-            <div class="col-xs-2 text-right"><small>
+            <div class="col-xs-2 text-center"><small>
+              {% if q.campaign %}{{q.campaign}}{% endif %}
+            </small></div>
+            <div class="col-xs-1 text-right"><small>
               {% if q.date_expired %}{{q.date_expired}}<br>{% endif %}
               {% if q.time_expired %}{{q.time_expired}}
                 {% if not q.date_expired %} (daily){% endif %}
               {% endif %}
             </small></div>
-            <div id="status-icon-{{q.id}}" class="col-xs-2  text-muted"></div>
+            <div id="status-icon-{{q.id}}" class="col-xs-2 text-muted"></div>
 
           </h4>
         </div> <!-- row -->
