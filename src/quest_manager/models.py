@@ -83,8 +83,34 @@ class XPItem(models.Model):
         # def get_icon_url(self):
         #     return "/images/s.jpg"
 
+    # TODO: Repeat of queryset code logic, how to combine?
+    def expired(self):
 
-# Github error didn't recognize push but says uptodate?
+        now_tz = timezone.now()
+        now_local = now_tz.astimezone(timezone.get_default_timezone())
+
+        # quests that have the current date AND past expiry time
+        if self.date_expired and self.date_expired == now_local.date() \
+                and self.time_expired and self.time_expired < now_local.time():
+            return True
+
+        # quests with no expiry date AND past expiry time (i.e.daily expiration at set time)
+        if self.date_expired is None and self.time_expired and self.time_expired < now_local.time():
+            return True
+
+        if self.date_expired and self.date_expired < now_local.date():
+            return True
+
+        return False
+
+    @property
+    def active(self):
+        """
+        Available as a property to make compatible with Badge.active attribute
+        :return: True if visible and not expired
+        """
+        return self.visible_to_students and not self.expired()
+
 
 class QuestQuerySet(models.query.QuerySet):
     def datetime_available(self):
@@ -195,26 +221,6 @@ class Quest(XPItem, IsAPrereqMixin):
 
     def prereqs(self):
         return Prereq.objects.all_parent(self)
-
-    # TODO: Repeat of queryset code logic, how to combine?
-    def expired(self):
-
-        now_tz = timezone.now()
-        now_local = now_tz.astimezone(timezone.get_default_timezone())
-
-        # quests that have the current date AND past expiry time
-        if self.date_expired and self.date_expired == now_local.date() \
-                and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        # quests with no expiry date AND past expiry time (i.e.daily expiration at set time)
-        if self.date_expired is None and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        if self.date_expired and self.date_expired < now_local.date():
-            return True
-
-        return False
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats

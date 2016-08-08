@@ -28,7 +28,7 @@ class IsAPrereqMixin:
         """
         return Prereq.objects.all_reliant_on(self)
 
-    def get_reliant_objects(self):
+    def get_reliant_objects(self, active_only=True):
         """
         :return: a list containing the objects that require this as a prereq
         """
@@ -38,7 +38,13 @@ class IsAPrereqMixin:
             parent_obj = prereq.parent()
             # Why would this be None?  It's happening in testing, perhaps deleted objects?
             if parent_obj is not None:
-                reliant_objects.append(parent_obj)
+                # TODO: hacky way of checking if quests are visible/expired
+                # should refactor the name of this field, or make in common
+                if active_only and hasattr(parent_obj, 'active'):
+                    if parent_obj.active:
+                        reliant_objects.append(parent_obj)
+                else:
+                    reliant_objects.append(parent_obj)
         return reliant_objects
 
     # to help with the prerequisite choices!
