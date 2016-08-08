@@ -1,8 +1,11 @@
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import ObjectDoesNotExist
+from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView, DeleteView
 from django.core.urlresolvers import reverse_lazy
+from djcytoscape.forms import GenerateQuestMapForm
 from quest_manager.models import Quest
 
 from .models import CytoScape
@@ -35,41 +38,68 @@ def index(request):
     return render(request, 'djcytoscape/index.html', context)
 
 
-def quest_map(request, quest_id):
-    scape = get_object_or_404(CytoScape, initial_quest_id=quest_id)
+def quest_map(request, quest_id, originating_scape_id=None):
+    try:
+        scape = CytoScape.objects.get(initial_quest_id=quest_id)
+    except ObjectDoesNotExist:
+        if request.user.is_staff:
+            # the map doesn't exist, so ask to generate it.
+            return generate_map(request, quest_id=quest_id, scape_id=originating_scape_id)
+        else:
+            raise Http404
+
     cytoscape_json = scape.json()
     return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
                                                           'cytoscape_json': cytoscape_json,
                                                           'fullscreen': True,
                                                           })
 
-#
-# def detail(request, scape_id):
-#     scape = get_object_or_404(CytoScape, pk=scape_id)
-#     cytoscape_json = scape.json()
-#     return render(request, 'djcytoscape/detail.html', {'scape': scape, 'cytoscape_json': cytoscape_json})
 
-#
-# def generate(request, num_nodes):
-#     cyto_test = CytoScape.objects.generate_random_scape("Test", int(num_nodes))
-#     return redirect('djcytoscape:detail', scape_id=cyto_test.id)
+def primary(request):
+    scape = CytoScape.objects.get(is_the_primary_scape=True)
+    return quest_map(request, scape.initial_quest.id)
 
 
-#
-# def generate_tree(request, num_nodes):
-#     cyto_test = CytoScape.objects.generate_random_tree_scape("Test", int(num_nodes))
-#     return redirect('djcytoscape:detail', scape_id=cyto_test.id)
+@staff_member_required
+def generate_map(request, quest_id=None, scape_id=None):
+    if request.method == 'POST':
+        form = GenerateQuestMapForm(request.POST)
+        # check whether it's valid:
+        if form.is_valid():
+            quest = form.cleaned_data['quest']
+            scape = form.cleaned_data['scape']
+            name = form.cleaned_data['name']
+            if not name:
+                name = str(quest)
+            cyto_test = CytoScape.generate_map(initial_quest=quest, name=name, parent_scape=scape)
+            return redirect('djcytoscape:quest_map', quest_id=cyto_test.initial_quest_id)
+
+    else:
+        interlink = False
+        initial = {}
+        if quest_id:
+            quest = get_object_or_404(Quest, pk=quest_id)
+            initial['quest'] = quest
+        if scape_id:
+            scape = get_object_or_404(CytoScape, pk=scape_id)
+            initial['scape'] = scape
+            interlink = True
+
+        form = GenerateQuestMapForm(initial=initial)
+
+        context = {
+            'form': form,
+            'interlink': interlink,
+        }
+
+    return render(request, 'djcytoscape/generate_new_form.html', context)
 
 
-def generate_map(request, quest_id=1):
-    q = get_object_or_404(Quest, id=quest_id)
-    cyto_test = CytoScape.generate_map(initial_quest=q, name=str(q))
-    return redirect('djcytoscape:quest_map', quest_id=cyto_test.initial_quest_id)
-
-
+@staff_member_required
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
     scape.regenerate()
     return redirect('djcytoscape:quest_map', quest_id=scape.initial_quest_id)
+
 
 

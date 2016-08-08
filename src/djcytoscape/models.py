@@ -295,7 +295,10 @@ class CytoScape(models.Model):
     name = models.CharField(max_length=250)
     initial_quest = models.OneToOneField(Quest)
     parent_scape = models.ForeignKey('self', blank=True, null=True,
-                                     help_text="The scape preceding this one, so it can be linked back to")
+                                     help_text="The map/scape preceding this one, so it can be linked back to")
+    is_the_primary_scape = models.BooleanField(default=False,
+                                        help_text="There can only be one primary map/scape. Making this True will "
+                                                  "change all other map/scapes will be set to False.")
     last_regeneration = models.DateTimeField(default=timezone.now)
     container_element_id = models.CharField(max_length=50, default="cy",
                                             help_text="id of the html element where the graph's canvas will be placed")
@@ -312,6 +315,7 @@ class CytoScape(models.Model):
 
     quest_styles = ""
     badge_styles = "'border-width': 3,"
+    campaign_styles = ""
 
     hidden_styles = "'opacity': 0,"
     link_styles = "'color':'#337ab7', 'border-color': '#337ab7', 'border-width': 1,"
@@ -322,6 +326,21 @@ class CytoScape(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        # if this is the first scape, make it primary
+        if CytoScape.objects.all().count() == 0:
+            self.is_the_primary_scape = True
+        # if setting this to primary, turn other primary to False
+        elif self.is_the_primary_scape:
+            try:
+                current_primary_scape = CytoScape.objects.get(is_the_primary_scape=True)
+                if self != current_primary_scape:
+                    current_primary_scape.is_the_chosen_one = False
+                    current_primary_scape.save()
+            except CytoScape.DoesNotExist:
+                pass
+        super(CytoScape, self).save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse('djcytoscape:quest_map', kwargs={'quest_id': self.initial_quest_id})
@@ -351,6 +370,7 @@ class CytoScape(models.Model):
             json_str += self.get_selector_styles_json('$node > node', self.parent_styles)
         json_str += self.get_selector_styles_json('.Quest', self.quest_styles)
         json_str += self.get_selector_styles_json('.Badge', self.badge_styles)
+        json_str += self.get_selector_styles_json('.campaign', self.campaign_styles)
         json_str += self.get_selector_styles_json('.hidden', self.hidden_styles)
         json_str += self.get_selector_styles_json('.link', self.link_styles)
         json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
@@ -418,7 +438,7 @@ class CytoScape(models.Model):
 
         # if this is a transition node (to a new map), add the link to href field. And add the "link" class
         if not initial_node and self.is_transition_node(new_node):
-            new_node.href = reverse('maps:quest_map', args=[obj.id])
+            new_node.href = reverse('maps:quest_map_interlink', args=[obj.id, self.id])
             new_node.classes += " link"
             new_node.save()
 
@@ -612,7 +632,7 @@ class CytoScape(models.Model):
         return node.label[0] is "~"
 
     @staticmethod
-    def generate_map(initial_quest, name, container_element_id="cy", layout_name="dagre"):
+    def generate_map(initial_quest, name, parent_scape=None, container_element_id="cy", layout_name="dagre"):
 
         layout_options = "'nodeSep': 25, \n"\
                          "'rankSep': 10, \n"\
@@ -655,6 +675,7 @@ class CytoScape(models.Model):
         scape = CytoScape(
             name=name,
             initial_quest=initial_quest,
+            parent_scape=parent_scape,
             container_element_id=container_element_id,
             layout_name=layout_name,
             layout_options=layout_options,
