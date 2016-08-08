@@ -56,8 +56,11 @@ def quest_map(request, quest_id, originating_scape_id=None):
 
 
 def primary(request):
-    scape = get_object_or_404(CytoScape, is_the_primary_scape=True)
-    return quest_map(request, scape.initial_quest.id)
+    try:
+        scape = CytoScape.objects.get(is_the_primary_scape=True)
+        return quest_map(request, scape.initial_quest.id)
+    except ObjectDoesNotExist:
+        return generate_map(request)
 
 
 @staff_member_required
