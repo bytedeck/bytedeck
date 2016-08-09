@@ -409,6 +409,9 @@ class CytoScape(models.Model):
             title = title[:(l-2)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
             post = " (" + str(obj.xp) + ")"
+        # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
+        #     if obj.max_repeats != 0:
+        #         post += ' ⟲'
         return title + post
 
     def get_last_node_in_campaign(self, parent_node, offset=0):
@@ -605,6 +608,7 @@ class CytoScape(models.Model):
             # add new_node to a campaign/compound/parent, if required
             self.add_to_campaign(obj, new_node, mother_node)
 
+            # TODO: should add number of times prereq is required, similar to repeat edges below
             CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.EDGES,
@@ -614,14 +618,20 @@ class CytoScape(models.Model):
             )
 
             # If repeatable, add circular edge
-            if hasattr(obj, 'max_repeats'):
-                if obj.max_repeats != 0:
-                    repeat_edge = CytoElement(
-                        scape=self, group=CytoElement.EDGES,
-                        data_source=new_node,
-                        data_target=new_node,
-                    )
-                    repeat_edge.save()
+            # TODO: cool idea, but currently big edge gets in the way, need a tight small one.
+            # if hasattr(obj, 'max_repeats'):
+            #     if obj.max_repeats != 0:
+            #         if obj.max_repeats < 0:
+            #             label = '∞'
+            #         else:
+            #             label = 'x ' + str(obj.max_repeats)
+            #         repeat_edge = CytoElement(
+            #             scape=self, group=CytoElement.EDGES,
+            #             data_source=new_node,
+            #             data_target=new_node,
+            #             label=label,
+            #         )
+            #         repeat_edge.save()
 
             # recursive, continuing adding if this is a new node, and not a closing node
             if created and not self.is_transition_node(new_node):
@@ -657,19 +667,19 @@ class CytoScape(models.Model):
                       "'text-events':   'yes'," \
                       ""
 
-        edge_styles = "'width': 1, "\
+        edge_styles = "'width': 1, \n"\
                       "'curve-style':'bezier', \n" \
                       "'line-color': 'black', \n" \
                       "'line-style': 'solid', \n"\
                       "'target-arrow-shape': 'triangle-backcurve', \n"\
                       "'target-arrow-color':'black', \n"\
                       "'text-rotation': 'autorotate', \n"\
-                      ""
+                      "'label': 'data(label)',"
 
         parent_styles = "'text-rotation': '-90deg', \n" \
                         "'text-halign': 'left', \n" \
                         "'text-margin-x': -10, \n" \
-                        "'text-margin-y': -50, \n" \
+                        "'text-margin-y': -40, \n" \
                         ""
 
         scape = CytoScape(
