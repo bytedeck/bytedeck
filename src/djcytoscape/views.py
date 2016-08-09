@@ -65,6 +65,7 @@ def primary(request):
 
 @staff_member_required
 def generate_map(request, quest_id=None, scape_id=None):
+    interlink = False
     if request.method == 'POST':
         form = GenerateQuestMapForm(request.POST)
         # check whether it's valid:
@@ -78,7 +79,7 @@ def generate_map(request, quest_id=None, scape_id=None):
             return redirect('djcytoscape:quest_map', quest_id=cyto_test.initial_quest_id)
 
     else:
-        interlink = False
+
         initial = {}
         if quest_id:
             quest = get_object_or_404(Quest, pk=quest_id)
@@ -90,10 +91,10 @@ def generate_map(request, quest_id=None, scape_id=None):
 
         form = GenerateQuestMapForm(initial=initial)
 
-        context = {
-            'form': form,
-            'interlink': interlink,
-        }
+    context = {
+        'form': form,
+        'interlink': interlink,
+    }
 
     return render(request, 'djcytoscape/generate_new_form.html', context)
 

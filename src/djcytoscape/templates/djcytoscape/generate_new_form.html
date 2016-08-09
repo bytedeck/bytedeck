@@ -11,7 +11,8 @@
     <form action="" method="post">
     {% csrf_token %}
     {{ form|crispy }}
-    <input type="submit" value="Generate a new Map starting from this Quest" />
+    <input type="submit" value="Generate a new Map starting from this Quest" class="btn btn-success"/>
+    <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
 </form>
 {% endblock %}
 

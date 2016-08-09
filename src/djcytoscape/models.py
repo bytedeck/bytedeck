@@ -72,6 +72,10 @@ class CytoStyleSet(models.Model):
                       ('dagre', 'dagre'),
                       )
 
+    JAVASCRIPT_DEFAULT = "$(document).ready(function() { \n" \
+                         "\n" \
+                         "});\n"
+
     name = models.CharField(max_length=50)
     init_options = models.TextField(blank=True, null=True, default=DEFAULT_INIT_OPTIONS,
                                     help_text="Format = key1: value1, key2: value2, ... (see "
@@ -90,7 +94,10 @@ class CytoStyleSet(models.Model):
     parent_styles = models.TextField(blank=True, null=True, default=DEFAULT_PARENT_STYLES,
                                      help_text="Format = key1: value1, key2: value2, ... (see "
                                                "http://js.cytoscape.org/#style)")
-    style_classes = models.ManyToManyField(CytoStyleClass, blank=True, null=True)
+    style_classes = models.ManyToManyField(CytoStyleClass, blank=True)
+    javascript = models.TextField(blank=True, null=True, default=JAVASCRIPT_DEFAULT,
+                                  help_text="Will be placed inside script tags. JQuery available. "
+                                            "See http://js.cytoscape.org/#core")
 
     def __str__(self):
         return self.name
