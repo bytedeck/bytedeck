@@ -38,7 +38,6 @@ class IsAPrereqMixin:
             parent_obj = prereq.parent()
             # Why would this be None?  It's happening in testing, perhaps deleted objects?
             if parent_obj is not None:
-                # TODO: hacky way of checking if quests are visible/expired
                 # should refactor the name of this field, or make in common
                 if active_only and hasattr(parent_obj, 'active'):
                     if parent_obj.active:
