@@ -13,6 +13,137 @@ from django.utils import timezone
 from quest_manager.models import Quest
 
 
+class CytoStyleClass(models.Model):
+    name = models.CharField(max_length=20, help_text="a period will be added before the name when used as a selector")
+    styles = models.TextField(blank=True, null=True,
+                              help_text="Format = key1: value1, key2: value2, ... (see http://js.cytoscape.org/#style)")
+
+    def __str__(self):
+        return self.name
+
+
+class CytoStyleSet(models.Model):
+    DEFAULT_NAME = "Default"
+
+    DEFAULT_INIT_OPTIONS = "  minZoom: 0.5, \n" \
+                           "  maxZoom: 1.5, \n" \
+                           "  wheelSensitivity: 0.1, \n" \
+                           ""
+
+    DEFAULT_LAYOUT_OPTIONS = "'nodeSep': 25, \n 'rankSep': 10, \n"
+
+    DEFAULT_NODE_STYLES = "label: 'data(label)', \n" \
+                          "'text-valign':   'center', 'text-halign': 'right', \n" \
+                          "'text-margin-x': '-270', \n" \
+                          "'background-fit':'contain', \n" \
+                          "'shape':         'roundrectangle', \n" \
+                          "'background-opacity': 0, \n" \
+                          "'background-position-x': 0, \n" \
+                          "'width':         300, \n" \
+                          "'border-width':  1, \n" \
+                          "'padding-right': 5, 'padding-left':5, 'padding-top':5, 'padding-bottom':5, \n" \
+                          "'text-events':   'yes'," \
+                          ""
+
+    DEFAULT_EDGE_STYLES = "'width': 1, \n"\
+                          "'curve-style':   'bezier', \n" \
+                          "'line-color':    'black', \n" \
+                          "'line-style':    'solid', \n"\
+                          "'target-arrow-shape': 'triangle-backcurve', \n"\
+                          "'target-arrow-color':'black', \n"\
+                          "'text-rotation': 'autorotate', \n"\
+                          "'label':         'data(label)', \n" \
+                          ""
+
+    DEFAULT_PARENT_STYLES = "'text-rotation':   '-90deg', \n" \
+                            "'text-halign':     'left', \n" \
+                            "'text-margin-x':   -10, \n" \
+                            "'text-margin-y':   -40, \n" \
+                            ""
+
+    LAYOUT_CHOICES = (('null', 'null'),
+                      ('random', 'random'),
+                      ('grid', 'grid'),
+                      ('circle', 'circle'),
+                      ('concentric', 'concentric'),
+                      ('breadthfirst', 'breadthfirst'),
+                      ('cose', 'cose'),
+                      ('cola', 'cola'),
+                      ('dagre', 'dagre'),
+                      )
+
+    name = models.CharField(max_length=50)
+    init_options = models.TextField(blank=True, null=True, default=DEFAULT_INIT_OPTIONS,
+                                    help_text="Format = key1: value1, key2: value2, ... (see "
+                                              "http://js.cytoscape.org/#core/initialisation)")
+    layout_name = models.CharField(max_length=50, default="dagre", choices=LAYOUT_CHOICES,
+                                   help_text="see http://js.cytoscape.org/#layouts")
+    layout_options = models.TextField(blank=True, null=True, default=DEFAULT_LAYOUT_OPTIONS,
+                                      help_text="Format = key1: value1, key2: value2, ... (see "
+                                                "http://js.cytoscape.org/#layouts)")
+    node_styles = models.TextField(blank=True, null=True, default=DEFAULT_NODE_STYLES,
+                                   help_text="Format = key1: value1, key2: value2, ... (see "
+                                             "http://js.cytoscape.org/#style)")
+    edge_styles = models.TextField(blank=True, null=True, default=DEFAULT_EDGE_STYLES,
+                                   help_text="Format = key1: value1, key2: value2, ... (see "
+                                             "http://js.cytoscape.org/#style)")
+    parent_styles = models.TextField(blank=True, null=True, default=DEFAULT_PARENT_STYLES,
+                                     help_text="Format = key1: value1, key2: value2, ... (see "
+                                               "http://js.cytoscape.org/#style)")
+    style_classes = models.ManyToManyField(CytoStyleClass)
+
+    def __str__(self):
+        return self.name
+
+    def get_node_styles(self):
+        if self.node_styles:
+            return self.get_selector_styles_json('node', self.node_styles)
+        return ""
+
+    def get_edge_styles(self):
+        if self.edge_styles:
+            return self.get_selector_styles_json('edge', self.edge_styles)
+        return ""
+
+    def get_parent_styles(self):
+        if self.parent_styles:
+            return self.get_selector_styles_json('$node > node', self.parent_styles)
+        return ""
+
+    def get_init_options(self):
+        if self.init_options:
+            return self.init_options
+        return ""
+
+    def get_layout_json(self):
+        json_str = ""
+        json_str += "  layout: { \n"
+        json_str += "    name: '" + self.layout_name + "', \n"
+        if self.layout_options:
+            json_str += self.layout_options
+        json_str += "  }, \n"
+        return json_str
+
+    def get_classes(self):
+        json_str = ""
+        style_classes = self.style_classes.all()
+        print(style_classes)
+        for style_class in style_classes:
+            selector = "." + style_class.name
+            json_str += self.get_selector_styles_json(selector, style_class.styles)
+        return json_str
+
+    @staticmethod
+    def get_selector_styles_json(selector, styles):
+        json_str = "    { \n"
+        json_str += "      selector: '" + selector + "', \n"
+        json_str += "      style: { \n"
+        json_str += styles
+        json_str += "      } \n"
+        json_str += "    }, \n"
+        return json_str
+
+
 class CytoElementQuerySet(models.query.QuerySet):
     def all_scape(self, scape_id):
         return self.filter(scape_id=scape_id)
@@ -75,7 +206,7 @@ class CytoElement(models.Model):
                                  help_text="styles specific to this node (using id selector)")
     label = models.CharField(max_length=50, blank=True, null=True,
                              help_text="if present, will be used as node label instead of id")
-    min_len = models.IntegerField(default=4,
+    min_len = models.IntegerField(default=1,
                                   help_text="number of ranks to keep between the source and target of the edge")
     href = models.URLField(blank=True, null=True)
 
@@ -293,36 +424,16 @@ class CytoScapeManager(models.Manager):
 
 class CytoScape(models.Model):
     name = models.CharField(max_length=250)
+    style_set = models.ForeignKey(CytoStyleSet, null=True)
     initial_quest = models.OneToOneField(Quest)
     parent_scape = models.ForeignKey('self', blank=True, null=True,
                                      help_text="The map/scape preceding this one, so it can be linked back to")
     is_the_primary_scape = models.BooleanField(default=False,
-                                        help_text="There can only be one primary map/scape. Making this True will "
-                                                  "change all other map/scapes will be set to False.")
+                                               help_text="There can only be one primary map/scape. Making this True "
+                                                         "will change all other map/scapes will be set to False.")
     last_regeneration = models.DateTimeField(default=timezone.now)
     container_element_id = models.CharField(max_length=50, default="cy",
                                             help_text="id of the html element where the graph's canvas will be placed")
-    layout_name = models.CharField(max_length=50, default="random",
-                                   help_text="layout name according to cytoscape API: http://js.cytoscape.org/#layouts \
-                                              null, random, preset, grid, circle, concentric, breadthfirst, cose, \
-                                              add-ons: cola, dagre")
-    layout_options = models.TextField(null=True, blank=True, help_text="key1: value1, key2: value2, ...")
-    node_styles = models.TextField(null=True, blank=True,
-                                   default="label: 'data(id)'",
-                                   help_text="key1: value1, key2: value2, ...")
-    edge_styles = models.TextField(null=True, blank=True, help_text="key1: value1, key2: value2, ...")
-    parent_styles = models.TextField(null=True, blank=True, help_text="key1: value1, key2: value2, ...")
-
-    quest_styles = ""
-    badge_styles = "'border-width': 3,"
-    campaign_styles = ""
-
-    hidden_styles = "'opacity': 0,"
-    link_styles = "'color':'#337ab7', 'border-color': '#337ab7', 'border-width': 1,"
-    link_hover_styles = "'color':'#23527c', " \
-                        "'background-opacity': 0.25, " \
-                        "'background-color': '#000000'," \
-                        "'border-color': '#23527c',"
 
     def __str__(self):
         return self.name
@@ -356,32 +467,23 @@ class CytoScape(models.Model):
         for element in elements:
             json_str += element.json()
         json_str += "  ], \n"
-        json_str += "  layout: { \n"
-        json_str += "    name: '" + self.layout_name + "', \n"
-        if self.layout_options:
-            json_str += self.layout_options
-        json_str += "  }, \n"
+        json_str += self.style_set.get_layout_json()
         json_str += "  style: [ \n"
-        if self.node_styles:
-            json_str += self.get_selector_styles_json('node', self.node_styles)
-        if self.edge_styles:
-            json_str += self.get_selector_styles_json('edge', self.edge_styles)
-        if self.parent_styles:
-            json_str += self.get_selector_styles_json('$node > node', self.parent_styles)
-        json_str += self.get_selector_styles_json('.Quest', self.quest_styles)
-        json_str += self.get_selector_styles_json('.Badge', self.badge_styles)
-        json_str += self.get_selector_styles_json('.campaign', self.campaign_styles)
-        json_str += self.get_selector_styles_json('.hidden', self.hidden_styles)
-        json_str += self.get_selector_styles_json('.link', self.link_styles)
-        json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
+        json_str += self.style_set.get_node_styles()
+        json_str += self.style_set.get_edge_styles()
+        json_str += self.style_set.get_parent_styles()
+        json_str += self.style_set.get_classes()
+        # json_str += self.get_selector_styles_json('.Quest', self.quest_styles)
+        # json_str += self.get_selector_styles_json('.Badge', self.badge_styles)
+        # json_str += self.get_selector_styles_json('.campaign', self.campaign_styles)
+        # json_str += self.get_selector_styles_json('.hidden', self.hidden_styles)
+        # json_str += self.get_selector_styles_json('.link', self.link_styles)
+        # json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
         for element in elements:
             if element.id_styles:
                 json_str += self.get_selector_styles_json('#'+str(element.id), element.id_styles)
-        json_str += "  ], \n"
-        json_str += "  minZoom: 0.5, \n"
-        json_str += "  maxZoom: 1.5, \n"
-        # json_str += "  userZoomingEnabled: false, \n"
-        json_str += "  wheelSensitivity: 0.1, \n"
+        json_str += "  ], \n"  # end style: [
+        json_str += self.style_set.get_init_options()
         json_str += "});"
 
         return json_str
@@ -524,7 +626,7 @@ class CytoScape(models.Model):
                             group=CytoElement.EDGES,
                             data_source_id=current_node_id,
                             data_target_id=next_node_id,
-                            defaults={'classes': 'hidden', 'min_len': 1, },
+                            defaults={'classes': 'hidden', },
                         )
 
                 first_node_id = campaign.get_first_node_id()
@@ -639,72 +741,28 @@ class CytoScape(models.Model):
 
     @staticmethod
     def is_transition_node(node):
-        return node.label[0] is "~"
+        """
+        :return: True if node.label begins with the tilde '~' or contains an astrix '*'
+        """
+        return node.label[0] is "~" or "*" in node.label
 
     @staticmethod
-    def generate_map(initial_quest, name, parent_scape=None, container_element_id="cy", layout_name="dagre"):
+    def generate_map(initial_quest, name, parent_scape=None, container_element_id="cy"):
 
-        layout_options = "'nodeSep': 25, \n"\
-                         "'rankSep': 10, \n"\
-                         "'minLen': function( edge ){ return edge.data('minLen'); }, \n" \
-                         "" \
-                         ""
-
-        # "'directed': 'true', " \
-        # "'spacingFactor': '1.5', " \
-        # "'padding': '100', " \
-
-        node_styles = "label: 'data(label)', \n" \
-                      "'text-valign':   'center', 'text-halign': 'right', \n" \
-                      "'text-margin-x': '-260', \n" \
-                      "'background-fit':'contain', \n" \
-                      "'shape':         'roundrectangle', \n" \
-                      "'background-opacity': 0, \n" \
-                      "'background-position-x': 0, \n" \
-                      "'width':         290, \n" \
-                      "'border-width':  1, \n" \
-                      "'padding-right': 5, 'padding-left':5, 'padding-top':5, 'padding-bottom':5, \n" \
-                      "'text-events':   'yes'," \
-                      ""
-
-        edge_styles = "'width': 1, \n"\
-                      "'curve-style':'bezier', \n" \
-                      "'line-color': 'black', \n" \
-                      "'line-style': 'solid', \n"\
-                      "'target-arrow-shape': 'triangle-backcurve', \n"\
-                      "'target-arrow-color':'black', \n"\
-                      "'text-rotation': 'autorotate', \n"\
-                      "'label': 'data(label)',"
-
-        parent_styles = "'text-rotation': '-90deg', \n" \
-                        "'text-halign': 'left', \n" \
-                        "'text-margin-x': -10, \n" \
-                        "'text-margin-y': -40, \n" \
-                        ""
+        if parent_scape:
+            style_set = parent_scape.style_set
+        else:
+            style_set, created = CytoStyleSet.objects.get_or_create(name=CytoStyleSet.DEFAULT_NAME)
 
         scape = CytoScape(
             name=name,
             initial_quest=initial_quest,
             parent_scape=parent_scape,
             container_element_id=container_element_id,
-            layout_name=layout_name,
-            layout_options=layout_options,
-            node_styles=node_styles,
-            edge_styles=edge_styles,
-            parent_styles=parent_styles,
+            style_set=style_set,
         )
         scape.save()
-
         scape.calculate_nodes()
-
-        # # generate starting node
-        # mother_node, created = scape.add_node_from_object(initial_quest)
-        #
-        # # node_list = [mother_node]
-        #
-        # scape.init_temp_campaign_list()
-        # scape.add_reliant(initial_quest, mother_node)
-        # scape.add_campaign_edges()
         return scape
 
     def calculate_nodes(self):

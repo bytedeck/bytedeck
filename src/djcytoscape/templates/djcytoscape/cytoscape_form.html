@@ -1,9 +1,15 @@
 {% extends "djcytoscape/base.html" %}
-
+{% load crispy_forms_tags %}
+{% block heading_inner %}Update Quest Map{% endblock%}
 {% block content %}
 
 <form action="" method="post">{% csrf_token %}
-    {{ form.as_p }}
-    <input type="submit" value="Update" />
+    <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="Update" class="btn btn-success"/>
+    <a href="/admin/djcytoscape/cytoscape/{{object.id}}/" role="button" class="btn btn-default">via Admin</a>
+    {{ form|crispy }}
+    <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="Update" class="btn btn-success"/>
+    <a href="/admin/djcytoscape/cytoscape/{{object.id}}/" role="button" class="btn btn-default">via Admin</a>
 </form>
 {% endblock %}
