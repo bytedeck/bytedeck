@@ -213,7 +213,7 @@ class CytoElement(models.Model):
     objects = CytoElementManager()
 
     def __str__(self):
-        return str(self.id) + ": " + self.label
+        return str(self.id) + ": " + str(self.label)
 
     def get_data_dict(self):
         """:return data_dict text field as a python dictionary."""
