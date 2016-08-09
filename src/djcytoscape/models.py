@@ -90,7 +90,7 @@ class CytoStyleSet(models.Model):
     parent_styles = models.TextField(blank=True, null=True, default=DEFAULT_PARENT_STYLES,
                                      help_text="Format = key1: value1, key2: value2, ... (see "
                                                "http://js.cytoscape.org/#style)")
-    style_classes = models.ManyToManyField(CytoStyleClass)
+    style_classes = models.ManyToManyField(CytoStyleClass, blank=True, null=True)
 
     def __str__(self):
         return self.name
