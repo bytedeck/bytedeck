@@ -32,8 +32,7 @@ class CytoStyleSet(models.Model):
 
     DEFAULT_LAYOUT_OPTIONS = "'nodeSep': 25, \n 'rankSep': 10, \n"
 
-    # TODO: properly escape labels.  Currently can only handle single quote marks
-    DEFAULT_NODE_STYLES = 'label: "data(label)", \n' \
+    DEFAULT_NODE_STYLES = "'label':         'data(label)', \n" \
                           "'text-valign':   'center', 'text-halign': 'right', \n" \
                           "'text-margin-x': '-270', \n" \
                           "'background-fit':'contain', \n" \
@@ -256,7 +255,7 @@ class CytoElement(models.Model):
         json_str += "      data: {\n"
         json_str += "        id: " + str(self.id) + ",\n"
         if self.label:
-            json_str += "        label: '" + self.label + "',\n"
+            json_str += '        label: "' + self.label + '",\n'  # TODO: should properly escape string
         if self.has_parent():
             json_str += "        parent: " + str(self.data_parent.id) + ",\n"
         elif self.is_edge():
