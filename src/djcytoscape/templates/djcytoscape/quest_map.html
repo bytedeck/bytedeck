@@ -65,6 +65,7 @@
 
     {% if request.user.profile.dark_theme %}
         // http://js.cytoscape.org/#cy.style
+        //TODO: try cy.batch()  http://js.cytoscape.org/#cy.batch
         $(document).ready(function() {
              cy.style()
                      .selector('node')

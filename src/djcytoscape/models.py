@@ -32,7 +32,8 @@ class CytoStyleSet(models.Model):
 
     DEFAULT_LAYOUT_OPTIONS = "'nodeSep': 25, \n 'rankSep': 10, \n"
 
-    DEFAULT_NODE_STYLES = "label: 'data(label)', \n" \
+    # TODO: properly escape labels.  Currently can only handle single quote marks
+    DEFAULT_NODE_STYLES = 'label: "data(label)", \n' \
                           "'text-valign':   'center', 'text-halign': 'right', \n" \
                           "'text-margin-x': '-270', \n" \
                           "'background-fit':'contain', \n" \
