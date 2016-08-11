@@ -34,7 +34,7 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
 
 
 class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'name', 'xp', 'visible_to_students', 'max_repeats', 'date_expired', 'common_data')
+    list_display = ('id', 'name', 'xp', 'visible_to_students', 'max_repeats', 'date_expired', 'common_data', 'campaign',)
     list_filter = ['visible_to_students', 'max_repeats', 'verification_required']
     search_fields = ['name']
     inlines = [
