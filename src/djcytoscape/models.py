@@ -3,6 +3,8 @@ import json
 
 import random
 from badges.models import Badge
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 
 from django.core.urlresolvers import reverse
@@ -45,13 +47,13 @@ class CytoStyleSet(models.Model):
                           "'text-events':   'yes'," \
                           ""
 
-    DEFAULT_EDGE_STYLES = "'width': 1, \n"\
+    DEFAULT_EDGE_STYLES = "'width': 1, \n" \
                           "'curve-style':   'bezier', \n" \
                           "'line-color':    'black', \n" \
-                          "'line-style':    'solid', \n"\
-                          "'target-arrow-shape': 'triangle-backcurve', \n"\
-                          "'target-arrow-color':'black', \n"\
-                          "'text-rotation': 'autorotate', \n"\
+                          "'line-style':    'solid', \n" \
+                          "'target-arrow-shape': 'triangle-backcurve', \n" \
+                          "'target-arrow-color':'black', \n" \
+                          "'text-rotation': 'autorotate', \n" \
                           "'label':         'data(label)', \n" \
                           ""
 
@@ -134,7 +136,6 @@ class CytoStyleSet(models.Model):
     def get_classes(self):
         json_str = ""
         style_classes = self.style_classes.all()
-        print(style_classes)
         for style_class in style_classes:
             selector = "." + style_class.name
             json_str += self.get_selector_styles_json(selector, style_class.styles)
@@ -278,6 +279,7 @@ class TempCampaign(object):
     Temporary structure used to help build the cytoscape, generates lists for each campaign to make it easier to
     properly generate edges to give the desired layout.
     """
+
     def __init__(self, parent_node_id):
         self.node_id = parent_node_id
         self.child_node_ids = []  # Quests in the campaign
@@ -364,12 +366,12 @@ class CytoScapeManager(models.Manager):
             name=name,
             container_element_id=container_element_id,
             layout_name='breadthfirst',
-            layout_options="directed: true, spacingFactor: " + str(1.75 * 30/size),
+            layout_options="directed: true, spacingFactor: " + str(1.75 * 30 / size),
         )
         scape.save()
 
         # generate starting node
-        mother_node = CytoElement(scape=scape, group=CytoElement.NODES,)
+        mother_node = CytoElement(scape=scape, group=CytoElement.NODES, )
         mother_node.save()
         node_list = [mother_node]
         count = 1
@@ -379,7 +381,7 @@ class CytoScapeManager(models.Manager):
             split = random.random()
             children = 1
             if split < .10:
-                children = random.randint(1, 3) # 1 to 3
+                children = random.randint(1, 3)  # 1 to 3
 
             if current_node is mother_node:
                 children = 10
@@ -430,9 +432,22 @@ class CytoScapeManager(models.Manager):
 
 
 class CytoScape(models.Model):
+    ALLOWED_INITIAL_CONTENT_TYPES = models.Q(app_label='quest_manager', model='quest') | models.Q(app_label='badges',
+                                                                                                  model='badge')
+
     name = models.CharField(max_length=250)
     style_set = models.ForeignKey(CytoStyleSet, null=True)
-    initial_quest = models.OneToOneField(Quest)
+
+    # initial_object = models.OneToOneField(Quest)
+
+    # The initial object
+    initial_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,
+                                             limit_choices_to=ALLOWED_INITIAL_CONTENT_TYPES)
+    initial_object_id = models.PositiveIntegerField(help_text="The id of the object for this content type. "
+                                                              "You may need to look this up.  E.g. If the initial type "
+                                                              "is a quest, then the quest's id goes here.")
+    initial_content_object = GenericForeignKey('initial_content_type', 'initial_object_id')
+
     parent_scape = models.ForeignKey('self', blank=True, null=True,
                                      help_text="The map/scape preceding this one, so it can be linked back to")
     is_the_primary_scape = models.BooleanField(default=False,
@@ -441,6 +456,9 @@ class CytoScape(models.Model):
     last_regeneration = models.DateTimeField(default=timezone.now)
     container_element_id = models.CharField(max_length=50, default="cy",
                                             help_text="id of the html element where the graph's canvas will be placed")
+
+    class Meta:
+        unique_together = (('initial_content_type', 'initial_object_id'),)
 
     def __str__(self):
         return self.name
@@ -461,7 +479,7 @@ class CytoScape(models.Model):
         super(CytoScape, self).save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('djcytoscape:quest_map', kwargs={'quest_id': self.initial_quest_id})
+        return reverse('djcytoscape:quest_map', kwargs={'scape_id': self.id})
 
     objects = CytoScapeManager()
 
@@ -488,7 +506,7 @@ class CytoScape(models.Model):
         # json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
         for element in elements:
             if element.id_styles:
-                json_str += self.get_selector_styles_json('#'+str(element.id), element.id_styles)
+                json_str += self.get_selector_styles_json('#' + str(element.id), element.id_styles)
         json_str += "  ], \n"  # end style: [
         json_str += self.style_set.get_init_options()
         json_str += "});"
@@ -515,7 +533,7 @@ class CytoScape(models.Model):
         title = pre + str(obj)
         # shorten in the middle to fit within node_styles.width
         if len(title) > l:
-            title = title[:(l-2)] + "..."  # + title[-int(l/2-2):]
+            title = title[:(l - 2)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
             post = " (" + str(obj.xp) + ")"
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
@@ -550,7 +568,16 @@ class CytoScape(models.Model):
 
         # if this is a transition node (to a new map), add the link to href field. And add the "link" class
         if not initial_node and self.is_transition_node(new_node):
-            new_node.href = reverse('maps:quest_map_interlink', args=[obj.id, self.id])
+            ct = ContentType.objects.get_for_model(obj)
+            obj = ct.get_object_for_this_type(id=obj.id)
+            try:
+                scape = CytoScape.objects.get(initial_content_type=ct, initial_object_id=obj.id)
+                sc_id = scape.id
+            except ObjectDoesNotExist:
+                sc_id = 0  # Not a real id
+
+            # <scape_id>, <content_type_id>, <object_id>, <originating_scape_id>
+            new_node.href = reverse('maps:quest_map_interlink', args=[sc_id, ct.id, obj.id, self.id])
             new_node.classes += " link"
             new_node.save()
 
@@ -633,7 +660,7 @@ class CytoScape(models.Model):
                             group=CytoElement.EDGES,
                             data_source_id=current_node_id,
                             data_target_id=next_node_id,
-                            defaults={'classes': 'hidden', },
+                            defaults={'classes': 'hidden',},
                         )
 
                 first_node_id = campaign.get_first_node_id()
@@ -662,7 +689,7 @@ class CytoScape(models.Model):
                         group=CytoElement.EDGES,
                         data_source_id=prereq_node_id,
                         data_target_id=first_node_id,
-                        defaults={'classes': 'hidden', }
+                        defaults={'classes': 'hidden',}
                     )
 
                 last_node_id = campaign.get_last_node_id()
@@ -693,7 +720,7 @@ class CytoScape(models.Model):
                             group=CytoElement.EDGES,
                             data_source_id=last_node_id,
                             data_target_id=reliant_node_id,
-                            defaults={'classes': 'hidden', }
+                            defaults={'classes': 'hidden',}
                             # defaults={'attribute': value},
                         )
 
@@ -754,7 +781,7 @@ class CytoScape(models.Model):
         return node.label[0] is "~" or "*" in node.label
 
     @staticmethod
-    def generate_map(initial_quest, name, parent_scape=None, container_element_id="cy"):
+    def generate_map(initial_object, name, parent_scape=None, container_element_id="cy"):
 
         if parent_scape:
             style_set = parent_scape.style_set
@@ -763,7 +790,7 @@ class CytoScape(models.Model):
 
         scape = CytoScape(
             name=name,
-            initial_quest=initial_quest,
+            initial_content_object=initial_object,
             parent_scape=parent_scape,
             container_element_id=container_element_id,
             style_set=style_set,
@@ -774,12 +801,12 @@ class CytoScape(models.Model):
 
     def calculate_nodes(self):
         # Create the starting node from the initial quest
-        mother_node, created = self.add_node_from_object(self.initial_quest, initial_node=True)
+        mother_node, created = self.add_node_from_object(self.initial_content_object, initial_node=True)
         # Temp campaign list used to track funky edges required for compound nodes to display properly with dagre
         self.init_temp_campaign_list()
         # Add nodes reliant on the mother_node, this is recursive and will generate all nodes until endpoints reached
         # Endpoints... not sure yet, but probably quests starting with '~' tilde character, or add a new field?
-        self.add_reliant(self.initial_quest, mother_node)
+        self.add_reliant(self.initial_content_object, mother_node)
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
         self.fix_nonsequential_campaign_edges()
         self.last_regeneration = timezone.now()
@@ -789,4 +816,3 @@ class CytoScape(models.Model):
         # Delete existing nodes
         CytoElement.objects.all_for_scape(self).delete()
         self.calculate_nodes()
-

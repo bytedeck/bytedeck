@@ -1,4 +1,5 @@
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
@@ -38,19 +39,18 @@ def index(request):
     return render(request, 'djcytoscape/index.html', context)
 
 
-def quest_map(request, quest_id, originating_scape_id=None):
-    try:
-        scape = CytoScape.objects.get(initial_quest_id=quest_id)
-    except ObjectDoesNotExist:
+def quest_map(request, scape_id, ct_id=None, obj_id=None, originating_scape_id=None):
+    if scape_id == str(0):
         if request.user.is_staff:
             # the map doesn't exist, so ask to generate it.
-            return generate_map(request, quest_id=quest_id, scape_id=originating_scape_id)
+            return generate_map(request, ct_id=ct_id, obj_id=obj_id, scape_id=originating_scape_id)
         else:
             raise Http404
+    else:
+        scape = get_object_or_404(CytoScape, id=scape_id)
 
-    cytoscape_json = scape.json()
     return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
-                                                          'cytoscape_json': cytoscape_json,
+                                                          'cytoscape_json': scape.json(),
                                                           'fullscreen': True,
                                                           })
 
@@ -58,32 +58,41 @@ def quest_map(request, quest_id, originating_scape_id=None):
 def primary(request):
     try:
         scape = CytoScape.objects.get(is_the_primary_scape=True)
-        return quest_map(request, scape.initial_quest.id)
+        return quest_map(request, scape.id)
     except ObjectDoesNotExist:
         return generate_map(request)
 
 
 @staff_member_required
-def generate_map(request, quest_id=None, scape_id=None):
+def generate_map(request, ct_id=None, obj_id=None, scape_id=None):
+    """
+    :param ct_id: Content Type for Generic Foreign Key (initial object)
+    :param obj_id: Object ID for Generic Foreign Key (initial object)
+    :param scape_id: originating scape/quest
+    :return:
+    """
     interlink = False
     if request.method == 'POST':
         form = GenerateQuestMapForm(request.POST)
         # check whether it's valid:
         if form.is_valid():
-            quest = form.cleaned_data['quest']
+            ct = form.cleaned_data['initial_content_type']
+            obj_id = form.cleaned_data['initial_object_id']
             scape = form.cleaned_data['scape']
             name = form.cleaned_data['name']
+            obj = ct.get_object_for_this_type(id=obj_id)
             if not name:
-                name = str(quest)
-            cyto_test = CytoScape.generate_map(initial_quest=quest, name=name, parent_scape=scape)
-            return redirect('djcytoscape:quest_map', quest_id=cyto_test.initial_quest_id)
+                name = str(obj)
+            new_scape = CytoScape.generate_map(initial_object=obj, name=name, parent_scape=scape)
+            return redirect('djcytoscape:quest_map', scape_id=new_scape.id)
 
     else:
 
         initial = {}
-        if quest_id:
-            quest = get_object_or_404(Quest, pk=quest_id)
-            initial['quest'] = quest
+        if ct_id and obj_id:
+            ct = get_object_or_404(ContentType, pk=ct_id)
+            initial['initial_content_type'] = ct
+            initial['initial_object_id'] = obj_id
         if scape_id:
             scape = get_object_or_404(CytoScape, pk=scape_id)
             initial['scape'] = scape
@@ -103,7 +112,7 @@ def generate_map(request, quest_id=None, scape_id=None):
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
     scape.regenerate()
-    return redirect('djcytoscape:quest_map', quest_id=scape.initial_quest_id)
+    return redirect('djcytoscape:quest_map', scape_id=scape.id)
 
 
 
