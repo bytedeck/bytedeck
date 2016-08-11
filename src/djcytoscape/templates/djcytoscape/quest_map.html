@@ -5,6 +5,7 @@
         width: 100%;
         position: relative;
         left: 0px;
+        cursor: move;
     }
 {% endblock %}
 {% block heading_inner %}{{ scape.name }} Quest Map{% endblock%}
@@ -49,17 +50,28 @@
     var cy = {{ cytoscape_json|safe }}
 
     // change mouse cursor and label style on hover to indicate link
-    cy.on('mouseover', 'node.link', function(){
-        $('html,body').css('cursor', 'pointer');
-        this.addClass('link_hover')
-    });
-    cy.on('mouseout', 'node.link', function(){
-        $('html,body').css('cursor', 'default');
-        this.removeClass('link_hover')
-    });
+    // moved to cyto style js
+
+{#    cy.on('mouseover', '[href]', function(){#}
+{#        $('#cy').css('cursor', 'pointer');#}
+{#        this.addClass('link_hover')#}
+{#    });#}
+{##}
+{#    cy.on('mouseout', '[href]', function(){#}
+{#        $('#cy').css('cursor', 'move');#}
+{#        this.removeClass('link_hover')#}
+{#    });#}
+{##}
+{#    cy.on('mouseover', '[^href]', function(){#}
+{#        $('#cy').css('cursor', 'default');#}
+{#    });#}
+{#     cy.on('mouseout', '[^href]', function(){#}
+{#        $('#cy').css('cursor', 'move');#}
+{#    });#}
+
 
     // redirect to linked quest map
-    cy.on('tap', 'node.link', function(){
+    cy.on('tap', '[href]', function(){
         window.location.href = this.data('href');
     });
 
