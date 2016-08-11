@@ -570,14 +570,9 @@ class CytoScape(models.Model):
         if not initial_node and self.is_transition_node(new_node):
             ct = ContentType.objects.get_for_model(obj)
             obj = ct.get_object_for_this_type(id=obj.id)
-            try:
-                scape = CytoScape.objects.get(initial_content_type=ct, initial_object_id=obj.id)
-                sc_id = scape.id
-            except ObjectDoesNotExist:
-                sc_id = 0  # Not a real id
 
-            # <scape_id>, <content_type_id>, <object_id>, <originating_scape_id>
-            new_node.href = reverse('maps:quest_map_interlink', args=[sc_id, ct.id, obj.id, self.id])
+            # <content_type_id>, <object_id>, <originating_scape_id>
+            new_node.href = reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id])
             new_node.classes += " link"
             new_node.save()
 

@@ -11,8 +11,8 @@ urlpatterns = [
     url(r'^primary/$', views.primary, name='primary'),
 
     url(r'^(?P<scape_id>[0-9]+)/$', views.quest_map, name='quest_map'),
-    url(r'^(?P<scape_id>[0-9]+)/(?P<ct_id>[0-9]+)/(?P<obj_id>[0-9]+)/(?P<originating_scape_id>[0-9]+)/$',
-        views.quest_map, name='quest_map_interlink'),
+    url(r'^(?P<ct_id>[0-9]+)/(?P<obj_id>[0-9]+)/(?P<originating_scape_id>[0-9]+)/$',
+        views.quest_map_interlink, name='quest_map_interlink'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.ScapeUpdate.as_view(), name='update'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.ScapeDelete.as_view(), name='delete'),
 

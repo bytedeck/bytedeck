@@ -39,20 +39,24 @@ def index(request):
     return render(request, 'djcytoscape/index.html', context)
 
 
-def quest_map(request, scape_id, ct_id=None, obj_id=None, originating_scape_id=None):
-    if scape_id == str(0):
+def quest_map(request, scape_id):
+    scape = get_object_or_404(CytoScape, id=scape_id)
+    return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
+                                                          'cytoscape_json': scape.json(),
+                                                          'fullscreen': True,
+                                                          })
+
+
+def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
+    try:
+        scape = CytoScape.objects.get(initial_content_type=ct_id, initial_object_id=obj_id)
+        return quest_map(request, scape.id)
+    except ObjectDoesNotExist:
         if request.user.is_staff:
             # the map doesn't exist, so ask to generate it.
             return generate_map(request, ct_id=ct_id, obj_id=obj_id, scape_id=originating_scape_id)
         else:
             raise Http404
-    else:
-        scape = get_object_or_404(CytoScape, id=scape_id)
-
-    return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
-                                                          'cytoscape_json': scape.json(),
-                                                          'fullscreen': True,
-                                                          })
 
 
 def primary(request):
@@ -66,6 +70,7 @@ def primary(request):
 @staff_member_required
 def generate_map(request, ct_id=None, obj_id=None, scape_id=None):
     """
+    :param request:
     :param ct_id: Content Type for Generic Foreign Key (initial object)
     :param obj_id: Object ID for Generic Foreign Key (initial object)
     :param scape_id: originating scape/quest
