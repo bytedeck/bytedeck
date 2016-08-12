@@ -611,7 +611,7 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
-        l = 45  # l = max label length in characters
+        l = 44  # l = max label length in characters
         post = ""
         pre = ""
         if type(obj) is Badge:
@@ -619,7 +619,7 @@ class CytoScape(models.Model):
         title = pre + str(obj)
         # shorten the end
         if len(title) > l:
-            title = title[:(l - 2)] + "..."  # + title[-int(l/2-2):]
+            title = title[:(l - 3)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
             post = " (" + str(obj.xp) + ")"
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
