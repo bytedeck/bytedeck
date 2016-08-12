@@ -661,6 +661,8 @@ class CytoScape(models.Model):
             new_node.href = reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id])
             new_node.classes += " link"
             new_node.save()
+        else:  # add a link to the object itself
+            new_node.href = obj.get_absolute_url()
 
         return new_node, created
 
