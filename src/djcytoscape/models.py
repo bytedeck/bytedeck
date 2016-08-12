@@ -663,6 +663,7 @@ class CytoScape(models.Model):
             new_node.save()
         else:  # add a link to the object itself
             new_node.href = obj.get_absolute_url()
+            new_node.save()
 
         return new_node, created
 
