@@ -5,13 +5,10 @@ import random
 from badges.models import Badge
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ObjectDoesNotExist
-
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-
 from quest_manager.models import Quest
 
 
@@ -391,7 +388,7 @@ class TempCampaign(object):
         are nodes that have an internal reliant node, which itself will have this common external reliant.
         """
         common_reliant_ids = []
-        print(self.get_all_reliant_ids())
+        # print(self.get_all_reliant_ids())
         for reliant_id in set(self.get_all_reliant_ids()):
             count = 0
             for node in self.nodes:
@@ -417,7 +414,7 @@ class TempCampaign(object):
         this common prereq)
         """
         common_prereq_ids = []
-        print(self.get_all_prereq_ids())
+        # print(self.get_all_prereq_ids())
         for prereq_id in set(self.get_all_prereq_ids()):
             external_count = 0
             internal_count = 0
@@ -625,6 +622,10 @@ class CytoScape(models.Model):
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
+
+        # json.dumps to escape special characters in the object, such as single and double quote marks.
+        # dumps not working...just try manually
+        title = title.replace('"', '\\"')
         return title + post
 
     def get_last_node_in_campaign(self, parent_node, offset=0):
