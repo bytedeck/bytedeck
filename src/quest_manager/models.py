@@ -107,9 +107,26 @@ class XPItem(models.Model):
     def active(self):
         """
         Available as a property to make compatible with Badge.active attribute
-        :return: True if visible and not expired
+        :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
+        now_local = timezone.now().astimezone(timezone.get_default_timezone())
+
+        # not available yet today
+        if self.date_available > now_local.date():
+            return False
+
+        # available today, but not time yet
+        if self.date_available == now_local.date() and self.time_available > now_local.time():
+            return False
+
         return self.visible_to_students and not self.expired()
+
+    def is_available(self, user):
+        """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
+        Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
+        return self.active and \
+            QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
+            Prereq.objects.all_conditions_met(self, user)
 
 
 class QuestQuerySet(models.query.QuerySet):
@@ -173,10 +190,11 @@ class QuestManager(models.Manager):
         return self.get_queryset().datetime_available().not_expired().visible()
 
     def get_available(self, user, remove_hidden=True):
+        """ Quests that should appear in the user's Available quests tab"""
         qs = self.get_active().get_conditions_met(user)
         quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        available_quests = [q for q in quest_list if QuestSubmission.objects.quest_is_available(user, q)]
+        available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
         if remove_hidden:
             available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
@@ -249,6 +267,13 @@ class Quest(XPItem, IsAPrereqMixin):
         :return: True if this object has been assigned as a prerequisite to at least one another object.
         """
         return Prereq.objects.is_prerequisite(self)
+
+    def is_on_user_available_tab(self, user):
+        """
+        :param user:
+        :return: True if this quest should appear on the user's available quests list.
+        """
+        not_submitted_already = 1
 
 
 # class Feedback(models.Model):
@@ -423,6 +448,18 @@ class QuestSubmissionManager(models.Manager):
             return 0
 
     def quest_is_available(self, user, quest):
+        """
+        :return: True if the quest should appear on the user's available quests tab
+        See: QuestManager.get_available()
+        """
+        return self.not_submitted_or_inprogress(user, quest) \
+            and True
+
+    def not_submitted_or_inprogress(self, user, quest):
+        """
+        :return: True if the quest has not been started, or if it has been completed already
+        it is a repeatable quest past the repeat time
+        """
         num_subs = self.num_submissions(user, quest)
         if num_subs == 0:
             return True
@@ -445,7 +482,7 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(latest_dt, num_subs)
 
     def create_submission(self, user, quest):
-        if self.quest_is_available(user, quest):
+        if self.not_submitted_or_inprogress(user, quest):
             ordinal = self.num_submissions(user, quest) + 1
             new_submission = QuestSubmission(
                 quest=quest,

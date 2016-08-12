@@ -251,19 +251,36 @@ def quest_copy(request, quest_id):
 
 @login_required
 def detail(request, quest_id):
-    # if there is an active submission, get it and display accordingly
+    """
+    Display the quest if it is available to the user or if user is staff, otherwise check for a completed submission
+    and display that.  If no submission, then display a page saying the user doesn't have access to this quest.
+    :param request:
+    :param quest_id:
+    :return:
+    """
 
     q = get_object_or_404(Quest, pk=quest_id)
-    active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
 
-    context = {
-        "heading": q.name,
-        "q": q,
-    }
-    return render(request, 'quest_manager/detail.html', context)
+    # Display teh quest
+    if request.user.is_staff or q.is_available(request.user):
+        context = {
+            "heading": q.name,
+            "q": q,
+        }
+        return render(request, 'quest_manager/detail.html', context)
+    # Check if the user has a submission to view
+    else:
+        submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, True)
+        if submissions:
+            sub = submissions.latest('time_approved')
+            return submission(request, sub.id)
+
+        else:
+            messages.error(request, "Sorry, the quest \"" + q.name + "\" is not available to you.")
+            return redirect("quests:quests")
 
 
-########### Quest APPROVAL VIEWS #################################
+# Quest APPROVAL VIEWS #################################
 
 @staff_member_required
 def approve(request, submission_id):
