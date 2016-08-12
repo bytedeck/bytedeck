@@ -611,13 +611,13 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
-        l = 30  # l = label length in characters
+        l = 45  # l = max label length in characters
         post = ""
         pre = ""
         if type(obj) is Badge:
             pre = "Badge: "
         title = pre + str(obj)
-        # shorten in the middle to fit within node_styles.width
+        # shorten the end
         if len(title) > l:
             title = title[:(l - 2)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
@@ -647,9 +647,8 @@ class CytoScape(models.Model):
             scape=self,
             group=CytoElement.NODES,
             label=self.generate_label(obj),
-            classes=type(obj).__name__,
-            id_styles="'background-image': '" + obj.get_icon_url() + "'"
-            # defaults={'attribute': value},
+            defaults={'id_styles': "'background-image': '" + obj.get_icon_url() + "'",
+                      'classes': type(obj).__name__, }
         )
 
         # if this is a transition node (to a new map), add the link to href field. And add the "link" class
@@ -855,7 +854,7 @@ class CytoScape(models.Model):
             #         )
             #         repeat_edge.save()
 
-            # recursive, continuing adding if this is a new node, and not a closing node
+            # recursive, continue adding if this is a new node, and not a closing node
             if created and not self.is_transition_node(new_node):
                 self.add_reliant(obj, new_node)
 
