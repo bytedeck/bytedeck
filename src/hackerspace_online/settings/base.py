@@ -90,6 +90,7 @@ INSTALLED_APPS = (
     'badges',
     'suggestions',
     'djcytoscape',
+    'portfolios',
     # 'tours',
 )
 

@@ -1,0 +1,45 @@
+{% extends "portfolios/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Hackerspace Portfolios{% endblock %}
+
+{% block content %}
+
+    <p><a class="btn btn-primary"
+          href="{% url 'portfolios:detail' request.user.id %}">View Your Portfolio</a></p>
+
+    <!-- <table class="table table-striped"> -->
+    <table data-toggle='table'
+            data-sort-name='username'
+            data-sort-order='asc'
+            data-search='true'
+            data-show-columns='true'
+            data-icons='icons'
+            data-icons-prefix='fa'>
+      <thead>
+        <tr>
+          <th data-sortable='true' data-field='username'>Student #</th>
+          <th data-sortable='true' data-field='shared'>Shared</th>
+          <th data-sortable='true' data-field='uuid'>UUID</th>
+          <th data-sortable='true' data-field='id'>pk</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for object in object_list %}
+
+        <tr>
+
+            <td><a href="{%  url 'portfolios:detail' object.pk %}">
+                {{object.user}}</a></td>
+            <td>{{object.shared}}</td>
+            <td>{{object.uuid}}</td>
+            <td>{{object.pk}}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}

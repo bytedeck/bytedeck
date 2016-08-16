@@ -1,0 +1,42 @@
+{% extends "portfolios/base.html" %}
+{% load staticfiles %}
+
+{% block head %}
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lightgallery.min.css' %}" />
+{% endblock %}
+
+{% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
+  <a class="btn btn-info btn-sm"
+    href="{% url 'portfolios:update' p.pk %}"
+    role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
+{% endblock %}
+
+{% block content %}
+    <p>Portfolio UUID: {{ p.uuid }}</p>
+    <p>Portfolio ID: {{ p.pk }}</p>
+    <p>Artist: {{ p.user }}</p>
+    <p>Shared: {{ p.shared }}</p>
+
+
+    <div id="lightgallery">
+    {% for art in p.artwork_set.all %}
+      <a href="{{ art.file.url }}">
+          <img src="{{ art.file.url }}" />
+      </a>
+    {%  endfor %}
+    </div>
+
+
+
+{% endblock %}
+
+{% block js %}
+    <script src="{% static 'portfolios/js/lightgallery.min.js' %}"></script>
+    <script type="text/javascript">
+        $(document).ready(function() {
+            $("#lightgallery").lightGallery({
+                nextHtml: '<i class="fa fa-arrow-right"></i>',
+            });
+        });
+    </script>
+{% endblock %}

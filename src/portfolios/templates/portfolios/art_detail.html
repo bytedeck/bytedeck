@@ -1,0 +1,17 @@
+{% extends "portfolios/base.html" %}
+
+{% block heading_inner %}{{ art.title }}
+  <a class="btn btn-info btn-sm"
+    href="{% url 'portfolios:art_update' art.pk %}"
+    role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
+{% endblock %}
+
+{% block content %}
+    <p>Artist: {{ art.portfolio.user }}</p>
+    <p>Description: {{ art.description }}</p>
+    <img src="{{ art.file.url }}" />
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}
