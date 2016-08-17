@@ -55,11 +55,11 @@ class PortfolioDetail(DetailView):
 
 
 @login_required
-def detail(request, user_id=None):
+def detail(request, pk=None):
 
-    if user_id is None:
-        user_id = request.user.id
-    user = get_object_or_404(User, id=user_id)
+    if pk is None:
+        pk = request.user.id
+    user = get_object_or_404(User, id=pk)
     p, created = Portfolio.objects.get_or_create(user=user)
 
     # only allow admins or the users to see their own portfolios, unless they are shared
@@ -133,21 +133,26 @@ class ArtworkCreate(CreateView):
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
 
+    def get_success_url(self):
+        return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})
+
     def form_valid(self, form):
         data = form.save(commit=False)
-        data.portfolio = self.request.user.portfolio
+        data.portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         data.save()
         return super(ArtworkCreate, self).form_valid(form)
 
     def get_context_data(self, **kwargs):
         context = super(ArtworkCreate, self).get_context_data(**kwargs)
-        context['heading'] = "Add Art to " + self.request.user.get_username() + "'s Portfolio"
+        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
+        context['heading'] = "Add Art to " + portfolio.user.get_username() + "'s Portfolio"
         context['action_value'] = ""
         context['submit_btn_value'] = "Create"
+        context['portfolio'] = portfolio
         return context
 
     def dispatch(self, *args, **kwargs):
-        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('user_id'))
+        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         # only allow the user or staff to edit
         if portfolio.user == self.request.user or self.request.user.is_staff:
             return super(ArtworkCreate, self).dispatch(*args, **kwargs)
@@ -167,9 +172,10 @@ class ArtworkUpdate(UpdateView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super(ArtworkUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Edit " + self.request.user.get_username() + "'s Portfolio Art"
+        context['heading'] = "Edit " + self.object.portfolio.user.get_username() + "'s Portfolio Art"
         context['action_value'] = ""
         context['submit_btn_value'] = "Update"
+        context['portfolio'] = self.object.portfolio
         return context
 
     def dispatch(self, *args, **kwargs):
@@ -213,7 +219,7 @@ def art_add(request, doc_id):
             datetime=doc.comment.timestamp,
         )
         art.save()
-        return redirect('portfolios:detail', user_id=art.portfolio.id)
+        return redirect('portfolios:detail', pk=art.portfolio.pk)
     else:
         raise Http404("I don't think you're supposed to be here....")
 

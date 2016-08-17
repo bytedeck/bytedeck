@@ -6,7 +6,7 @@
 {% block content %}
 <form action="" method="post">{% csrf_token %}
   <p>Are you sure you want to Delete this art from your portfolio?<p>
-  <a href="{% url 'portfolios:update' object.portfolio.pk %}" role="button" class="btn btn-info">Cancel</a>
+  <a href="{% url 'portfolios:edit' object.portfolio.pk %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
   <div class="well">
     <p>Artist: {{ object.portfolio.user }}</p>
@@ -15,9 +15,9 @@
     <p>Description: {{ object.description }}</p>
     <p>Art Type: {{ object.get_art_type }}</p>
     <p>Link: <a href="{{ object.get_link }}">{{ object.get_link }}</a></p>
-    <p><img class="img-responsive" alt="{{ art.title }}" src="{{ object.get_icon_url }}" /></p>
+    <p><img class="img-responsive" alt="{{ art.title }}" src="{{ object.get_image_url }}" /></p>
   </div>
-  <a href="{% url 'portfolios:update' object.portfolio.pk %}" role="button" class="btn btn-info">Cancel</a>
+  <a href="{% url 'portfolios:edit' object.portfolio.pk %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
 {% endblock %}

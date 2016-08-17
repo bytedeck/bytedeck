@@ -35,7 +35,7 @@
       <tbody>
         {% for art in p.artwork_set.all %}
         <tr>
-            <td><img class="icon-xl" alt="{{ art.title }}" src="{{ art.get_icon_url }}" /></td>
+            <td><img class="icon-xl" alt="{{ art.title }}" src="{{ art.get_image_url }}" /></td>
             <td>{{ art.title }}</td>
             <td>{{ art.date }}</td>
             <td>{{ art.get_art_type }}</td>

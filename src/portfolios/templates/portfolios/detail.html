@@ -8,9 +8,11 @@
 {% endblock %}
 
 {% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
-  <a class="btn btn-info btn-sm"
+    {% if request.user.is_staff or request.user == p.user %}
+  <a class="btn btn-info"
     href="{% url 'portfolios:edit' p.pk %}"
     role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
+    {%  endif %}
 {% endblock %}
 
 {% block content %}
@@ -19,18 +21,28 @@
     <p>Artist: {{ p.user }}</p>
     <p>Shared: {{ p.shared }}</p>
 
+    <!-- Hidden html5 video divs -->
+    {% for art in p.artwork_set.all %}
+        {% if art.video_file %}
+        <div style="display:none;" id="video-{{ art.id }}">
+            <video class="lg-video-object lg-html5" controls preload="none">
+                <source src="{{ art.video_file.url }}" type="video/mp4">
+                 Your browser can't play this HTML5 video.
+            </video>
+        </div>
+        {% endif %}
+    {% endfor %}
 
     <div id="gallery">
     {% for art in p.artwork_set.all %}
-        {% if art.image_file %}
-          <a href="{{ art.image_file.url }}"
-          data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>">
-              <img alt="{{ art.title }}" src="{{ art.image_file.url }}" />
-          </a>
-        {% else %}
-            <p>{{ art.title }}</p>
-        {% endif %}
-
+        <a href="{% if not art.video_file %}{{ art.get_link }}{% endif %}"
+            {% if art.video_url or art.video_file %}data-poster="{{ art.get_image_url }}"{% endif %}
+            {% if art.video_file %}data-html="#video-{{ art.id }}"{% endif %}
+            data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>">
+            <img alt="{{ art.title }}" src="{{ art.get_image_url }}" />
+        </a>
+    {% empty %}
+        <p>This portfolio is empty.</p>
     {%  endfor %}
     </div>
 
@@ -41,6 +53,7 @@
     <script src="{% static 'portfolios/js/lightgallery.min.js' %}"></script>
     <script src="{% static 'portfolios/js/lg-thumbnail.min.js' %}"></script>
     <script src="{% static 'portfolios/js/lg-video.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-fullscreen.min.js' %}"></script>
     {#    http://miromannino.github.io/Justified-Gallery/options-and-events/ #}
     <script src="{% static 'portfolios/js/jquery.justifiedGallery.min.js' %}"></script>
 

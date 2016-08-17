@@ -39,7 +39,6 @@ class Artwork(models.Model):
                                             'MP4 (H.264 video +AAC or +MP3 audio) and WebM (VP8 video +Vorbis audio).'
                                             'You can upload other video types, but they may not play when you try '
                                             'to view your portfolio.')
-    # TODO: set custom validator: https://docs.djangoproject.com/en/1.10/ref/validators/
     video_url = EmbedVideoField(blank=True, null=True,
                                 help_text='OPTION 3. You can also add YouTube or Vimeo videos to your Portfolio '
                                           'by providing the link here.  If a link is provided, the image and video'
@@ -60,7 +59,7 @@ class Artwork(models.Model):
         else:
             return self.image_file.url
 
-    def get_icon_url(self):
+    def get_image_url(self):
         if self.image_file:
             return self.image_file.url
         elif self.video_url:
