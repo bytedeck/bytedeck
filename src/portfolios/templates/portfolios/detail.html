@@ -3,11 +3,13 @@
 
 {% block head %}
     <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lightgallery.min.css' %}" />
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lg-transitions.min.css' %}" />
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/justifiedGallery.min.css' %}" />
 {% endblock %}
 
 {% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
   <a class="btn btn-info btn-sm"
-    href="{% url 'portfolios:update' p.pk %}"
+    href="{% url 'portfolios:edit' p.pk %}"
     role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
 {% endblock %}
 
@@ -18,25 +20,48 @@
     <p>Shared: {{ p.shared }}</p>
 
 
-    <div id="lightgallery">
+    <div id="gallery">
     {% for art in p.artwork_set.all %}
-      <a href="{{ art.file.url }}">
-          <img src="{{ art.file.url }}" />
-      </a>
+        {% if art.image_file %}
+          <a href="{{ art.image_file.url }}"
+          data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>">
+              <img alt="{{ art.title }}" src="{{ art.image_file.url }}" />
+          </a>
+        {% else %}
+            <p>{{ art.title }}</p>
+        {% endif %}
+
     {%  endfor %}
     </div>
-
-
 
 {% endblock %}
 
 {% block js %}
+    {#    http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html #}
     <script src="{% static 'portfolios/js/lightgallery.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-thumbnail.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-video.min.js' %}"></script>
+    {#    http://miromannino.github.io/Justified-Gallery/options-and-events/ #}
+    <script src="{% static 'portfolios/js/jquery.justifiedGallery.min.js' %}"></script>
+
     <script type="text/javascript">
         $(document).ready(function() {
-            $("#lightgallery").lightGallery({
-                nextHtml: '<i class="fa fa-arrow-right"></i>',
-            });
+
+            var $gallery = $('#gallery');
+            console.log($gallery.length)
+            if ($gallery.length) {
+                $gallery.justifiedGallery({
+                    margins: 5,
+                    maxRowHeight: 150,
+                    lastRow: 'center',
+                }).on('jg.complete', function() {
+                    $gallery.lightGallery({
+                        thumbnail: true,
+                    });
+                });
+            };
         });
+
+
     </script>
 {% endblock %}
