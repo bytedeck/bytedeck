@@ -13,6 +13,7 @@ from embed_video.fields import EmbedVideoField
 class Portfolio(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, primary_key=True, on_delete=models.CASCADE)
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    description = models.TextField(null=True, blank=True, help_text='A description to display with your portfolio')
     shared = models.BooleanField(default=True)
 
     def __str__(self):
@@ -21,11 +22,16 @@ class Portfolio(models.Model):
     def get_absolute_url(self):
         return reverse('portfolios:detail', kwargs={'pk': self.pk})
 
+    def get_public_url(self):
+        return reverse('portfolios:public', kwargs={'uuid': self.uuid})
+
 
 class Artwork(models.Model):
-    title = models.CharField(max_length=50)
-    description = models.TextField(null=True, blank=True)
-    date = models.DateField(default=timezone.now)
+    title = models.CharField(max_length=50, help_text='The name of this piece of art.')
+    description = models.TextField(null=True, blank=True, help_text='A description of the meaning of this art, '
+                                                                    'how the art was made, or any other info you would '
+                                                                    'like to share about this portfolio piece')
+    date = models.DateField(default=timezone.now, help_text='The date this art was created or completed')
     image_file = models.ImageField(upload_to='portfolios/video/%Y/%m', null=True, blank=True,
                                    help_text="OPTION 1. Your artwork or photograph to display. "
                                              "If a video file is also uploaded, "

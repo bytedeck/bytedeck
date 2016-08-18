@@ -73,7 +73,8 @@ def detail(request, pk=None):
 
 
 def public(request, uuid):
-    raise Http404
+    p = get_object_or_404(Portfolio, uuid=uuid)
+    return render(request, 'portfolios/public.html', {"p": p})
 
 
 # @method_decorator(login_required, name='dispatch')

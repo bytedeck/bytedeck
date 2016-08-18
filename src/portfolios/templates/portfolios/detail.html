@@ -7,6 +7,10 @@
     <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/justifiedGallery.min.css' %}" />
 {% endblock %}
 
+{% block head_css %}
+    {% include 'portfolios/portfolio_css.html' %}
+{% endblock %}
+
 {% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
     {% if request.user.is_staff or request.user == p.user %}
   <a class="btn btn-info"
@@ -17,91 +21,38 @@
 
 {% block content %}
     {% if request.user == p.user %}
-        <div class="panel panel-default">
-            <div class="panel-heading">
-                Your portfolio is {% if not p.shared %}<b>NOT</b> {% endif %}being shared with other Hackerspace students.
+        <div class="panel panel-warning" >
+            <div class="panel-heading" title="This section is only visible to you">
+                Your portfolio is {% if not p.shared %}<b>NOT</b> {% endif %} shared.
             </div>
             <div class="panel-body">
                 Sharing your portfolio means a link to the portfolio will appear in the student list accessed from the
                 Students button at the right.  Edit your portfolio to change this setting.
             </div>
         </div>
-        <div class="panel panel-default">
-            <div class="panel-heading">
-                Public link: <a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile }}'s Public Portfolio</a>
+        <div class="panel panel-success" title="This section is only visible to you">
+            <div class="panel-heading" title="This section is only visible to you">
+                Public link
             </div>
             <div class="panel-body">
+                <a href="{{ p.get_public_url }}">
+                    {{ request.build_absolute_uri }}{{ p.get_public_url }}
+                </a>
+                <br><br>
+
                 Use this link if you would like to share your portfolio with friends, family, as part of
                 an application, etc.  The people you share this link with will be able to see your portfolio
-                without having to sign in to the Hackerspace.
+                without having to sign in to the Hackerspace.  Your public portfolio is available even if you are
+                not sharing your portfolio with other Hackerspace students.
             </div>
         </div>
 
     {% endif %}
 
-    <!-- Hidden html5 video divs -->
-    <!-- See: http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html -->
-    {% for art in p.artwork_set.all %}
-        {% if art.video_file %}
-        <div style="display:none;" id="video-{{ art.id }}">
-            <video class="lg-video-object lg-html5" controls preload="none">
-                <source src="{{ art.video_file.url }}" type="video/mp4">
-                 Your browser can't play this HTML5 video.
-            </video>
-        </div>
-        {% endif %}
-    {% endfor %}
-
-    <div id="gallery">
-    {% for art in p.artwork_set.all %}
-        <a href="{% if not art.video_file %}{{ art.get_link }}{% endif %}"
-            {% if art.video_url or art.video_file %}data-poster="{{ art.get_image_url }}"{% endif %}
-            {% if art.video_file %}data-html="#video-{{ art.id }}"{% endif %}
-            data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>">
-            <img alt="{{ art.title }}" src="{{ art.get_image_url }}" />
-        </a>
-    {% empty %}
-        <p>This portfolio is empty!</p>
-        {% if request.user == p.user %}
-        <p>To add pictures, images, or video to your portfolio, you can:</p>
-        <ul>
-        <li>Go to any quest where you've uploaded an attachment, then click the button beside the file to add it
-        to your portfolio; or</li>
-        <li>Click on the Edit button above to upload items directly to your portfolio.</li>
-        </ul>
-        {% endif %}
-    {%  endfor %}
-    </div>
+    {% include 'portfolios/portfolio_content.html' %}
 
 {% endblock %}
 
 {% block js %}
-    {#    http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html #}
-    <script src="{% static 'portfolios/js/lightgallery.min.js' %}"></script>
-    <script src="{% static 'portfolios/js/lg-thumbnail.min.js' %}"></script>
-    <script src="{% static 'portfolios/js/lg-video.min.js' %}"></script>
-    <script src="{% static 'portfolios/js/lg-fullscreen.min.js' %}"></script>
-    {#    http://miromannino.github.io/Justified-Gallery/options-and-events/ #}
-    <script src="{% static 'portfolios/js/jquery.justifiedGallery.min.js' %}"></script>
-
-    <script type="text/javascript">
-        $(document).ready(function() {
-
-            var $gallery = $('#gallery');
-            console.log($gallery.length)
-            if ($gallery.length) {
-                $gallery.justifiedGallery({
-                    margins: 5,
-                    maxRowHeight: 150,
-                    lastRow: 'center',
-                }).on('jg.complete', function() {
-                    $gallery.lightGallery({
-                        thumbnail: true,
-                    });
-                });
-            };
-        });
-
-
-    </script>
+    {% include 'portfolios/portfolio_js.html' %}
 {% endblock %}

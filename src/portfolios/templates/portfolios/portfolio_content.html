@@ -1,0 +1,38 @@
+    <h3>Description</h3>
+    <p>{{ p.description }}</p>
+    <h3>Content</h3>
+
+    <!-- Hidden html5 video divs -->
+    <!-- See: http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html -->
+    {% for art in p.artwork_set.all %}
+        {% if art.video_file %}
+        <div style="display:none;" id="video-{{ art.id }}">
+            <video class="lg-video-object lg-html5" controls preload="none">
+                <source src="{{ art.video_file.url }}" type="video/mp4">
+                 Your browser can't play this HTML5 video.
+            </video>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    <div id="gallery">
+    {% for art in p.artwork_set.all %}
+        <a href="{% if not art.video_file %}{{ art.get_link }}{% endif %}"
+           {% if art.video_url or art.video_file %}data-poster="{{ art.get_image_url }}"{% endif %}
+           {% if art.video_file %}data-html="#video-{{ art.id }}"{% endif %}
+           data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>"
+           class="hovereffect">
+            <img alt="{{ art.title }}" src="{{ art.get_image_url }}" class="img-responsive"/>
+        </a>
+    {% empty %}
+        <p>This portfolio is empty!</p>
+        {% if request.user == p.user %}
+        <p>To add pictures, images, or video to your portfolio:</p>
+        <ul>
+        <li>Go to any quest where you've uploaded an attachment, then click the button beside the file to add it
+        to your portfolio; or</li>
+        <li>Click on the Edit button above to upload items directly to your portfolio.</li>
+        </ul>
+        {% endif %}
+    {%  endfor %}
+    </div>

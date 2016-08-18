@@ -1,0 +1,25 @@
+{% extends "base_no_sidebar_wide.html" %}
+{% load staticfiles %}
+
+{% block head_title %}Portfolios | {% endblock %}
+
+{% block head %}
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lightgallery.min.css' %}" />
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lg-transitions.min.css' %}" />
+    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/justifiedGallery.min.css' %}" />
+{% endblock %}
+
+{% block head_css %}
+    {% include 'portfolios/portfolio_css.html' %}
+{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}{{ p.user.profile.get_preferred_name }}'s Portfolio{% endblock %}
+
+{% block content %}
+ {% include 'portfolios/portfolio_content.html' %}
+{% endblock %}
+
+{% block js %}
+ {% include 'portfolios/portfolio_js.html' %}
+{% endblock %}
