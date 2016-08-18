@@ -8,7 +8,7 @@ urlpatterns = [
     url(r'^(?P<pk>[0-9]+)/$', views.detail, name='detail'),
     url(r'^detail/$', views.detail, name='current_user'),
     url(r'^(?P<uuid>[0-9a-z-]+)/$', views.public, name='public'),
-    url(r'^(?P<pk>[0-9]+)/update/$', views.PortfolioUpdate.as_view(), name='update'),
+    # url(r'^(?P<pk>[0-9]+)/update/$', views.PortfolioUpdate.as_view(), name='update'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.edit, name='edit'),
 
     url(r'^(?P<pk>[0-9]+)/create/$', views.ArtworkCreate.as_view(), name='art_create'),

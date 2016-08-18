@@ -16,12 +16,31 @@
 {% endblock %}
 
 {% block content %}
-    <p>Portfolio UUID: {{ p.uuid }}</p>
-    <p>Portfolio ID: {{ p.pk }}</p>
-    <p>Artist: {{ p.user }}</p>
-    <p>Shared: {{ p.shared }}</p>
+    {% if request.user == p.user %}
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                Your portfolio is {% if not p.shared %}<b>NOT</b> {% endif %}being shared with other Hackerspace students.
+            </div>
+            <div class="panel-body">
+                Sharing your portfolio means a link to the portfolio will appear in the student list accessed from the
+                Students button at the right.  Edit your portfolio to change this setting.
+            </div>
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                Public link: <a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile }}'s Public Portfolio</a>
+            </div>
+            <div class="panel-body">
+                Use this link if you would like to share your portfolio with friends, family, as part of
+                an application, etc.  The people you share this link with will be able to see your portfolio
+                without having to sign in to the Hackerspace.
+            </div>
+        </div>
+
+    {% endif %}
 
     <!-- Hidden html5 video divs -->
+    <!-- See: http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html -->
     {% for art in p.artwork_set.all %}
         {% if art.video_file %}
         <div style="display:none;" id="video-{{ art.id }}">
@@ -42,7 +61,15 @@
             <img alt="{{ art.title }}" src="{{ art.get_image_url }}" />
         </a>
     {% empty %}
-        <p>This portfolio is empty.</p>
+        <p>This portfolio is empty!</p>
+        {% if request.user == p.user %}
+        <p>To add pictures, images, or video to your portfolio, you can:</p>
+        <ul>
+        <li>Go to any quest where you've uploaded an attachment, then click the button beside the file to add it
+        to your portfolio; or</li>
+        <li>Click on the Edit button above to upload items directly to your portfolio.</li>
+        </ul>
+        {% endif %}
     {%  endfor %}
     </div>
 

@@ -6,9 +6,6 @@
 {% endblock %}
 
 {% block content %}
-    <p>Public link: <a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile }}'s Public Portfolio</a><p>
-    <p class="text-muted">&nbsp;&nbsp; If you would like to share your portfolio with friends and family, use this link.</p>
-    <p>Shared with other students: {{ p.shared }}</p>
     <p class="text-muted">&nbsp;&nbsp; Other students can view your portfolio if you turn this on.</p>
 
     <h3>Art in this portfolio:

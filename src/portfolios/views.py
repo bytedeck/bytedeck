@@ -76,30 +76,29 @@ def public(request, uuid):
     raise Http404
 
 
-@method_decorator(login_required, name='dispatch')
-class PortfolioUpdate(UpdateView):
-    model = Portfolio
-    form_class = PortfolioForm
-    template_name = 'portfolios/form.html'
-
-    def get_context_data(self, **kwargs):
-        # Call the base implementation first to get a context
-        context = super(PortfolioUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Edit " + self.request.user.get_username() + "'s Portfolio"
-        context['action_value'] = ""
-        context['submit_btn_value'] = "Update"
-        return context
-
-    # def get_object(self):
-    #     return get_object_or_404(Portfolio, user_id=self.request.user)
-
-    def dispatch(self, *args, **kwargs):
-        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-        # only allow the user or staff to edit
-        if portfolio.user == self.request.user or self.request.user.is_staff:
-            return super(PortfolioUpdate, self).dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this isn't your portfolio!")
+# @method_decorator(login_required, name='dispatch')
+# class PortfolioUpdate(UpdateView):
+#     model = Portfolio
+#     form_class = PortfolioForm
+#     template_name = 'portfolios/form.html'
+#
+#     def get_context_data(self, **kwargs):
+#         # Call the base implementation first to get a context
+#         context = super(PortfolioUpdate, self).get_context_data(**kwargs)
+#         context['heading'] = "Edit " + self.request.user.get_username() + "'s Portfolio"
+#         context['action_value'] = ""
+#         context['submit_btn_value'] = "Update"
+#         print(context)
+#         return context
+#
+#     def dispatch(self, *args, **kwargs):
+#         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
+#         print(self)
+#         # only allow the user or staff to edit
+#         if portfolio.user == self.request.user or self.request.user.is_staff:
+#             return super(PortfolioUpdate, self).dispatch(*args, **kwargs)
+#         else:
+#             raise Http404("Sorry, this isn't your portfolio!")
 
 
 @login_required
@@ -110,9 +109,9 @@ def edit(request, pk=None):
         pk = request.user.id
     user = get_object_or_404(User, id=pk)
     p, created = Portfolio.objects.get_or_create(user=user)
-
+    print("EDIT VIEW FUNCTION BASED")
     # only allow admins or the users to see their own portfolios, unless they are shared
-    if request.user.is_staff or p.pk == request.user.id or p.shared:
+    if request.user.is_staff or request.user == p.user:
         context = {
             "p": p,
         }

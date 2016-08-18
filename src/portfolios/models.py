@@ -1,16 +1,13 @@
 import uuid
-from urllib.parse import parse_qs
 
 import embed_video
 from django.templatetags.static import static
-from django.core.exceptions import ValidationError
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from embed_video.backends import detect_backend
 from embed_video.fields import EmbedVideoField
-from embed_video.settings import EMBED_VIDEO_BACKENDS
 
 
 class Portfolio(models.Model):
@@ -22,7 +19,7 @@ class Portfolio(models.Model):
         return str(self.user)
 
     def get_absolute_url(self):
-        return reverse('portfolios:detail', kwargs={'user_id': self.pk})
+        return reverse('portfolios:detail', kwargs={'pk': self.pk})
 
 
 class Artwork(models.Model):
@@ -65,7 +62,7 @@ class Artwork(models.Model):
         elif self.video_url:
             return self.get_embed_video_thumbnail()
         else:
-            return static('img/default_icon.png')
+            return static('img/icon.png')
 
     def get_embed_video_thumbnail(self):
         be = detect_backend(self.video_url)
