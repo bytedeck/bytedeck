@@ -73,12 +73,12 @@ tr.detail-view {
 
 /******* Accordian ***********************/
 
-.panel-default > .panel-heading {
+.panel-default > .panel-heading.accordian-trigger {
     background-color: #FFF;
     background-image: none;
 }
 
-.panel-default > .panel-heading:hover {
+.panel-default > .panel-heading.accordian-trigger:hover {
     background-image: linear-gradient(to bottom, #F5F5F5 0px, #E8E8E8 100%);
     background-repeat: repeat-x;
 }
