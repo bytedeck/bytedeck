@@ -1,16 +1,9 @@
 {% extends "base_no_sidebar_wide.html" %}
-{% load staticfiles %}
 
 {% block head_title %}Portfolios | {% endblock %}
 
 {% block head %}
-    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lightgallery.min.css' %}" />
-    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/lg-transitions.min.css' %}" />
-    <link type="text/css" rel="stylesheet" href="{% static 'portfolios/css/justifiedGallery.min.css' %}" />
-{% endblock %}
-
-{% block head_css %}
-    {% include 'portfolios/portfolio_css.html' %}
+    {% include 'portfolios/portfolio_head.html' %}
 {% endblock %}
 
 {% block content_first %}{% endblock %}

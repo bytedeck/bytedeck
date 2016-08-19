@@ -91,3 +91,8 @@ class Artwork(models.Model):
                 return "Vimeo"
         else:
             return None
+
+    def is_video(self):
+        if self.video_url or self.video_file:
+            return True
+        return False

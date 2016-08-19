@@ -18,11 +18,20 @@
     <div id="gallery">
     {% for art in p.artwork_set.all %}
         <a href="{% if not art.video_file %}{{ art.get_link }}{% endif %}"
-           {% if art.video_url or art.video_file %}data-poster="{{ art.get_image_url }}"{% endif %}
+           {% if art.is_video %}data-poster="{{ art.get_image_url }}"{% endif %}
            {% if art.video_file %}data-html="#video-{{ art.id }}"{% endif %}
            data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>"
-           class="hovereffect">
-            <img alt="{{ art.title }}" src="{{ art.get_image_url }}" class="img-responsive"/>
+           >
+            <img alt="{{ art.title }}" src="{{ art.get_image_url }}" />
+            {# Display a marker in the center of the thumbnail upon hover       #}
+            <div class="caption caption-fill">
+                <div class="caption-centered-outer">
+                    <i class="caption-centered-inner fa fa-3x
+                    {% if art.is_video %}fa-play
+                    {% else %}fa-search
+                    {% endif %}"></i>
+                </div>
+            </div>
         </a>
     {% empty %}
         <p>This portfolio is empty!</p>
@@ -35,4 +44,15 @@
         </ul>
         {% endif %}
     {%  endfor %}
+    </div>
+
+    <div style="width:50%">
+    {% for art in p.artwork_set.all %}
+        {% if forloop.first %}
+            <a href="" class="test-container">
+            <img class="img-responsive" alt="{{ art.title }}" src="{{ art.get_image_url }}" />
+            {# Display a marker in the center of the thumbnail upon hover       #}
+        </a>
+        {% endif %}
+    {% endfor %}
     </div>
