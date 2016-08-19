@@ -46,13 +46,3 @@
     {%  endfor %}
     </div>
 
-    <div style="width:50%">
-    {% for art in p.artwork_set.all %}
-        {% if forloop.first %}
-            <a href="" class="test-container">
-            <img class="img-responsive" alt="{{ art.title }}" src="{{ art.get_image_url }}" />
-            {# Display a marker in the center of the thumbnail upon hover       #}
-        </a>
-        {% endif %}
-    {% endfor %}
-    </div>
