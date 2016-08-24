@@ -1,3 +1,4 @@
+import re
 from ast import literal_eval
 
 from badges.models import BadgeAssertion
@@ -254,6 +255,12 @@ def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
     if kwargs["created"]:
         new_profile = Profile(user=current_user)
+
+        # if user's name matches student number (e.g 9912345), set student number:
+        pattern = re.compile("^(9[89])(\d{5})$")
+        if pattern.match(current_user.get_username()):
+            new_profile.student_number = int(current_user.get_username())
+
         new_profile.save()
 
         staff_list = User.objects.filter(is_staff=True)
