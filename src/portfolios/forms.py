@@ -6,7 +6,7 @@ from portfolios.models import Portfolio, Artwork
 class PortfolioForm(forms.ModelForm):
     class Meta:
         model = Portfolio
-        fields = ['shared', ]
+        fields = ['description', 'listed_locally', 'listed_publicly', ]
 
 
 class ArtworkForm(forms.ModelForm):

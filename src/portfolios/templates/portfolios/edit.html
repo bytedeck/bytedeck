@@ -6,8 +6,11 @@
 {% endblock %}
 
 {% block content %}
-    <p class="text-muted">&nbsp;&nbsp; Other students can view your portfolio if you turn this on.</p>
-
+    <form method="post">{% csrf_token %}
+        {{ form|crispy }}
+        <input class="btn btn-default" type="submit" value="Update Portfolio Settings" />
+    </form>
+    <hr>
     <h3>Art in this portfolio:
      <a class="btn btn-primary pull-right" href="{% url 'portfolios:art_create' p.pk %}">Add Art</a>
     </h3>

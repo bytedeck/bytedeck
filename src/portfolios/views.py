@@ -1,7 +1,9 @@
 import os
 from comments.models import Document
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse_lazy, reverse
 from django.http import Http404
@@ -48,7 +50,7 @@ class PortfolioDetail(DetailView):
     def dispatch(self, *args, **kwargs):
         # only allow admins or the users to see their own portfolios, unless they are shared
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-        if portfolio.shared or portfolio.user == self.request.user or self.request.user.is_staff:
+        if portfolio.listed_locally or portfolio.user == self.request.user or self.request.user.is_staff:
             return super(PortfolioDetail, self).dispatch(*args, **kwargs)
         else:
             raise Http404("Sorry, this portfolio isn't shared!")
@@ -77,31 +79,6 @@ def public(request, uuid):
     return render(request, 'portfolios/public.html', {"p": p})
 
 
-# @method_decorator(login_required, name='dispatch')
-# class PortfolioUpdate(UpdateView):
-#     model = Portfolio
-#     form_class = PortfolioForm
-#     template_name = 'portfolios/form.html'
-#
-#     def get_context_data(self, **kwargs):
-#         # Call the base implementation first to get a context
-#         context = super(PortfolioUpdate, self).get_context_data(**kwargs)
-#         context['heading'] = "Edit " + self.request.user.get_username() + "'s Portfolio"
-#         context['action_value'] = ""
-#         context['submit_btn_value'] = "Update"
-#         print(context)
-#         return context
-#
-#     def dispatch(self, *args, **kwargs):
-#         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-#         print(self)
-#         # only allow the user or staff to edit
-#         if portfolio.user == self.request.user or self.request.user.is_staff:
-#             return super(PortfolioUpdate, self).dispatch(*args, **kwargs)
-#         else:
-#             raise Http404("Sorry, this isn't your portfolio!")
-
-
 @login_required
 def edit(request, pk=None):
 
@@ -109,12 +86,19 @@ def edit(request, pk=None):
     if pk is None:
         pk = request.user.id
     user = get_object_or_404(User, id=pk)
-    p, created = Portfolio.objects.get_or_create(user=user)
-    print("EDIT VIEW FUNCTION BASED")
+    p = get_object_or_404(Portfolio, user=user)
+
+    # if user submitted the Portfolio form to make changes:
+    form = PortfolioForm(request.POST or None, instance=p)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Portfolio updated.")
+
     # only allow admins or the users to see their own portfolios, unless they are shared
     if request.user.is_staff or request.user == p.user:
         context = {
             "p": p,
+            "form": form,
         }
         return render(request, 'portfolios/edit.html', context)
     else:
@@ -128,10 +112,11 @@ def edit(request, pk=None):
 ######################################
 
 @method_decorator(login_required, name='dispatch')
-class ArtworkCreate(CreateView):
+class ArtworkCreate(SuccessMessageMixin, CreateView):
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
+    success_message = "The art was added to the Portfolio"
 
     def get_success_url(self):
         return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})
@@ -161,10 +146,11 @@ class ArtworkCreate(CreateView):
 
 
 @method_decorator(login_required, name='dispatch')
-class ArtworkUpdate(UpdateView):
+class ArtworkUpdate(SuccessMessageMixin, UpdateView):
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
+    success_message = "Art updated!"
 
     def get_success_url(self):
         return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})

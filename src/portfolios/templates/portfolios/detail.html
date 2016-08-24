@@ -16,11 +16,20 @@
     {% if request.user == p.user %}
         <div class="panel panel-warning" >
             <div class="panel-heading" title="This section is only visible to you">
-                Your portfolio is {% if not p.shared %}<b>NOT</b> {% endif %} shared.
+                Your portfolio is {% if not p.listed_locally %}<b>NOT</b> {% endif %} listed <b>locally</b>.
             </div>
             <div class="panel-body">
-                Sharing your portfolio means a link to the portfolio will appear in the student list accessed from the
-                Students button at the right.  Edit your portfolio to change this setting.
+                Sharing your portfolio locally means a link to the portfolio will appear in the student list accessed
+                from the Students button at the right.  Edit your portfolio to change this setting.
+            </div>
+        </div>
+        <div class="panel panel-warning" >
+            <div class="panel-heading" title="This section is only visible to you">
+                Your portfolio is {% if not p.listed_publicly %}<b>NOT</b> {% endif %} listed <b>publicly</b>.
+            </div>
+            <div class="panel-body">
+                Sharing your portfolio locally means a link to the portfolio will appear in the student list accessed
+                from the Students button at the right.  Edit your portfolio to change this setting.
             </div>
         </div>
         <div class="panel panel-success" title="This section is only visible to you">

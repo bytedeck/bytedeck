@@ -88,3 +88,13 @@
    transform:scale(1.25,1.25);
     transition: transform .15s ease 0s;
 }
+
+/* light gallery customization */
+
+.lg-outer .lg-thumb-item.active, .lg-outer .lg-thumb-item:hover {
+    border-color: #337ab7;
+}
+
+.lg-backdrop {
+    background-color: #272b30;
+}

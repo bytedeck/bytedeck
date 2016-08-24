@@ -14,7 +14,11 @@ class Portfolio(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, primary_key=True, on_delete=models.CASCADE)
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     description = models.TextField(null=True, blank=True, help_text='A description to display with your portfolio')
-    shared = models.BooleanField(default=True)
+    listed_locally = models.BooleanField(default=True, help_text="Your portfolio will be listed on the Students page "
+                                                                 "and other Hackerspace students will be able "
+                                                                 "to see it.")
+    listed_publicly = models.BooleanField(default=False, help_text="Your portfolio will be listed publicly, for example"
+                                                                   " on Timberline's website.")
 
     def __str__(self):
         return str(self.user)
