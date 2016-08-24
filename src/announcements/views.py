@@ -74,7 +74,7 @@ def comment(request, ann_id):
 
 
 @login_required
-def list(request, id=None):
+def list(request, ann_id=None):
     if request.user.is_staff:
         object_list = Announcement.objects.get_active()
     else:
@@ -84,13 +84,13 @@ def list(request, id=None):
     page = request.GET.get('page')
     active_id = 0
     # we want the page of a specific object
-    if id is not None:
-        active_obj = get_object_or_404(Announcement, pk=id)
+    if ann_id is not None:
+        active_obj = get_object_or_404(Announcement, pk=ann_id)
         for pg in paginator.page_range:
             object_list = paginator.page(pg)
             if active_obj in object_list:
                 page = pg
-                active_id = int(id)
+                active_id = int(ann_id)
                 break
 
     try:

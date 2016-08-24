@@ -66,7 +66,7 @@ class Announcement(models.Model):
 
     def get_absolute_url(self):
         # return reverse('announcements:list')
-        return reverse('announcements:list', kwargs={'id': self.id})
+        return reverse('announcements:list', kwargs={'ann_id': self.id})
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
