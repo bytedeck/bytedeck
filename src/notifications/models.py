@@ -119,10 +119,9 @@ class Notification(models.Model):
     objects = NotificationManager()
 
     def __str__(self):
-        # print("***** NOTIFICATION.__str__ **********")
         try:
             target_url = self.target_object.get_absolute_url()
-        except:
+        except AttributeError:
             target_url = None
 
         action = self.action_object
@@ -213,20 +212,41 @@ class Notification(models.Model):
 
 
 def new_notification(sender, **kwargs):
-    signal = kwargs.pop('signal', None)
-    recipient = kwargs.pop('recipient')
-    verb = kwargs.pop('verb')
+    """
+    Creates notification when a signal is sent with notify.send(sender, **kwargs)
+    :param sender: the object (any Model) initiating/causing the notification
+    :param kwargs:
+        target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
+        action (any Model): Not sure... not used I assume.
+        recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
+        affected_users (list of Users): everyone who should receive the notification
+        verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
+        icon (html string): e.g.:
+            "<span class='fa-stack'>" + \
+               "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+               "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+            "</span>"
+    :return:
+    """
+    print("############ CREATING PROFILE ############")
+    print(kwargs)
+    # signal = kwargs.pop('signal', None)
+    kwargs.pop('signal', None)
+    recipient = kwargs.pop('recipient')  # required
+    verb = kwargs.pop('verb')  # required
     icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
+    affected_users = kwargs.pop('affected_users', [recipient, ])
 
-    try:
-        affected_users = kwargs.pop('affected_users')
-    except:
-        affected_users = [recipient, ]
+    # try:
+    #     affected_users = kwargs.pop('affected_users')
+    # except:
+    #     affected_users = [recipient, ]
 
     if affected_users is None:
         affected_users = [recipient, ]
 
     for u in affected_users:
+        # don't send a notification to yourself/themself
         if u == sender:
             pass
         else:
@@ -237,6 +257,7 @@ def new_notification(sender, **kwargs):
                 sender_object_id=sender.id,
                 font_icon=icon,
             )
+            # Set the target if provided.  Action not currently used...
             for option in ("target", "action"):
                 # obj = kwargs.pop(option, None) #don't want to remove option with pop
                 try:
