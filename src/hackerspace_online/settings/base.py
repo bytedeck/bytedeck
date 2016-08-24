@@ -93,6 +93,9 @@ INSTALLED_APPS = (
     # 'tours',
 )
 
+# http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
+#SITE_ID = 1
+
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

@@ -5,6 +5,8 @@
 
 {% block head_title %}{% trans "Sign In" %} | {% endblock %}
 
+{% block heading %}{% trans "Sign In" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
+
 {% block content %}
   {% if socialaccount.providers %}
     <p>{% blocktrans with site.name as site_name %}Please sign in with one
