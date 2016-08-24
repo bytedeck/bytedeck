@@ -256,12 +256,14 @@ def create_profile(sender, **kwargs):
         new_profile = Profile(user=current_user)
         new_profile.save()
 
+        staff_list = User.objects.filter(is_staff=True)
         notify.send(
             current_user,
-            recipient=User.objects.filter(is_staff=True).first(),  # admin user
-            affected_users=User.objects.filter(is_staff=True),
-            icon="<i class='fa fa-fw fa-lg fa-user'></i>",
-            verb='new user created')
+            target=new_profile,
+            recipient=staff_list[0],
+            affected_users=staff_list,
+            icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+            verb='.  New user registered: ')
 
 
 post_save.connect(create_profile, sender=User)
