@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from comments.forms import CommentForm
 from comments.models import Comment
+from django.contrib.messages.views import SuccessMessageMixin
 from notifications.signals import notify
 
 from django.contrib import messages
@@ -163,7 +164,7 @@ def send_notifications(request, announcement):
         verb='posted')
 
 
-class Create(CreateView):
+class Create(SuccessMessageMixin, CreateView):
     model = Announcement
     form_class = AnnouncementForm
     template_name = 'announcements/form.html'
@@ -180,13 +181,19 @@ class Create(CreateView):
 
         return super(Create, self).form_valid(form)
 
+    def get_success_message(self, cleaned_data):
+        if self.object.draft:
+            return "Draft Announcement created."
+        else:
+            return "New Announcement published and broadcast to students!"
+
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super(Create, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         context['heading'] = "Create New Announcement"
         context['action_value'] = ""
-        context['submit_btn_value'] = "Publish"
+        context['submit_btn_value'] = "Save"
         return context
 
     @method_decorator(staff_member_required)
@@ -194,7 +201,7 @@ class Create(CreateView):
         return super(Create, self).dispatch(*args, **kwargs)
 
 
-class Update(UpdateView):
+class Update(SuccessMessageMixin, UpdateView):
     model = Announcement
     form_class = AnnouncementForm
     template_name = 'announcements/form.html'
@@ -207,6 +214,14 @@ class Update(UpdateView):
         context['action_value'] = ""
         context['submit_btn_value'] = "Update"
         return context
+
+        return super(Update, self).form_valid(form)
+
+    def get_success_message(self, cleaned_data):
+        if self.object.draft:
+            return "Draft Announcement updated."
+        else:
+            return "Announcement updated but NOT (re-)broadcasted to students."
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
