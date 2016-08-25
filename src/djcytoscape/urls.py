@@ -17,4 +17,5 @@ urlpatterns = [
     url(r'^(?P<pk>[0-9]+)/delete/$', views.ScapeDelete.as_view(), name='delete'),
 
     url(r'^(?P<scape_id>[0-9]+)/regenerate/$', views.regenerate, name='regenerate'),
+    url(r'^all/regenerate/$', views.regenerate_all, name='regenerate_all'),
 ]

@@ -644,11 +644,18 @@ class CytoScape(models.Model):
 
     def add_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
+
+        # check for an icon
+        if hasattr(obj, 'get_icon_url'):
+            img_url = obj.get_icon_url()
+        else:
+            img_url = "none"
+
         new_node, created = CytoElement.objects.get_or_create(
             scape=self,
             group=CytoElement.NODES,
             label=self.generate_label(obj),
-            defaults={'id_styles': "'background-image': '" + obj.get_img_url() + "'",
+            defaults={'id_styles': "'background-image': '" + img_url + "'",
                       'classes': type(obj).__name__, }
         )
 

@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
@@ -120,4 +121,10 @@ def regenerate(request, scape_id):
     return redirect('djcytoscape:quest_map', scape_id=scape.id)
 
 
+@staff_member_required
+def regenerate_all(request):
+    for scape in CytoScape.objects.all():
+        scape.regenerate()
+    messages.success(request, "All quest maps have been regenerated.")
+    return redirect('djcytoscape:primary')
 

@@ -12,9 +12,13 @@
 {% block content %}
     {% if user.is_staff %}
         <p>
-            <a class="btn btn-default" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
-              title = "Recalculate this Map.  This may take a few minutes." >
+            <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
+              title = "Recalculate ALL Maps.  This may take a few moments." >
               <i class="fa fa-refresh"></i>
+            </a>
+            <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
+              title = "Recalculate this Map." >
+              <i class="fa fa-undo"></i>
             </a>
             <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
               title = "Edit the Map" >
