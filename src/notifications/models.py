@@ -228,8 +228,6 @@ def new_notification(sender, **kwargs):
             "</span>"
     :return:
     """
-    print("############ CREATING PROFILE ############")
-    print(kwargs)
     # signal = kwargs.pop('signal', None)
     kwargs.pop('signal', None)
     recipient = kwargs.pop('recipient')  # required

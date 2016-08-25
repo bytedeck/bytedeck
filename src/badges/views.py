@@ -1,3 +1,4 @@
+from django.http import Http404
 from notifications.signals import notify
 
 from django.contrib import messages
@@ -171,7 +172,7 @@ def grant_badge(request, badge_id, user_id):
     issued_by = request.user
     new_assertion = BadgeAssertion.objects.create_assertion(user, badge, issued_by)
     if new_assertion is None:
-        print("This achievement is not available, why is it showing up?")
+        # print("This achievement is not available, why is it showing up?")
         raise Http404  # shouldn't get here
 
     messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
