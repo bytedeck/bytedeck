@@ -30,6 +30,11 @@
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i
                             class="fa fa-newspaper-o fa-fw"></i></i></a></li>
                 <li>&nbsp;&nbsp;&nbsp;&nbsp;</li>
+                {% else %}
+                    <li>
+                    <a title="Public Portfolios" href="{% url 'portfolios:public_list' %}">
+                        <i class="fa fa-picture-o fa-fw"></i>
+                    </a></li>
                 {% endif %}
 
                 {% if request.user.is_authenticated and request.user.is_staff %}

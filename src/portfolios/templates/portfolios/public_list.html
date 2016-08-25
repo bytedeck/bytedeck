@@ -1,0 +1,21 @@
+{% extends "base_no_sidebar_wide.html" %}
+
+{% block head_title %}Portfolios | {% endblock %}
+
+{% block heading %}Public Portfolios<i class="fa fa-picture-o pull-right"></i>{% endblock %}
+
+{% block content%}
+    {% if portfolios %}<p>These students have chosen to share their digital portfolios publicly.</p>
+        <ul>
+        {% for p in portfolios %}
+            <li><a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile }}</a></li>
+
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Sorry, no students have chosen to publicly share their digital portfolios yet!</p>
+    {% endif %}
+{% endblock %}
+
+
+

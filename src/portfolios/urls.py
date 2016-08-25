@@ -4,6 +4,7 @@ from portfolios import views
 app_name = 'portfolios'  # needed for static files to get picked up... why?
 urlpatterns = [
     url(r'^$', views.PortfolioList.as_view(), name='list'),
+    url(r'^public/$', views.public_list, name='public_list'),
     url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
     url(r'^(?P<pk>[0-9]+)/$', views.detail, name='detail'),
     url(r'^detail/$', views.detail, name='current_user'),

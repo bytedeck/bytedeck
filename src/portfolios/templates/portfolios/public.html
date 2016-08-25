@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}{{ p.user.profile.get_preferred_name }}'s Portfolio{% endblock %}
+{% block heading %}{{ p.user.profile.get_preferred_name }}'s Portfolio<i class="fa fa-picture-o pull-right"></i>{% endblock %}
 
 {% block content %}
  {% include 'portfolios/portfolio_content.html' %}

@@ -74,6 +74,11 @@ def detail(request, pk=None):
         raise Http404("Sorry, this portfolio isn't shared!")
 
 
+def public_list(request):
+    public_portfolios = Portfolio.objects.all().filter(listed_publicly=True)
+    return render(request, 'portfolios/public_list.html', {"portfolios": public_portfolios})
+
+
 def public(request, uuid):
     p = get_object_or_404(Portfolio, uuid=uuid)
     return render(request, 'portfolios/public.html', {"p": p})
