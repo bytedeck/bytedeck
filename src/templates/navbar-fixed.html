@@ -24,11 +24,11 @@
                 <li class="navbar-packed-listitem">
                     <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a></li>
                 <li class="navbar-packed-listitem">
-                    <a title="Students" href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></i>
-                    </a></li>
+                    <a title="Students" href="{% url 'profiles:profile_list_current' %}">
+                        <i class="fa fa-users fa-fw"></i></a></li>
                 <li class="navbar-packed-listitem">
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i
-                            class="fa fa-newspaper-o fa-fw"></i></i></a></li>
+                            class="fa fa-newspaper-o fa-fw"></i></a></li>
                 <li>&nbsp;&nbsp;&nbsp;&nbsp;</li>
                 {% else %}
                     <li>

@@ -36,10 +36,17 @@ class ProfileQuerySet(models.query.QuerySet):
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
-        qs = ProfileQuerySet(self.model, using=self._db)
-        if config.hs_view_active_semester_only:
-            qs = qs.get_semester(config.hs_active_semester)
-        return qs
+        return ProfileQuerySet(self.model, using=self._db)
+
+    def all_for_active_semester(self):
+        """
+        Check for students with a course this semester
+        :return:
+        """
+        courses = CourseStudent.objects.all_for_semester(config.hs_active_semester)
+        courses_user_list = courses.values_list('user', flat=True)
+        courses_user_list = set(courses_user_list)  # removes doubles
+        return self.get_queryset().filter(user__in=courses_user_list)
 
     def get_mailing_list(self):
         return self.get_queryset().announcement_email()
@@ -76,6 +83,7 @@ class Profile(models.Model):
     # New students automatically active,
     # all existing students should be changed to "inactive" at the end of the semester
     # they should be reactivated when they join a new course in a new (active) semester
+    # TODO: alternately, could check who has a course this semester (more robust but slower?)
     active_in_current_semester = models.BooleanField(default=True)
 
     # Student options

@@ -1,4 +1,5 @@
 from courses.models import Semester
+from django.http import Http404
 from quest_manager.models import QuestSubmission
 
 from django.contrib import messages

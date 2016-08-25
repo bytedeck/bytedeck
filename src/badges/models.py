@@ -160,7 +160,10 @@ class BadgeAssertionManager(models.Manager):
         return self.get_queryset().get_user(user)
 
     def all_for_user_distinct(self, user):
-        """This only works in a postgresql database"""
+        """
+        This only works in a postgresql database
+        https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
+        """
         if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql_psycopg2':
             return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
         return self.get_queryset(False).get_user(user)

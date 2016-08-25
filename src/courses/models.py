@@ -64,11 +64,12 @@ class SemesterManager(models.Manager):
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
-    def get_current(self, as_queryset=False):
-        if as_queryset:
-            return self.get_queryset().filter(pk=config.hs_active_semester)
-        else:
-            return self.get_queryset().get(pk=config.hs_active_semester)
+    # def get_current(self, as_queryset=False):
+    #     print("################################# get current semester")
+    #     if as_queryset:
+    #         return self.get_queryset().filter(pk=config.hs_active_semester)
+    #     else:
+    #         return self.get_queryset().get(pk=config.hs_active_semester)
 
     def set_active(self, active_sem_id):
         sems = self.get_queryset()
@@ -270,19 +271,22 @@ class CourseStudentManager(models.Manager):
                 xp += studentcourse.xp_adjustment
         return xp
 
-    # pick one of the courses...for now
-    def current_course(self, user):
-        return self.all_for_user(user).get_semester(config.hs_active_semester).first()
-
-    def current_courses(self, user):
-        return self.all_for_user(user).get_semester(config.hs_active_semester)
-
     def calc_semester_grades(self, semester):
         coursestudents = self.get_queryset().get_semester(semester)
         for coursestudent in coursestudents:
             coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
             coursestudent.active = False
             coursestudent.save()
+
+    def all_for_semester(self, semester):
+        return self.get_queryset().get_semester(semester)
+
+    # pick one of the courses...for now
+    def current_course(self, user):
+        return self.all_for_user(user).get_semester(config.hs_active_semester).first()
+
+    def current_courses(self, user):
+        return self.all_for_user(user).get_semester(config.hs_active_semester)
 
 
 class CourseStudent(models.Model):
@@ -310,7 +314,7 @@ class CourseStudent(models.Model):
         ordering = ['semester', 'block']
 
     def __str__(self):
-        return self.user.username + ", " + str(self.semester) + ", " + self.block.block
+        return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course)
 
     def get_absolute_url(self):
         return reverse('courses:list')

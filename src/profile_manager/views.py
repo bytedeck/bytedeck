@@ -1,6 +1,7 @@
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent
+from courses.models import CourseStudent, Semester
 from django.http import Http404
+from djconfig import config
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 
@@ -25,6 +26,16 @@ class ProfileList(ListView):
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
         return super(ProfileList, self).dispatch(request, *args, **kwargs)
+
+
+class ProfileListCurrent(ProfileList):
+    def get_queryset(self):
+        return Profile.objects.all_for_active_semester()
+
+    def get_context_data(self, **kwargs):
+        context = super(ProfileListCurrent, self).get_context_data(**kwargs)
+        context['current_only'] = True
+        return context
 
 
 class ProfileCreate(CreateView):

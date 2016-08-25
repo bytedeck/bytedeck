@@ -7,7 +7,15 @@
 
 {% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
 
-{% block heading %}Students <i class="fa fa-users pull-right"></i>{% endblock %}
+{% block heading %}Students
+    <div class="btn-group">
+        <a href="{% url 'profiles:profile_list_current' %}"
+           class="btn {% if current_only %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+        <a href="{% url 'profiles:profile_list' %}"
+           class="btn {% if not current_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+    </div>
+    <i class="fa fa-users pull-right"></i>
+{% endblock %}
 
 {% block content %}
 <!-- <table class="table table-striped"> -->
@@ -46,7 +54,7 @@
         <td><img class="icon-md img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/></td>
         {% if object.preferred_name %}<td>{{object.preferred_name}}</td>
           {% else %}<td>{{object.first_name}}</td>{% endif %}
-        <td>{{object.last_name}}</td>
+        <td>{{object.active_in_current_semester}}</td>
         <td>{{object.alias}}</td>
         <td>{{object.xp}}</td>
         <td>{{object.num_courses}}</td>
