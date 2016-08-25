@@ -38,7 +38,7 @@
             </div>
             <div class="panel-body">
                 <a href="{{ p.get_public_url }}">
-                    {{ request.build_absolute_uri }}{{ p.get_public_url }}
+                    {{ request.get_host }}{% url 'portfolios:public' p.uuid %}
                 </a>
                 <br><br>
 
