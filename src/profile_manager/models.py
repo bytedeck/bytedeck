@@ -3,6 +3,7 @@ from ast import literal_eval
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
+from django.core.validators import RegexValidator
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 
@@ -56,6 +57,11 @@ class ProfileManager(models.Manager):
 
 
 class Profile(models.Model):
+    student_number_regex_string = r"^(9[89])(\d{5})$"
+    student_number_validator = RegexValidator(regex=student_number_regex_string,
+                                              message="Invalid student number.",
+                                              code='invalid_student_number',)
+
     def get_grad_year_choices():
         grad_year_choices = []
         for year in range(timezone.now().year, timezone.now().year + 4):
@@ -73,22 +79,18 @@ class Profile(models.Model):
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
                                       help_text='If you would prefer your teacher to call you by a name other than \
                                       the first name you entered above, put it here.')
-    student_number = models.PositiveIntegerField(unique=True, blank=False, null=True)
+    student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
+                                                 validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
     game_lab_transfer_process_on = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
 
-    # New students automatically active,
-    # all existing students should be changed to "inactive" at the end of the semester
-    # they should be reactivated when they join a new course in a new (active) semester
-    # TODO: alternately, could check who has a course this semester (more robust but slower?)
-    active_in_current_semester = models.BooleanField(default=True)
-
     # Student options
     get_announcements_by_email = models.BooleanField(default=False)
-    visible_to_other_students = models.BooleanField(default=False)
+    visible_to_other_students = models.BooleanField(default=False, help_text="Your marks will be visible to "
+                                                                             "other students.")
     dark_theme = models.BooleanField(default=False)
     hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
 
@@ -265,7 +267,7 @@ def create_profile(sender, **kwargs):
         new_profile = Profile(user=current_user)
 
         # if user's name matches student number (e.g 9912345), set student number:
-        pattern = re.compile("^(9[89])(\d{5})$")
+        pattern = re.compile(Profile.student_number_regex_string)
         if pattern.match(current_user.get_username()):
             new_profile.student_number = int(current_user.get_username())
 
