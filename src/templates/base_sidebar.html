@@ -23,10 +23,10 @@
 
 {% block js %}{% endblock %}
 
-{% block tour_js %}
-{% if config.hs_tour_on %}
-{% if request.user.profile.intro_tour_completed = False %}
-{% include 'intro_tour.html' %}
-{% endif %}
-{% endif %}
-{% endblock %}
+{#{% block tour_js %}#}
+{#{% if config.hs_tour_on %}#}
+{#{% if request.user.profile.intro_tour_completed = False %}#}
+{#{% include 'intro_tour.html' %}#}
+{#{% endif %}#}
+{#{% endif %}#}
+{#{% endblock %}#}
