@@ -1,0 +1,60 @@
+{% extends "portfolios/base.html" %}
+
+{% block head %}
+    {% include 'portfolios/portfolio_head.html' %}
+{% endblock %}
+
+{% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
+    {% if request.user.is_staff or request.user == p.user %}
+  <a class="btn btn-info"
+    href="{% url 'portfolios:edit' p.pk %}"
+    role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
+    {%  endif %}
+{% endblock %}
+
+{% block content %}
+    {% if request.user == p.user %}
+        <div class="panel panel-warning" >
+            <div class="panel-heading" title="This section is only visible to you">
+                Your portfolio is {% if not p.listed_locally %}<b>NOT</b> {% endif %} listed <b>locally</b>.
+            </div>
+            <div class="panel-body">
+                Sharing your portfolio locally means a link to the portfolio will appear in the student list accessed
+                from the Students button at the right.  Edit your portfolio to change this setting.
+            </div>
+        </div>
+        <div class="panel panel-warning" >
+            <div class="panel-heading" title="This section is only visible to you">
+                Your portfolio is {% if not p.listed_publicly %}<b>NOT</b> {% endif %} listed <b>publicly</b>.
+            </div>
+            <div class="panel-body">
+                Sharing your portfolio locally means a link to the portfolio will appear in the student list accessed
+                from the Students button at the right.  Edit your portfolio to change this setting.
+            </div>
+        </div>
+        <div class="panel panel-success" title="This section is only visible to you">
+            <div class="panel-heading" title="This section is only visible to you">
+                Public link
+            </div>
+            <div class="panel-body">
+                <a href="{{ p.get_public_url }}">
+                    {{ request.build_absolute_uri }}{{ p.get_public_url }}
+                </a>
+                <br><br>
+
+                Use this link if you would like to share your portfolio with friends, family, as part of
+                an application, etc.  The people you share this link with will be able to see your portfolio
+                without having to sign in to the Hackerspace.  Your public portfolio is available even if you are
+                not sharing your portfolio with other Hackerspace students.
+            </div>
+        </div>
+
+    {% endif %}
+
+    {% include 'portfolios/portfolio_content.html' %}
+
+{% endblock %}
+
+{% block js %}
+    {% include 'portfolios/portfolio_js.html' %}
+{% endblock %}

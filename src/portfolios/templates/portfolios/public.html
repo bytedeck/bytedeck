@@ -1,0 +1,18 @@
+{% extends "base_no_sidebar_wide.html" %}
+
+{% block head_title %}Portfolios | {% endblock %}
+
+{% block head %}
+    {% include 'portfolios/portfolio_head.html' %}
+{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}{{ p.user.profile.get_preferred_name }}'s Portfolio{% endblock %}
+
+{% block content %}
+ {% include 'portfolios/portfolio_content.html' %}
+{% endblock %}
+
+{% block js %}
+ {% include 'portfolios/portfolio_js.html' %}
+{% endblock %}

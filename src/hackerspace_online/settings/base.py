@@ -76,6 +76,10 @@ INSTALLED_APPS = (
     # For development only...
     # 'debug_toolbar',
 
+    # https://github.com/yetty/django-embed-video
+    # used for the EmbedVideoField that validates YouTube and Vimeo urls
+    'embed_video',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -90,6 +94,7 @@ INSTALLED_APPS = (
     'badges',
     'suggestions',
     'djcytoscape',
+    'portfolios',
     # 'tours',
 )
 

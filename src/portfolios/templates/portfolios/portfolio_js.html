@@ -1,0 +1,30 @@
+{% load staticfiles %}
+
+    {#    http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html #}
+    <script src="{% static 'portfolios/js/lightgallery.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-thumbnail.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-video.min.js' %}"></script>
+    <script src="{% static 'portfolios/js/lg-fullscreen.min.js' %}"></script>
+    {#    http://miromannino.github.io/Justified-Gallery/options-and-events/ #}
+    <script src="{% static 'portfolios/js/jquery.justifiedGallery.min.js' %}"></script>
+
+    <script type="text/javascript">
+        $(document).ready(function() {
+
+            var $gallery = $('#gallery');
+            console.log($gallery.length)
+            if ($gallery.length) {
+                $gallery.justifiedGallery({
+                    margins: 5,
+                    maxRowHeight: 150,
+                    lastRow: 'center',
+                }).on('jg.complete', function() {
+                    $gallery.lightGallery({
+                        thumbnail: true,
+                    });
+                });
+            };
+        });
+
+
+    </script>

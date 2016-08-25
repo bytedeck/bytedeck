@@ -1,0 +1,100 @@
+/* Additions to justifiedGallery */
+.justified-gallery > a > .caption {
+    opacity: 0;
+    display: initial;
+    -webkit-transition: opacity .15s ease 0s;
+    -o-transition: opacity .15s ease 0s;
+    transition: opacity .15s ease 0s;
+}
+
+.justified-gallery > a > .caption.caption-visible {
+    opacity: .5;
+    display: initial;
+    -webkit-transition: opacity .15s ease 0s;
+    -o-transition: opacity .15s ease 0s;
+    transition: opacity .15s ease 0s;
+}
+
+
+
+.justified-gallery > a > .caption.caption-fill {
+    height:100%;
+}
+
+.justified-gallery > a > .caption > .caption-centered-outer {
+    height:100%;
+    width: 100%;
+    display: table;
+    text-align: center;
+}
+
+.caption-centered-outer > .caption-centered-inner {
+    display:table-cell;
+    vertical-align: middle;
+}
+
+/*!* see here: http://www.alessioatzeni.com/blog/css3-hover-effects/ *!*/
+
+.justified-gallery > a > img {
+   -moz-transform:scale(1,1);
+   -webkit-transform:scale(1,1);
+   -o-transform:scale(1,1);
+   transform:scale(1,1);
+    transition: transform .15s ease 0s;
+
+}
+
+.justified-gallery > a:hover > img {
+   -moz-transform:scale(1.15,1.15);
+   -webkit-transform:scale(1.15,1.15);
+   -o-transform:scale(1.15,1.15);
+   transform:scale(1.15,1.15);
+    transition: transform .15s ease 0s;
+}
+
+
+
+/*!* Using justifiedGallery.js, equivalent elements are noted *!*/
+
+/*!* See jg: #gallery > a *!*/
+.test-container {
+   width: 300px;
+   height: 200px;
+   margin: 10px;
+   overflow: hidden;
+   position: absolute;
+    display: inline-block;
+}
+
+/* See jg: .justified-gallery > a > img */
+.test-container > img {
+   display: inline;
+   position: relative;
+}
+
+.test-container > img {
+   -moz-transform:scale(1,1);
+   -webkit-transform:scale(1,1);
+   -o-transform:scale(1,1);
+   transform:scale(1,1);
+    transition: transform .15s ease 0s;
+
+}
+
+.test-container:hover > img {
+   -moz-transform:scale(1.25,1.25);
+   -webkit-transform:scale(1.25,1.25);
+   -o-transform:scale(1.25,1.25);
+   transform:scale(1.25,1.25);
+    transition: transform .15s ease 0s;
+}
+
+/* light gallery customization */
+
+.lg-outer .lg-thumb-item.active, .lg-outer .lg-thumb-item:hover {
+    border-color: #337ab7;
+}
+
+.lg-backdrop {
+    background-color: #272b30;
+}

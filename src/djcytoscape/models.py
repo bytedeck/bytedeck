@@ -648,7 +648,7 @@ class CytoScape(models.Model):
             scape=self,
             group=CytoElement.NODES,
             label=self.generate_label(obj),
-            defaults={'id_styles': "'background-image': '" + obj.get_icon_url() + "'",
+            defaults={'id_styles': "'background-image': '" + obj.get_img_url() + "'",
                       'classes': type(obj).__name__, }
         )
 

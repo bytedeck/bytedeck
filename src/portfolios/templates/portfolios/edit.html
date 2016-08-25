@@ -1,0 +1,60 @@
+{% extends "portfolios/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Editing {{ p.user }}'s Portfolio
+<a class="btn btn-success" href="{% url 'portfolios:detail' p.pk %}" >View</a>
+{% endblock %}
+
+{% block content %}
+    <form method="post">{% csrf_token %}
+        {{ form|crispy }}
+        <input class="btn btn-default" type="submit" value="Update Portfolio Settings" />
+    </form>
+    <hr>
+    <h3>Art in this portfolio:
+     <a class="btn btn-primary pull-right" href="{% url 'portfolios:art_create' p.pk %}">Add Art</a>
+    </h3>
+
+
+    <table data-toggle='table'
+            data-sort-name='title'
+            data-sort-order='asc'
+            data-search='true'
+            data-icons='icons'
+            data-icons-prefix='fa'>
+      <thead>
+        <tr>
+          <th data-field='thumbnail'>Thumbnail</th>
+          <th data-field='title' data-sortable='true'>Title</th>
+          <th data-field='date'  data-sortable='true'>Date</th>
+          <th data-field='type'  data-sortable='true'>Type</th>
+          <th data-field='description' data-sortable='true'>Description</th>
+          <th data-field='edit'  data-switchable="false"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for art in p.artwork_set.all %}
+        <tr>
+            <td><img class="icon-xl" alt="{{ art.title }}" src="{{ art.get_image_url }}" /></td>
+            <td>{{ art.title }}</td>
+            <td>{{ art.date }}</td>
+            <td>{{ art.get_art_type }}</td>
+            <td>{{ art.description }}</td>
+            <td>
+                <a class="btn btn-info btn-sm" title="Edit this Portfolio entry"
+                   href="{% url 'portfolios:art_update' art.pk %}">
+                    <i class="fa fa-cog"></i>
+                </a>
+                <a class="btn btn-danger btn-sm" title="Delete this Portfolio entry"
+                   href="{% url 'portfolios:art_delete' art.pk %}">
+                    <i class="fa fa-trash"></i>
+                </a>
+            </td>
+        </tr>
+        {% empty %}
+            <tr>No art has been added to this portfolio.</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+{% endblock %}

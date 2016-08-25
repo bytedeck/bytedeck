@@ -1,0 +1,24 @@
+{% extends "portfolios/base.html" %}
+{% load staticfiles %}
+{% load crispy_forms_tags %}
+{{ form.media }}
+
+{% block head %}
+  <!-- need these loaded first for date-time picker widgets to work I think -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+  <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
+{% endblock %}
+
+{% block heading_inner %}{{ heading }}{% endblock %}
+
+
+
+{% block content %}
+<form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
+      <a href="{% url 'portfolios:edit' portfolio.pk %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" /><br><br>
+  {{ form|crispy }}
+  <a href="{% url 'portfolios:edit' portfolio.pk %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+</form>
+{% endblock %}

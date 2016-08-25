@@ -1,15 +1,20 @@
 {% extends "profile_manager/base.html" %}
 
 {% block heading_inner %}{{ object.get_preferred_name }}'s Profile
-  <a class="btn btn-info btn-sm"
+    <div class="btn-group" role="group">
+  <a class="btn btn-info" title="Edit your Profile"
     href="{% url 'profiles:profile_update' object.id %}"
-    role="button"><i class="fa fa-cog"></i>&nbsp;&nbsp;Edit</a>
-  <a class="btn btn-default btn-sm"
+    role="button"><i class="fa fa-cog"></i></a>
+  <a class="btn btn-warning" title="Change your Password"
     href="{% url 'account_change_password' %}"
-    role="button"><i class="fa fa-key"></i>&nbsp;&nbsp;Change Password</a>
-  <a class= "btn btn-default btn-sm"
+    role="button"><i class="fa fa-key"></i></a>
+  <a class= "btn btn-primary" title="View your Mark Calculations"
     href="{% url 'courses:marks' object.user.id %}"
-    role="button"><i class="fa fa-line-chart"></i>&nbsp;&nbsp;View Mark Calculations</a>
+    role="button"><i class="fa fa-line-chart"></i></a>
+  <a class= "btn btn-success" title="View your Portfolio"
+    href="{% url 'portfolios:detail' object.user.id %}"
+    role="button"><i class="fa fa-picture-o"></i></a>
+    </div>
 {% endblock %}
 
 {% block content %}
