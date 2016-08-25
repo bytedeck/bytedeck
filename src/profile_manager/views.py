@@ -1,5 +1,6 @@
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent
+from django.http import Http404
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 
@@ -94,15 +95,13 @@ class ProfileUpdate(UpdateView):
         context['submit_btn_value'] = "Update"
         return context
 
-    def get_object(self):
-        return get_object_or_404(Profile, user_id=self.request.user)
-
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
         profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
         if profile_user == self.request.user or self.request.user.is_staff:
             return super(ProfileUpdate, self).dispatch(*args, **kwargs)
-        return redirect('quests:quests')
+        else:
+            raise Http404("Sorry, this profile isn't yours!")
 
 
 @login_required
