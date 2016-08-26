@@ -14,8 +14,9 @@ from .models import Badge, BadgeType, BadgeAssertion
 
 
 @login_required
-def list(request):
+def badge_list(request):
     badge_types = BadgeType.objects.all()
+    inactive_badges = Badge.objects.all().filter(active=False)
 
     # http://stackoverflow.com/questions/32421214/django-queryset-all-model1-objects-where-a-model2-exists-with-a-model1-and-the
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
@@ -25,6 +26,7 @@ def list(request):
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
         "earned_badges": earned_badges,
+        "inactive_badges": inactive_badges
     }
     return render(request, "badges/list.html", context)
 

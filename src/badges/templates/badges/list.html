@@ -21,47 +21,55 @@
   <div class="panel-body panel-body-badge">
     <div class="row">
       {% for badge in badge_type.badge_set.all %}
-      <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
-        <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-        data-trigger="focus" data-placement="left" data-html="true"
-        title="<h3 class='panel-title'>{{badge.name}}</h3>"
-        data-content='
-        <p>{{badge.short_description}}</p>
-        <p>XP: {{badge.xp}}</p>
-        <!-- <p>Series: {{badge.series}}</p> -->
-        <p>Requirements:<ul><small>
-        {% for p in badge.prereqs %}
-          <li>{{ p }}</li>
-        {% empty %}
-          <li>None (granted manually)</li>
-        {% endfor %}</ul></small></p>
-        {% if request.user.is_staff %}
-        <div class="btn-group block" role="group">
-          <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}" role="button">
-            <i class="fa fa-edit"></i>
-          </a>
-          <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}" role="button">
-            <i class="fa fa-copy"></i>
-          </a>
-          <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}" role="button">
-            <i class="fa fa-trash-o"></i>
-          </a>
-        </div>
-        <a class="btn btn-success pull-right" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}" role="button">
-          <i class="fa fa-gift"></i>
-        </a>
-        {% endif %}
-        '>
-        <div class="thumbnail thumbnail-badge">
-          <img class="hackerbadge img-rounded
-            {% if not badge in earned_badges %} hackerbadge-unearned {% endif %}"
-            src="{{badge.get_icon_url}}" alt="badge icon">
-          <div class="caption caption-badge text-center">
-            {{badge.name}}
-          </div>
-        </div>
-      </a>
-      </div>
+          {% if request.user.is_staff or badge.active %}
+              <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
+                <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
+                    data-trigger="focus" data-placement="left" data-html="true"
+                    title="<h3 class='panel-title'>{{badge.name}}</h3>"
+                    data-content='
+                    {% if not badge.active %}
+                        <p class="text-danger"><i class="fa fa-eye-slash"></i> INACTIVE</p>
+                    {% endif %}
+                    <p>{{badge.short_description}}</p>
+                    <p>XP: {{badge.xp}}</p>
+                    <!-- <p>Series: {{badge.series}}</p> -->
+                    <p>Requirements:<ul><small>
+                    {% for p in badge.prereqs %}
+                      <li>{{ p }}</li>
+                    {% empty %}
+                      <li>None (granted manually)</li>
+                    {% endfor %}</ul></small></p>
+                    {% if request.user.is_staff %}
+                    <div class="btn-group block" role="group">
+                      <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}" role="button">
+                        <i class="fa fa-edit"></i>
+                      </a>
+                      <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}" role="button">
+                        <i class="fa fa-copy"></i>
+                      </a>
+                      <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}" role="button">
+                        <i class="fa fa-trash-o"></i>
+                      </a>
+                    </div>
+                    <a class="btn btn-success pull-right" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}" role="button">
+                      <i class="fa fa-gift"></i>
+                    </a>
+                    {% endif %}
+                '>
+                    <div class="thumbnail thumbnail-badge">
+                        {% if not badge.active %}
+                            <i class="fa fa-2x fa-eye-slash pull-right text-danger" style="position:absolute;"></i>
+                        {% endif %}
+                        <img class="hackerbadge img-rounded
+                            {% if not badge in earned_badges %} hackerbadge-unearned {% endif %}"
+                            src="{{badge.get_icon_url}}" alt="badge icon">
+                        <div class="caption caption-badge text-center">
+                            {{badge.name}}
+                        </div>
+                    </div>
+                </a>
+              </div>
+          {% endif %}
       {% empty %}
       <div class='col-sm-12'>None.</div>
       {% endfor %}

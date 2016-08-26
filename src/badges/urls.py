@@ -3,7 +3,7 @@ from badges import views
 from django.conf.urls import url
 
 urlpatterns = [
-    url(r'^$', views.list, name='list'),
+    url(r'^$', views.badge_list, name='list'),
     url(r'^create/$', views.badge_create, name='badge_create'),
     url(r'^(?P<badge_id>[0-9]+)/$', views.detail, name='badge_detail'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.BadgeUpdate.as_view(), name='badge_update'),
