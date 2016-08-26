@@ -67,12 +67,15 @@ def comment(request, id):
 
 
 @login_required
-def suggestion_list(request, id=None):
+def suggestion_list(request, id=None, completed=False):
     template_name = 'suggestions/suggestion_list.html'
-    if request.user.is_staff:
-        suggestions = Suggestion.objects.all()
+    if completed:
+        suggestions = Suggestion.objects.all_completed()
     else:
-        suggestions = Suggestion.objects.all_for_student(request.user)
+        if request.user.is_staff:
+            suggestions = Suggestion.objects.all()
+        else:
+            suggestions = Suggestion.objects.all_for_student(request.user)
 
     if id:
         active_id = int(id)
@@ -87,8 +90,13 @@ def suggestion_list(request, id=None):
         'comment_form': comment_form,
         'object_list': suggestions,
         'active_id': active_id,
+        'completed_list': completed,
     }
     return render(request, template_name, context)
+
+
+def suggestion_list_completed(request, id=None):
+    return suggestion_list(request, id, completed=True)
 
 
 @login_required
@@ -170,23 +178,85 @@ def suggestion_approve(request, id):
 
     return redirect(suggestion.get_absolute_url())
 
+@staff_member_required
+def suggestion_complete(request, pk):
+    suggestion = get_object_or_404(Suggestion, pk=pk)
+    suggestion.status = Suggestion.COMPLETED
+    suggestion.status_timestamp = timezone.now()
+    suggestion.save()
+
+    icon = "<span class='fa-stack'>" + \
+           "<i class='fa fa-lightbulb-o fa-stack-1x'></i>" + \
+           "<i class='fa fa-star-o fa-stack-2x text-success'></i>" + \
+           "</span>"
+
+    notify.send(
+        request.user,
+        # action=profile.user,
+        target=suggestion,
+        recipient=suggestion.user,
+        affected_users=[suggestion.user, ],
+        verb='completed',
+        icon=icon,
+    )
+    messages.success(request, "Suggestion by " + str(suggestion.user) + " was completed!")
+
+    return redirect(suggestion.get_absolute_url())
+
+
+
+@staff_member_required
+def suggestion_reject(request, pk):
+    suggestion = get_object_or_404(Suggestion, pk=pk)
+    suggestion.status = Suggestion.NOT_APPROVED
+    suggestion.status_timestamp = timezone.now()
+    suggestion.save()
+
+    icon = "<span class='fa-stack'>" + \
+           "<i class='fa fa-lightbulb-o fa-stack-1x'></i>" + \
+           "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+           "</span>"
+
+    notify.send(
+        request.user,
+        # action=profile.user,
+        target=suggestion,
+        recipient=suggestion.user,
+        affected_users=[suggestion.user, ],
+        verb='rejected',
+        icon=icon,
+    )
+    messages.error(request, "Suggestion by " + str(suggestion.user) + " was rejected.")
+
+    return redirect(suggestion.get_absolute_url())
+
 
 @login_required
-def vote(request, id):
+def up_vote(request, id):
+    return vote(request, id, 1)
+
+
+@login_required
+def down_vote(request, id):
+    return vote(request, id, -1)
+
+
+@login_required
+def vote(request, id, vote_score):
     suggestion = get_object_or_404(Suggestion, id=id)
 
-    if '/upvote/' in request.path_info:
-        vote = 1
-    elif '/downvote/' in request.path_info:
-        vote = -1
+    if vote_score == 1:
+        str_vote = "+1"
+    elif vote_score == -1:
+        str_vote = "-1"
     else:
-        raise Http404
+        raise Http404("There was an error with your attempt to vote.")
 
-    success = Vote.objects.record_vote(suggestion, request.user, vote)
+    success = Vote.objects.record_vote(suggestion, request.user, vote_score)
 
     if not success:
         messages.error(request, "You already voted today!")
     else:
-        messages.success(request, "You voted " + str(vote) + " for " + str(suggestion))
+        messages.success(request, "You voted " + str_vote + " for " + str(suggestion))
 
     return redirect("suggestions:list")

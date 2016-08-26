@@ -42,6 +42,12 @@ class SuggestionManager(models.Manager):
         # all suggestions from the user, but only approved ones from others
         return self.get_queryset().filter(Q(status=Suggestion.APPROVED) | Q(user=user))
 
+    def all_completed(self):
+        return self.get_queryset().completed()
+
+    def all_rejected(self):
+        return self.get_queryset().not_approved()
+
 
 class Suggestion(models.Model):
     AWAITING_APPROVED = 1
@@ -139,11 +145,7 @@ class Vote(models.Model):
     objects = VoteManager()
 
     def is_upvote(self):
-        if vote > 0:
-            return True
-        return False
+        return self.vote > 0
 
     def is_downvote(self):
-        if vote < 0:
-            return True
-        return False
+        return self.vote < 0
