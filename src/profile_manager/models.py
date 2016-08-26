@@ -16,10 +16,6 @@ from django.templatetags.static import static
 from django.utils import timezone
 from djconfig import config
 
-GRAD_YEAR_CHOICES = []
-for r in range(timezone.now().year, timezone.now().year + 4):
-    GRAD_YEAR_CHOICES.append((r, r))  # (actual value, human readable name) tuples
-
 
 class ProfileQuerySet(models.query.QuerySet):
     def get_grad_year(self, year):
@@ -84,7 +80,6 @@ class Profile(models.Model):
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
                                                  validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
-    # grad_year = models.PositiveIntegerField(choices=GRAD_YEAR_CHOICES, null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
     game_lab_transfer_process_on = models.BooleanField(default=False)
