@@ -64,12 +64,11 @@ class SemesterManager(models.Manager):
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
-    # def get_current(self, as_queryset=False):
-    #     print("################################# get current semester")
-    #     if as_queryset:
-    #         return self.get_queryset().filter(pk=config.hs_active_semester)
-    #     else:
-    #         return self.get_queryset().get(pk=config.hs_active_semester)
+    def get_current(self, as_queryset=False):
+        if as_queryset:
+            return self.get_queryset().filter(pk=config.hs_active_semester)
+        else:
+            return self.get_queryset().get(pk=config.hs_active_semester)
 
     def set_active(self, active_sem_id):
         sems = self.get_queryset()
