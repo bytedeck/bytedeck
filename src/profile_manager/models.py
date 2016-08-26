@@ -62,9 +62,10 @@ class Profile(models.Model):
                                               message="Invalid student number.",
                                               code='invalid_student_number',)
 
+    @staticmethod
     def get_grad_year_choices():
         grad_year_choices = []
-        for year in range(timezone.now().year, timezone.now().year + 4):
+        for year in range(timezone.now().year, timezone.now().year + 5):
             grad_year_choices.append((year, year))  # (actual value, human readable name) tuples
         return grad_year_choices
 
@@ -77,11 +78,13 @@ class Profile(models.Model):
     last_name = models.CharField(max_length=50, null=True, blank=False,
                                  help_text='Use the last name that matches your school records.')
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
+                                      verbose_name='Preferred first name',
                                       help_text='If you would prefer your teacher to call you by a name other than \
                                       the first name you entered above, put it here.')
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
                                                  validators=[student_number_validator])
-    grad_year = models.PositiveIntegerField(choices=get_grad_year_choices(), null=True, blank=False)
+    grad_year = models.PositiveIntegerField(null=True, blank=False)
+    # grad_year = models.PositiveIntegerField(choices=GRAD_YEAR_CHOICES, null=True, blank=False)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
     game_lab_transfer_process_on = models.BooleanField(default=False)
@@ -89,8 +92,11 @@ class Profile(models.Model):
 
     # Student options
     get_announcements_by_email = models.BooleanField(default=False)
-    visible_to_other_students = models.BooleanField(default=False, help_text="Your marks will be visible to "
-                                                                             "other students.")
+    visible_to_other_students = models.BooleanField(
+        default=False, help_text="Your marks will be visible to other students through the student list.")
+    preferred_internal_only = models.BooleanField(
+        verbose_name='Use preferred first name internally only',
+        default=False, help_text="Check this if you don't want your preferred first name used in any public areas.")
     dark_theme = models.BooleanField(default=False)
     hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
 
@@ -119,12 +125,34 @@ class Profile(models.Model):
         elif self.first_name:
             return self.first_name
         else:
-            return self.user.username
+            ""
+
+    def preferred_full_name(self):
+        name = self.get_preferred_name()
+        if self.last_name:
+            name += " " + self.last_name
+        return name
+
+    def public_name(self):
+        if self.preferred_internal_only:
+            return self.formal_name()
+        else:
+            return self.preferred_full_name()
+
+    def internal_name(self):
+        name = self.preferred_full_name()
+        if self.alias:
+            name += ", aka " + self.alias
+        return name
+
+    def formal_name(self):
+        if self.first_name and self.last_name:
+            return self.first_name + " " + self.last_name
+        else:
+            return ""
 
     def get_absolute_url(self):
         return reverse('profiles:profile_detail', kwargs={'pk': self.id})
-        # return reverse('profiles:profile_detail', kwargs={'pk':self.id})
-        # return u'/some_url/%d' % self.id
 
     def get_avatar_url(self):
         if self.avatar and hasattr(self.avatar, 'url'):
@@ -259,6 +287,13 @@ class Profile(models.Model):
 
     def last_submission_completed(self):
         return QuestSubmission.objects.user_last_submission_completed(self.user)
+
+    def gone_stale(self):
+        last_sub = self.last_submission_completed()
+        if last_sub is None:
+            return True
+        else:
+            return last_sub.time_completed < timezone.now()-timezone.timedelta(days=5)
 
 
 def create_profile(sender, **kwargs):

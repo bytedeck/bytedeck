@@ -4,7 +4,7 @@
     {% include 'portfolios/portfolio_head.html' %}
 {% endblock %}
 
-{% block heading_inner %}{{ p.user.profile.get_preferred_name }}'s Portfolio
+{% block heading_inner %}{{ p.user.profile.internal_name }}'s Portfolio
     {% if request.user.is_staff or request.user == p.user %}
   <a class="btn btn-info"
     href="{% url 'portfolios:edit' p.pk %}"

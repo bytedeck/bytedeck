@@ -5,7 +5,7 @@
 {% block head_css %}
 {% endblock %}
 
-{% block head_title%}{% if title %}{{ title }}{% endif %}{% endblock%}
+{% block head_title %}{% if title %}{{ title }}{% endif %}{% endblock %}
 
 {% block heading %}Students
     <div class="btn-group">
@@ -18,84 +18,131 @@
 {% endblock %}
 
 {% block content %}
-<!-- <table class="table table-striped"> -->
-<table data-toggle='table'
-        data-sort-name='first'
-        data-sort-order='asc'
-        data-search='true'
-        data-show-columns='true'
-        data-icons='icons'
-        data-icons-prefix='fa'>
-  <thead>
-    <tr>
-      <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>Avatar</th>
-      <th data-sortable='true' data-field='first'>Student</th>
-      <th data-sortable='true' data-field='last'>Last Name</th>
-      <th data-sortable='true' data-field='alias' data-visible="false">Alias</th>
-      <th data-sortable='true' data-field='xp' {% if request.user.is_staff %}data-visible="false"{% endif %}>XP</th>
-      <th data-sortable='true' data-field='num_courses' {% if request.user.is_staff %}data-visible="false"{% endif %}># Blocks</th>
-      <th data-sortable='true' data-field='mark'>Mark</th>
-      <th data-sortable='true' data-field='portfolio'>Portfolio</th>
-      {% if request.user.is_staff %}
-      <th data-sortable='true' data-field='blocks'>Block</th>
-      <th data-sortable='true' data-field='last_sub'>Last Quest</th>
-      <th data-sortable='true' data-field='username'>Student #</th>
-      <th data-field='comment_ban' data-switchable="false"></th>
-      <th data-field='skipped' data-switchable="false"></th>
-      <th data-field='pw' data-switchable="false"></th>
-      {% endif %}
-    </tr>
-  </thead>
-  <tbody>
-    {% for object in object_list %}
+    <table data-toggle='table'
+           data-sort-name='first'
+           data-sort-order='asc'
+           data-search='true'
+           data-show-columns='true'
+           data-icons='icons'
+           data-icons-prefix='fa'>
+        <thead>
+        <tr>
+            <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
+                Avatar
+            </th>
+            <th data-sortable='true' data-field='first'>
+                First Name
+            </th>
+            <th data-sortable='true' data-field='last'>
+                Last Name
+            </th>
+            <th data-sortable='true' data-field='alias'
+                {% if request.user.is_staff %}data-visible="false"{% endif %}>
+                Alias
+            </th>
+            <th data-sortable='true' data-field='grad'
+                {% if request.user.is_staff %}data-visible="false"{% endif %}>
+                Grad
+            </th>
+            <th data-sortable='true' data-field='blocks'
+                {% if not request.user.is_staff %}data-visible="false"{% endif %}>
+                Block
+            </th>
+            <th data-sortable='true' data-field='xp'
+                {% if request.user.is_staff %}data-visible="false"{% endif %}>
+                XP
+            </th>
+            <th data-sortable='true' data-field='mark'
+                {% if not request.user.is_staff %}data-visible="false"{% endif %}>
+                Mark
+            </th>
+            <th data-sortable='true' data-field='portfolio'>
+                Portfolio
+            </th>
 
-    <tr {% if object.game_lab_transfer_process_on and request.user.is_staff %}class="danger"{% endif %}>
-      {% if request.user.is_staff or object.visible_to_other_students %}
-        <td><img class="icon-md img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/></td>
-        {% if object.preferred_name %}<td>{{object.preferred_name}}</td>
-          {% else %}<td>{{object.first_name}}</td>{% endif %}
-        <td>{{object.active_in_current_semester}}</td>
-        <td>{{object.alias}}</td>
-        <td>{{object.xp}}</td>
-        <td>{{object.num_courses}}</td>
-      {% else %}
-        <td></td>
-        <td>*Private*</td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-      {% endif %}
-      <td>{{object.mark|floatformat}}</td>
-      <td>{% if object.user.portfolio.shared %}
-            <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
-          {% else %}
-            *Private*
-          {% endif %}
-      </td>
-      {% if request.user.is_staff %}
-        <td>{{object.blocks}}</td>
-        <td>{{object.last_submission_completed.time_completed|date:'y/m/d'}}
-          <br><small>{{object.last_submission_completed.time_completed|timesince}} ago</small></td>
-        <td><a href="{% url 'profiles:profile_detail' object.id %}">
-          {{object.user}}</a></td>
-        <td><a href="{% url 'profiles:comment_ban_toggle' object.id %}">
-          <small {% if object.banned_from_comments %}class="text-danger"{% endif %}>
-            Comments <b>{{object.banned_from_comments|yesno:'BANNED,ON'}}</b></small></a>
-        </td>
-        <td><a href="{% url 'profiles:GameLab_toggle' object.id %}"
-               title="Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP."
-               >
-          <small {% if object.game_lab_transfer_process_on %}class="text-danger"{% endif %}>
-            Skip <b>{{object.game_lab_transfer_process_on|yesno:'ON,OFF'}}</b></small></a>
-        </td>
-        <td><a href="/admin/auth/user/{{object.user.id}}/password/"><small>Reset password</small></a>
-        </td>
-      {% endif %}
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+            {% if request.user.is_staff %}
+            <th data-sortable='true' data-field='last_sub'>
+                Last Quest
+            </th>
+            <th data-sortable='true' data-field='sn'>
+                Student #
+            </th>
+            <th data-field='skipped' data-switchable="false">
+                Admin
+            </th>
+            {% endif %}
+
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for object in object_list %}
+
+            <tr {% if request.user.is_staff %}
+                    {% if object.game_lab_transfer_process_on or object.banned_from_comments %}
+                        class="warning"
+                    {% elif object.gone_stale %}
+                        class="danger"
+                    {% endif %}
+                {% endif %}>
+
+                <td><img class="icon-md img-rounded" src="{{ object.get_avatar_url }}" alt="avatar"/></td>
+                <td>{{ object.get_preferred_name }}</td>
+                <td>{{ object.last_name|default:"-" }}</td>
+                <td>{{ object.alias|default:"-" }}</td>
+                <td>{{ object.grad_year|default:"-" }}</td>
+                <td>{{ object.blocks }}</td>
+                <td>{% if object.visible_to_other_students or request.user.is_staff %}
+                    {{ object.xp }}
+                    {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
+                </td>
+                <td>{% if object.visible_to_other_students or request.user.is_staff %}
+                    {{ object.mark|floatformat }}%
+                    {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
+                </td>
+                <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
+                        <a href="{{ object.user.portfolio.get_absolute_url }}">View</i></a>
+                    {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
+                </td>
+                {% if request.user.is_staff %}
+
+                    <td>{% if object.last_submission_completed %}
+                            {{ object.last_submission_completed.time_completed|date:'y/m/d' }}<br>
+                            <small>{{ object.last_submission_completed.time_completed|timesince }} ago</small>
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </td>
+                    <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user }}</a></td>
+
+                    {#      Admin buttons #}
+                    <td>
+                        <div class="btn-group">
+                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
+                               title="{% if object.banned_from_comments %}Remove comment ban
+                           {% else %}Ban student from public comments{% endif %}"
+                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
+                                <i class="fa fa-commenting-o"></i>
+                            </a>
+                            <a href="{% url 'profiles:GameLab_toggle' object.id %}"
+                               title="{% if object.game_lab_transfer_process_on %}Turn quest skipping off
+                           {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"
+                               class="btn btn-sm
+                        {% if object.game_lab_transfer_process_on %}btn-success{% else %}btn-default{% endif %}">
+                                <i class="fa fa-magic"></i>
+                            </a>
+                            <a href="/admin/auth/user/{{ object.user.id }}/password/" class="btn btn-sm btn-default"
+                               title="Reset this student's password">
+                                <i class="fa fa-key"></i>
+                            </a>
+                        </div>
+                    </td>
+
+                {% endif %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 
 {% endblock %}
 

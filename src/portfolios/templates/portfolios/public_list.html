@@ -8,7 +8,7 @@
     {% if portfolios %}<p>These students have chosen to share their digital portfolios publicly.</p>
         <ul>
         {% for p in portfolios %}
-            <li><a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile }}</a></li>
+            <li><a href="{% url 'portfolios:public' p.uuid %}">{{ p.user.profile.public_name }}</a></li>
 
         {% endfor %}
         </ul>

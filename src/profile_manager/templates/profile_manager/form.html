@@ -4,9 +4,29 @@
 {% block heading_inner %}{{ heading }}{% endblock %}
 
 {% block content %}
+    <p><a href="{% url 'portfolios:edit' profile.user.pk %}" class="btn btn-info">
+        <i class="fa fa-picture-o"></i> &nbsp;Edit your Portfolio</a></p>
+    <div class="panel panel-info" >
+        <div class="panel-heading">
+            How your names will be used:
+        </div>
+        <div class="panel-body">
+            <dl class="dl-horizontal">
+              <dt>to other students:</dt>
+                <dd>{{ profile.internal_name }}</dd>
+              <dt>to the public:</dt>
+                <dd>{{ profile.public_name }}</dd>
+               <dt>to your teacher:</dt>
+                <dd>{{ profile }}</dd>
+            </dl>
+        </div>
+    </div>
+
 <form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
+  <a href="{% url 'profiles:profile_detail' profile.id %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" /><br><br>
   {{ form|crispy }}
-  <a href="{% url 'profiles:profile_detail' request.user.profile.id %}" role="button" class="btn btn-danger">Cancel</a>
+  <a href="{% url 'profiles:profile_detail' profile.id %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
 {% endblock %}

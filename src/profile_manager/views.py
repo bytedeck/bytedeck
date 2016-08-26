@@ -100,10 +100,12 @@ class ProfileUpdate(UpdateView):
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
+        profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super(ProfileUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Edit " + self.request.user.get_username() + "'s Profile"
+        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
         context['action_value'] = ""
         context['submit_btn_value'] = "Update"
+        context['profile'] = profile
         return context
 
     @method_decorator(login_required)
@@ -132,13 +134,21 @@ def GameLab_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
     profile.save()
-    return redirect('profiles:profile_list')
+    return redirect_to_previous_page(request)
 
 
 @staff_member_required
 def comment_ban_toggle(request, profile_id):
+    return comment_ban(request, profile_id, toggle=True)
+
+
+@staff_member_required
+def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
-    profile.banned_from_comments = not profile.banned_from_comments
+    if toggle:
+        profile.banned_from_comments = not profile.banned_from_comments
+    else:
+        profile.banned_from_comments = True
     profile.save()
 
     if profile.banned_from_comments:
@@ -157,32 +167,21 @@ def comment_ban_toggle(request, profile_id):
             icon=icon,
         )
 
-        messages.success(request, profile.user.username + " banned from commenting publicly")
+        messages.warning(request,
+                         "<a href='" + profile.get_absolute_url() + "'>" +
+                         profile.user.username + "</a> banned from commenting publicly")
+    else:
+        messages.success(
+            request, "Commenting ban removed for <a href='" + profile.get_absolute_url() + "'>" +
+                     profile.user.username + "</a>")
 
-    return redirect('profiles:profile_list')
+    return redirect_to_previous_page(request)
 
 
 @staff_member_required
-def comment_ban(request, profile_id):
-    profile = get_object_or_404(Profile, id=profile_id)
-    profile.banned_from_comments = True
-    profile.save()
-
-    icon = "<span class='fa-stack'>" + \
-           "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
-           "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
-           "</span>"
-
-    notify.send(
-        request.user,
-        # action=profile.user,
-        target=profile.user,
-        recipient=request.user,
-        affected_users=[profile.user, ],
-        verb='banned you from making public comments',
-        icon=icon,
-    )
-
-    messages.success(request, profile.user.username + "banned from commenting publicly")
-
-    return redirect('profiles:profile_list')
+def redirect_to_previous_page(request):
+    # http://stackoverflow.com/questions/4406377/django-request-to-find-previous-referrer
+    if '/profiles/all/' in request.META['HTTP_REFERER']:
+        return redirect('profiles:profile_list')
+    else:
+        return redirect('profiles:profile_list_current')

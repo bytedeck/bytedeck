@@ -513,8 +513,13 @@ class QuestSubmissionManager(models.Manager):
         return xp
 
     def user_last_submission_completed(self, user):
-        # print( self.get_queryset().get_user(user).completed().latest('time_completed'))
-        return self.get_queryset(True).get_user(user).completed().latest('time_completed')
+        qs = self.get_queryset(True).get_user(user).completed()
+        qs2 = qs.latest('time_completed')
+        print(qs2 is None)
+        if not qs:
+            return None
+        else:
+            return qs.latest('time_completed')
 
     def move_incomplete_to_active_semester(self):
         """ Called when changing Active Semesters, however should be uneccessary
