@@ -261,7 +261,7 @@ def detail(request, quest_id):
 
     q = get_object_or_404(Quest, pk=quest_id)
 
-    # Display teh quest
+    # Display the quest
     if request.user.is_staff or q.is_available(request.user):
         context = {
             "heading": q.name,
@@ -270,7 +270,7 @@ def detail(request, quest_id):
         return render(request, 'quest_manager/detail.html', context)
     # Check if the user has a submission to view
     else:
-        submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, True)
+        submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, active_semester_only=False)
         if submissions:
             sub = submissions.latest('time_approved')
             return submission(request, sub.id)
