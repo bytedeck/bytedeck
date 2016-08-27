@@ -1,3 +1,4 @@
+from courses.models import Semester
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import models
@@ -135,6 +136,12 @@ class VoteManager(models.Manager):
             return True
         return False
 
+    def all_this_semester(self, user):
+        qs = self.get_queryset().all_user(user)
+        print(qs)
+        sem = Semester.objects.get_current()
+        return qs.filter(timestamp__date__range=(sem.first_day, sem.last_day))
+
 
 class Vote(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL)
@@ -143,6 +150,9 @@ class Vote(models.Model):
     vote = models.SmallIntegerField(help_text="up vote is +1, down vote is -1")
 
     objects = VoteManager()
+
+    def __str__(self):
+        return str(self.user) + " on " + str(self.timestamp.date())
 
     def is_upvote(self):
         return self.vote > 0

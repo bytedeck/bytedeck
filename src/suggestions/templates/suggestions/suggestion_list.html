@@ -7,8 +7,10 @@
         <a href="{% url 'suggestions:list_completed' %}"
            class="btn {% if completed_list %}btn-primary{% else %}btn-default{% endif %}">Completed</a>
     </div>
+    <small>You've voted {{ votes_total }} times this semester</small>
 {% endblock %}
 {% block content %}
+    <br>
 <div class="panel panel-primary" >
     <div class="panel-heading" title="This section is only visible to you">
         How to get XP by helping to improve the Hackerspace.

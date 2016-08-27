@@ -82,6 +82,9 @@ def suggestion_list(request, id=None, completed=False):
     else:
         active_id = None
 
+    votes_total = request.user.vote_set.all().count()
+    # votes_this_semester = Vote.objects.all_this_semester(request.user).count()
+
     # print("**********")
     # print(active_id)
 
@@ -91,6 +94,8 @@ def suggestion_list(request, id=None, completed=False):
         'object_list': suggestions,
         'active_id': active_id,
         'completed_list': completed,
+        'votes_total': votes_total,
+        # 'votes_this_semester': votes_this_semester,
     }
     return render(request, template_name, context)
 
