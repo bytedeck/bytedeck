@@ -213,8 +213,6 @@ class QuestManager(models.Manager):
         return qs.get_list_not_submitted_or_inprogress(user)
 
 
-
-
 class Quest(XPItem, IsAPrereqMixin):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \

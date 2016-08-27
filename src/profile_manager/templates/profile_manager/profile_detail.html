@@ -21,8 +21,9 @@
 
 <div class="row">
   <div class="col-sm-3">
-    <img class="icon-avatar img-rounded" src="{{object.get_avatar_url}}"
-        alt="avatar"/>
+    <div class="icon_avatar">
+      <img class="icon-avatar img-rounded" src="{{object.get_avatar_url}}" alt="avatar"/>
+    </div>
   </div>
   <div class="col-sm-9">
 
@@ -182,14 +183,46 @@
 
       </div> <!--panel -->
 
-      <div class="panel panel-primary">
-        <div class="panel-heading">
-          <h3 class="panel-title">Recent Activity</h3>
+      <!-- PAST QUESTS -->
+     <div class="panel panel-primary">
+       <div class="panel-heading">
+         <i class="pull-right fa fa-fw fa-shield"></i>
+         <h3 class="panel-title">Past Quests</h3>
+       </div>
+       <div class="list-group">
+         <div class="list-group-item list-group-item-info">Completed</div>
+         {% if completed_past_submissions %}
+           {% for s in completed_past_submissions %}
+             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+                 {% if s.is_awaiting_approval %}list-group-item-warning
+                 {% elif s.game_lab_transfer %}list-group-item-muted
+                 {% endif %}">
+               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
+               {{s.quest|truncatechars:40}} <small>
+                {% if s.game_lab_transfer %}
+                  (Quest Skipped)
+                {% else %}
+                  ({{s.quest.xp}} XP)
+                {% endif %}
+                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
+             </a>
+           {% endfor %}
+         {% else %}
+           <div class="list-group-item">None.</div>
+         {% endif %}
         </div>
-        <div class="panel-body">
-          <p>Under construction...</p>
-        </div>
-       </div> <!--panel -->
+
+      </div> <!--panel -->
+
+
+{#      <div class="panel panel-primary">#}
+{#        <div class="panel-heading">#}
+{#          <h3 class="panel-title">Recent Activity</h3>#}
+{#        </div>#}
+{#        <div class="panel-body">#}
+{#          <p>Under construction...</p>#}
+{#        </div>#}
+{#       </div> <!--panel -->#}
   </div>
 
   <!-- BADGES -->

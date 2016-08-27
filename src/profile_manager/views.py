@@ -76,6 +76,7 @@ class ProfileDetail(DetailView):
         context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile_user)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile_user)
         context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile_user)
+        context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile_user)
 
         earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile_user)
         assertion_dict = defaultdict(list)
