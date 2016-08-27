@@ -123,8 +123,16 @@ class Semester(models.Model):
         return self.first_day.strftime("%b-%Y")
 
     def active_by_date(self):
-        return (self.last_day + timedelta(days=5)) > timezone.now().date() and (self.first_day - timedelta(
-            days=20)) < timezone.now().date()
+        return (self.last_day + timedelta(days=5)) > timezone.now().date() > (self.first_day - timedelta(days=20))
+
+    def is_open(self):
+        """
+        :return: True if the current date falls within the semeseter's first and last day (inclusive)
+        """
+        print(self.first_day)
+        print(timezone.now().date())
+        print(self.last_day)
+        return self.first_day <= timezone.now().date() <= self.last_day
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date

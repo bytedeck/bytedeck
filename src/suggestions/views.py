@@ -2,6 +2,7 @@ from badges.models import Badge, BadgeAssertion
 from badges.views import grant_badge
 from comments.forms import CommentForm
 from comments.models import Comment
+from courses.models import Semester
 from djconfig import config
 from notifications.signals import notify
 
@@ -70,6 +71,10 @@ def comment(request, id):
 @login_required
 def suggestion_list(request, id=None, completed=False):
     template_name = 'suggestions/suggestion_list.html'
+
+    # Are we within the dates of the active semester?
+    semester = get_object_or_404(Semester, pk=config.hs_active_semester)
+
     if completed:
         suggestions = Suggestion.objects.all_completed()
     else:
@@ -100,6 +105,7 @@ def suggestion_list(request, id=None, completed=False):
         'vote_badge': vote_badge,
         'num_votes': config.hs_num_votes,
         'votes_this_semester': votes_this_semester,
+        'semester': semester,
     }
     return render(request, template_name, context)
 

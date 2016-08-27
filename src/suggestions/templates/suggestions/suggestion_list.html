@@ -12,7 +12,7 @@
 {% block content %}
     <br>
 
-{% if request.user.is_staff or request.user.profile.has_current_course %}
+{% if request.user.is_staff or semester.is_open and request.user.profile.has_current_course %}
 <div class="panel panel-primary" >
     <div class="panel-heading" title="This section is only visible to you">
         How to get XP by helping to improve the Hackerspace.
@@ -132,8 +132,12 @@
   {% endfor %}
   </div>
 {% else %}
-  <p>You need to join a course before voting or suggesting improvements.</p>
-  <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+  {% if semester.is_open %}
+    <p>You need to join a course before voting or suggesting improvements.</p>
+    <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+  {% else %}
+    <p>The semester is currently closed. This semester runs from {{ semester.first_day }} to {{ semester.last_day }}</p>
+  {% endif %}
 {% endif %}
 {% endblock %}
 {% block js %}
