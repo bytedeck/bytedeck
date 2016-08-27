@@ -74,9 +74,9 @@ def suggestion_list(request, id=None, completed=False):
         suggestions = Suggestion.objects.all_completed()
     else:
         if request.user.is_staff:
-            suggestions = Suggestion.objects.all()
+            suggestions = Suggestion.objects.all().exclude(status=Suggestion.COMPLETED)
         else:
-            suggestions = Suggestion.objects.all_for_student(request.user)
+            suggestions = Suggestion.objects.all_for_student(request.user).exclude(status=Suggestion.COMPLETED)
 
     if id:
         active_id = int(id)

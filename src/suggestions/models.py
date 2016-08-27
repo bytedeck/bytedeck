@@ -79,6 +79,9 @@ class Suggestion(models.Model):
     status_timestamp = models.DateTimeField(null=True, blank=True)
     objects = SuggestionManager()
 
+    class Meta:
+        ordering = ['status']
+
     def __str__(self):
         return self.title
 

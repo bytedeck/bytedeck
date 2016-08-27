@@ -56,7 +56,7 @@
       <div class="row">
           <h4 class="panel-title">
             <div class="col-xs-2">
-              {% if not completed_list %}
+              {% if not completed_list and object.status == 2 %}
               <a href="{% url 'suggestions:upvote' object.id %}">
                 <i class="fa fa-2x fa-thumbs-o-up"></i></a>
               &nbsp;&nbsp;
@@ -85,7 +85,7 @@
       class="panel-collapse collapse {% if object.id == active_id %} in {% endif %}"
       role="tabpanel" aria-labelledby="heading{{object.id}}">
       <ul class="list-group">
-        <li class="list-group-item">
+        <li class="list-group-item list-group-item-buttons">
           {% if request.user.is_staff %}
           <div class="pull-right">
             <a class="btn btn-info" href="{% url 'suggestions:edit' object.id %}" role="button">Edit</a>
