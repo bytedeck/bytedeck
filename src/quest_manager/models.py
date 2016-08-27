@@ -166,6 +166,9 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students=True)
 
+    def available_without_course(self):
+        return self.filter(available_outside_course=True)
+
     # TODO: this should be generic and placed in the prerequisites app
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
@@ -181,6 +184,11 @@ class QuestQuerySet(models.query.QuerySet):
             ]
         return self.filter(pk__in=pk_met_list)
 
+    def get_list_not_submitted_or_inprogress(self, user):
+        quest_list = list(self)
+        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
+        return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
+
 
 class QuestManager(models.Manager):
     def get_queryset(self):
@@ -192,12 +200,19 @@ class QuestManager(models.Manager):
     def get_available(self, user, remove_hidden=True):
         """ Quests that should appear in the user's Available quests tab"""
         qs = self.get_active().get_conditions_met(user)
-        quest_list = list(qs)
+        # quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
+        # available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
+        available_quests = qs.get_list_not_submitted_or_inprogress(user)
         if remove_hidden:
             available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
+
+    def get_available_without_course(self, user):
+        qs = self.get_active().get_conditions_met(user).available_without_course()
+        return qs.get_list_not_submitted_or_inprogress(user)
+
+
 
 
 class Quest(XPItem, IsAPrereqMixin):
@@ -207,6 +222,10 @@ class Quest(XPItem, IsAPrereqMixin):
                                                 granted without the teacher seeing the submission.")
     hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest form their list of \
                                                  available quests. ")
+    available_outside_course = models.BooleanField(default=False,
+                                                   help_text="Allows student to view and submit this quest without "
+                                                             "having joined a course.  E.g. for quests you might "
+                                                             "still want available to past students.")
     # categories = models.ManyToManyField(Category, blank=True)
     campaign = models.ForeignKey(Category, blank=True, null=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)

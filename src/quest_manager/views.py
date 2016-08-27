@@ -90,7 +90,7 @@ def quest_list(request, quest_id=None, submission_id=None):
     else:
         available_tab_active = True
         if '/all/' in request.path_info:
-            remove_hidden=False
+            remove_hidden = False
 
     page = request.GET.get('page')
 
@@ -114,8 +114,11 @@ def quest_list(request, quest_id=None, submission_id=None):
             available_quests = Quest.objects.all()
             # num_available = available_quests.count()
         else:
-            available_quests = Quest.objects.get_available(request.user, remove_hidden)
+            if request.user.profile.has_current_course():
+                available_quests = Quest.objects.get_available(request.user, remove_hidden)
             # num_available = len(available_quests)
+            else:
+                available_quests = Quest.objects.get_available_without_course(request.user)
 
     # paginate or no?
     # available_quests = paginate(available_quests, page)
@@ -708,8 +711,7 @@ def hide(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
     request.user.profile.hide_quest(quest_id)
 
-    messages.warning(request, "<strong>" + quest.name + "</strong> has been added to your list of hidden quests. \
-                                HOW TO UN-HIDE QUESTS?")
+    messages.warning(request, "<strong>" + quest.name + "</strong> has been added to your list of hidden quests.")
 
     return redirect("quests:quests")
 

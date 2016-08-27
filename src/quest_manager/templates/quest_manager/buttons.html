@@ -42,7 +42,7 @@
          class="btn btn-success" role="button" href="{% url 'quests:unhide' q.id %}" >
         <i class="fa fa-eye"></i>
       </a>
-    {% else %}
+    {% elif request.user.profile.has_current_course %}
       <a title="Add this to your list of hidden quests"
          class="btn btn-default" role="button" href="{% url 'quests:hide' q.id %}" >
         <i class="fa fa-eye-slash"></i>

@@ -57,10 +57,9 @@
     {% if request.user.is_staff or request.user.profile.has_current_course %}
       {% include 'quest_manager/tab_quests_available.html' %}
     {% else %}
-      <p>
-        You have not joined a course yet for this semester.</p>
-        <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
-
+      <p>You have not joined a course yet for this semester.</p>
+      <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+      {% include 'quest_manager/tab_quests_available.html' %}
     {% endif %}
   </div>
   <div role="tabpanel"
