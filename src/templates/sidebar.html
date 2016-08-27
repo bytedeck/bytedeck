@@ -4,86 +4,131 @@
 <!-- sidebar -->
 
 <div id="sidebar_menu">
-    <ul class="nav">
-        <li><a href="#" data-toggle="offcanvas" class="visible-xs text-center"><i class="fa fa-chevron-right fa-fw"></i></a>
-        </li>
-    </ul>
+  <ul class="nav sidebar-menu-nav">
+    <li><a href="#" data-toggle="offcanvas" class="visible-xs text-center"><i class="fa fa-chevron-right fa-fw"></i></a>
+    </li>
+  </ul>
 
-    <!--so logo margins align with main div headings-->
-    <h3 class="hidden-xs">
-        <img id="logo"
-             src="{% if request.user.profile.dark_theme %}
-                 {%static 'img/banner_slate.png' %}
+  <!--so logo margins align with main div headings-->
+  <h3 class="hidden-xs">
+    <img id="logo"
+         src="{% if request.user.profile.dark_theme %}
+                 {% static 'img/banner_slate.png' %}
               {% else %}
-                 {%static 'img/banner.png' %}
+                 {% static 'img/banner.png' %}
               {% endif %}"
-             class="img-responsive" alt="Timberline's Digital Hackerspace Logo"/>
-    </h3>
-    <div class="nav list-group hidden-xs" id="lg-menu">
-        <a id="quests-menu" class="list-group-item
+         class="img-responsive" alt="Timberline's Digital Hackerspace Logo"/>
+  </h3>
+
+
+  {#    Group Menus #}
+  <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-main">
+    <a id="quests-menu" class="list-group-item
         {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info %}active{% endif %}"
-           href="{% url 'quests:quests' %}">
-            <i class="fa fa-shield fa-fw"></i>&nbsp; Quests
-        </a>
-        <a id="achievements-menu"
-           class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
-           href="{% url 'badges:list' %}">
-            <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges
-        </a>
-        <a id="groups-menu" class="list-group-item {% if '/profiles/' in request.path_info %}active{% endif %}"
-           href="{% url 'profiles:profile_list_current' %}">
-            <i class="fa fa-users fa-fw"></i>&nbsp; Students
-        </a>
-        <a id="announcements-menu"
-           class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}"
-           href="{% url 'announcements:list' %}">
-            <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
-            <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
-            <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
-            <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
-        </a>
-    </div>
+       href="{% url 'quests:quests' %}">
+      <i class="fa fa-shield fa-fw"></i>&nbsp; Quests
+    </a>
+      <a id="achievements-menu"
+       class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
+       href="{% url 'badges:list' %}">
+      <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges
+    </a>
+    <a id="maps-menu" class="list-group-item
+        {% if '/maps/' in request.path_info %}active{% endif %}"
+       href="{% url 'maps:primary' %}">
+      <i class="fa fa-map-signs fa-fw"></i>&nbsp; Maps
+    </a>
+ </div>
 
-    {% if request.user.is_staff %}
-    <div class="nav list-group hidden-xs" id="lg-menu-staff">
-        <a class="list-group-item {% if '/approvals/' in request.path_info %}active{% endif %}"
-           href="{% url 'quests:approvals' %}">
-            <i class="fa fa-shield fa-fw"></i>&nbsp;
-            <span class="visible-sm-inline visible-xs-inline visible-md-inline">Approvals</span>
-            <span class="hidden-sm hidden-xs hidden-md">Quest Approvals</span>
-            <span id="approvals_badge" class="badge alert-danger list-group-item-badge "></span>
-        </a>
-    </div>
-    {% endif %}
+  <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-secondary">
+    <a id="announcements-menu"
+       class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}"
+       href="{% url 'announcements:list' %}">
+      <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
+      <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
+      <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
+      <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
+    </a>
+    <a id="suggestions-menu" class="list-group-item
+        {% if '/suggestions/' in request.path_info %}active{% endif %}"
+       href="{% url 'suggestions:list' %}">
+      <i class="fa fa-lightbulb-o fa-fw"></i>&nbsp; Suggestions
+    </a>
 
-    <!-- COMMON DATA FOR QUEST SUBJECT -->
-    <div class="hidden-xs" id="common-data">
-        {% if q.common_data %}
-        <div id="quest-common-{{q.id}}" class="panel panel-primary panel-top">
-            <div class="panel-heading">
-                <h3 class="panel-title">{{q.common_data.title}} Quest
-                    <small>General Info</small>
-                </h3>
-            </div>
-            <div class="panel-body">
-                {{ q.common_data.instructions | safe }}
-            </div>
+    <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
+       href="{% url 'profiles:profile_list_current' %}">
+      <i class="fa fa-users fa-fw"></i>&nbsp; Students
+    </a>
+
+  </div>
+
+  {#  Student Menus #}
+  <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-student">
+    <a id="profile-menu" class="list-group-item
+        {% if '/profiles/' in request.path_info and not '/list/' in request.path_info %}
+        active{% endif %}"
+       href="{% url 'profiles:profile_detail' request.user.id %}">
+      <i class="fa fa-user fa-fw"></i>&nbsp; Profile
+    </a>
+    <a id="aportfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
+       href="{% url 'portfolios:detail' request.user.id %}">
+      <i class="fa fa-picture-o fa-fw"></i>&nbsp; Portfolio
+    </a>
+  </div>
+
+  {% if request.user.is_staff %}
+    <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-staff">
+      <a class="list-group-item {% if '/approvals/' in request.path_info %}active{% endif %}"
+         href="{% url 'quests:approvals' %}">
+        <i class="fa fa-shield fa-fw"></i>&nbsp;
+        <span class="visible-sm-inline visible-xs-inline visible-md-inline">Approvals</span>
+        <span class="hidden-sm hidden-xs hidden-md">Quest Approvals</span>
+        <span id="approvals_badge" class="badge alert-danger list-group-item-badge "></span>
+      </a>
+    </div>
+  {% endif %}
+
+  <!-- COMMON DATA FOR QUEST SUBJECT -->
+  <div class="hidden-xs" id="common-data">
+    {% if q.common_data %}
+      <div id="quest-common-{{ q.id }}" class="panel panel-primary panel-top">
+        <div class="panel-heading">
+          <h3 class="panel-title">{{ q.common_data.title }} Quest
+            <small>General Info</small>
+          </h3>
         </div>
-        {% endif %}
-    </div>
-
-    <!-- tiny only nav-->
-    <ul class="nav visible-xs" id="xs-menu">
-        <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
-        <li><a href="#" class="text-center"><i class="fa fa-certificate fa-fw"></i></a></li>
-        <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>
-        <li><a href="#" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>
-    </ul>
-    {% if request.user.is_staff %}
-    <ul class="nav visible-xs" id="xs-menu-staff">
-        <li><a href="{% url 'quests:approvals' %}"><i class="fa fa-shield fa-fw"></i></a></li>
-    </ul>
+        <div class="panel-body">
+          {{ q.common_data.instructions | safe }}
+        </div>
+      </div>
     {% endif %}
+  </div>
+
+  <!-- tiny only nav-->
+
+
+
+  <ul class="nav visible-xs xs-sidebar-menu" id="xs-menu">
+    <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
+    <li><a href="{% url 'badges:list' %}" class="text-center"><i class="fa fa-certificate fa-fw"></i></a></li>
+    <li><a href="{% url 'maps:primary' %}" class="text-center"><i class="fa fa-map-signs fa-fw"></i></a></li>
+  </ul>
+<ul class="nav visible-xs xs-sidebar-menu" id="xs-second-menu">
+  <li><a href="{% url 'announcements:list' %}" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>
+  <li><a href=""{% url 'suggestions:list' %}" class="text-center"><i class="fa fa-lightbulb-o fa-fw"></i></a></li>
+      <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>
+
+</ul>
+  <ul class="nav visible-xs xs-sidebar-menu" id="xs-user-menu">
+    <li><a href="{% url 'profiles:profile_detail' request.user.id %}"><i class="fa fa-user fa-fw"></i></a></li>
+    <li><a href="{% url 'portfolios:detail' request.user.id %}" class="text-center">
+        <i class="fa fa-picture-o fa-fw"></i></a></li>
+  </ul>
+  {% if request.user.is_staff %}
+    <ul class="nav visible-xs xs-sidebar-menu" id="xs-menu-staff">
+      <li><a href="{% url 'quests:approvals' %}"><i class="fa fa-shield fa-fw"></i></a></li>
+    </ul>
+  {% endif %}
 </div>
 
 <!-- /sidebar -->

@@ -533,11 +533,15 @@ already distinguished*/
  padding-bottom: 10px;
 }*/
 
-#lg-menu a, #lg-menu-staff a {
+.sidebar-menu {
     font-size: 125%;
     /*display:inline-block
     .text-overflow();*/
 
+}
+
+.sidebar-menu-nav > li > a:focus {
+    background-color: transparent;
 }
 
 /*this allows us to use contextual badges (-success, -primary, etc)*/

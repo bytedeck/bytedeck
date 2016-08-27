@@ -13,11 +13,14 @@ $(document).ready(function() {
     $(this).toggleClass('visible-xs text-center');
     $(this).find('i').toggleClass('fa-chevron-right fa-chevron-left');
     $('.row-offcanvas').toggleClass('active');
-    $('#lg-menu').toggleClass('hidden-xs').toggleClass('visible-xs');
-    $('#lg-menu-staff').toggleClass('hidden-xs').toggleClass('visible-xs');
-    $('#xs-menu').toggleClass('visible-xs').toggleClass('hidden-xs');
-    $('#xs-menu-staff').toggleClass('visible-xs').toggleClass('hidden-xs');
-    $('#btnShow').toggle();
+    $('.sidebar-menu').toggleClass('hidden-xs').toggleClass('visible-xs');
+    $('.xs-sidebar-menu').toggleClass('visible-xs').toggleClass('hidden-xs');
+
+    // $('#lg-menu').toggleClass('hidden-xs').toggleClass('visible-xs');
+    // $('#lg-menu-staff').toggleClass('hidden-xs').toggleClass('visible-xs');
+    // $('#xs-menu').toggleClass('visible-xs').toggleClass('hidden-xs');
+    // $('#xs-menu-staff').toggleClass('visible-xs').toggleClass('hidden-xs');
+    // $('#btnShow').toggle();
   });
 
 

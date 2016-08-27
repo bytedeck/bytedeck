@@ -8,8 +8,8 @@ from django.conf.urls import url
 # Admin site customizations
 
 urlpatterns = [
-    url(r'^all/$', views.ProfileList.as_view(), name='profile_list'),
-    url(r'^current/$', views.ProfileListCurrent.as_view(), name='profile_list_current'),
+    url(r'^list/all/$', views.ProfileList.as_view(), name='profile_list'),
+    url(r'^list/current/$', views.ProfileListCurrent.as_view(), name='profile_list_current'),
     url(r'^create/$', views.ProfileCreate.as_view(), name='profile_create'),
     url(r'^tour/$', views.tour_complete, name='tour_complete'),
     # url(r'^edit/$', views.ProfileUpdate.as_view(), name='profile_update'),

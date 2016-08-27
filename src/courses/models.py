@@ -129,9 +129,6 @@ class Semester(models.Model):
         """
         :return: True if the current date falls within the semeseter's first and last day (inclusive)
         """
-        print(self.first_day)
-        print(timezone.now().date())
-        print(self.last_day)
         return self.first_day <= timezone.now().date() <= self.last_day
 
     def num_days(self, upto_today=False):
