@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from prerequisites.models import Prereq, IsAPrereqMixin
 
 from django.conf import settings
@@ -56,7 +57,7 @@ class BadgeManager(models.Manager):
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
-            obj.pk for obj in self.get_queryset()
+            obj.pk for obj in self.get_queryset().get_active()
             if Prereq.objects.all_conditions_met(obj, user, False)
             # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
             ]
@@ -168,8 +169,8 @@ class BadgeAssertionManager(models.Manager):
             return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
         return self.get_queryset(False).get_user(user)
 
-    def num_assertions(self, user, badge):
-        qs = self.all_for_user_badge(user, badge, False)
+    def num_assertions(self, user, badge, active_semester_only=False):
+        qs = self.all_for_user_badge(user, badge, active_semester_only)
         if qs.exists():
             max_dict = qs.aggregate(Max('ordinal'))
             return max_dict.get('ordinal__max')
@@ -181,6 +182,8 @@ class BadgeAssertionManager(models.Manager):
 
     def create_assertion(self, user, badge, issued_by=None, transfer=False):
         ordinal = self.get_assertion_ordinal(user, badge)
+        if issued_by is None:
+            issued_by = get_object_or_404(User, pk=config.hs_hackerspace_ai)
         new_assertion = BadgeAssertion(
             badge=badge,
             user=user,

@@ -1,7 +1,8 @@
-from badges.models import Badge
+from badges.models import Badge, BadgeAssertion
 from badges.views import grant_badge
 from comments.forms import CommentForm
 from comments.models import Comment
+from djconfig import config
 from notifications.signals import notify
 
 from django.contrib import messages
@@ -83,10 +84,10 @@ def suggestion_list(request, id=None, completed=False):
         active_id = None
 
     votes_total = request.user.vote_set.all().count()
-    # votes_this_semester = Vote.objects.all_this_semester(request.user).count()
+    votes_this_semester = Vote.objects.all_this_semester(request.user).count()
 
-    # print("**********")
-    # print(active_id)
+    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
+    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
 
     comment_form = CommentForm(request.POST or None, label="")
     context = {
@@ -95,7 +96,10 @@ def suggestion_list(request, id=None, completed=False):
         'active_id': active_id,
         'completed_list': completed,
         'votes_total': votes_total,
-        # 'votes_this_semester': votes_this_semester,
+        'suggestion_badge': suggestion_badge,
+        'vote_badge': vote_badge,
+        'num_votes': config.hs_num_votes,
+        'votes_this_semester': votes_this_semester,
     }
     return render(request, template_name, context)
 
@@ -158,6 +162,7 @@ def suggestion_delete(request, pk):
 @staff_member_required
 def suggestion_approve(request, id):
     suggestion = get_object_or_404(Suggestion, id=id)
+    # Todo move this into the model, not view!
     suggestion.status = Suggestion.APPROVED
     suggestion.status_timestamp = timezone.now()
     suggestion.save()
@@ -167,7 +172,8 @@ def suggestion_approve(request, id):
            "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
            "</span>"
 
-    suggestion_badge = get_object_or_404(Badge, name="Human Baby")
+    # TODO don't hardcode this, put it in the settings!
+    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
     grant_badge(request, suggestion_badge.id, suggestion.user.id)
 
     notify.send(
@@ -182,6 +188,7 @@ def suggestion_approve(request, id):
     messages.success(request, "Suggestion by " + str(suggestion.user) + " approved.")
 
     return redirect(suggestion.get_absolute_url())
+
 
 @staff_member_required
 def suggestion_complete(request, pk):
@@ -207,7 +214,6 @@ def suggestion_complete(request, pk):
     messages.success(request, "Suggestion by " + str(suggestion.user) + " was completed!")
 
     return redirect(suggestion.get_absolute_url())
-
 
 
 @staff_member_required
@@ -258,10 +264,27 @@ def vote(request, id, vote_score):
         raise Http404("There was an error with your attempt to vote.")
 
     success = Vote.objects.record_vote(suggestion, request.user, vote_score)
+    check_votes_and_grant_badge(request, request.user)
 
     if not success:
         messages.error(request, "You already voted today!")
     else:
         messages.success(request, "You voted " + str_vote + " for " + str(suggestion))
+        check_votes_and_grant_badge(request, request.user)
 
     return redirect("suggestions:list")
+
+
+def check_votes_and_grant_badge(request, user):
+    user_votes_this_sem = Vote.objects.all_this_semester(user).count()
+    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
+    user_num_votes_badge = BadgeAssertion.objects.num_assertions(user, vote_badge, active_semester_only=True)
+    votes_per_badge = config.hs_num_votes
+
+    vote_badges_earned = int(user_votes_this_sem / votes_per_badge)
+
+    if vote_badges_earned > user_num_votes_badge:
+        grant_badge(request, vote_badge.id, user.id)
+        return True
+    else:
+        return False

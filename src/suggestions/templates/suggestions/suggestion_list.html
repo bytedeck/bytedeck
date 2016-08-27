@@ -7,7 +7,7 @@
         <a href="{% url 'suggestions:list_completed' %}"
            class="btn {% if completed_list %}btn-primary{% else %}btn-default{% endif %}">Completed</a>
     </div>
-    <small>You've voted {{ votes_total }} times this semester</small>
+    <small>You've voted {{ votes_this_semester }} times this semester</small>
 {% endblock %}
 {% block content %}
     <br>
@@ -21,8 +21,9 @@
         <ul>
               <a class="btn btn-primary pull-right"
               href="{% url 'suggestions:create' %}">Make a Suggestion</a>
-            <li>For every 10 votes, you will automatically receive a 5 XP Award.</li>
-            <li>If you make a suggestion and it is approved, you will automatically receive a 5 XP Award.</li>
+            <li>For every {{ num_votes }} votes, you will automatically receive a {{ vote_badge.xp }} XP Award.</li>
+            <li>If you make a suggestion and it is approved, you will automatically receive a
+                {{ suggestion_badge.xp }} XP Award.</li>
         </ul>
     </div>
 </div>
@@ -39,7 +40,7 @@
 {% for object in object_list %}
   <div class="panel accordian
     {% if object.id == active_id %} active {% endif %}
-    {% if object.status == 1 %}panel-warning
+    {% if object.status == 1 %}panel-info
     {% elif object.status == 2 %}panel-default
 {#    {% elif object.status == 3 %}panel-success#}
     {% elif object.status == 4 %}panel-info

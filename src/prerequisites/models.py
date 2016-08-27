@@ -6,7 +6,8 @@ from django.db.models.base import ObjectDoesNotExist
 
 class IsAPrereqMixin:
     """
-    For models that act as a prerequisite.  Classes using this mixin need to implement
+    For models that act as a prerequisite.
+    Classes using this mixin need to implement
     the method: condition_met_as_prerequisite(user, num_required)
     """
 
