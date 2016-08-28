@@ -23,9 +23,10 @@
         <ul>
               <a class="btn btn-primary pull-right"
               href="{% url 'suggestions:create' %}">Make a Suggestion</a>
-            <li>For every {{ num_votes }} votes, you will automatically receive a {{ vote_badge.xp }} XP Award.</li>
+            <li>For every {{ num_votes }} votes, you will automatically receive a {{ vote_badge.xp }} XP
+              {{ vote_badge.name }} Award.</li>
             <li>If you make a suggestion and it is approved, you will automatically receive a
-                {{ suggestion_badge.xp }} XP Award.</li>
+                {{ suggestion_badge.xp }} XP {{ suggestion_badge.name }} Award.</li>
         </ul>
     </div>
 </div>
