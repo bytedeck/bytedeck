@@ -3,6 +3,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
 
 # Create your views here.

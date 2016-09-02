@@ -21,6 +21,9 @@
 <!--<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/locale/bootstrap-table-zh-CN.min.js"></script>-->
 
 
+<!--https://github.com/chjj/marked-->
+{#<script src="{% static 'js/marked.min.js' %}"></script>#}
+
 <!-- Custom js -->
 <script src="{% static 'js/custom.js' %}"></script>
 
@@ -29,8 +32,9 @@
 <script src="{% static 'js/jquery-double-submission.js' %}"></script>
 
 
-<script>
 
+
+<script>
     var timeout = 30000; //milliseconds
 
     // this method contain your ajax request
@@ -84,6 +88,9 @@
       $("a[href^='http://']").attr("target","_blank");
       $("a[href^='https://']").attr("target","_blank");
       $("a[href^='/media/']").attr("target","_blank");
+
+      // Enable allowfullscreen on responsive iframes
+      $("iframe.embed-responsive-item").attr('allowfullscreen', '');
 
       // Dismiss bootstrap alerts
       if ($('.dismiss-in-3').length) {
