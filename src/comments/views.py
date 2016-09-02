@@ -130,7 +130,7 @@ def comment_create(request):
                     target=target,
                 )
                 # Fix this to send to all staff
-                affected_users = [User.objects.get(username='90158'), ]
+                affected_users = affected_users = User.objects.filter(is_staff=True)
                 notify.send(
                     request.user,
                     action=comment_new,
