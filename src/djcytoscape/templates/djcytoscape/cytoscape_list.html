@@ -1,0 +1,28 @@
+{% extends "djcytoscape/base.html" %}
+{% load staticfiles %}
+{% block heading_inner %}Quest Maps{% endblock%}
+{% block content %}
+    {% if user.is_staff %}
+        <p>
+            <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
+              title = "Recalculate ALL Maps.  This may take a few moments." >
+              <i class="fa fa-refresh"></i>
+            </a>
+            <a class="btn btn-success" href="{% url 'djcytoscape:generate_unseeded' %}" role="button"
+              title = "Create a new Map." >
+              <i class="fa fa-map-signs"></i>
+            </a>
+        </p>
+    {%  endif %}
+
+  <ul>
+      {% for scape in object_list %}
+      <li>{{ scape.name }}  :  generated on {{ scape.last_regeneration }}
+        <a href="{% url "djcytoscape:quest_map" scape.id %}">view</a>
+      <a href="{% url "djcytoscape:update" scape.id %}">edit</a>
+      <a href="{% url "djcytoscape:delete" scape.id %}">delete</a>
+      </li>
+      {% endfor %}
+  </ul>
+
+{%  endblock %}

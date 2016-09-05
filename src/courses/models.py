@@ -34,7 +34,8 @@ class RankManager(models.Manager):
 class Rank(models.Model, IsAPrereqMixin):
     name = models.CharField(max_length=50, unique=False, null=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
-    icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+    icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
+                             help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
     fa_icon = models.TextField(null=True, blank=True,
                                help_text='html to render a font-awesome icon or icon stack etc.')
 
@@ -46,10 +47,20 @@ class Rank(models.Model, IsAPrereqMixin):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        return reverse('courses:ranks')
+
+    def get_icon_url(self):
+        return self.icon.url
+
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
         # profile = Profile.objects.get(user=user)
         return user.profile.xp() >= self.xp
+
+    def get_map(self):
+        from djcytoscape.models import CytoScape
+        return CytoScape.objects.get_map_for_init(self)
 
 
 class SemesterManager(models.Manager):

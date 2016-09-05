@@ -5,6 +5,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.decorators import method_decorator
+from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView
 from django.core.urlresolvers import reverse_lazy
 from djcytoscape.forms import GenerateQuestMapForm
@@ -29,6 +30,10 @@ class ScapeDelete(DeleteView):
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(ScapeDelete, self).dispatch(*args, **kwargs)
+
+
+class ScapeList(ListView):
+    model = CytoScape
 
 
 def index(request):

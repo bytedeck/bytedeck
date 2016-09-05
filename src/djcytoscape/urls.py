@@ -15,6 +15,7 @@ urlpatterns = [
         views.quest_map_interlink, name='quest_map_interlink'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.ScapeUpdate.as_view(), name='update'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.ScapeDelete.as_view(), name='delete'),
+    url(r'^list/$', views.ScapeList.as_view(), name='list'),
 
     url(r'^(?P<scape_id>[0-9]+)/regenerate/$', views.regenerate, name='regenerate'),
     url(r'^all/regenerate/$', views.regenerate_all, name='regenerate_all'),

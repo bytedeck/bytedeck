@@ -29,25 +29,9 @@ class QuestDelete(DeleteView):
         return super(QuestDelete, self).dispatch(*args, **kwargs)
 
 
-# @staff_member_required
-# def quest_create(request):
-#     form = QuestForm(request.POST or None, request.FILES or None)
-#     if form.is_valid():
-#         form.save()
-#         redirect(reverse("quest_detail", kwargs={'quest_id': })
-#         # return redirect('quests:quests')
-#     context = {
-#         "heading": "Create New Quest",
-#         "form": form,
-#         "submit_btn_value": "Create",
-#     }
-#     return render(request, "quest_manager/quest_form.html", context)
-
 class QuestCreate(CreateView):
     model = Quest
     form_class = QuestForm
-
-    # template_name = 'quest_manager/quest_form.html'
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
@@ -60,7 +44,6 @@ class QuestCreate(CreateView):
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(QuestCreate, self).dispatch(*args, **kwargs)
-
 
 
 class QuestUpdate(UpdateView):

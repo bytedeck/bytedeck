@@ -14,12 +14,18 @@
         <th></th>
         <th>Rank</th>
         <th>XP</th>
+        <th>Quest Map</th>
       </tr>
       {% for object in object_list %}
         <tr>
           <td class="text-center"><i class="{{object.fa_icon}} fa-lg fa-fw text-warning"></i></td>
           <td>{{object.name}}</td>
           <td>{{object.xp}} XP</td>
+          <td>
+            {% if object.get_map.get_absolute_url %}
+            <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
     </table>

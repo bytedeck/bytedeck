@@ -3,8 +3,10 @@ import json
 
 import random
 from badges.models import Badge
+from courses.models import Rank
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
@@ -513,6 +515,15 @@ class CytoScapeManager(models.Manager):
 
         return new_scape
 
+    def get_map_for_init(self, initial_object):
+        """Return the map that this object initiates, else return None"""
+        ct = ContentType.objects.get_for_model(initial_object)
+        try:
+            return self.get_queryset().get(initial_object_id=initial_object.id, initial_content_type = ct)
+        except ObjectDoesNotExist:
+            return None
+
+
 
 class CytoScape(models.Model):
     ALLOWED_INITIAL_CONTENT_TYPES = models.Q(app_label='quest_manager', model='quest') | \
@@ -614,6 +625,8 @@ class CytoScape(models.Model):
         pre = ""
         if type(obj) is Badge:
             pre = "Badge: "
+        elif type(obj) is Rank:
+            pre = "Rank: "
         title = pre + str(obj)
         # shorten the end
         if len(title) > l:
