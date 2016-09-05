@@ -24,7 +24,8 @@
            data-search='true'
            data-show-columns='true'
            data-icons='icons'
-           data-icons-prefix='fa'>
+           data-icons-prefix='fa'
+    >
         <thead>
         <tr>
             <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
@@ -101,7 +102,7 @@
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
-                        <a href="{{ object.user.portfolio.get_absolute_url }}">View</i></a>
+                        <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 {% if request.user.is_staff %}
@@ -147,4 +148,12 @@
 {% endblock %}
 
 {% block js %}
+  <!-- Bootstrap Tables: Latest compiled and minified JavaScript -->
+<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
+<!-- <script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.js"></script> -->
+<script src="{% static 'js/bootstrap-table.min.js' %}"></script>
+<!-- Latest compiled and minified Locales -->
+<!--<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/locale/bootstrap-table-zh-CN.min.js"></script>-->
+
+{#  <script src="{% static 'js/bootstrap-table-filter-control.js'%}"></script>#}
 {% endblock %}

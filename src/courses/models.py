@@ -1,5 +1,6 @@
 from datetime import timedelta, date, datetime
 
+from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 
 from django.conf import settings
@@ -30,7 +31,7 @@ class RankManager(models.Manager):
         return self.get_queryset().get_ranks_gt(user_xp).first()
 
 
-class Rank(models.Model):
+class Rank(models.Model, IsAPrereqMixin):
     name = models.CharField(max_length=50, unique=False, null=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)

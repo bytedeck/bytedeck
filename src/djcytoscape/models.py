@@ -515,8 +515,9 @@ class CytoScapeManager(models.Manager):
 
 
 class CytoScape(models.Model):
-    ALLOWED_INITIAL_CONTENT_TYPES = models.Q(app_label='quest_manager', model='quest') | models.Q(app_label='badges',
-                                                                                                  model='badge')
+    ALLOWED_INITIAL_CONTENT_TYPES = models.Q(app_label='quest_manager', model='quest') | \
+                                    models.Q(app_label='badges', model='badge') | \
+                                    models.Q(app_label='courses', model='rank')
 
     name = models.CharField(max_length=250)
     style_set = models.ForeignKey(CytoStyleSet, null=True)

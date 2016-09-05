@@ -152,7 +152,7 @@ def ajax_quest_info(request, quest_id=None):
         quest = get_object_or_404(Quest, pk=quest_id)
         is_hidden = request.user.profile.is_quest_hidden(quest)
         is_repeatable = quest.max_repeats != 0
-        is_prerequisite = quest.is_prereq()
+        is_prerequisite = quest.is_used_prereq()
 
         template = "quest_manager/preview_content_quests_avail.html"
         quest_info_html = render_to_string(template, {"q": quest}, request=request)

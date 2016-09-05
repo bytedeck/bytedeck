@@ -23,6 +23,12 @@ class IsAPrereqMixin:
         """
         return False
 
+    def is_used_prereq(self):
+        """
+        :return: True if this object has been assigned as a prerequisite to at least one another object.
+        """
+        return Prereq.objects.is_prerequisite(self)
+
     def get_reliant_qs(self):
         """
         :return: a queryset containing the objects that require this as a prereq

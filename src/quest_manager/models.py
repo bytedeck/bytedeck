@@ -278,13 +278,6 @@ class Quest(XPItem, IsAPrereqMixin):
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
-    # TODO: should be part of the prerequisite interface
-    def is_prereq(self):
-        """
-        :return: True if this object has been assigned as a prerequisite to at least one another object.
-        """
-        return Prereq.objects.is_prerequisite(self)
-
     def is_on_user_available_tab(self, user):
         """
         :param user:
