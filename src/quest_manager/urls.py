@@ -21,7 +21,7 @@ from django.conf.urls import url
 
 urlpatterns = [
     url(r'^$', views.quest_list, name=''),
-    url(r'^create/$', views.quest_create, name='quest_create'),
+    # url(r'^create/$', views.quest_create, name='quest_create'),
     url(r'^ajax/$', views.ajax, name='ajax'),
     url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
@@ -50,6 +50,7 @@ urlpatterns = [
     url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
     url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
+    url(r'^create/$', views.QuestCreate.as_view(), name='quest_create'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),
     url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),

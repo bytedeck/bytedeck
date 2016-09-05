@@ -15,7 +15,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
-from django.views.generic.edit import DeleteView, UpdateView
+from django.views.generic.edit import DeleteView, UpdateView, CreateView
 from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission
 
@@ -27,6 +27,40 @@ class QuestDelete(DeleteView):
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(QuestDelete, self).dispatch(*args, **kwargs)
+
+
+# @staff_member_required
+# def quest_create(request):
+#     form = QuestForm(request.POST or None, request.FILES or None)
+#     if form.is_valid():
+#         form.save()
+#         redirect(reverse("quest_detail", kwargs={'quest_id': })
+#         # return redirect('quests:quests')
+#     context = {
+#         "heading": "Create New Quest",
+#         "form": form,
+#         "submit_btn_value": "Create",
+#     }
+#     return render(request, "quest_manager/quest_form.html", context)
+
+class QuestCreate(CreateView):
+    model = Quest
+    form_class = QuestForm
+
+    # template_name = 'quest_manager/quest_form.html'
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get a context
+        context = super(QuestCreate, self).get_context_data(**kwargs)
+        context['heading'] = "Create New Quest"
+        context['action_value'] = ""
+        context['submit_btn_value'] = "Create"
+        return context
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        return super(QuestCreate, self).dispatch(*args, **kwargs)
+
 
 
 class QuestUpdate(UpdateView):
@@ -207,20 +241,6 @@ def ajax_submission_info(request, submission_id=None):
         return JsonResponse({"quest_info_html": quest_info_html})
     else:
         raise Http404
-
-
-@staff_member_required
-def quest_create(request):
-    form = QuestForm(request.POST or None, request.FILES or None)
-    if form.is_valid():
-        form.save()
-        return redirect('quests:quests')
-    context = {
-        "heading": "Create New Quest",
-        "form": form,
-        "submit_btn_value": "Create",
-    }
-    return render(request, "quest_manager/quest_form.html", context)
 
 
 @staff_member_required
