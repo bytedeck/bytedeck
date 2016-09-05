@@ -4,7 +4,11 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}<i class="fa fa-star pull-right"></i>Ranks{% endblock %}
+{% block heading %}<i class="fa fa-star pull-right"></i>Ranks
+  {% if request.user.is_staff %}
+    <a class="btn btn-primary" href="/admin/courses/rank/" role="button">Edit</a>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="row">
