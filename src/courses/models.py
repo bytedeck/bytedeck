@@ -295,6 +295,14 @@ class CourseStudentManager(models.Manager):
     def current_courses(self, user):
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
+    def all_users_for_active_semester(self):
+        """
+        :return: a list of all Users who are enrolled in a course during the active semester (doubles removed)
+        """
+        courses = self.all_for_semester(config.hs_active_semester)
+        courses_user_list = courses.values_list('user', flat=True)
+        return set(courses_user_list)  # removes doubles
+
 
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9, 9), (10, 10), (11, 11), (12, 12), (13, 'Adult'))

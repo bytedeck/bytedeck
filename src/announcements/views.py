@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from comments.forms import CommentForm
 from comments.models import Comment
+from courses.models import CourseStudent
 from django.contrib.messages.views import SuccessMessageMixin
 from notifications.signals import notify
 
@@ -153,7 +154,7 @@ def publish(request, ann_id):
 
 
 def send_notifications(request, announcement):
-    affected_users = User.objects.all().filter(is_active=True)
+    affected_users = CourseStudent.objects.all_users_for_active_semester()
     notify.send(
         request.user,
         # action=new_announcement,

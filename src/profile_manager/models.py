@@ -37,12 +37,9 @@ class ProfileManager(models.Manager):
 
     def all_for_active_semester(self):
         """
-        Check for students with a course this semester
-        :return:
+        :return: a queryset of student profiles with a course this semester
         """
-        courses = CourseStudent.objects.all_for_semester(config.hs_active_semester)
-        courses_user_list = courses.values_list('user', flat=True)
-        courses_user_list = set(courses_user_list)  # removes doubles
+        courses_user_list = CourseStudent.objects.all_users_for_active_semester()
         return self.get_queryset().filter(user__in=courses_user_list)
 
     def get_mailing_list(self):

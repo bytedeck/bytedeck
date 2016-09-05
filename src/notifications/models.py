@@ -243,13 +243,13 @@ def new_notification(sender, **kwargs):
     if affected_users is None:
         affected_users = [recipient, ]
 
-    for u in affected_users:
+    for u_id in affected_users:
         # don't send a notification to yourself/themself
-        if u == sender:
+        if u_id == sender.id:
             pass
         else:
             new_note = Notification(
-                recipient=u,
+                recipient_id=u_id,
                 verb=verb,
                 sender_content_type=ContentType.objects.get_for_model(sender),
                 sender_object_id=sender.id,
