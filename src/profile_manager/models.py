@@ -36,9 +36,7 @@ class ProfileManager(models.Manager):
         return ProfileQuerySet(self.model, using=self._db)
 
     def all_for_active_semester(self):
-        """
-        :return: a queryset of student profiles with a course this semester
-        """
+        """:return: a queryset of student profiles with a course this semester"""
         courses_user_list = CourseStudent.objects.all_users_for_active_semester()
         return self.get_queryset().filter(user__in=courses_user_list)
 

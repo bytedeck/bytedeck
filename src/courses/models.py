@@ -4,6 +4,7 @@ from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils import timezone
@@ -204,6 +205,9 @@ class Block(models.Model):
     block = models.CharField(max_length=50, unique=True)
     start_time = models.TimeField(blank=True, null=True)
     end_time = models.TimeField(blank=True, null=True)
+    current_teacher = models.ForeignKey(settings.AUTH_USER_MODEL,
+                                        null=True, blank=True,
+                                        limit_choices_to={'is_staff': True},)
 
     def __str__(self):
         return self.block
@@ -297,11 +301,12 @@ class CourseStudentManager(models.Manager):
 
     def all_users_for_active_semester(self):
         """
-        :return: a list of all Users who are enrolled in a course during the active semester (doubles removed)
+        :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
         """
         courses = self.all_for_semester(config.hs_active_semester)
-        courses_user_list = courses.values_list('user', flat=True)
-        return set(courses_user_list)  # removes doubles
+        user_list = courses.values_list('user', flat=True)
+        user_list = set(user_list)  # removes doubles
+        return User.objects.filter(id__in=user_list)
 
 
 class CourseStudent(models.Model):

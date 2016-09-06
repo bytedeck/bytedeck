@@ -524,8 +524,6 @@ class QuestSubmissionManager(models.Manager):
 
     def user_last_submission_completed(self, user):
         qs = self.get_queryset(True).get_user(user).completed()
-        qs2 = qs.latest('time_completed')
-        print(qs2 is None)
         if not qs:
             return None
         else:
