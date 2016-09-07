@@ -9,7 +9,7 @@
     I can't calculate your mark because you haven't joined a course for this
     semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
     and join your course.</p>
-  {% elif obj.semester.days_so_far < 1 %}
+  {% elif obj.semester.days_so_far < 0 %}
     I can't calculate your mark because semester hasn't started yet!  According
     to my records, the semester is scheduled to start on
   </strong>{{obj.semester.first_day}}</strong>.</p>
