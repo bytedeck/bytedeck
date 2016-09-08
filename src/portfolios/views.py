@@ -65,7 +65,7 @@ def detail(request, pk=None):
     p, created = Portfolio.objects.get_or_create(user=user)
 
     # only allow admins or the users to see their own portfolios, unless they are shared
-    if request.user.is_staff or p.pk == request.user.id or p.shared:
+    if request.user.is_staff or p.pk == request.user.id or p.listed_locally:
         context = {
             "p": p,
         }
@@ -99,7 +99,7 @@ def edit(request, pk=None):
         form.save()
         messages.success(request, "Portfolio updated.")
 
-    # only allow admins or the users to see their own portfolios, unless they are shared
+    # only allow admins or the users to edit their own portfolios
     if request.user.is_staff or request.user == p.user:
         context = {
             "p": p,
