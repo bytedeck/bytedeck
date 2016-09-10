@@ -371,7 +371,10 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         :param teacher: a User model
         :return: qs filtered for submissions of students in the current teacher's blocks
         """
-        pass
+        if teacher is None:
+            return self
+        else:
+            return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
 
 
 class QuestSubmissionManager(models.Manager):
@@ -439,9 +442,10 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(True).completed().count()
         return self.get_queryset(True).get_user(user).completed().count()
 
-    def all_awaiting_approval(self, user=None):
+    def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
-            return self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)
+            qs = self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)
+            return qs.for_teacher_only(teacher)
         return self.get_queryset(True).get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
