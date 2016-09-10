@@ -366,6 +366,13 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_completed_before(self, date):
         return self.filter(time_approved__lte=date)
 
+    def for_teacher_only(self, teacher):
+        """
+        :param teacher: a User model
+        :return: qs filtered for submissions of students in the current teacher's blocks
+        """
+        pass
+
 
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self, active_semester_only=False):

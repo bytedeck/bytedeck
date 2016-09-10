@@ -12,6 +12,7 @@ urlpatterns = [
     url(r'^create/$', views.CourseStudentCreate.as_view(), name='create'),
     url(r'^add/(?P<user_id>[0-9]+)/$', views.add_course_student, name='add'),
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),
+    url(r'^marks/$', views.mark_calculations, name='my_marks'),
     url(r'^marks/(?P<user_id>[0-9]+)/$', views.mark_calculations, name='marks'),
     url(r'^close_semester/$',
         views.end_active_semester, name='end_active_semester'),

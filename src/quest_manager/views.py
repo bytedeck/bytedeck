@@ -515,6 +515,11 @@ def approvals(request, quest_id=None):
     else:
         quest = None
 
+    if '/all/' in request.path_info:
+        current_teacher_only = False
+    else:
+        current_teacher_only = True
+
     submitted_submissions = []
     approved_submissions = []
     returned_submissions = []
@@ -542,6 +547,7 @@ def approvals(request, quest_id=None):
         skipped_submissions = paginate(skipped_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
         submitted_tab_active = True
+        # TODO: if current_teacher_only:
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval()
         submitted_submissions = paginate(submitted_submissions, page)
 
@@ -576,6 +582,8 @@ def approvals(request, quest_id=None):
         "heading": "Quest Approval",
         "tab_list": tab_list,
         "quick_reply_form": quick_reply_form,
+        "submitted_tab_active": submitted_tab_active,
+        "current_teacher_only": current_teacher_only,
     }
     return render(request, "quest_manager/quest_approval.html", context)
 
