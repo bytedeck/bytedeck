@@ -2,6 +2,7 @@ import json
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
+from djconfig import config
 from notifications.signals import notify
 from prerequisites.models import Prereq
 
@@ -508,6 +509,7 @@ def approvals(request, quest_id=None):
 
     """
 
+    # Why is this here?
     if quest_id:
         quest = get_object_or_404(Quest, id=quest_id)
     else:

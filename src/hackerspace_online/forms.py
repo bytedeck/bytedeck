@@ -29,10 +29,11 @@ class HackerspaceConfigForm(ConfigForm):
                                                 queryset=Semester.objects.all(), initial=1, required=True)
     hs_chillax_line = forms.FloatField(label="Chillax Line %", initial=72.5,
                                        required=True)
-    hs_chillax_line_active = forms.BooleanField(label="Activate Chillax Line",
-                                                initial=False, required=False)
-    hs_dark_theme = forms.BooleanField(label="Dark Theme (Experimental)",
-                                       initial=False, required=False)
+    hs_chillax_line_active = forms.BooleanField(label="Activate Chillax Line", initial=False, required=False)
+    hs_approve_oldest_first = forms.BooleanField(label="Sort quests awaiting approval with oldest on top",
+                                                 initial=True, required=False)
+    # hs_dark_theme = forms.BooleanField(label="Dark Theme (Experimental)",
+    #                                    initial=False, required=False)
 
     def clean_hs_active_semester(self):
         # Untested, may not even work

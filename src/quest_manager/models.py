@@ -339,8 +339,11 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def not_approved(self):
         return self.filter(is_approved=False)
 
-    def completed(self):
-        return self.filter(is_completed=True).order_by('-time_completed')
+    def completed(self, oldest_first=False):
+        if oldest_first:
+            return self.filter(is_completed=True)
+        else:
+            return self.filter(is_completed=True).order_by('-time_completed')
 
     def not_completed(self):
         return self.filter(is_completed=False).order_by('-time_completed')
@@ -431,7 +434,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None):
         if user is None:
-            return self.get_queryset(True).not_approved().completed()
+            return self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)
         return self.get_queryset(True).get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
