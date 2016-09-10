@@ -125,8 +125,8 @@ class XPItem(models.Model):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
         Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
         return self.active and \
-            QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
-            Prereq.objects.all_conditions_met(self, user)
+               QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
+               Prereq.objects.all_conditions_met(self, user)
 
 
 class QuestQuerySet(models.query.QuerySet):
@@ -371,6 +371,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         :param teacher: a User model
         :return: qs filtered for submissions of students in the current teacher's blocks
         """
+        print(teacher)
         if teacher is None:
             return self
         else:
@@ -444,8 +445,9 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
-            qs = self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)
-            return qs.for_teacher_only(teacher)
+            qs = self.get_queryset(True).not_approved().for_teacher_only(teacher).completed(
+                config.hs_approve_oldest_first)
+            return qs
         return self.get_queryset(True).get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
@@ -477,7 +479,7 @@ class QuestSubmissionManager(models.Manager):
         See: QuestManager.get_available()
         """
         return self.not_submitted_or_inprogress(user, quest) \
-            and True
+               and True
 
     def not_submitted_or_inprogress(self, user, quest):
         """

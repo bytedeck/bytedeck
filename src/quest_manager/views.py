@@ -547,11 +547,11 @@ def approvals(request, quest_id=None):
         skipped_submissions = paginate(skipped_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
         submitted_tab_active = True
-        if current_teacher_only:
-            teacher = request.user
-        else:
-            teacher = None
-        submitted_submissions = QuestSubmission.objects.all_awaiting_approval(teacher=teacher)
+        # if current_teacher_only:
+        #     teacher = request.user
+        # else:
+        #     teacher = None
+        submitted_submissions = QuestSubmission.objects.all_awaiting_approval(teacher=None)
         submitted_submissions = paginate(submitted_submissions, page)
 
     tab_list = [{"name": "Submitted",
