@@ -178,9 +178,19 @@ class Semester(models.Model):
         excluded_days = self.excluded_days()
         return workday(self.first_day, days_to_fraction, excluded_days)
 
-    def get_datetime_by_days_since_start(self, class_days):
+    def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
         excluded_days = self.excluded_days()
+
+        # The next day of class excluding holidays/weekends
         date = workday(self.first_day, class_days, excluded_days)
+
+        # Might want to include the holidays (if class day is Friday, then work done on weekend/holidays won't show up
+        # till Monday.  For chart, want to include those days
+        if (add_holidays):
+            next_date = workday(self.first_day, class_days+1, excluded_days)
+            num_holidays_to_add = next_date - date - timedelta(days=1)  # If more than one day difference
+            date += num_holidays_to_add
+
         # convert from date to datetime
         dt = datetime.combine(date, datetime.max.time())
         # make timezone aware

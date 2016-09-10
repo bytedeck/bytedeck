@@ -247,6 +247,7 @@
       success: function(data){
         // console.log(data.xp_data);
         XPData.data = data.xp_data;
+        console.log(data.xp_data);
         generate_trend(data.days_in_semester);
         generate_mark_lines(data.days_in_semester);
         myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;

@@ -371,7 +371,6 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         :param teacher: a User model
         :return: qs filtered for submissions of students in the current teacher's blocks
         """
-        print(teacher)
         if teacher is None:
             return self
         else:
