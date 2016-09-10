@@ -57,7 +57,8 @@
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 Mark
             </th>
-            <th data-sortable='true' data-field='portfolio'>
+            <th data-sortable='true' data-field='portfolio'
+                {% if request.user.is_staff %}data-visible="false"{% endif %}>
                 Portfolio
             </th>
 
