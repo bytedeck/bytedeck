@@ -49,27 +49,28 @@
         {% else %}
           So far, you have earned <strong>{{obj.user.profile.xp}}</strong> XP in your course.
         {% endif %}
-      </li>
-      <li>We are currently
-        <a tabindex="0" data-toggle="popover" data-trigger="hover"
-          data-placement="top" data-html="true"
-          data-content="There are {{obj.semester.num_days}} days of class in the semester.
-            So far, we've had {{obj.semester.days_so_far}} days:<br/><br/>
-            <pre>{{obj.semester.days_so_far}}/{{obj.semester.num_days}} = {{obj.semester.fraction_complete|floatformat:3}} &times; 100 = {{obj.semester.percent_complete|floatformat}}%</pre>
-          ">
-          {{obj.semester.fraction_complete|floatformat:3}} or {{obj.semester.percent_complete|floatformat}}%</a>
-        of the way through the semester.
-      </li>
-      <li>At this pace you will have
-        <a tabindex="0" data-toggle="popover" data-trigger="hover"
-          data-placement="top" data-html="true"
-          data-content="You currently have {{xp_per_course|floatformat}} XP, and the semester is
-            {{obj.semester.fraction_complete|floatformat:3}} complete:<br/><br/>
-            <pre>{{xp_per_course|floatformat}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
-          ">
-        {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
-        by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%
-      </li>
+        </li>
+        <li>We are currently
+          <a tabindex="0" data-toggle="popover" data-trigger="hover"
+            data-placement="top" data-html="true"
+            data-content="There are {{obj.semester.num_days}} days of class in the semester.
+              So far, we've had {{obj.semester.days_so_far}} days:<br/><br/>
+              <pre>{{obj.semester.days_so_far}}/{{obj.semester.num_days}} = {{obj.semester.fraction_complete|floatformat:3}} &times; 100 = {{obj.semester.percent_complete|floatformat}}%</pre>
+            ">
+            {{obj.semester.fraction_complete|floatformat:3}} or {{obj.semester.percent_complete|floatformat}}%</a>
+          of the way through the semester.
+        </li>
+        <li>At this pace you will have
+          <a tabindex="0" data-toggle="popover" data-trigger="hover"
+            data-placement="top" data-html="true"
+            data-content="You currently have {{xp_per_course|floatformat}} XP, and the semester is
+              {{obj.semester.fraction_complete|floatformat:3}} complete:<br/><br/>
+              <pre>{{xp_per_course|floatformat}}/{{obj.semester.fraction_complete|floatformat:3}} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
+            ">
+          {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
+          by the end of the semester, which converts to {{obj.user.profile.mark|floatformat}}%
+        </li>
+      </ul>
     </div>
     <p>Another way to look at it:</p>
     <ul>

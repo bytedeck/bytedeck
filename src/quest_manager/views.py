@@ -563,6 +563,7 @@ def approvals(request, quest_id=None):
                 {"name": "Returned",
                  "submissions": returned_submissions,
                  "active": returned_tab_active,
+                 "active": returned_tab_active,
                  "time_heading": "Returned",
                  "url": reverse('quests:returned'),
                  },
@@ -843,6 +844,7 @@ def submission(request, submission_id=None, quest_id=None):
     context = {
         "heading": sub.quest.name,
         "submission": sub,
+        "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         # "comments": comments,
         "submission_form": main_comment_form,
         # "reply_comment_form": reply_comment_form,

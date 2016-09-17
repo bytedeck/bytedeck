@@ -1,0 +1,10 @@
+      <div id="quest-common-{{ q.id }}" class="panel panel-primary panel-top">
+        <div class="panel-heading">
+          <h3 class="panel-title">{{ q.common_data.title }} Quest
+            <small>General Info</small>
+          </h3>
+        </div>
+        <div class="panel-body">
+          {{ q.common_data.instructions | safe }}
+        </div>
+      </div>
