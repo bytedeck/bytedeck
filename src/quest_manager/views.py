@@ -664,7 +664,8 @@ def complete(request, submission_id):
                     # student's teachers
                     affected_users.extend(request.user.profile.current_teachers())  # User.objects.filter(is_staff=True)
                     # add quest's teacher if necessary
-                    affected_users.append(submission.quest.specific_teacher_to_notify)
+                    if submission.quest.specific_teacher_to_notify:
+                        affected_users.append(submission.quest.specific_teacher_to_notify)
                     # remove doubles/flatten
                     affected_users = set(affected_users)
             else:
