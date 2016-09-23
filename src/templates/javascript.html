@@ -128,7 +128,10 @@
             }
             var url = "{% url 'notifications:list' %}";
             $("#notification_dropdown").append("<li><a href='"+url+"'>"+ overflow+" View All Notifications</a></li>");
-
+            if(count>1) {
+              var url_mark = "{% url 'notifications:read_all' %}";
+              $("#notification_dropdown").append("<li><a href='" + url_mark + "'>Mark all read</a></li>");
+            }
           },
           error: function(rs, e) {
             console.log(rs);
