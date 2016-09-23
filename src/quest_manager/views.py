@@ -614,7 +614,8 @@ def complete(request, submission_id):
             if not comment_text:
                 if submission.quest.verification_required and not request.FILES:
                     messages.error(request,
-                                   "Please read the Submission Instructions more carefully.  You are expected to submit something to complete this quest!")
+                                   "Please read the Submission Instructions more carefully.  "
+                                   "You are expected to attach something or comment to complete this quest!")
                     return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
@@ -639,7 +640,13 @@ def complete(request, submission_id):
                     note_verb += " and automatically approved."
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
-                affected_users = None
+
+                # Notify teacher if they are specific to quest but are not the student's teacher
+                if submission.quest.specific_teacher_to_notify \
+                        and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
+                    affected_users = [submission.quest.specific_teacher_to_notify, ]
+                else:
+                    affected_users = None
                 submission.mark_completed()  ###################
                 if not submission.quest.verification_required:
                     submission.mark_approved()
@@ -650,10 +657,16 @@ def complete(request, submission_id):
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
                        "</span>"
+                affected_users = []
                 if request.user.is_staff:
                     affected_users = [submission.user, ]
                 else:  # student comment
-                    affected_users = User.objects.filter(is_staff=True)
+                    # student's teachers
+                    affected_users.extend(request.user.profile.current_teachers())  # User.objects.filter(is_staff=True)
+                    # add quest's teacher if necessary
+                    affected_users.append(submission.quest.specific_teacher_to_notify)
+                    # remove doubles/flatten
+                    affected_users = set(affected_users)
             else:
                 raise Http404("unrecognized submit button")
 

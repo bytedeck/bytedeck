@@ -318,6 +318,9 @@ class CourseStudentManager(models.Manager):
         user_list = set(user_list)  # removes doubles
         return User.objects.filter(id__in=user_list)
 
+    def get_current_teacher_list(self, user):
+        return self.current_courses(user).values_list('block__current_teacher', flat=True)
+
 
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9, 9), (10, 10), (11, 11), (12, 12), (13, 'Adult'))

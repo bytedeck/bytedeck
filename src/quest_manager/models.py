@@ -225,6 +225,10 @@ class Quest(XPItem, IsAPrereqMixin):
                                                              "having joined a course.  E.g. for quests you might "
                                                              "still want available to past students.")
     # categories = models.ManyToManyField(Category, blank=True)
+    specific_teacher_to_notify = models.ForeignKey(settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True},
+                                                blank=True, null=True,
+                                                help_text="Notifications related to this quest will be sent to this "
+                                                          "teacher even if they do not teach the student.")
     campaign = models.ForeignKey(Category, blank=True, null=True)
     common_data = models.ForeignKey(CommonData, blank=True, null=True)
     instructions = models.TextField(blank=True)

@@ -285,6 +285,10 @@ class Profile(models.Model):
         else:
             return last_sub.time_completed < timezone.now()-timezone.timedelta(days=5)
 
+    def current_teachers(self):
+        user_id_list = CourseStudent.objects.get_current_teacher_list(self.user)
+        return User.objects.filter(id__in=user_id_list)
+
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
