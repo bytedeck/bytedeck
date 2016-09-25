@@ -400,6 +400,11 @@ to overlap borders ****/
 }
 
 /***********Submission ********************************/
+
+li.file-link {
+    margin-bottom: 5px;
+}
+
 .panel-body-comments {
     padding: 0px;
 }

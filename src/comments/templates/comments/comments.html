@@ -37,7 +37,8 @@
               <div class="markdown">{{comment.text|safe}}</div>
               <ul>
               {% for document in comment.document_set.all %}
-                <li><a href="{{ document.docfile.url }}" target="_blank" >{{ document.docfile|filename }}</a>
+                <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
+                  {{ document.docfile|filename }}</a>
                     <a href="{% url 'portfolios:art_add' document.id %}"
                     class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
                 </li>
