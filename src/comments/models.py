@@ -1,3 +1,5 @@
+import re
+
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -45,15 +47,20 @@ class CommentManager(models.Manager):
 
         # format unformatted links
         # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
-
         soup = BeautifulSoup(text, "html.parser")
-
-        textNodes = soup.findAll(text=True)
-        for textNode in textNodes:
+        text_nodes = soup.find_all(text=True)
+        for textNode in text_nodes:
             if textNode.parent and getattr(textNode.parent, 'name') == 'a':
                 continue  # skip already formatted links
-            urlizedText = urlize(textNode, trim_url_limit=50)
-            textNode.replaceWith(BeautifulSoup(urlizedText, "html.parser"))
+            urlized_text = urlize(textNode, trim_url_limit=50)
+            textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
+
+        soup = BeautifulSoup(soup.renderContents())
+        # All links in comments: force open in new tab
+        links = soup.find_all('a')
+        for link in links:
+            link['target'] = '_blank'
+
         text = str(soup)
 
         comment = self.model(

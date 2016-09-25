@@ -434,6 +434,13 @@ to overlap borders ****/
 
 /***********ACCORDIAN COMMENTS *******************************/
 
+/* lists within list-groups */
+ul.list-group ul, ul.list-group ol {
+    margin-bottom: 10px;
+}
+
+
+
 .panel > .list-group > .list-group-item > .list-group {
     margin-bottom: 0px
 }
