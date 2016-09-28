@@ -1,6 +1,7 @@
 import uuid
 
 import embed_video
+import os
 from django.templatetags.static import static
 from django.core.urlresolvers import reverse
 from django.db import models
@@ -100,3 +101,15 @@ class Artwork(models.Model):
         if self.video_url or self.video_file:
             return True
         return False
+
+    @staticmethod
+    def create(title, image_file, video_file, portfolio, date):
+        art = Artwork(
+            title=title,
+            image_file=image_file,
+            video_file=video_file,
+            portfolio=portfolio,
+            date=date,
+        )
+        art.save()
+
