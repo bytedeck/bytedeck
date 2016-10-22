@@ -415,84 +415,6 @@ def paginate(object_list, page, per_page=30):
     return object_list
 
 
-# Redundant - Use the approvals view below
-# @staff_member_required
-# def submissions(request, quest_id):
-#
-#     quest = get_object_or_404(Quest, id=quest_id)
-#
-#     submitted_submissions = []
-#     approved_submissions = []
-#     returned_submissions = []
-#     skipped_submissions = []
-#
-#     submitted_tab_active=True
-#     returned_tab_active=False
-#     approved_tab_active=False
-#     skipped_tab_active=False
-#
-#     page = request.GET.get('page')
-#     # if '/submitted/' in request.path_info:
-#     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-#     if '/returned/' in request.path_info:
-#         returned_submissions = QuestSubmission.objects.all_returned().get_quest(quest)
-#         returned_tab_active = True
-#         submitted_tab_active= False
-#         returned_submissions = paginate(returned_submissions, page)
-#     elif '/approved/' in request.path_info:
-#         approved_submissions = QuestSubmission.objects.all_approved().get_quest(quest)
-#         approved_tab_active = True
-#         submitted_tab_active= False
-#         approved_submissions = paginate(approved_submissions, page)
-#     elif '/skipped/' in request.path_info:
-#         skipped_submissions = QuestSubmission.objects.all_skipped().get_quest(quest)
-#         skipped_tab_active = True
-#         submitted_tab_active= False
-#         skipped_submissions = paginate(skipped_submissions, page)
-#     else:
-#         submitted_submissions = QuestSubmission.objects.all_awaiting_approval().get_quest(quest)
-#         submitted_submissions = paginate(submitted_submissions, page)
-#         # approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-#         # approved_submissions = QuestSubmission.objects.all_approved()
-#         # returned_submissions = QuestSubmission.objects.all_returned()
-#
-#     tab_list = [{   "name": "Submitted",
-#                     "submissions": submitted_submissions,
-#                     "active" : submitted_tab_active,
-#                     "time_heading": "Submitted",
-#                     "url": reverse('quests:submitted_for_quest', kwargs={'quest_id': quest_id}),
-#                 },
-#                 {   "name": "Returned",
-#                     "submissions": returned_submissions,
-#                     "active" : returned_tab_active,
-#                     "time_heading": "Returned",
-#                     "url": reverse('quests:returned_for_quest', kwargs={'quest_id': quest_id}),
-#                 },
-#                 {   "name": "Approved",
-#                     "submissions": approved_submissions,
-#                     "active" : approved_tab_active,
-#                     "time_heading": "Approved",
-#                     "url": reverse('quests:approved_for_quest', kwargs={'quest_id': quest_id}),
-#                 },
-#                 {   "name": "Skipped",
-#                     "submissions": skipped_submissions,
-#                     "active" : skipped_tab_active,
-#                     "time_heading": "Transfered",
-#                     "url": reverse('quests:skipped_for_quest', kwargs={'quest_id': quest_id}),
-#                 },]
-#
-#     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-#     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
-#     heading = "Submission Summary: " + quest.name
-#
-#     context = {
-#         "heading": heading,
-#         "tab_list": tab_list,
-#         # "main_comment_form": main_comment_form,
-#         "quick_reply_form": quick_reply_form,
-#     }
-#     return render(request, "quest_manager/quest_approval.html" , context)
-
 @staff_member_required
 def approvals(request, quest_id=None):
     """A view for Teachers' Quest Approvals section.
@@ -509,11 +431,19 @@ def approvals(request, quest_id=None):
 
     """
 
-    # Why is this here?
+    # If we are looking up past approvals of a specific quest
     if quest_id:
         quest = get_object_or_404(Quest, id=quest_id)
+        if '/all/' in request.path_info:
+            active_sem_only = False
+            past_approvals_all = True
+        else:
+            active_sem_only = True
+            past_approvals_all = False  # If we are looking at previous approvals of a specific quest
     else:
         quest = None
+        past_approvals_all = None
+        active_sem_only = True
 
     if '/all/' in request.path_info:
         current_teacher_only = False
@@ -538,7 +468,7 @@ def approvals(request, quest_id=None):
         returned_tab_active = True
         returned_submissions = paginate(returned_submissions, page)
     elif '/approved/' in request.path_info:
-        approved_submissions = QuestSubmission.objects.all_approved(quest=quest)
+        approved_submissions = QuestSubmission.objects.all_approved(quest=quest, active_semester_only=active_sem_only)
         approved_tab_active = True
         approved_submissions = paginate(approved_submissions, page)
     elif '/skipped/' in request.path_info:
@@ -563,7 +493,6 @@ def approvals(request, quest_id=None):
                 {"name": "Returned",
                  "submissions": returned_submissions,
                  "active": returned_tab_active,
-                 "active": returned_tab_active,
                  "time_heading": "Returned",
                  "url": reverse('quests:returned'),
                  },
@@ -576,7 +505,7 @@ def approvals(request, quest_id=None):
                 {"name": "Skipped",
                  "submissions": skipped_submissions,
                  "active": skipped_tab_active,
-                 "time_heading": "Transfered",
+                 "time_heading": "Transferred",
                  "url": reverse('quests:skipped'),
                  }, ]
 
@@ -588,6 +517,8 @@ def approvals(request, quest_id=None):
         "quick_reply_form": quick_reply_form,
         "submitted_tab_active": submitted_tab_active,
         "current_teacher_only": current_teacher_only,
+        "past_approvals_all": past_approvals_all,
+        "quest": quest,
     }
     return render(request, "quest_manager/quest_approval.html", context)
 

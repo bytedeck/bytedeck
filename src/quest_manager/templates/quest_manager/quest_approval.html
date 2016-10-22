@@ -1,3 +1,11 @@
+<!--
+  Quest Approvals (quest_approval.html)
+    > SUBMITTED (tab_quests_available.html)
+    > RETURNED (tab_quests_submission.html)
+    > APPROVED (tab_quests_submission.html)
+    > SKIPPED (tab_quests_submission.html)
+-->
+
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 {% block heading_inner %}{{ heading }}
@@ -9,6 +17,14 @@
 {#           class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>#}
 {#    </div>#}
 {#    {% endif %}#}
+    {% if not past_approvals_all == None %}
+      <div class="btn-group">
+        <a href="{% url 'quests:approved_for_quest' quest.id %}"
+           class="btn {% if not past_approvals_all %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+        <a href="{% url 'quests:approved_for_quest_all' quest.id %}"
+           class="btn {% if past_approvals_all %}btn-primary{% else %}btn-default{% endif %}">All</a>
+      </div>
+    {%  endif %}
 {% endblock %}
 
 {% block content %}

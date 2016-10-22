@@ -49,6 +49,7 @@ urlpatterns = [
     url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),
     url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'),
     url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
+    url(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
     url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'),
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
     url(r'^create/$', views.QuestCreate.as_view(), name='quest_create'),

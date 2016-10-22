@@ -398,8 +398,8 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(active_semester_only).not_approved()
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
-    def all_approved(self, user=None, quest=None, up_to_date=None):
-        qs = self.get_queryset(True).approved()
+    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+        qs = self.get_queryset(active_semester_only).approved()
 
         if user is None:
             # Staff have a separate tab for skipped quests
