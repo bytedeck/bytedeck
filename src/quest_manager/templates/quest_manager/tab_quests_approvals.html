@@ -82,13 +82,12 @@
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ quick_reply_form | crispy }}
             <div>
-              {% if s.is_approved %}
-                <input type='submit' name='comment_button'
-                       class='btn btn-primary' value='Add Comment' />
-              {% else %}
+              {% if not s.is_approved %}
                 <input type='submit' name='approve_button'
                        class='btn btn-success' value='Approve' />
               {% endif %}
+                <input type='submit' name='comment_button'
+                       class='btn btn-primary' value='Comment' />
                 <input type='submit' name='return_button'
                        class='btn btn-danger' value='Return' />
                 <a class="btn btn-warning" data-target="#quick_reply{{s.id}}"
