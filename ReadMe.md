@@ -14,7 +14,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 #### Python Virtual Environment
 1. If on Windows, open Git Bash as an administrator
 2. On Linux, ensure you are using Python 3.x: `python -V` (Some distros might have Python 2.7 installed)
-3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/): `pip install virtualenv`
+3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/): `pip3 install virtualenv`
 2. Move to the parent directory of the project: `cd ~/Developer`
 2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace`
 3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
