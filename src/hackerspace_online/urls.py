@@ -28,6 +28,7 @@ admin.site.site_title = "Hackerspace Admin"
 urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^$', views.home, name='home'),
+    url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     url(r'^config/$', views.config_view, name='config'),
     # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
@@ -48,6 +49,7 @@ urlpatterns = [
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth
     url(r'^accounts/', include('allauth.urls')),
+
 ]
 
 if settings.DEBUG:

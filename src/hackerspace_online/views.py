@@ -19,6 +19,10 @@ def home(request):
     return render(request, "home.html", {})
 
 
+def simple(request):
+    return render(request, "secret.html", {})
+
+
 @staff_member_required
 def config_view(request):
     if not request.user.is_superuser:
