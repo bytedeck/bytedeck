@@ -51,6 +51,8 @@ INSTALLED_APPS = (
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
 
+    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
+
     # third party apps
 
     # https://django-allauth.readthedocs.org/en/latest/installation.html

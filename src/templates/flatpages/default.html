@@ -1,0 +1,16 @@
+{% extends "base_sidebar.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%}{{ flatpage.title }} | {% endblock%}
+
+{% block head_css %}{% endblock %}
+{% block content_first %}{% endblock %}
+
+{% block content %}
+{{ flatpage.content }}
+{% endblock %}
+
+
+{% block content_last %}{% endblock %}
+
+{% block js %}{% endblock %}
