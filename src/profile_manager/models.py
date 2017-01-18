@@ -283,7 +283,10 @@ class Profile(models.Model):
         if last_sub is None:
             return True
         else:
-            return last_sub.time_completed < timezone.now()-timezone.timedelta(days=5)
+            if last_sub.time_completed:
+                return last_sub.time_completed < timezone.now()-timezone.timedelta(days=5)
+            else:
+                return True
 
     def current_teachers(self):
         user_id_list = CourseStudent.objects.get_current_teacher_list(self.user)
