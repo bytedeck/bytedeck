@@ -7,10 +7,10 @@ from .base import *
 #root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-INSTALLED_APPS += (
-    # https://django-debug-toolbar.readthedocs.io/en/1.4/
-    'debug_toolbar',
-)
+# INSTALLED_APPS += (
+#     # https://django-debug-toolbar.readthedocs.io/en/1.4/
+#     'debug_toolbar',
+# )
 
 
 # Quick-start development settings - unsuitable for production
