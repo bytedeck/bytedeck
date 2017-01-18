@@ -74,10 +74,6 @@ INSTALLED_APPS = (
     # django-djconfig.readthedocs.org/en/
     'djconfig',
 
-    # https://django-debug-toolbar.readthedocs.io/en/1.4/
-    # For development only...
-    # 'debug_toolbar',
-
     # https://github.com/yetty/django-embed-video
     # used for the EmbedVideoField that validates YouTube and Vimeo urls
     'embed_video',
@@ -104,6 +100,7 @@ INSTALLED_APPS = (
 #SITE_ID = 1
 
 MIDDLEWARE_CLASSES = (
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -114,6 +111,7 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'djconfig.middleware.DjConfigMiddleware',
+
 )
 
 ROOT_URLCONF = 'hackerspace_online.urls'
