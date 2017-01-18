@@ -33,7 +33,7 @@ class ProfileQuerySet(models.query.QuerySet):
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
-        return ProfileQuerySet(self.model, using=self._db)
+        return ProfileQuerySet(self.model, using=self._db).select_related()
 
     def all_for_active_semester(self):
         """:return: a queryset of student profiles with a course this semester"""
