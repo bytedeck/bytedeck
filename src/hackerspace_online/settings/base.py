@@ -98,9 +98,20 @@ INSTALLED_APPS = (
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
 #SITE_ID = 1
+MIDDLEWARE_CLASSES = []
 
-MIDDLEWARE_CLASSES = (
-    # 'debug_toolbar.middleware.DebugToolbarMiddleware',
+
+# TEMP DEBUG STUFF UNTIL CAN GET PRODUCTION OF DEBUG MODE... COMMENT OUT BEFORE PUSHING TO GIT
+# MIDDLEWARE_CLASSES += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+# INSTALLED_APPS += ('debug_toolbar', )
+
+
+MIDDLEWARE_CLASSES += [
+    # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
+    'django.middleware.cache.UpdateCacheMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',
+
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -111,8 +122,7 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'djconfig.middleware.DjConfigMiddleware',
-
-)
+]
 
 ROOT_URLCONF = 'hackerspace_online.urls'
 
@@ -139,6 +149,13 @@ TEMPLATES = [
         },
     },
 ]
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'LOCATION': 'unix:/tmp/memcached.sock',
+    }
+}
 
 AUTHENTICATION_BACKENDS = (
 

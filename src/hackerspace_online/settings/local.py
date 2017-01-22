@@ -18,10 +18,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # This is a non-secret key.  A different key is used in the productions settings file.
-SECRET_KEY = '8(@^b-s07o7a(*durcp#sx!-8=cnq2-shiq61!7nznn=h$az7n'
+SECRET_KEY = 'notverysecretkey...gimmebetteroneinproduction'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+
+INTERNAL_IPS = ['127.0.0.1', ]
 
 ALLOWED_HOSTS = []
 

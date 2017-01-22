@@ -107,13 +107,15 @@
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 {% if request.user.is_staff %}
-
-                    <td>{% if object.last_submission_completed %}
-                            {{ object.last_submission_completed.time_completed|date:'y/m/d' }}<br>
-                            <small>{{ object.last_submission_completed.time_completed|timesince }} ago</small>
+                    <td>
+                      {% with last_submission=object.last_submission_completed %}
+                        {% if last_submission %}
+                            {{ last_submission.time_completed|date:'y/m/d' }}<br>
+                            <small>{{ last_submission.time_completed|timesince }} ago</small>
                         {% else %}
                             Never
                         {% endif %}
+                      {% endwith %}
                     </td>
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user }}</a></td>
 
