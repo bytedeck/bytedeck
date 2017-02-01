@@ -2,6 +2,7 @@ import json
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
+from django.views.decorators.cache import cache_page
 from djconfig import config
 from notifications.signals import notify
 from prerequisites.models import Prereq
@@ -60,6 +61,11 @@ class QuestUpdate(UpdateView):
         context['action_value'] = ""
         context['submit_btn_value'] = "Update"
         return context
+
+    def get_success_url(self):
+        if self.object.archived:
+            return reverse("quests:quests")
+        return self.object.get_absolute_url()
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
@@ -191,7 +197,11 @@ def ajax_quest_info(request, quest_id=None):
 @login_required
 def ajax_approval_info(request, submission_id=None):
     if request.is_ajax() and request.method == "POST":
-        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False,
+                                                  exclude_quests_not_visible_to_students=False)
+
+        sub = get_object_or_404(qs, pk=submission_id)
         template = "quest_manager/preview_content_approvals.html"
         quest_info_html = render_to_string(template, {"s": sub}, request=request)
 
@@ -209,10 +219,13 @@ def ajax_submission_info(request, submission_id=None):
         completed = '/completed/' in request.path_info
 
         if past:  # past subs are filtered out of default queryset, so need to get
-            past_submissions = QuestSubmission.objects.all_completed_past(request.user)
-            sub = get_object_or_404(past_submissions, pk=submission_id)
+            qs = QuestSubmission.objects.all_completed_past(request.user)
+        elif completed:
+            qs = QuestSubmission.objects.all_completed(request.user)
         else:
-            sub = get_object_or_404(QuestSubmission, pk=submission_id)
+            qs = QuestSubmission.objects.all()
+
+        sub = get_object_or_404(qs, pk=submission_id)
 
         context = {
             "s": sub,

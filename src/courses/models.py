@@ -318,6 +318,7 @@ class CourseStudentManager(models.Manager):
         user_list = set(user_list)  # removes doubles
         return User.objects.filter(id__in=user_list)
 
+    # @cached(60*60*12)
     def get_current_teacher_list(self, user):
         return self.current_courses(user).values_list('block__current_teacher', flat=True)
 

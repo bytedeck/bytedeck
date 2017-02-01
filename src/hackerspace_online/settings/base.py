@@ -102,14 +102,33 @@ MIDDLEWARE_CLASSES = []
 
 
 # TEMP DEBUG STUFF UNTIL CAN GET PRODUCTION OF DEBUG MODE... COMMENT OUT BEFORE PUSHING TO GIT
-# MIDDLEWARE_CLASSES += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
-# INSTALLED_APPS += ('debug_toolbar', )
+MIDDLEWARE_CLASSES += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+INSTALLED_APPS += ('debug_toolbar',
+                   'template_timings_panel',
+                   # http://django-cachalot.readthedocs.io
+                   # 'cachalot',
+                   )
+DEBUG_TOOLBAR_PANELS = [
+    'debug_toolbar.panels.versions.VersionsPanel',
+    'debug_toolbar.panels.timer.TimerPanel',
+    'debug_toolbar.panels.settings.SettingsPanel',
+    'debug_toolbar.panels.headers.HeadersPanel',
+    'debug_toolbar.panels.request.RequestPanel',
+    'debug_toolbar.panels.sql.SQLPanel',
+    'debug_toolbar.panels.staticfiles.StaticFilesPanel',
+    'debug_toolbar.panels.templates.TemplatesPanel',
+    'template_timings_panel.panels.TemplateTimings.TemplateTimings',
+    # 'cachalot.panels.CachalotPanel',
+    'debug_toolbar.panels.cache.CachePanel',
+    'debug_toolbar.panels.signals.SignalsPanel',
+    'debug_toolbar.panels.logging.LoggingPanel',
+    'debug_toolbar.panels.redirects.RedirectsPanel',
+]
 
 
 MIDDLEWARE_CLASSES += [
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     'django.middleware.cache.UpdateCacheMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.cache.FetchFromCacheMiddleware',
 
     'django.contrib.sessions.middleware.SessionMiddleware',

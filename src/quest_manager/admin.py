@@ -24,9 +24,11 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
     list_filter = ['is_completed', 'is_approved', 'semester']
     search_fields = ['user']
 
-    # default queryset doesn't return other semesters
+    # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
     def get_queryset(self, request):
-        qs = QuestSubmission.objects.get_queryset(active_semester_only=False)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=False,
+                                                  exclude_archived_quests=False,
+                                                  exclude_quests_not_visible_to_students=False)
         ordering = self.get_ordering(request)
         if ordering:
             qs = qs.order_by(*ordering)
@@ -34,8 +36,9 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
 
 
 class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'name', 'xp', 'visible_to_students', 'max_repeats', 'date_expired', 'common_data', 'campaign',)
-    list_filter = ['visible_to_students', 'max_repeats', 'verification_required']
+    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
+                    'common_data', 'campaign',)
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required']
     search_fields = ['name']
     inlines = [
         # TaggedItemInline
@@ -43,6 +46,11 @@ class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
     ]
 
     change_list_filter_template = "admin/filter_listing.html"
+
+    # default queryset doesn't include archived quests
+    def get_queryset(self, request):
+        qs = Quest.objects.get_queryset(include_archived=True)
+        return qs
 
     # fieldsets = [
     #     ('Available', {'fields': ['date_available', 'time_available']}),

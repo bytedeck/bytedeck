@@ -53,6 +53,9 @@ class XPItem(models.Model):
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default=True)
+    archived = models.BooleanField(default=False,
+                                   help_text='Setting this will prevent it form appearing in admin quest lists.  '
+                                             'To un-archive a quest, you will need to access it through Django Admin.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable, enter -1 for unlimited')
     hours_between_repeats = models.PositiveIntegerField(default=0)
@@ -166,6 +169,9 @@ class QuestQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_students=True)
 
+    def not_archived(self):
+        return self.exclude(archived=True)
+
     def available_without_course(self):
         return self.filter(available_outside_course=True)
 
@@ -191,8 +197,11 @@ class QuestQuerySet(models.query.QuerySet):
 
 
 class QuestManager(models.Manager):
-    def get_queryset(self):
-        return QuestQuerySet(self.model, using=self._db)
+    def get_queryset(self, include_archived=False):
+        qs = QuestQuerySet(self.model, using=self._db)
+        if not include_archived:
+            qs = qs.not_archived()
+        return qs
 
     def get_active(self):
         return self.get_queryset().datetime_available().not_expired().visible()
@@ -380,15 +389,27 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         else:
             return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
 
+    def exclude_archived_quests(self):
+        return self.exclude(quest__archived=True)
+
+    def exclude_quests_not_visible_to_students(self):
+        return self.exclude(quest__visible_to_students=False)
+
 
 class QuestSubmissionManager(models.Manager):
-    def get_queryset(self, active_semester_only=False):
+    def get_queryset(self,
+                     active_semester_only=False,
+                     exclude_archived_quests=True,
+                     exclude_quests_not_visible_to_students=True):
+
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
-        qs = qs.select_related('quest')
         if active_semester_only:
-            return qs.get_semester(config.hs_active_semester)
-        else:
-            return qs
+            qs = qs.get_semester(config.hs_active_semester)
+        if exclude_archived_quests:
+            qs = qs.exclude_archived_quests()
+        if exclude_quests_not_visible_to_students:
+            qs = qs.exclude_quests_not_visible_to_students()
+        return qs.select_related('quest')
 
     def all_for_quest(self, quest):
         return self.get_queryset(True).get_quest(quest)
@@ -399,7 +420,10 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
     def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
-        qs = self.get_queryset(active_semester_only).approved()
+        qs = self.get_queryset(active_semester_only,
+                               exclude_archived_quests=False,
+                               exclude_quests_not_visible_to_students=False
+                               ).approved()
 
         if user is None:
             # Staff have a separate tab for skipped quests
@@ -420,9 +444,14 @@ class QuestSubmissionManager(models.Manager):
         # return self.get_queryset().get_user(user).approved().completed()
 
     def all_skipped(self, user=None):
+        qs = self.get_queryset(active_semester_only=True,
+                               exclude_archived_quests=False,
+                               exclude_quests_not_visible_to_students=False
+                               )
+
         if user is None:
-            return self.get_queryset(True).approved().completed().game_lab()
-        return self.get_queryset(True).get_user(user).approved().completed()
+            return qs.approved().completed().game_lab()
+        return qs.get_user(user).approved().completed()
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True):
@@ -432,14 +461,21 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset(active_semester_only).get_user(user).not_completed()
 
     def all_completed_past(self, user):
-        qs = self.get_queryset().get_user(user).completed()
+        qs = self.get_queryset(exclude_archived_quests=False,
+                               exclude_quests_not_visible_to_students=False).get_user(user).completed()
         return qs.get_not_semester(config.hs_active_semester).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None):
+        qs = self.get_queryset(active_semester_only=True,
+                               exclude_archived_quests=False,
+                               exclude_quests_not_visible_to_students=False
+                               )
         if user is None:
-            return self.get_queryset(True).completed()
-        return self.get_queryset(True).get_user(user).completed().order_by(
-            'is_approved', '-time_approved')
+            qs = qs.completed()
+        else:
+            qs = qs.get_user(user).completed().order_by('is_approved', '-time_approved')
+
+        return qs
 
     def num_completed(self, user=None):
         if user is None:
