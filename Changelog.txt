@@ -1,6 +1,0 @@
-Dark Theme
-
-Summer 2016:
-Performance improvements (load accordian content in background
-XP Calculations graph
-Can hide quests
