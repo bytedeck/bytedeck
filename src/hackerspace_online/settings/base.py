@@ -102,8 +102,8 @@ MIDDLEWARE_CLASSES = []
 
 MIDDLEWARE_CLASSES += [
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
-    'django.middleware.cache.UpdateCacheMiddleware',
-    'django.middleware.cache.FetchFromCacheMiddleware',
+    # 'django.middleware.cache.UpdateCacheMiddleware',
+    # 'django.middleware.cache.FetchFromCacheMiddleware',
 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
