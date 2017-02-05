@@ -23,14 +23,18 @@ class ProfileList(ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
 
-    def get_queryset(self):
-        profiles_qs = Profile.objects.all().select_related('user__portfolio')
+    def queryset_append(self, profiles_qs):
+        profiles_qs = profiles_qs.select_related('user__portfolio')
         for profile in profiles_qs:
             profile.blocks_value = profile.blocks()
             profile.xp_value = profile.xp()
             profile.mark_value = profile.mark()
             profile.last_submission_completed_value = profile.last_submission_completed()
         return profiles_qs
+
+    def get_queryset(self):
+        profiles_qs = Profile.objects.all()
+        return self.queryset_append(profiles_qs)
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
@@ -39,7 +43,8 @@ class ProfileList(ListView):
 
 class ProfileListCurrent(ProfileList):
     def get_queryset(self):
-        return Profile.objects.all_for_active_semester()
+        profiles_qs = Profile.objects.all_for_active_semester()
+        return self.queryset_append(profiles_qs)
 
     def get_context_data(self, **kwargs):
         context = super(ProfileListCurrent, self).get_context_data(**kwargs)

@@ -1,7 +1,5 @@
 from datetime import timedelta, date, datetime
 
-# from cache_utils.decorators import cached
-
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 
@@ -10,6 +8,7 @@ from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 from djconfig import config
 from workdays import networkdays, workday
 
@@ -137,7 +136,6 @@ class Semester(models.Model):
         """
         return self.first_day <= timezone.now().date() <= self.last_day
 
-    # @cached(60)
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
         excluding weekends and ExcludedDates) '''
@@ -357,6 +355,7 @@ class CourseStudent(models.Model):
         return reverse('courses:list')
         # return reverse('courses:detail', kwargs={'pk': self.pk})
 
+    # @cached_property
     def calc_mark(self, xp):
         fraction_complete = self.semester.fraction_complete()
         if fraction_complete > 0:
