@@ -1,6 +1,8 @@
 import re
 from ast import literal_eval
 
+from django.utils.functional import cached_property
+
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
 from django.core.validators import RegexValidator
@@ -244,10 +246,10 @@ class Profile(models.Model):
         return CourseStudent.objects.all_for_user_semester(self.user, config.hs_active_semester)
 
     def mark(self):
-        course = CourseStudent.objects.current_course(self.user)
+        # course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
-        if courses and course:
-            return course.calc_mark(self.xp_cached) / courses.count()
+        if courses:
+            return courses[0].calc_mark(self.xp_cached) / len(courses)
         else:
             return None
 

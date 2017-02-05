@@ -305,7 +305,7 @@ class CourseStudentManager(models.Manager):
 
     # pick one of the courses...for now
     def current_course(self, user):
-        return self.all_for_user(user).get_semester(config.hs_active_semester).first()
+        return self.current_courses(user).first()
 
     def current_courses(self, user):
         return self.all_for_user(user).get_semester(config.hs_active_semester)
