@@ -93,13 +93,13 @@
                 <td>{{ object.last_name|default:"-" }}</td>
                 <td>{{ object.alias|default:"-" }}</td>
                 <td>{{ object.grad_year|default:"-" }}</td>
-                <td>{{ object.blocks }}</td>
+                <td>{{ object.blocks_value }}</td>
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}
-                    {{ object.xp }}
+                    {{ object.xp_value }}
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}
-                    {{ object.mark|floatformat }}%
+                    {{ object.mark_value|floatformat }}%
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
@@ -108,7 +108,7 @@
                 </td>
                 {% if request.user.is_staff %}
                     <td>
-                      {% with last_submission=object.last_submission_completed %}
+                      {% with last_submission=object.last_submission_completed_value %}
                         {% if last_submission %}
                             {{ last_submission.time_completed|date:'y/m/d' }}<br>
                             <small>{{ last_submission.time_completed|timesince }} ago</small>
@@ -122,12 +122,12 @@
                     {#      Admin buttons #}
                     <td>
                         <div class="btn-group">
-                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
-                               title="{% if object.banned_from_comments %}Remove comment ban
-                           {% else %}Ban student from public comments{% endif %}"
-                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
-                                <i class="fa fa-commenting-o"></i>
-                            </a>
+{#                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"#}
+{#                               title="{% if object.banned_from_comments %}Remove comment ban#}
+{#                           {% else %}Ban student from public comments{% endif %}"#}
+{#                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">#}
+{#                                <i class="fa fa-commenting-o"></i>#}
+{#                            </a>#}
                             <a href="{% url 'profiles:GameLab_toggle' object.id %}"
                                title="{% if object.game_lab_transfer_process_on %}Turn quest skipping off
                            {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"

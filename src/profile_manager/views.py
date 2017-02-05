@@ -23,6 +23,15 @@ class ProfileList(ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
 
+    def get_queryset(self):
+        profiles_qs = Profile.objects.all().select_related('user__portfolio')
+        for profile in profiles_qs:
+            profile.blocks_value = profile.blocks()
+            profile.xp_value = profile.xp()
+            profile.mark_value = profile.mark()
+            profile.last_submission_completed_value = profile.last_submission_completed()
+        return profiles_qs
+
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
         return super(ProfileList, self).dispatch(request, *args, **kwargs)
