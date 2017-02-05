@@ -208,7 +208,8 @@ class QuestManager(models.Manager):
 
     def get_available(self, user, remove_hidden=True):
         """ Quests that should appear in the user's Available quests tab"""
-        qs = self.get_active().get_conditions_met(user)
+        qs = self.get_active().select_related('campaign')
+        qs = qs.get_conditions_met(user)
         # quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         # available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
