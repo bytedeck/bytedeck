@@ -79,6 +79,7 @@ class Profile(models.Model):
     intro_tour_completed = models.BooleanField(default=False)
     game_lab_transfer_process_on = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
+    xp_cached = models.IntegerField(default=0)
 
     # Student options
     get_announcements_by_email = models.BooleanField(default=False)
@@ -214,17 +215,19 @@ class Profile(models.Model):
         else:
             return None
 
-    def xp(self):
+    def xp_invalidate_cache(self):
         xp = QuestSubmission.objects.calculate_xp(self.user)
         xp += BadgeAssertion.objects.calculate_xp(self.user)
         xp += CourseStudent.objects.calculate_xp(self.user)
+        self.xp_cached = xp
+        self.save()
         return xp
 
     def xp_per_course(self):
         course_count = self.num_courses()
         if not course_count or course_count == 0:
             return 0
-        return self.xp() / course_count
+        return self.xp_cached / course_count
 
     def xp_to_date(self, date):
         # TODO: Combine this with xp()
@@ -244,7 +247,7 @@ class Profile(models.Model):
         course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
         if courses and course:
-            return course.calc_mark(self.xp()) / courses.count()
+            return course.calc_mark(self.xp_cached) / courses.count()
         else:
             return None
 
@@ -257,10 +260,10 @@ class Profile(models.Model):
         return False
 
     def rank(self):
-        return Rank.objects.get_rank(self.xp())
+        return Rank.objects.get_rank(self.xp_cached)
 
     def next_rank(self):
-        return Rank.objects.get_next_rank(self.xp())
+        return Rank.objects.get_next_rank(self.xp_cached)
 
     def xp_to_next_rank(self):
         next_rank = self.next_rank()
@@ -271,7 +274,7 @@ class Profile(models.Model):
     def xp_since_last_rank(self):
         # TODO: Fix this laziness
         try:
-            return self.xp() - self.rank().xp
+            return self.xp_cached - self.rank().xp
         except:
             return 0
 

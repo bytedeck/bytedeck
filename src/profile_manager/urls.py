@@ -12,6 +12,7 @@ urlpatterns = [
     url(r'^list/current/$', views.ProfileListCurrent.as_view(), name='profile_list_current'),
     url(r'^create/$', views.ProfileCreate.as_view(), name='profile_create'),
     url(r'^tour/$', views.tour_complete, name='tour_complete'),
+    url(r'^recalculate/current$', views.recalculate_current_xp, name='recalculate_xp_current'),
     # url(r'^edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
     # url(r'^detail/$', views.ProfileDetail.as_view(), name='profile_detail'),
     url(r'^(?P<pk>[0-9]+)/$', views.ProfileDetail.as_view(), name='profile_detail'),

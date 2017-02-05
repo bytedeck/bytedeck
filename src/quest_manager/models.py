@@ -667,6 +667,7 @@ class QuestSubmission(models.Model):
         self.save()
         # update badges
         BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
+        self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def mark_returned(self):
         self.is_completed = False
@@ -674,6 +675,7 @@ class QuestSubmission(models.Model):
         self.game_lab_transfer = False
         self.time_returned = timezone.now()
         self.save()
+        self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def is_awaiting_approval(self):
         return self.is_completed and not self.is_approved

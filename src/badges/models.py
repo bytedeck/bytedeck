@@ -193,6 +193,7 @@ class BadgeAssertionManager(models.Manager):
             semester_id=config.hs_active_semester,
         )
         new_assertion.save()
+        user.profile.xp_invalidate_cache() # recalculate user's XP
         return new_assertion
 
     def check_for_new_assertions(self, user, transfer=False):

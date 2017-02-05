@@ -58,7 +58,7 @@ class Rank(models.Model, IsAPrereqMixin):
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
         # profile = Profile.objects.get(user=user)
-        return user.profile.xp() >= self.xp
+        return user.profile.xp_cached >= self.xp
 
     def get_map(self):
         from djcytoscape.models import CytoScape
@@ -366,6 +366,6 @@ class CourseStudent(models.Model):
     def xp_per_day_ave(self):
         days = self.semester.days_so_far()
         if days > 0:
-            return self.user.profile.xp() / self.semester.days_so_far()
+            return self.user.profile.xp_cached / self.semester.days_so_far()
         else:
             return 0

@@ -1,5 +1,5 @@
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Semester
+from courses.models import CourseStudent, Semester, Block
 from django.http import Http404
 from djconfig import config
 from notifications.signals import notify
@@ -25,9 +25,11 @@ class ProfileList(ListView):
 
     def queryset_append(self, profiles_qs):
         profiles_qs = profiles_qs.select_related('user__portfolio')
+        # blocks = Block.objects.all()
+        # blocks_dict = {x.pk: x for x in blocks}
+
         for profile in profiles_qs:
             profile.blocks_value = profile.blocks()
-            profile.xp_value = profile.xp()
             profile.mark_value = profile.mark()
             profile.last_submission_completed_value = profile.last_submission_completed()
         return profiles_qs
@@ -132,6 +134,14 @@ class ProfileUpdate(UpdateView):
             raise Http404("Sorry, this profile isn't yours!")
 
 
+@staff_member_required()
+def recalculate_current_xp(request):
+    profiles_qs = Profile.objects.all_for_active_semester()
+    for profile in profiles_qs:
+        profile.xp_invalidate_cache()
+    return redirect_to_previous_page(request)
+
+
 @login_required
 def tour_complete(request):
     profile = request.user.profile
@@ -195,8 +205,10 @@ def comment_ban(request, profile_id, toggle=False):
 
 @staff_member_required
 def redirect_to_previous_page(request):
-    # http://stackoverflow.com/questions/4406377/django-request-to-find-previous-referrer
-    if '/profiles/all/' in request.META['HTTP_REFERER']:
-        return redirect('profiles:profile_list')
-    else:
-        return redirect('profiles:profile_list_current')
+    # http://stackoverflow.com/questions/12758786/redirect-return-to-same-previous-page-in-django
+    return redirect(request.META.get('HTTP_REFERER', '/'))
+    #
+    # if '/profiles/all/' in request.META['HTTP_REFERER']:
+    #     return redirect('profiles:profile_list')
+    # else:
+    #     return redirect('profiles:profile_list_current')

@@ -95,7 +95,7 @@
                 <td>{{ object.grad_year|default:"-" }}</td>
                 <td>{{ object.blocks_value }}</td>
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}
-                    {{ object.xp_value }}
+                    {{ object.xp_cached }}
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}
@@ -122,12 +122,12 @@
                     {#      Admin buttons #}
                     <td>
                         <div class="btn-group">
-{#                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"#}
-{#                               title="{% if object.banned_from_comments %}Remove comment ban#}
-{#                           {% else %}Ban student from public comments{% endif %}"#}
-{#                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">#}
-{#                                <i class="fa fa-commenting-o"></i>#}
-{#                            </a>#}
+                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
+                               title="{% if object.banned_from_comments %}Remove comment ban
+                           {% else %}Ban student from public comments{% endif %}"
+                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
+                                <i class="fa fa-commenting-o"></i>
+                            </a>
                             <a href="{% url 'profiles:GameLab_toggle' object.id %}"
                                title="{% if object.game_lab_transfer_process_on %}Turn quest skipping off
                            {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"

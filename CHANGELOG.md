@@ -8,6 +8,8 @@ This file chronologically records all notable changes to this website, including
 ###Removed
 
 ##[1.5.0] 2017-02-01
-###Added
-###Changed
-###Removed
+First recorded changelog
+* XP is now cached so it doesn't recalculate unless a new quest is approve/returned or badge awarded.
+* Other minor optimizations for speed improvement.
+* Changed license to GPL v3
+

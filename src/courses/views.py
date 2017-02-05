@@ -32,7 +32,7 @@ def mark_calculations(request, user_id=None):
     courses = CourseStudent.objects.current_courses(user)
     num_courses = courses.count()
     if courses:
-        xp_per_course = user.profile.xp() / num_courses
+        xp_per_course = user.profile.xp_cached / num_courses
     else:
         xp_per_course = None
 

@@ -46,6 +46,9 @@
                         <!-- <li class="dropdown-header">Content</li> -->
                         <li><a title="This may take a few moments..."
                                 href="{% url 'djcytoscape:regenerate_all' %}">Refresh all Quest Maps</a></li>
+                        <li><a title="This may take a few moments..."
+                                href="{% url 'profiles:recalculate_xp_current' %}">
+                          Recalculate XP for all current users</a></li>
                         <li><a href="/config">Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Database</li>
@@ -61,7 +64,7 @@
                 <li id="menu-xp">
                     <a href="{% url 'courses:marks' request.user.id %}"
                        class="navbar-text-large-container">XP:
-                        <span class="navbar-text-large"> {{ request.user.profile.xp }}</span>
+                        <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
                     </a>
                 </li>
                 <li id="profile">
