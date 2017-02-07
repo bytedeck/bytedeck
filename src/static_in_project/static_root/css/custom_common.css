@@ -94,13 +94,17 @@ ul.left-aligned, ol.left-aligned {
 
 .badge-icon-lg {
     position: absolute;
-    bottom: -23px;
-    left: 1px;
+    bottom: 2px;
+    left: 2px;
+    border-radius: 6px;
+    padding: 3px 6px;
+
 }
 
 .icon-badge-container {
-    display: inline;
+    display: inline-block;
     position: relative;
+    margin-bottom: 5px;
 }
 
 .hackerbadge {
@@ -194,7 +198,7 @@ ul.left-aligned, ol.left-aligned {
 }
 
 .icon-xl {
-    width: 80px
+    width: 72px
 }
 
 .icon-xxl {
