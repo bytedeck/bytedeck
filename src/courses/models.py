@@ -223,6 +223,9 @@ class Block(models.Model):
     def __str__(self):
         return self.block
 
+    class Meta:
+        ordering = ["start_time"]
+
 
 class ExcludedDate(models.Model):
     semester = models.ForeignKey(Semester)
