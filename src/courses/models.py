@@ -349,7 +349,7 @@ class CourseStudent(models.Model):
             ('user', 'course', 'grade'),
         )
         verbose_name = "Student Course"
-        ordering = ['semester', 'block']
+        ordering = ['-semester', 'block']
 
     def __str__(self):
         return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course)
