@@ -1,4 +1,4 @@
-/* Used in the summernote iframe whcih can't see the our other css files
+/* Used in the summernote iframe which can't see the our other css files
 
   See settings/base.py:
 
@@ -20,4 +20,9 @@
 .note-editable {
   /*need to override inline height which is 20px too short*/
   height: 382px !important;
+}
+
+body {
+    padding: 0;
+    min-height: 0;
 }

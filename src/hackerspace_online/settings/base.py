@@ -329,10 +329,10 @@ SUMMERNOTE_CONFIG = {
     #     '//code.jquery.com/jquery-1.9.1.min.js',
     #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
     # ),
-    # 'internal_css': (
-    #     os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
-    #     os.path.join(STATIC_URL, 'font-awesome.min.css'),
-    # ),
+    'internal_css': (
+        # os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
+        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+    ),
     # 'internal_js': (
     #     os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
     #     os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
@@ -342,6 +342,9 @@ SUMMERNOTE_CONFIG = {
     #
     # You can add custom css/js for SummernoteWidget.
     'css': (
+        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        os.path.join(STATIC_URL, 'css/custom_common.css'),
+        os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
     ),
     # 'js': (
