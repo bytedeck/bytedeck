@@ -34,7 +34,7 @@
               <small>&ndash; {{comment.timestamp|timesince}} ago</small>
               {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
             </h5>
-              <div class="markdown">{{comment.text|safe}}</div>
+              <div class="markdown">{{comment.text|safe|linebreaks}}</div>
               <ul>
               {% for document in comment.document_set.all %}
                 <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
