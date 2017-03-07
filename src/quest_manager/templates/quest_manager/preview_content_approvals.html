@@ -9,14 +9,5 @@
   {% endwith %}
   <li class="list-group-item list-group-item-info">
     Quick Reply Form
-    (
-    <a title="View the full quest details and the full comment form."
-       href="{% url 'quests:submission' s.id %}">Full Reply</a> |
-    <a title="Quick link to edit in case an error or typo in the quest is found."
-       target="_blank"
-       href="{% url 'quests:quest_update' s.quest.id %}">Edit Quest</a> |
-    <a title="View past submissions of this quest from other students."
-       target="_blank"
-       href="{% url 'quests:approved_for_quest' s.quest.id %}">Past Submissions</a>
-    )
+    {% include 'quest_manager/quick_buttons.html' %}
   </li>
