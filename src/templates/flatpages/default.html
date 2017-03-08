@@ -7,7 +7,18 @@
 {% block content_first %}{% endblock %}
 
 {% block content %}
-{{ flatpage.content }}
+  <div class="pull-right">
+  {% if  request.user.is_staff %}
+
+  {% endif %}
+  </div>
+  <h1>{{ flatpage.title }}
+    <i class="pull-right fa fa-file-text-o"></i>
+    <a class="btn btn-info btn-sm" href="/admin/flatpages/flatpage/{{ flatpage.id }}/change/" role="button"
+      title = "Edit this page" >
+      <i class="fa fa-edit"></i></a>
+  </h1>
+  {{ flatpage.content }}
 {% endblock %}
 
 
