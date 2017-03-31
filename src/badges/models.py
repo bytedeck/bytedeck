@@ -147,7 +147,7 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
 
 
 class BadgeAssertionManager(models.Manager):
-    def get_queryset(self, active_semester_only=True):
+    def get_queryset(self, active_semester_only=False):
         qs = BadgeAssertionQuerySet(self.model, using=self._db)
         if active_semester_only:
             return qs.get_semester(config.hs_active_semester)
@@ -158,7 +158,7 @@ class BadgeAssertionManager(models.Manager):
         return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
 
     def all_for_user(self, user):
-        return self.get_queryset().get_user(user)
+        return self.get_queryset(True).get_user(user)
 
     def all_for_user_distinct(self, user):
         """
@@ -206,7 +206,7 @@ class BadgeAssertionManager(models.Manager):
     def get_by_type_for_user(self, user):
         self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
-        qs = self.get_queryset().get_user(user)
+        qs = self.get_queryset(True).get_user(user)
         by_type = [
             {
                 'badge_type': t,
@@ -217,7 +217,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
-        total_xp = self.get_queryset().no_game_lab().get_user(user).aggregate(Sum('badge__xp'))
+        total_xp = self.get_queryset(True).no_game_lab().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
@@ -225,7 +225,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # self.check_for_new_assertions(user)
-        qs = self.get_queryset().no_game_lab().get_user(user)
+        qs = self.get_queryset(True).no_game_lab().get_user(user)
         qs = qs.get_issued_before(date)
         total_xp = qs.aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
