@@ -246,6 +246,7 @@
         </div>
         <div class="list-group-item">
           {% for assertion in assertions %}
+            {% with duplicates=assertion.get_duplicate_assertions %}
             <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
             data-trigger="hover focus" data-placement="left" data-html="true"
             title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
@@ -264,20 +265,30 @@
             {% empty %}
               <li>None (granted manually)</li>
             {% endfor %}</ul></small></p>
-            <p>Granted on: <small>{{assertion.timestamp}}</small></p>
-            {% if request.user.is_staff %}
-            <a class="btn btn-danger" href="{% url 'badges:revoke' assertion.id %}" role="button">
-              <i class="fa fa-trash-o"></i>
-            </a>
-            {% endif %}
+
+            <p>Granted on: <small><ul>
+            {% for ass in duplicates %}
+              <li>{{ass.timestamp}}
+              {% if request.user.is_staff %}
+              <a class="btn btn-danger btn-xs" href="{% url 'badges:revoke' ass.id %}" role="button">
+                <i class="fa fa-trash-o"></i>
+              </a>
+              {% endif %}
+              </li>
+            {% endfor %}
+            </ul></small></p>
+
             '>
-              <div class="icon-badge-container">
-                <img class="icon-xl img-rounded
-                  {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
-                  src="{{assertion.badge.get_icon_url}}">
-                <span class="badge badge-icon-lg progress-bar-info">{{assertion.count_bootstrap_badge}}</span>
-              </div>
+
+            <div class="icon-badge-container">
+              <img class="icon-xl img-rounded
+                {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
+                src="{{assertion.badge.get_icon_url}}">
+              <span class="badge badge-icon-lg progress-bar-info">{{duplicates|length}}</span>
+            </div>
+
             </a>
+            {% endwith %}
           {% empty %}
             None.
           {% endfor %}

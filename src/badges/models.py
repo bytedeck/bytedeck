@@ -273,6 +273,10 @@ class BadgeAssertion(models.Model):
             return ""
         return count
 
+    def get_duplicate_assertions(self):
+        """A qs of all assertions of this badge for this user"""
+        return BadgeAssertion.objects.all_for_user_badge(self.user, self.badge, False)
+
 
 from django.dispatch import receiver
 from django.db.models.signals import post_save
