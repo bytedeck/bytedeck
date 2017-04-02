@@ -284,7 +284,9 @@
               <img class="icon-xl img-rounded
                 {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
                 src="{{assertion.badge.get_icon_url}}">
-              <span class="badge badge-icon-lg progress-bar-info">{{duplicates|length}}</span>
+              {% if duplicates|length > 1 %}
+                <span class="badge badge-icon-lg progress-bar-info">{{duplicates|length}}</span>
+              {% endif %}
             </div>
 
             </a>
