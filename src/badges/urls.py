@@ -11,6 +11,8 @@ urlpatterns = [
     url(r'^(?P<pk>[0-9]+)/delete/$', views.BadgeDelete.as_view(), name='badge_delete'),
     # url(r'^(?P<badge_id>[0-9]+)/grant/(?P<user_id>[0-9]+)/$', views.grant, name='grant'),
     url(r'^(?P<badge_id>[0-9]+)/grant/(?P<user_id>[0-9]+)/$', views.assertion_create, name='grant'),
+    url(r'^(?P<badge_id>[0-9]+)/grant/bulk/$', views.bulk_assertion_create, name='bulk_grant_badge'),
+    url(r'^grant/bulk/$', views.bulk_assertion_create, name='bulk_grant'),
     url(r'^assertion/(?P<assertion_id>[0-9]+)/revoke/$', views.assertion_delete, name='revoke'),
 
 ]

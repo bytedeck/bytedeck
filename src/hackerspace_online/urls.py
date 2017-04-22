@@ -51,6 +51,8 @@ urlpatterns = [
     # allauth
     url(r'^accounts/', include('allauth.urls')),
     url(r'^pages/', include('django.contrib.flatpages.urls')),
+    # select2
+    url(r'^select2/', include('django_select2.urls')),
 ]
 
 if settings.DEBUG:

@@ -13,4 +13,9 @@
   <a href="{% url 'badges:list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
+
+{% endblock %}
+{% block js %}
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+  {{ form.media }}
 {% endblock %}

@@ -51,9 +51,16 @@
                         <i class="fa fa-trash-o"></i>
                       </a>
                     </div>
-                    <a class="btn btn-success pull-right" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}" role="button">
-                      <i class="fa fa-gift"></i>
-                    </a>
+                    <div class="btn-group block pull-right" role="group">
+                      <a class="btn btn-success" title="Grant to a student"
+                        href="{% url 'badges:grant' badge.id 0 %}" role="button">
+                        <i class="fa fa-user"></i>
+                      </a>
+                      <a class="btn btn-success" title="Bulk grant to multiple student"
+                        href="{% url 'badges:bulk_grant_badge' badge.id %}" role="button">
+                        <i class="fa fa-users"></i>
+                      </a>
+                    </div>
                     {% endif %}
                 '>
                     <div class="thumbnail thumbnail-badge">

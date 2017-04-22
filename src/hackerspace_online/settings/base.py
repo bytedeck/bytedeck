@@ -78,6 +78,9 @@ INSTALLED_APPS = (
     # used for the EmbedVideoField that validates YouTube and Vimeo urls
     'embed_video',
 
+    # https://github.com/applegrew/django-select2
+    'django_select2',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -147,8 +150,13 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
         'LOCATION': 'unix:/tmp/memcached.sock',
+    },
+    'select2': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'cache_table',
     }
 }
+SELECT2_CACHE_BACKEND = 'select2'
 
 AUTHENTICATION_BACKENDS = (
 

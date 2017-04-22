@@ -9,7 +9,7 @@ from django.core.urlresolvers import reverse_lazy
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView
-from .forms import BadgeForm, BadgeAssertionForm
+from .forms import BadgeForm, BadgeAssertionForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeType, BadgeAssertion
 
 
@@ -106,6 +106,37 @@ def detail(request, badge_id):
 
 
 ########### Badge Assertion Views #########################
+
+
+@staff_member_required
+def bulk_assertion_create(request, badge_id=None):
+    initial = {}
+    if badge_id:
+        badge = get_object_or_404(Badge, pk=badge_id)
+        initial['badge'] = badge
+
+    form = BulkBadgeAssertionForm(request.POST or None, initial=initial)
+
+    if form.is_valid():
+        badge = form.cleaned_data['badge']
+        profiles = form.cleaned_data['students']
+
+        result_message = "Badge " + str(badge) + " granted to "
+        for profile in profiles:
+            BadgeAssertion.objects.create_assertion(profile.user, badge)
+            result_message += profile.preferred_full_name() + "; "
+
+        messages.success(request, result_message)
+        return redirect('badges:list')
+
+    context = {
+        "heading": "Grant Badges in Bulk",
+        "form": form,
+        "submit_btn_value": "Grant",
+    }
+
+    return render(request, "badges/assertion_form.html", context)
+
 
 @staff_member_required
 def assertion_create(request, user_id, badge_id):

@@ -124,7 +124,7 @@ class Profile(models.Model):
         name = self.get_preferred_name()
         if self.last_name:
             name += " " + self.last_name
-        return name
+        return name if name else str(self.user)
 
     def public_name(self):
         if self.preferred_internal_only:

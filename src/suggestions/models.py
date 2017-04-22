@@ -1,5 +1,4 @@
 from badges.models import Badge, BadgeAssertion
-from badges.views import grant_badge
 from courses.models import Semester
 from django.conf import settings
 from django.core.urlresolvers import reverse
