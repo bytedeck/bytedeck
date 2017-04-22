@@ -2,9 +2,9 @@
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
-##[1.6]
+##[1.6.0]
 ###Added
-* 
+* Bulk badge granting
 * TOC generator for FAQ
 ###Changed
 * List all dates that badges were granted in profile (as opposed to only the latest one)

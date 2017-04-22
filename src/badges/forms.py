@@ -58,6 +58,7 @@ class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
         'last_name__istartswith',
         'preferred_name__istartswith',
     ]
+    # queryset = Profile.objects.all_for_active_semester()
 
     # SHOULD BE USING USER NOT PROFILE!
     # model = User
@@ -71,8 +72,15 @@ class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
     #     return obj.get_full_name().upper()
 
 
+
 class BulkBadgeAssertionForm(forms.Form):
     badge = forms.ModelChoiceField(queryset=Badge.objects.all_manually_granted(),
                                    required=True)
     students = forms.ModelMultipleChoiceField(queryset=Profile.objects.all(),
                                               widget=StudentsCustomTitleWidget())
+
+    def __init__(self, *args, **kwds):
+        super(BulkBadgeAssertionForm, self).__init__(*args, **kwds)
+        # Need to set queryset on init because config isn't available until apps are loaded.
+        # https://github.com/nitely/django-djconfig/issues/14
+        self.fields['students'].queryset = Profile.objects.all_for_active_semester()
