@@ -39,7 +39,9 @@
             </div>
             <div class="col-xs-4">{{s.quest.name}}</div>
             <div class="col-xs-1">{{s.quest.xp}}  </div>
-            <div class="col-xs-1">{% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}</div>
+            <div class="col-xs-1">
+              {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </div>
             <div class="col-xs-2">{{s.user}} <br />
               <small>{{s.user.profile.first_name|add:' '|add:s.user.profile.last_name|truncatechars:15}}</small>
              </div>
