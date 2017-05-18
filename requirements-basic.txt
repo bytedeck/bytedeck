@@ -1,7 +1,7 @@
 beautifulsoup4==4.4.1
 #decorator==4.0.10
 defusedxml==0.4.1
-Django==1.9.7
+Django==1.11.2
 django-allauth==0.25.2
 django-crispy-forms==1.6.0
 django-datetime-widget==0.9.3
