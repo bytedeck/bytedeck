@@ -2,16 +2,25 @@
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
+
 ##[1.6.1]
+
 ###Added
+
 * None
+
 ###Changed
+
 * Updated Django to 1.11 LTS (support to 2020)
+
 ###Removed
+
 None.
 
 ##[1.6.0]
+
 ###Added
+
 * Bulk badge granting
 * TOC generator for FAQ
 ###Changed
