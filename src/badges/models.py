@@ -64,6 +64,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_met_list)
 
     def all_manually_granted(self):
+        #return None
         # build a list of pk's for badges that have no prerequisites.
         pk_manual_list = [
             obj.pk for obj in self.get_queryset()

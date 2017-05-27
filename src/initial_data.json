@@ -1,15 +1,6 @@
 [
   {
     "fields": {
-      "active": true,
-      "icon": "",
-      "title": "Introduction"
-    },
-    "model": "quest_manager.category",
-    "pk": 1
-  },
-  {
-    "fields": {
       "hours_between_repeats": 0,
       "datetime_last_edit": "2016-07-06T05:56:08.090Z",
       "visible_to_students": true,
@@ -23,7 +14,6 @@
       "icon": "",
       "short_description": "What the heck is the Hackerspace Online? Let me take you on a tour! ",
       "time_available": "00:00:00",
-      "categories": [],
       "common_data": null,
       "verification_required": false,
       "xp": 5,
@@ -49,7 +39,6 @@
       "icon": "",
       "short_description": "First quest++",
       "time_available": "00:00:00",
-      "categories": [],
       "common_data": null,
       "verification_required": true,
       "xp": 10,
@@ -75,7 +64,6 @@
       "icon": "",
       "short_description": "Use this quest to communicate with [TEACHER].  Send him a file, link, message, question, reminder, complaint, etc.",
       "time_available": "00:00:00",
-      "categories": [],
       "common_data": null,
       "verification_required": true,
       "xp": 5,
