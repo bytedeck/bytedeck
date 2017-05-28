@@ -24,9 +24,9 @@
       </div>
       <div class="col-sm-6">
         <ul class="list-unstyled">
-          <li>Repeatable: {% if quest.max_repeats = 0 %}No
+          <li>Repeatable: {% if quest.max_repeats == 0 %}No
                  {% else %}
-                   {% if quest.max_repeats = -1 %} Unlimited
+                   {% if quest.max_repeats == -1 %} Unlimited
                    {% else %} {{quest.max_repeats}} times max
                    {% endif %}
                    {% if quest.hours_between_repeats > 0 %}
