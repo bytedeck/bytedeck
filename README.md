@@ -29,7 +29,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 #### Creating the SQLite database
 1. A basic database to get started.  You can move to PostgreSQL later if you like:
 `./src/manage.py migrate`  This will create your database and create tables for all the thrid-party apps/requirements
-2. Now prepare tables for all of the hackerspace models: `./src/manage.py makemigrations badges announcements courses comments djcytoscape notifications portfolios profile_manager quest_manager prerequisites` (you might get an error later on if I forget to keep this list of apps updated =)
+2. Now prepare tables for all of the hackerspace models: `./src/manage.py makemigrations badges announcements courses comments djcytoscape notifications portfolios profile_manager quest_manager prerequisites suggestions` (you might get an error later on if I forget to keep this list of apps updated =)
 2. Create tables: `./src/manage.py migrate`
 2. Populate the database with some default data: `./src/manage.py loaddata src/initial_data`
 3. Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`

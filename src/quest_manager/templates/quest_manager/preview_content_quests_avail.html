@@ -14,9 +14,9 @@
     <div class="col-sm-6">
       <ul class="list-unstyled">
       <li>Available without course: {{ q.available_outside_course|yesno }}</li>
-      <li>Repeatable: {% if q.max_repeats = 0 %}no
+      <li>Repeatable: {% if q.max_repeats == 0 %}no
              {% else %}
-               {% if q.max_repeats = -1 %} Unlimited
+               {% if q.max_repeats == -1 %} Unlimited
                {% else %} {{q.max_repeats}} times max
                {% endif %}
                {% if q.hours_between_repeats > 0 %}
