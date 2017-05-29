@@ -2,11 +2,11 @@
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
-##[1.7.1] 2014-05-28
+##[1.7.0] 2014-05-28
 ###Added
-* None
-###Changed
 * Updated Django to 1.11 LTS (support to 2020)
+###Changed
+* Fixed bugs preventing initial migrations when setting up the django app
 ###Removed
 None.
 
