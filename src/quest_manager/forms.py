@@ -58,9 +58,13 @@ class SubmissionForm(forms.Form):
 
 
 class SubmissionFormStaff(SubmissionForm):
-    #awards = Badge.objects.all()
-    awards = Badge.objects.all_manually_granted()
-    award = forms.ModelChoiceField(queryset=awards, label='Grant an Award', required=False)
+    # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
+    award = forms.ModelChoiceField(queryset=None, label='Grant an Award', required=False)
+
+    def __init__(self, *args, **kwds):
+        super(SubmissionFormStaff, self).__init__(*args, **kwds)
+
+        self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
 class SubmissionReplyForm(forms.Form):
@@ -69,6 +73,9 @@ class SubmissionReplyForm(forms.Form):
 
 class SubmissionQuickReplyForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
-    # awards = Badge.objects.all()
-    awards = Badge.objects.all_manually_granted()
-    award = forms.ModelChoiceField(queryset=awards, label='Grant an Award', required=False)
+    # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
+    award = forms.ModelChoiceField(queryset=None, label='Grant an Award', required=False)
+
+    def __init__(self, *args, **kwds):
+        super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
+        self.fields['award'].queryset = Badge.objects.all_manually_granted()

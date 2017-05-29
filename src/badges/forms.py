@@ -74,13 +74,13 @@ class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
 
 
 class BulkBadgeAssertionForm(forms.Form):
-    badge = forms.ModelChoiceField(queryset=Badge.objects.all_manually_granted(),
-                                   required=True)
-    students = forms.ModelMultipleChoiceField(queryset=Profile.objects.all(),
-                                              widget=StudentsCustomTitleWidget())
+    # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
+    badge = forms.ModelChoiceField(queryset=None, required=True)
+    students = forms.ModelMultipleChoiceField(queryset=None, widget=StudentsCustomTitleWidget())
 
     def __init__(self, *args, **kwds):
         super(BulkBadgeAssertionForm, self).__init__(*args, **kwds)
         # Need to set queryset on init because config isn't available until apps are loaded.
         # https://github.com/nitely/django-djconfig/issues/14
         self.fields['students'].queryset = Profile.objects.all_for_active_semester()
+        self.fields['badge'].queryset = Badge.objects.all_manually_granted()
