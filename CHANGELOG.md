@@ -7,8 +7,6 @@ This file chronologically records all notable changes to this website, including
 * Updated Django to 1.11 LTS (support to 2020)
 ### Changed
 * Fixed bugs preventing initial migrations when setting up the django app
-### Removed
-None.
 
 ## [1.6.0]
 ### Added
@@ -17,8 +15,6 @@ None.
 ### Changed
 * List all dates that badges were granted in profile (as opposed to only the latest one)
 * XP Chart formatting tweaks
-### Removed
-None.
 
 ## [1.5.0] 2017-02-01
 ### Added
@@ -27,5 +23,3 @@ None.
 * XP is now cached so it doesn't recalculate unless a new quest is approve/returned or badge awarded.
 * Other minor optimizations to improve page load speeds.
 * Changed license to GPL v3.
-### Removed
-None.
