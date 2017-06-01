@@ -68,9 +68,15 @@ def comment(request, id):
         raise Http404
 
 
+def suggestion_list_beta(request, id=None, completed=False):
+    return suggestion_list(request, id, completed, beta=True)
+
 @login_required
-def suggestion_list(request, id=None, completed=False):
-    template_name = 'suggestions/suggestion_list.html'
+def suggestion_list(request, id=None, completed=False, beta=False):
+    if beta:
+        template_name = 'suggestions/suggestion_list_2_beta.html'
+    else:
+        template_name = 'suggestions/suggestion_list.html'
 
     # Are we within the dates of the active semester?
     semester = get_object_or_404(Semester, pk=config.hs_active_semester)

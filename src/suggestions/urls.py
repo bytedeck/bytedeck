@@ -6,6 +6,7 @@ from django.conf.urls import url
 
 urlpatterns = [
     url(r'^$', views.suggestion_list, name='list'),
+    url(r'^beta/$', views.suggestion_list_beta, name='list_beta'),
     url(r'^active/$', views.suggestion_list, name='list_active'),
     url(r'^completed/$', views.suggestion_list_completed, name='list_completed'),
     url(r'^new/$', views.suggestion_create, name='create'),
