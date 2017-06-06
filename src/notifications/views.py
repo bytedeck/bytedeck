@@ -5,6 +5,7 @@ from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
+
 from .models import Notification
 
 
