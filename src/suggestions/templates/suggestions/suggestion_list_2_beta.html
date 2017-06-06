@@ -57,31 +57,44 @@
     <thead>
     <tr>
       <th data-field="id" data-visible='false'>ID</th>
-      <th data-field="vote">{% if not completed_list %}Vote{% endif %}</th>
-      <th data-field="score" data-sortable='true'>Score</th>
+      <th data-field="vote" data-class="text-center">{% if not completed_list %}Vote{% endif %}</th>
+      <th data-field="score" data-class="text-center" data-sortable='true'>Score</th>
       <th data-field="suggestion">Suggestion</th>
       <th data-field="status" data-sortable='true' data-sorter="statusSorter">Status</th>
     </tr>
     </thead>
     <tbody>
     {% for object in object_list %}
-    <tr>
+    <tr class="
+      {% if object.status == 1 %}row-info
+      {% elif object.status == 2 %}
+      {#    {% elif object.status == 3 %}panel-success#}
+      {% elif object.status == 4 %}row-info
+      {% elif object.status == 5 %}text-muted
+      {% else %}
+      {% endif %}
+    ">
       <td>{{ object.id }}</td>
-      <td class="col-md-2">
+      <!-- VOTING CELL -->
+      <td class="col-md-1 text-center">
         {% if not completed_list and object.status == 2 %}
           <a href="{% url 'suggestions:upvote' object.id %}">
-            <i class="fa fa-2x fa-thumbs-o-up"></i></a>
-          &nbsp;&nbsp;
+            <i class="fa fa-lg fa-chevron-circle-up"></i></a>
+          <br>
           <a href="{% url 'suggestions:downvote' object.id %}">
-            <i class="fa fa-2x fa-thumbs-o-down"></i>
+            <i class="fa fa-lg fa-chevron-circle-down"></i>
           </a>
         {% endif %}
       </td>
-      <td class="col-md-1">{{ object.get_score }}</td>
-      <td class="col-md-6">{{ forloop.counter0 }}
-        {{object.title}}<br>
+      <td class="col-md-1 text-center">{{ object.get_score }}</td>
+      <td class="col-md-7">{{object.title}}
+        {% if request.user.is_staff %}<br>
         <small><a href="{% url 'profiles:profile_detail' object.user.profile.id %}">
                 {{object.user}}</a> - {{object.user.profile}}</small>
+        {% elif request.user == object.user %}<br>
+        <small>(Your suggestion)</small>
+        {% endif %}
+
       </td>
       <td class="col-md-3">
         {% if object.status == 1 %}Awaiting Approval
@@ -134,8 +147,8 @@
               </form>
             {% else %}
               <p><i class="fa fa-ban text-danger"> </i>
-                Sorry Spammy McTrollson, you've been banned from commenting on announcements. If you would like this
-                privilege back, you can grovel for forgiveness from Mr C.</p>
+                Sorry Spammy McTrollson, you've been banned from commenting. If you would like this
+                privilege back, you can discuss it with your teacher.</p>
             {% endif %}
           </li>
         </ul>
@@ -179,12 +192,12 @@
           // In my real scenarion, trigger expands row with text detailFormatter..
           //$tr.find(">td>.detail-icon").trigger("click");
           // $tr.find(">td>.detail-icon").triggerHandler("click");
-          $table.find('tr').removeClass('bg-primary');
+          $table.find('tr').removeClass('row-active');
           if ($tr.next().is('tr.detail-view') ) {
               $table.bootstrapTable('collapseRow', $tr.data('index'));
           } else {
               $table.bootstrapTable('collapseAllRows');
-              $tr.addClass('bg-primary');
+              $tr.addClass('row-active');
               $table.bootstrapTable('expandRow', $tr.data('index'));
           }
       });
@@ -197,7 +210,10 @@
           var dateB = b.match(re); // first element is the match
 
           dateA = dateA == null ? 0 : dateA[0];
-          dateB = dateB == null ? 0 : dateB[0]
+          dateB = dateB == null ? 0 : dateB[0];
+
+          // match the text up to the first tag, probably <br>
+          //var re = /^.*(?=(<))/;
 
           if (dateA > dateB) return 1;
           if (dateA < dateB) return -1;
@@ -208,7 +224,7 @@
       // Stop links in accordian from triggering accordian opening and closing
       $(document).ready(function () {
           $("[data-toggle='table'] a").click(function (e) {
-              e.stopPropagation();
+              //e.stopPropagation();
           });
       });
   </script>

@@ -1,12 +1,7 @@
 beautifulsoup4==4.6.0
-certifi==2017.4.17
-chardet==3.0.3
-defusedxml==0.5.0
-Django==1.11.2
 django-allauth==0.32.0
-django-appconf==1.0.2
 django-crispy-forms==1.6.1
-django-datetime-widget==0.9.3
+django-datetime-widget==0.9.3 # Requires `pip install setuptool` first?
 django-debug-toolbar==1.8
 django-debug-toolbar-template-timings==0.7
 django-djconfig==0.5.3
@@ -15,17 +10,6 @@ django-grappelli==2.10.1
 django-postgrespool==0.3.1
 Django-Select2==5.10.0
 django-summernote==0.8.7
-idna==2.5
-oauthlib==2.0.2
-olefile==0.44
 Pillow==4.1.1
 pipdeptree==0.10.1
-psycopg2==2.7.1
-python3-openid==3.1.0
-pytz==2017.2
-requests==2.17.3
-requests-oauthlib==0.8.0
-SQLAlchemy==1.1.10
-sqlparse==0.2.3
-urllib3==1.21.1
 workdays==1.4

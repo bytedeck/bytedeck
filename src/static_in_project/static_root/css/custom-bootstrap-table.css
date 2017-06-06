@@ -1,0 +1,41 @@
+.fixed-table-container {
+    border: None;
+}
+
+.table>tbody>tr.row-warning, .table>tbody>tr.row-info:hover{
+    color: #8a6d3b;
+    background-color: #fcf8e3;
+    border-color: #faebcc;
+}
+
+.table>tbody>tr.row-info, .table>tbody>tr.row-info:hover {
+    color: #31708f;
+    background-color: #d9edf7;
+    border-color: #bce8f1;
+}
+
+.table>tbody>tr.row-danger, .table>tbody>tr.row-danger:hover {
+    color: #a94442;
+    background-color: #f2dede;
+    border-color: #ebccd1;
+}
+
+/* Active hover is last so it will override the above hover styles */
+.table>tbody>tr.row-active, .table>tbody>tr.row-active:hover {
+    color: #fff;
+    background-color: #337ab7;
+    border-color: #337ab7;
+}
+.table>tbody>tr.row-active a {
+  color: #173652;
+}
+
+
+.fixed-table-container thead th .sortable {
+    /*cursor: pointer;*/
+    /*background-position: right;*/
+        /*background-position-x: right;*/
+        /*background-position-y: center;*/
+    /*background-repeat: no-repeat;*/
+    padding-right: 18px;
+}

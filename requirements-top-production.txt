@@ -1,0 +1,15 @@
+beautifulsoup4==4.6.0
+django-allauth==0.32.0
+django-crispy-forms==1.6.1
+django-datetime-widget==0.9.3 # Requires `pip install setuptool` first?
+#django-debug-toolbar==1.8
+#django-debug-toolbar-template-timings==0.7
+django-djconfig==0.5.3
+django-embed-video==1.1.2
+django-grappelli==2.10.1
+django-postgrespool==0.3.1
+Django-Select2==5.10.0
+django-summernote==0.8.7
+Pillow==4.1.1
+#pipdeptree==0.10.1
+workdays==1.4
