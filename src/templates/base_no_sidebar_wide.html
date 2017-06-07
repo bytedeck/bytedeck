@@ -12,13 +12,7 @@
 <div class="row">
     <div class="col-sm-3">
         <h3 class="hidden-xs"> <!--so logo margins align with main div headings-->
-            <img id="logo"
-                 src="{% if request.user.profile.dark_theme %}
-                  {% static 'img/banner_slate.png' %}
-               {% else %}
-                  {% static 'img/banner.svg' %}
-               {% endif %}"
-                 class="img-responsive" alt="Timberline's Digital Hackerspace Logo"/>
+            {% include "banner.html" %}
         </h3>
     </div>
     <div class="col-sm-9">

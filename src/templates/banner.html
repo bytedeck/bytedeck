@@ -1,0 +1,9 @@
+{% load staticfiles %}
+<img id="banner"
+     src="{% if request.user.profile.dark_theme %}
+                 {% static 'img/banner_slate.svg' %}
+              {% else %}
+                 {% static 'img/banner.svg' %}
+              {% endif %}"
+     class="img-responsive" alt="Timberline Digital Hackerspace Banner"
+/>

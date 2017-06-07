@@ -9,13 +9,9 @@
 {% block content_first %}{% endblock %}
 
 {% block content_outer %}
-<img class="img-responsive jumbo-banner banner1"
-     src="{% if request.user.profile.dark_theme %}
-                 {%static 'img/banner_slate.png' %}
-              {% else %}
-                 {%static 'img/banner.svg' %}
-              {% endif %}"
-     alt="Timberline's Digital Hackerspace Landing Page"/>
+  <div class="jumbo-banner">
+    {% include "banner.html" %}
+  </div>
 {% endblock %}
 
 

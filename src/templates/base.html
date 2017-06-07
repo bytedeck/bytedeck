@@ -55,7 +55,7 @@
     {% endfor %}
     {% endif %}
     {% if not config.hs_closed or request.user.is_staff %}
-    {% block content_outer %}{% endblock %}
+      {% block content_outer %}{% endblock %}
     {% else %}
     <img class="img-responsive jumbo-banner banner1"
          src="{% static 'img/banner_closed.jpg' %}"
