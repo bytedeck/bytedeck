@@ -604,3 +604,11 @@ kbd
     }
 
 }
+
+
+/*************** SECRET ****************/
+
+.secret-link, secret-link:hover {
+    color: #333 !important;
+    cursor: default;
+}
