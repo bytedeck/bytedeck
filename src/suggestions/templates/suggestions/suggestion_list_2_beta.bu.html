@@ -107,61 +107,57 @@
         <small>{{ object.status_timestamp|timesince }} ago</small>
         <div style="display:none;">{{ object.status_timestamp|date:'Ymd' }}</div> <!-- for sorting -->
       </td>
+
+      <div style="display: none;" id="collapse{{ object.id }}" >
+        <ul class="list-group">
+          <li class="list-group-item list-group-item-buttons">
+            {% if request.user.is_staff %}
+              <div class="pull-right">
+                <a class="btn btn-info" href="{% url 'suggestions:edit' object.id %}" role="button">Edit</a>
+                {% if object.status != 3 %}
+                  <a class="btn btn-danger" href="{% url 'suggestions:reject' object.id %}" role="button">Reject</a>
+                {% endif %}
+                {% if object.status != 2 %}
+                  <a class="btn btn-success" href="{% url 'suggestions:approve' object.id %}" role="button">Approve</a>
+                {% endif %}
+                {% if object.status == 2 %}
+                  <a class="btn btn-success" href="{% url 'suggestions:complete' object.id %}"
+                     role="button">Complete</a>
+                {% endif %}
+              </div>
+            {% endif %}
+            <div>
+              {{ object.description }}
+            </div>
+          </li>
+
+          {% with object.get_comments as target_comments %}
+            {% if target_comments %}
+              <li class="list-group-item list-group-item-info">Suggestion Comments</li>
+              {% include "comments/comments.html" %}
+            {% endif %}
+          {% endwith %}
+
+          <li class="list-group-item list-group-item-info">Comment</li>
+          <li class="list-group-item">
+            {% if not request.user.profile.banned_from_comments %}
+              <form method="POST" action="{% url 'suggestions:comment' object.id %}">{% csrf_token %}
+                {{ comment_form | crispy }}
+                <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment'/>
+              </form>
+            {% else %}
+              <p><i class="fa fa-ban text-danger"> </i>
+                Sorry Spammy McTrollson, you've been banned from commenting. If you would like this
+                privilege back, you can discuss it with your teacher.</p>
+            {% endif %}
+          </li>
+        </ul>
+
+      </div>
     </tr>
     {% endfor %}
     </tbody>
   </table>
-
-{#  Content for detailed view #}
-  {% for object in object_list %}
-  <div style="display: none;" id="collapse{{ object.id }}">
-    <ul class="list-group">
-      <li class="list-group-item list-group-item-buttons">
-        {% if request.user.is_staff %}
-          <div class="pull-right">
-            <a class="btn btn-info" href="{% url 'suggestions:edit' object.id %}" role="button">Edit</a>
-            {% if object.status != 3 %}
-              <a class="btn btn-danger" href="{% url 'suggestions:reject' object.id %}" role="button">Reject</a>
-            {% endif %}
-            {% if object.status != 2 %}
-              <a class="btn btn-success" href="{% url 'suggestions:approve' object.id %}" role="button">Approve</a>
-            {% endif %}
-            {% if object.status == 2 %}
-              <a class="btn btn-success" href="{% url 'suggestions:complete' object.id %}"
-                 role="button">Complete</a>
-            {% endif %}
-          </div>
-        {% endif %}
-        <div>
-          {{ object.description }}
-        </div>
-      </li>
-
-      {% with object.get_comments as target_comments %}
-        {% if target_comments %}
-          <li class="list-group-item list-group-item-info">Suggestion Comments</li>
-          {% include "comments/comments.html" %}
-        {% endif %}
-      {% endwith %}
-
-      <li class="list-group-item list-group-item-info">Comment</li>
-      <li class="list-group-item">
-        {% if not request.user.profile.banned_from_comments %}
-          <form method="POST" action="{% url 'suggestions:comment' object.id %}">{% csrf_token %}
-            {{ comment_form | crispy }}
-            <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment'/>
-          </form>
-        {% else %}
-          <p><i class="fa fa-ban text-danger"> </i>
-            Sorry Spammy McTrollson, you've been banned from commenting. If you would like this
-            privilege back, you can discuss it with your teacher.</p>
-        {% endif %}
-      </li>
-    </ul>
-
-  </div>  <!-- collapsible content -->
-  {% endfor %}
-
 
 
 {% else %}
@@ -228,7 +224,7 @@
       // Stop links in accordian from triggering accordian opening and closing
       $(document).ready(function () {
           $("[data-toggle='table'] a").click(function (e) {
-              e.stopPropagation();
+              //e.stopPropagation();
           });
       });
   </script>
