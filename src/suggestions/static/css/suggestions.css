@@ -1,8 +1,3 @@
-
-body {
-    margin: 10px;
-}
-
 #suggestions-table thead > tr > th.detail,
 #suggestions-table tbody > tr:not(.detail-view) > td:first-of-type {
     display: none;
@@ -31,20 +26,18 @@ body {
     /*border-color: #2B669A;*/
 
 /*}*/
-
+/*
 tr.detail-view,
 tr.detail-view td
 {
     border-width: 1px;
     border-color: #2B669A;
-}
-
+}*/
+/*
 tr.list-group-item {
     border-left: None;
     border-right: None;
-}
-
-
+}*/
 
 .bg-primary a {
   color: #173652;

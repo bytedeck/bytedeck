@@ -39,3 +39,29 @@
     /*background-repeat: no-repeat;*/
     padding-right: 18px;
 }
+
+/*
+.detail-view {
+    border-color: ;
+}*/
+
+.detail-view .list-group-item:first-child {
+    border-top-left-radius: 0px;
+    border-top-right-radius: 0px;
+    border-top: none;
+}
+
+.detail-view .list-group-item:last-child {
+    border-bottom-right-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-bottom-color: #337ab7;
+}
+
+.detail-view .list-group-item {
+    border-left-color: #337ab7;
+    border-right-color: #337ab7;
+}
+
+.detail-view .list-group {
+    margin-bottom: 0px;
+}

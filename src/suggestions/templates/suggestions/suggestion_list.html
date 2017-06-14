@@ -186,9 +186,6 @@
       var $table = $('#suggestions-table');
 
       $table.on('expand-row.bs.table', function (e, index, row, $detail) {
-          //var $tr = $("tr[data-index=" + index + "]").next(".detail-view");
-          //console.log($tr);
-          //$tr.hide();
           var detailContent = $("#collapse" + row.id).html();
 
           //sliding doesn't work on table elements, so add a div and animate that.
@@ -210,9 +207,23 @@
                   $table.bootstrapTable('collapseRow', $tr.data('index'));
               });
           } else {
-              $table.bootstrapTable('collapseAllRows');
+              /*$table.bootstrapTable('collapseRow', $expanded_tr.data('index'));*/
+              //$tr.addClass('row-active');
+              //$table.bootstrapTable('expandRow', $tr.data('index'));
+
+              var $detailContainer = $('div.detail-container');
+              if ($detailContainer.length > 0) {
+                  $detailContainer.slideUp(function () {
+                      $('html, body').animate({ scrollTop: $tr.offset().top - 50 });
+                      var $expanded_tr = $detailContainer.parents('tr.detail-view').prev();
+                      $table.bootstrapTable('collapseRow', $expanded_tr.data('index'));
+                  });
+
+              }
+
               $tr.addClass('row-active');
               $table.bootstrapTable('expandRow', $tr.data('index'));
+
           }
       });
 
