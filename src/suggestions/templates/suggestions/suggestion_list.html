@@ -58,7 +58,7 @@
     >
       <thead>
       <tr>
-        <th data-field="id" >ID</th>
+        <th data-field="id" data-visible="false">ID</th>
         <th data-field="vote" data-class="text-center">{% if not completed_list %}Vote{% endif %}</th>
         <th data-field="score" data-class="text-center" data-sortable='true'>Score</th>
         <th data-field="suggestion">Suggestion</th>
@@ -78,17 +78,13 @@
       {% endif %}
     ">
           <td>{{ object.id }}</td>
-          <!-- VOTING CELL -->
-          <td class="col-md-1 text-center">
-            {% if not completed_list and object.status == 2 %}
-              <a href="{% url 'suggestions:upvote' object.id %}" class="dont-expand vote vote-up">
-                <i class="fa fa-lg fa-chevron-circle-up"></i></a>
-              <br>
-              <a href="{% url 'suggestions:downvote' object.id %}" class="dont-expand vote vote-down">
-                <i class="fa fa-lg fa-chevron-circle-down"></i>
-              </a>
-            {% endif %}
-          </td>
+          <!-- VOTING CELL can't have extra whitespace or arrows won't align in chrome...
+          should prolly align it properly with css -->
+          <td class="col-md-1 text-center">{% if not completed_list and object.status == 2 %}<a
+              href="{% url 'suggestions:upvote' object.id %}"
+              class="dont-expand"><i class="fa fa-fw fa-lg fa-chevron-circle-up"></i></a><br><a
+              href="{% url 'suggestions:downvote' object.id %}"
+              class="dont-expand"><i class="fa fa-fw fa-lg fa-chevron-circle-down"></i></a>{% endif %}</td>
           <td class="col-md-1 text-center">{{ object.get_score }}</td>
           <td class="col-md-6">{{ object.title }}
             {% if request.user.is_staff %}<br>
