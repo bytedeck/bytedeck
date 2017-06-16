@@ -1,5 +1,13 @@
-.fixed-table-container {
-    border: None;
+/************************************
+*
+* Custom Stylings for Bootstrap Table
+* https://github.com/wenzhixin/bootstrap-table
+*
+************************************/
+
+/* restore thicker bootstrap header bottom border removed in bootstrap-table */
+.table > thead > tr > th {
+    border-bottom: 2px solid #ddd;
 }
 
 .table>tbody>tr.row-warning, .table>tbody>tr.row-info:hover{
@@ -30,12 +38,12 @@
   color: #173652;
 }
 
-
+/* Don't give so much extra room for the sorting icons in the header */
 .fixed-table-container thead th .sortable {
     /*cursor: pointer;*/
     /*background-position: right;*/
-        /*background-position-x: right;*/
-        /*background-position-y: center;*/
+    /*background-position-x: right;*/
+    /*background-position-y: center;*/
     /*background-repeat: no-repeat;*/
     padding-right: 18px;
 }

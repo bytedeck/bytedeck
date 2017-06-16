@@ -289,46 +289,6 @@ form .panel-body {
     padding-left: 20px;
 }
 
-/******** Bootstrap Tables ******************************/
-/*table {
-  border-collapse: separate !important;
-  border-spacing: 0px 10px;
-}*/
-
-.bootstrap-table .table thead > tr > th {
-    /*padding-right: 20px;*/
-    border-bottom-width: 1px;
-    border-left: none;
-}
-
-.bootstrap-table .table {
-    border-bottom: 0px;
-    /*border-collapse: separate !important;*/
-    /*border-spacing: 0px 10px !important;*/
-}
-
-.bootstrap-table .table td {
-    /*border-bottom: 0px;*/
-    border-collapse: separate !important;
-    border-spacing: 0px 10px !important;
-    border-left: 0px;
-}
-
-/*.fixed-table-container {
-  border: none;
-}*/
-
-.fixed-table-container tbody td {
-    border-left: none;
-}
-
-/*
-td {
-  border-left: 0px !important;
-  border-bottom: 1px solid !important;
-}
-*/
-
 /******* Accordian ***********************/
 
 .panel-heading-tall {

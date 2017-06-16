@@ -56,6 +56,7 @@
            data-sort-name="score"
            data-sort-order="desc"
            data-search="true"
+           data-classes="table table-no-bordered table-hover"
     >
       <thead>
       <tr>
@@ -70,14 +71,14 @@
       <tbody>
       {% for object in object_list %}
         <tr class="
-      {% if object.status == 1 %}row-info
-      {% elif object.status == 2 %}
-      {#    {% elif object.status == 3 %}panel-success#}
-      {% elif object.status == 4 %}row-info
-      {% elif object.status == 5 %}text-muted
-      {% else %}
-      {% endif %}
-    ">
+          {% if object.status == 1 %}row-info
+          {% elif object.status == 2 %}
+          {#    {% elif object.status == 3 %}panel-success#}
+          {% elif object.status == 4 %}row-info
+          {% elif object.status == 5 %}text-muted
+          {% else %}
+          {% endif %}
+        ">
           <td>{{ object.id }}</td>
           <!-- VOTING CELL can't have extra whitespace or arrows won't align in chrome...
           should prolly align it properly with css -->
