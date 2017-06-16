@@ -123,9 +123,10 @@
               <div class="pull-right">
                 <a class="btn btn-info" href="{% url 'suggestions:edit' object.id %}" role="button">Edit</a>
                 {% if object.status != 3 %}
-                  <a class="btn btn-danger" href="{% url 'suggestions:reject' object.id %}" role="button">Reject</a>
+                  <a class="btn btn-warning" href="{% url 'suggestions:reject' object.id %}" role="button">Reject</a>
                 {% endif %}
                 {% if object.status != 2 %}
+                  <a class="btn btn-danger" href="{% url 'suggestions:delete' object.id %}" role="button">Delete</a>
                   <a class="btn btn-success" href="{% url 'suggestions:approve' object.id %}" role="button">Approve</a>
                 {% endif %}
                 {% if object.status == 2 %}
