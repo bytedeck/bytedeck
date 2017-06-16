@@ -7,26 +7,42 @@
 
 /* restore thicker bootstrap header bottom border removed in bootstrap-table */
 .table > thead > tr > th {
-    border-bottom: 2px solid #ddd;
+    border-bottom-width: 2px !important;
 }
 
-.table>tbody>tr.row-warning, .table>tbody>tr.row-info:hover{
-    color: #8a6d3b;
-    background-color: #fcf8e3;
-    border-color: #faebcc;
+/* New contextual class: .primary */
+.table>tbody>tr.primary>td, .table>tbody>tr.primary>th, .table>tbody>tr>td.primary, .table>tbody>tr>th.primary,
+.table>tfoot>tr.primary>td, .table>tfoot>tr.primary>th, .table>tfoot>tr>td.primary, .table>tfoot>tr>th.primary,
+.table>thead>tr.primary>td, .table>thead>tr.primary>th, .table>thead>tr>td.primary, .table>thead>tr>th.primary {
+    background-color: #337ab7 !important;
+    color: #fff;
+    border-color: #337ab7;
 }
 
-.table>tbody>tr.row-info, .table>tbody>tr.row-info:hover {
-    color: #31708f;
-    background-color: #d9edf7;
-    border-color: #bce8f1;
+.table>tbody>tr.primary a {
+  color: #173652;
 }
 
+
+/*.table>tbody>tr.row-warning, .table>tbody>tr.row-info:hover{*/
+    /*color: #8a6d3b;*/
+    /*background-color: #fcf8e3;*/
+    /*border-color: #faebcc;*/
+/*}*/
+
+/*.table>tbody>tr.row-info, .table>tbody>tr.row-info:hover {*/
+    /*color: #31708f;*/
+    /*background-color: #d9edf7;*/
+    /*border-color: #bce8f1;*/
+/*}*/
+
+/*
 .table>tbody>tr.row-danger, .table>tbody>tr.row-danger:hover {
     color: #a94442;
     background-color: #f2dede;
     border-color: #ebccd1;
-}
+}*/
+
 
 /* Active hover is last so it will override the above hover styles */
 .table>tbody>tr.row-active, .table>tbody>tr.row-active:hover {

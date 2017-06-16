@@ -23,12 +23,9 @@ $table.on("click-row.bs.table", function (e, row, $tr) {
         $tr.next().find('div.detail-container').slideUp(function () {
             // when animation complete, otherwise element will be deleted before animation
             $table.bootstrapTable('collapseRow', $tr.data('index'));
-            $table.find('tr').removeClass('row-active');
+            $table.find('tr').removeClass('primary');
         });
     } else {
-        /*$table.bootstrapTable('collapseRow', $expanded_tr.data('index'));*/
-        //$tr.addClass('row-active');
-        //$table.bootstrapTable('expandRow', $tr.data('index'));
 
         var $detailContainer = $('div.detail-container');
         if ($detailContainer.length > 0) {
@@ -36,8 +33,8 @@ $table.on("click-row.bs.table", function (e, row, $tr) {
                 scrollToRow($tr);
                 var $expanded_tr = $detailContainer.parents('tr.detail-view').prev();
                 $table.bootstrapTable('collapseRow', $expanded_tr.data('index'));
-                $table.find('tr').removeClass('row-active');
             });
+            $table.find('tr').not($tr).removeClass('primary');
         }
         activateRow($tr);
     }
@@ -67,7 +64,7 @@ function scrollToRow($tr) {
 }
 
 function activateRow($tr) {
-    $tr.addClass('row-active');
+    $tr.addClass('primary');
     $table.bootstrapTable('expandRow', $tr.data('index'));
 }
 

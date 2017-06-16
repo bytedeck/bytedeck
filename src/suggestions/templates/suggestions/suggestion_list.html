@@ -71,10 +71,10 @@
       <tbody>
       {% for object in object_list %}
         <tr class="
-          {% if object.status == 1 %}row-info
+          {% if object.status == 1 %}info
           {% elif object.status == 2 %}
           {#    {% elif object.status == 3 %}panel-success#}
-          {% elif object.status == 4 %}row-info
+          {% elif object.status == 4 %}info
           {% elif object.status == 5 %}text-muted
           {% else %}
           {% endif %}
