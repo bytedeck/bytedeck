@@ -389,7 +389,7 @@ class CourseStudent(models.Model):
 class MarkDistributionHistogram(Chart):
     chart_type = 'bar'
     scales = {
-        'xAxes': [{'barPercentage': 1.0}]
+        'xAxes': [{'barPercentage': 1.0, 'categoryPercentage': 1.0}]
     }
     histogram = {'labels': [], 'data': []}
 
@@ -420,7 +420,7 @@ class MarkDistributionHistogram(Chart):
 
         return [DataSet(label='Distribution of Marks for All Classes this Semester',
                         data=data,
-                        borderWidth=2,
+                        borderWidth=1,
                         #backgroundColor=colors,
                         borderColor=rgba(0, 0, 0, 0.2)
                         )
