@@ -2,10 +2,9 @@ from courses import views
 
 from django.conf.urls import url
 
-# For TemplateView example
-# from django.views.generic import TemplateView
+from jchart.views import ChartView
 
-# Admin site customizations
+from courses.models import MarkDistributionHistogram
 
 urlpatterns = [
     url(r'^$', views.CourseStudentList.as_view(), name='list'),
@@ -14,10 +13,13 @@ urlpatterns = [
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),
     url(r'^marks/$', views.mark_calculations, name='my_marks'),
     url(r'^marks/(?P<user_id>[0-9]+)/$', views.mark_calculations, name='marks'),
+    url(r'^marks2/(?P<user_id>[0-9]+)/$', views.mark_calculations2, name='marks2'),
     url(r'^close_semester/$',
         views.end_active_semester, name='end_active_semester'),
     url(r'^ajax/progress_chart/(?P<user_id>[0-9]+)/$',
         views.ajax_progress_chart, name='ajax_progress_chart'),
+
+    url(r'^charts/bar_chart/$', ChartView.from_chart(MarkDistributionHistogram()), name='mark_distribution_chart'),
     # url(r'^semester/$', views.semesters, name='semester'),
     # url(r'^semester/$', views.semesters, name='semester'),
     # url(r'^create2/$', views.course_student_create, name='create2'),

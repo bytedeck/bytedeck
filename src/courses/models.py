@@ -1,6 +1,8 @@
+import numpy
 from datetime import timedelta, date, datetime
 
 from prerequisites.models import IsAPrereqMixin
+
 from quest_manager.models import QuestSubmission
 
 from django.conf import settings
@@ -10,7 +12,10 @@ from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
 from djconfig import config
+
 from workdays import networkdays, workday
+from jchart import Chart
+from jchart.config import Axes, DataSet, rgba
 
 
 # Create your models here.
@@ -204,6 +209,13 @@ class Semester(models.Model):
     def chillax_line(self):
         return 1000 * config.hs_chillax_line * self.fraction_complete()
 
+    def get_student_mark_list(self):
+        students = CourseStudent.objects.all_users_for_active_semester()
+        mark_list = []
+        for student in students:
+            mark_list.append(student.profile.mark())
+        return mark_list
+
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
@@ -372,3 +384,55 @@ class CourseStudent(models.Model):
             return self.user.profile.xp_cached / self.semester.days_so_far()
         else:
             return 0
+
+
+class MarkDistributionHistogram(Chart):
+    chart_type = 'bar'
+    scales = {
+        'xAxes': [{'barPercentage': 1.0}]
+    }
+    histogram = {'labels': [], 'data': []}
+
+
+    # def __init__(self):
+    #     try:  #the config data may not be readable whent he app loads
+    #         self.mark_list =
+    #     except AttributeError as e:
+    #         print(e)
+
+    def get_labels(self, **kwargs):
+        # return ["February", "March", "April",
+        #         "May", "June", "July"]
+        self.generate_histogram()
+        return self.histogram['labels']
+
+    def get_datasets(self, **kwargs):
+        # data = [10, 15, 29, 30, 5, 10, 22]
+        data = self.histogram['data']
+        # colors = [
+        #     rgba(255, 99, 132, 0.2),
+        #     rgba(54, 162, 235, 0.2),
+        #     rgba(255, 206, 86, 0.2),
+        #     rgba(75, 192, 192, 0.2),
+        #     rgba(153, 102, 255, 0.2),
+        #     rgba(255, 159, 64, 0.2)
+        # ]
+
+        return [DataSet(label='Distribution of Marks for All Classes this Semester',
+                        data=data,
+                        borderWidth=2,
+                        #backgroundColor=colors,
+                        borderColor=rgba(0, 0, 0, 0.2)
+                        )
+                ]
+
+    def generate_histogram(self):
+        data = Semester.objects.get_current().get_student_mark_list()
+        #data = numpy.random.normal(0, 20, 1000)
+        bins = numpy.arange(0, 110, 10)
+        hist, bin_edges = numpy.histogram(data, bins)
+        self.histogram['labels'] = bins.tolist()
+        self.histogram['data'] = hist.tolist()
+
+
+

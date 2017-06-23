@@ -81,6 +81,9 @@ INSTALLED_APPS = (
     # https://github.com/applegrew/django-select2
     'django_select2',
 
+    # https://github.com/matthisk/django-jchart
+    'jchart',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
