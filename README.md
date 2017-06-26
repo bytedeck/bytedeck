@@ -3,7 +3,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 
 #### Preparation
 1. Install Python 3: `sudo apt install python3`
-1. Install Git: `sudo apt nstall git`.  If working in Windows, install [Git Bash](https://git-for-windows.github.io/)
+1. Install Git: `sudo apt install git`.  If working in Windows, install [Git Bash](https://git-for-windows.github.io/)
 1. Pick/create a location for the project, e.g: `~/Developer`
 
 #### Clone the repository
@@ -20,10 +20,10 @@ LMS for Timberline Secondary School's Digital Hackerspace
 3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
 3. Activate your virtual environment: Linux: `source bin/activate` Windows w/Git Bash: `source Scripts/activate`
 4. You should now see "(hackerspace)" appear before your prompt.
-5. Later, when you are finished you can leave the environment by typing: `deactivate`
+5. Later (don't do it now), when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. `pip install -r requirments-basic.txt`
+1. `pip install -r requirments-top.txt`
 2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
 
 #### Creating the SQLite database
@@ -55,7 +55,3 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. Set Settings to: `hackerspace_online/settings` (this is relative to the root above)
 1. OK, OK.
 1. Hit the green play button to test.
-
-
-
-
