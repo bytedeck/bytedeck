@@ -27,14 +27,17 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. `pip install -r requirments-top.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
 2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
 
-#### Creating the SQLite database
-1. A basic database to get started.  You can move to PostgreSQL later if you like:
+#### Creating the SQLite database (Easy Option)
+1. A basic database to get started.  You can move to a more advanced PostgreSQL database later if you like, or try now (see next section)
 `./src/manage.py migrate`  This will create your database and create tables for all the thrid-party apps/requirements
 2. Now prepare tables for all of the hackerspace models: `./src/manage.py makemigrations badges announcements courses comments djcytoscape notifications portfolios profile_manager quest_manager prerequisites suggestions` (you might get an error later on if I forget to keep this list of apps updated =)
 2. Create tables: `./src/manage.py migrate`
 2. Populate the database with some default data: `./src/manage.py loaddata src/initial_data`
 3. Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
 4. Windows w/Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
+
+#### Creating the PostgreSQL database (Advanced Option)
+1. You can follow [these instructions](https://www.digitalocean.com/community/tutorials/how-to-use-postgresql-with-your-django-application-on-ubuntu-16-04) if you are on Linux (won't work on Windows).  Use the Python3 options.
 
 #### Runniing the server
 1. `./src/manage.py runserver`
