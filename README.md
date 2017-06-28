@@ -48,7 +48,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 6. Stop running server (or any bash script in progress) with `Ctrl + C`
 
 #### Setting up PyCharm IDE
-1. Install some version of PyCharmIDE
+1. Install some version of [PyCharmIDE](https://www.jetbrains.com/pycharm/download/#section=linux)
 1. File > Open, then choose the ~/Developer/hackerspace directory
 1. Run > Edit Configurations
 1. it "+" and choose Django Server
