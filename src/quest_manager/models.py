@@ -207,13 +207,20 @@ class QuestManager(models.Manager):
         return self.get_queryset().datetime_available().not_expired().visible()
 
     def get_available(self, user, remove_hidden=True):
-        """ Quests that should appear in the user's Available quests tab"""
-        qs = self.get_active().select_related('campaign')
-        qs = qs.get_conditions_met(user)
+        """ Quests that should appear in the user's Available quests tab.   Should exclude:
+        1. Quests whose available date & time has not past, or quest that have expired
+        2. Quests that are not visible to students or archived
+        3. Quests who's prerequisites have not been met
+        4. Quests that are not currently submitted for approval or already in progress
+        5. Quests who's maximum repeats have been completed
+        6. Quests who's repeat time has not passed since last completion
+        """
+        qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
+        qs = qs.get_conditions_met(user)  # 3
         # quest_list = list(qs)
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         # available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
-        available_quests = qs.get_list_not_submitted_or_inprogress(user)
+        available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
         if remove_hidden:
             available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
@@ -539,12 +546,17 @@ class QuestSubmissionManager(models.Manager):
         except ObjectDoesNotExist:
             pass  # nothing found, continue
 
+        # Handle repeatable quests with past submissions
+
         latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
         latest_dt = latest_sub.first_time_completed
 
         # to handle cases before first_time_completed existed as a property
         if not latest_dt:
+            # then latest_sub could be wrong.  Need to get latest completed date
+            latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
             latest_dt = latest_sub.time_completed
+
         return quest.is_repeat_available(latest_dt, num_subs)
 
     def create_submission(self, user, quest):
@@ -624,6 +636,7 @@ class QuestSubmission(models.Model):
     ordinal = models.PositiveIntegerField(default=1,
                                           help_text='indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
+    # `first_time_completed` so that repeatable quests can count time from the first submission attempt
     first_time_completed = models.DateTimeField(null=True, blank=True)
     time_completed = models.DateTimeField(null=True, blank=True)
     is_approved = models.BooleanField(default=False)
@@ -655,8 +668,8 @@ class QuestSubmission(models.Model):
         self.time_completed = timezone.now()
         # this is only set the first time, so it can be referenced to
         # when calculating repeatable quests
-        if self.first_time_completed is not None:
-            self.first_time_completed = timezone.now()
+        if self.first_time_completed is None:
+            self.first_time_completed = self.time_completed()
         self.save()
 
     def mark_approved(self, transfer=False):
