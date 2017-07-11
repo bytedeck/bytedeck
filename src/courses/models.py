@@ -389,7 +389,26 @@ class CourseStudent(models.Model):
 class MarkDistributionHistogram(Chart):
     chart_type = 'bar'
     scales = {
-        'xAxes': [{'barPercentage': 1.0, 'categoryPercentage': 1.0}]
+        'xAxes': [{
+            'barPercentage': 1.05,
+            'categoryPercentage': 1.05,
+            'gridLines': {
+               'offsetGridLines': False,
+               'display': False,
+            },
+            # 'scaleLabel': {
+            #   'display': True,
+            #   'labelString': 'Current mark as a percentage'
+            # }
+        }],
+        # 'yAxes': [{
+        #       'scaleLabel': {
+        #         'display': True,
+        #         'labelString': '# of students in this mark range'
+        #       }
+        # }]
+
+
     }
     histogram = {'labels': [], 'data': []}
 
@@ -418,7 +437,7 @@ class MarkDistributionHistogram(Chart):
         #     rgba(255, 159, 64, 0.2)
         # ]
 
-        return [DataSet(label='Distribution of Marks for All Classes this Semester',
+        return [DataSet(label='# of students in this mark range',
                         data=data,
                         borderWidth=1,
                         #backgroundColor=colors,
@@ -430,9 +449,18 @@ class MarkDistributionHistogram(Chart):
         data = Semester.objects.get_current().get_student_mark_list()
         #data = numpy.random.normal(0, 20, 1000)
         bins = numpy.arange(0, 110, 10)
-        hist, bin_edges = numpy.histogram(data, bins)
-        self.histogram['labels'] = bins.tolist()
+        bins_list = bins.tolist()  # numpy uses some weird ass array format, lets get a list from it
+        bins_list.append(999)  # include everything >100 in the last bin
+        hist, bin_edges = numpy.histogram(data, bins_list)
         self.histogram['data'] = hist.tolist()
+
+        # do some work to get labels correct
+        # don't wan't the last bin 999 to appear as a label on the chart
+        bin_labels = [str(bin_label) + "%" for bin_label in bins_list]
+        bin_labels[-1] = ""
+        bin_labels[-2] = "100%+"
+        self.histogram['labels'] = bin_labels
+
 
 
 
