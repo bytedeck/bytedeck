@@ -1,5 +1,6 @@
 {% extends "courses/base.html" %}
 {% load crispy_forms_tags %}
+{% load jchart %}
 
 {% block heading_inner %}Mark Calculations{% endblock %}
 
@@ -98,42 +99,45 @@
         </li>
       </ul>
 
+      <h3>Charts</h3>
+
       <p>Here are some pretty charts I made just for you, to help you visualize your progress so far:</p>
-{#      <div>#}
-{#        <ul class="nav nav-pills" role="tablist">#}
-{#          <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>#}
-{#          <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>#}
-{#        </ul>#}
+      <div>
+        <ul class="nav nav-pills" role="tablist">
+          <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
+          <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+        </ul>
 
         <!-- Tab panes -->
-{#        <div class="tab-content">#}
-{#          <div role="tabpanel" class="tab-pane active" id="progress">#}
+        <div class="tab-content">
+          <div role="tabpanel" class="tab-pane active" id="progress">
             <div class="well">
               <div class="loading">
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
                 &nbsp;Calculating data for chart...
               </div>
-              <canvas id="myChart" style="display: none; height: 400px;">
+              <canvas id="myChart" class="xp-chart" style="display: none; ">
                 <!-- content will be set by js in xp_chart.html -->
               </canvas>
-{#            </div>#}
-{#          </div>#}
-{##}
-{#          <div role="tabpanel" class="tab-pane" id="distribution">#}
-{#            <div class="well">#}
+            </div>
+          </div>
+          <div role="tabpanel" class="tab-pane" id="distribution">
+            <div class="well">
+              {% render_chart 'courses:mark_distribution_chart' %}
 {#              <div class="loading">#}
 {#                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>#}
 {#                &nbsp;Calculating data for chart...#}
 {#              </div>#}
-{#              <canvas id="chart-mark-distribution" style="/*display: none;*/ height: 400px;">#}
+{#              <canvas id="chart-mark-distribution" class="xp-chart" style="/*display: none;*/ height: 400px;">#}
 {#                <!-- content will be set by js in xp_chart.html -->#}
 {#              </canvas>#}
 {#            </div>#}
-{#          </div>#}
-{#        </div>#}
-{##}
-{##}
-{#      </div>#}
+            </div>
+          </div>
+
+
+        </div> <!-- tab-content -->
+      </div>  <!-- tab container -->
 
       <h3>Chillax Line</h3>
       <p>{% if obj.semester.chillax_line_started %}
