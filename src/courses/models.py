@@ -440,7 +440,7 @@ class MarkDistributionHistogram(Chart):
         return [DataSet(label='# of students in this mark range',
                         data=data,
                         borderWidth=1,
-                        #backgroundColor=colors,
+                        backgroundColor=rgba(128, 128, 128, 0.3),
                         borderColor=rgba(0, 0, 0, 0.2)
                         )
                 ]
