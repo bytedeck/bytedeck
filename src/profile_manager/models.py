@@ -140,7 +140,7 @@ class Profile(models.Model):
     def internal_name(self):
         name = self.preferred_full_name()
         if self.alias:
-            name += ", aka " + self.alias_clipped
+            name += ", aka " + self.alias_clipped()
         return name
 
     def formal_name(self):
