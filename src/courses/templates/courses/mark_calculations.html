@@ -123,7 +123,7 @@
           </div>
           <div role="tabpanel" class="tab-pane" id="distribution">
             <div class="well chart-container">
-              {% render_chart 'courses:mark_distribution_chart' %}
+              {% render_chart 'courses:mark_distribution_chart' user.id %}
             </div>
           </div>
 

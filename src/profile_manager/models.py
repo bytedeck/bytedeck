@@ -32,15 +32,22 @@ class ProfileQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         return self.filter(active_in_current_semester=semester)
 
+    def students_only(self):
+        return self.filter(user__is_staff=False, is_test_account=False)
+
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
         return ProfileQuerySet(self.model, using=self._db).select_related('user')
 
+    def all_students(self):
+        return self.get_queryset().students_only()
+
     def all_for_active_semester(self):
         """:return: a queryset of student profiles with a course this semester"""
         courses_user_list = CourseStudent.objects.all_users_for_active_semester()
-        return self.get_queryset().filter(user__in=courses_user_list)
+        qs = self.all_students().filter(user__in=courses_user_list)
+        return qs
 
     def get_mailing_list(self):
         return self.get_queryset().announcement_email()
@@ -77,6 +84,9 @@ class Profile(models.Model):
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
                                                  validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
+    is_test_account = models.BooleanField(default=False,
+                                          help_text="A test account that won't show up in student lists",
+                                          )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
     game_lab_transfer_process_on = models.BooleanField(default=False)

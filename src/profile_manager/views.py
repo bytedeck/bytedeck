@@ -35,7 +35,7 @@ class ProfileList(ListView):
         return profiles_qs
 
     def get_queryset(self):
-        profiles_qs = Profile.objects.all()
+        profiles_qs = Profile.objects.all_students()
         return self.queryset_append(profiles_qs)
 
     @method_decorator(login_required)

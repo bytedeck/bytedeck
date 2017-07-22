@@ -33,6 +33,7 @@ def mark_calculations(request, user_id=None):
     num_courses = courses.count()
     if courses:
         xp_per_course = user.profile.xp_cached / num_courses
+        #mark = user.profile.mark()
     else:
         xp_per_course = None
 
@@ -42,34 +43,7 @@ def mark_calculations(request, user_id=None):
         'courses': courses,
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
-    }
-    return render(request, template_name, context)
-
-
-@login_required
-def mark_calculations2(request, user_id=None):
-    template_name = 'courses/mark_calculations2.html'
-
-    # Only allow staff to see other student's mark page
-    if user_id is not None and request.user.is_staff:
-        user = get_object_or_404(User, pk=user_id)
-    else:
-        user = request.user
-
-    course_student = CourseStudent.objects.current_course(user)
-    courses = CourseStudent.objects.current_courses(user)
-    num_courses = courses.count()
-    if courses:
-        xp_per_course = user.profile.xp_cached / num_courses
-    else:
-        xp_per_course = None
-
-    context = {
-        'user': user,
-        'obj': course_student,
-        'courses': courses,
-        'xp_per_course': xp_per_course,
-        'num_courses': num_courses,
+        #'mark': mark,
     }
     return render(request, template_name, context)
 

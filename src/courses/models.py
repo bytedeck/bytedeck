@@ -193,7 +193,7 @@ class Semester(models.Model):
         # Might want to include the holidays (if class day is Friday, then work done on weekend/holidays won't show up
         # till Monday.  For chart, want to include those days
         if (add_holidays):
-            next_date = workday(self.first_day, class_days+1, excluded_days)
+            next_date = workday(self.first_day, class_days + 1, excluded_days)
             num_holidays_to_add = next_date - date - timedelta(days=1)  # If more than one day difference
             date += num_holidays_to_add
 
@@ -209,8 +209,8 @@ class Semester(models.Model):
     def chillax_line(self):
         return 1000 * config.hs_chillax_line * self.fraction_complete()
 
-    def get_student_mark_list(self):
-        students = CourseStudent.objects.all_users_for_active_semester()
+    def get_student_mark_list(self, students_only=False):
+        students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
         mark_list = []
         for student in students:
             mark_list.append(student.profile.mark())
@@ -230,7 +230,7 @@ class Block(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     current_teacher = models.ForeignKey(settings.AUTH_USER_MODEL,
                                         null=True, blank=True,
-                                        limit_choices_to={'is_staff': True},)
+                                        limit_choices_to={'is_staff': True}, )
 
     def __str__(self):
         return self.block
@@ -279,6 +279,9 @@ class CourseStudentQuerySet(models.query.QuerySet):
     def get_inactive(self):
         return self.filter(active=False)
 
+    def get_students_only(self):
+        return self.filter(user__is_staff=False, user__profile__is_test_account=False)
+
 
 class CourseStudentManager(models.Manager):
     def get_queryset(self):
@@ -315,8 +318,11 @@ class CourseStudentManager(models.Manager):
             coursestudent.active = False
             coursestudent.save()
 
-    def all_for_semester(self, semester):
-        return self.get_queryset().get_semester(semester)
+    def all_for_semester(self, semester, students_only=False):
+        qs = self.get_queryset().get_semester(semester)
+        if students_only:
+            qs = qs.get_students_only()
+        return qs
 
     # pick one of the courses...for now
     def current_course(self, user):
@@ -325,11 +331,11 @@ class CourseStudentManager(models.Manager):
     def current_courses(self, user):
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
-    def all_users_for_active_semester(self):
+    def all_users_for_active_semester(self, students_only=False):
         """
         :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
         """
-        courses = self.all_for_semester(config.hs_active_semester)
+        courses = self.all_for_semester(config.hs_active_semester, students_only=students_only)
         user_list = courses.values_list('user', flat=True)
         user_list = set(user_list)  # removes doubles
         return User.objects.filter(id__in=user_list)
@@ -393,65 +399,72 @@ class MarkDistributionHistogram(Chart):
             'barPercentage': 1.05,
             'categoryPercentage': 1.05,
             'gridLines': {
-               'offsetGridLines': False,
-               'display': False,
+                'offsetGridLines': False,
+                'display': False,
             },
+            'stacked': True,
             # 'scaleLabel': {
             #   'display': True,
             #   'labelString': 'Current mark as a percentage'
             # }
         }],
-        # 'yAxes': [{
-        #       'scaleLabel': {
-        #         'display': True,
-        #         'labelString': '# of students in this mark range'
-        #       }
-        # }]
-
+        'yAxes': [{
+            'stacked': True,
+            # 'scaleLabel': {
+            #     'display': True,
+            #     'labelString': '# of students in this mark range'
+            # }
+        }]
 
     }
     options = {
         'maintainAspectRatio': False,
     }
     histogram = {'labels': [], 'data': []}
-
-
-    # def __init__(self):
-    #     try:  #the config data may not be readable whent he app loads
-    #         self.mark_list =
-    #     except AttributeError as e:
-    #         print(e)
+    bin_size = 10
 
     def get_labels(self, **kwargs):
-        # return ["February", "March", "April",
-        #         "May", "June", "July"]
+
         self.generate_histogram()
         return self.histogram['labels']
 
-    def get_datasets(self, **kwargs):
-        # data = [10, 15, 29, 30, 5, 10, 22]
-        data = self.histogram['data']
-        # colors = [
-        #     rgba(255, 99, 132, 0.2),
-        #     rgba(54, 162, 235, 0.2),
-        #     rgba(255, 206, 86, 0.2),
-        #     rgba(75, 192, 192, 0.2),
-        #     rgba(153, 102, 255, 0.2),
-        #     rgba(255, 159, 64, 0.2)
-        # ]
+    def get_datasets(self, user_id):
+        all_course_data = self.histogram['data']
+        user_data = self.generate_user_data(user_id)
 
-        return [DataSet(label='# of students in this mark range',
-                        data=data,
-                        borderWidth=1,
-                        backgroundColor=rgba(128, 128, 128, 0.3),
-                        borderColor=rgba(0, 0, 0, 0.2)
-                        )
-                ]
+        course_dataset = DataSet(label='# of students in this mark range',
+                                  data=all_course_data,
+                                  borderWidth=1,
+                                  backgroundColor=rgba(128, 128, 128, 0.3),
+                                  borderColor=rgba(0, 0, 0, 0.2),
+                                  )
+        # course_dataset['stack'] = 'marks'
+
+        user_dataset = DataSet(label='You',
+                               data=user_data,
+                               )
+        # user_dataset['stack'] = 'marks'
+
+        return [course_dataset, user_dataset, ]
+
+    def generate_user_data(self, user_id):
+        """ Create a list for the histogram filled with 0's except the bin with the user's mark
+        """
+        user = User.objects.get(id=user_id)
+        user_mark = user.profile.mark()
+        data = []
+        for mark_bin in range(0, 100 + self.bin_size, self.bin_size):
+            if mark_bin <= user_mark < mark_bin + self.bin_size:
+                data.append(1)
+            else:
+                data.append(0)
+        return data
 
     def generate_histogram(self):
-        data = Semester.objects.get_current().get_student_mark_list()
-        #data = numpy.random.normal(0, 20, 1000)
-        bins = numpy.arange(0, 110, 10)
+        data = Semester.objects.get_current().get_student_mark_list(students_only=True)
+        # data = numpy.random.normal(0, 20, 1000)
+        right_edge = 100 + self.bin_size
+        bins = numpy.arange(0, right_edge, self.bin_size)
         bins_list = bins.tolist()  # numpy uses some weird ass array format, lets get a list from it
         bins_list.append(999)  # include everything >100 in the last bin
         hist, bin_edges = numpy.histogram(data, bins_list)
@@ -463,7 +476,3 @@ class MarkDistributionHistogram(Chart):
         bin_labels[-1] = ""
         bin_labels[-2] = "100%+"
         self.histogram['labels'] = bin_labels
-
-
-
-
