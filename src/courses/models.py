@@ -411,7 +411,7 @@ class MarkDistributionHistogram(Chart):
 
     }
     options = {
-        'maintainAspectRatio': True
+        'maintainAspectRatio': False,
     }
     histogram = {'labels': [], 'data': []}
 

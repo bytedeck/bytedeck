@@ -7,7 +7,7 @@ django-datetime-widget==0.9.3 # Requires `pip install setuptool` first?
 django-djconfig==0.5.3
 django-embed-video==1.1.2
 django-grappelli==2.10.1
-django-jchart==0.3.0
+django-jchart==0.4.1
 django-postgrespool==0.3.1
 Django-Select2==5.10.0
 django-summernote==0.8.7
