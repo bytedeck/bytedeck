@@ -111,7 +111,7 @@
         <!-- Tab panes -->
         <div class="tab-content">
           <div role="tabpanel" class="tab-pane active" id="progress">
-            <div class="well">
+            <div class="well chart-container">
               <div class="loading">
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
                 &nbsp;Calculating data for chart...
@@ -122,7 +122,7 @@
             </div>
           </div>
           <div role="tabpanel" class="tab-pane" id="distribution">
-            <div class="well">
+            <div class="well chart-container">
               {% render_chart 'courses:mark_distribution_chart' %}
             </div>
           </div>
