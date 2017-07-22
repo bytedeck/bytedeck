@@ -425,19 +425,24 @@ class MarkDistributionHistogram(Chart):
 
     def get_labels(self, **kwargs):
 
-        self.generate_histogram()
+        if not self.histogram['labels']:
+            self.generate_histogram()
         return self.histogram['labels']
 
     def get_datasets(self, user_id):
-        all_course_data = self.histogram['data']
-        user_data = self.generate_user_data(user_id)
 
-        course_dataset = DataSet(label='# of students in this mark range',
-                                  data=all_course_data,
-                                  borderWidth=1,
-                                  backgroundColor=rgba(128, 128, 128, 0.3),
-                                  borderColor=rgba(0, 0, 0, 0.2),
-                                  )
+        if not self.histogram['data']:
+            self.generate_histogram()
+
+        user_data = self.generate_user_data(user_id)  # needs to be before getting histogram data
+        all_course_data = self.histogram['data']
+
+        course_dataset = DataSet(label='# of other students in this mark range',
+                                 data=all_course_data,
+                                 borderWidth=1,
+                                 backgroundColor=rgba(128, 128, 128, 0.3),
+                                 borderColor=rgba(0, 0, 0, 0.2),
+                                 )
         # course_dataset['stack'] = 'marks'
 
         user_dataset = DataSet(label='You',
@@ -453,11 +458,15 @@ class MarkDistributionHistogram(Chart):
         user = User.objects.get(id=user_id)
         user_mark = user.profile.mark()
         data = []
+        index = 0
         for mark_bin in range(0, 100 + self.bin_size, self.bin_size):
             if mark_bin <= user_mark < mark_bin + self.bin_size:
                 data.append(1)
+                # Remove this data point from the main data
+                self.histogram['data'][index] -= 1
             else:
                 data.append(0)
+            index += 1
         return data
 
     def generate_histogram(self):
