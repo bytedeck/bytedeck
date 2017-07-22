@@ -103,7 +103,7 @@ class Profile(models.Model):
                 profile += " (" + self.preferred_name + ")"
             profile += " " + self.last_name
             if self.alias:
-                profile += ", aka " + self.alias
+                profile += ", aka " + self.alias_clipped()
         else:
             profile = self.user.username
         return profile
@@ -118,7 +118,12 @@ class Profile(models.Model):
         elif self.first_name:
             return self.first_name
         else:
-            ""
+            return ""
+
+    def alias_clipped(self):
+        if self.alias is None:
+            return "-"
+        return self.alias if len(self.alias) < 15 else self.alias[:13] + "..."
 
     def preferred_full_name(self):
         name = self.get_preferred_name()
@@ -135,7 +140,7 @@ class Profile(models.Model):
     def internal_name(self):
         name = self.preferred_full_name()
         if self.alias:
-            name += ", aka " + self.alias
+            name += ", aka " + self.alias_clipped
         return name
 
     def formal_name(self):

@@ -92,7 +92,7 @@
                 <td><img class="icon-md img-rounded" src="{{ object.get_avatar_url }}" alt="avatar"/></td>
                 <td>{{ object.get_preferred_name }}</td>
                 <td>{{ object.last_name|default:"-" }}</td>
-                <td>{{ object.alias|default:"-" }}</td>
+                <td>{{ object.alias_clipped|default:"-" }}</td>
                 <td>{{ object.grad_year|default:"-" }}</td>
                 <td>
                   {% for block in object.blocks %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
