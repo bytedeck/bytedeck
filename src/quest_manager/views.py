@@ -840,3 +840,31 @@ def flagged_submissions(request):
         "active_id": None,
     }
     return render(request, "quest_manager/flagged.html", context)
+
+
+@staff_member_required
+def flag(request, submission_id):
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+
+    # approve quest automatically, and mark as transfer.
+    sub.flagged_by = request.user
+    sub.save()
+
+    messages.success(request, "Submission flagged for future follow up.")
+
+    return redirect("quests:flagged")
+
+
+@staff_member_required
+def unflag(request, submission_id):
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+
+    # approve quest automatically, and mark as transfer.
+    sub.flagged_by = None
+    sub.save()
+
+    messages.success(request, "Submission <a href='%s'>%s by %s</a> has been unflagged." %
+                     (sub.get_absolute_url(), sub.quest.name, sub.user))
+
+    return redirect("quests:flagged")
+

@@ -68,6 +68,8 @@ urlpatterns = [
     url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 
     # Flagged submissions
+    url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
     url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),

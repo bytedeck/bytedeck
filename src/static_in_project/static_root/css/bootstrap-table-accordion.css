@@ -10,6 +10,13 @@
     border-bottom-width: 2px !important;
 }
 
+/* remove the transparent border to prevent gaps in row borders */
+.bootstrap-table .table.table-no-bordered > tbody > tr > td,
+.bootstrap-table .table.table-no-bordered > thead > tr > th {
+    border-right: none;
+    border-left: none;
+}
+
 /* New contextual class: .primary */
 .table>tbody>tr.primary>td, .table>tbody>tr.primary>th, .table>tbody>tr>td.primary, .table>tbody>tr>th.primary,
 .table>tfoot>tr.primary>td, .table>tfoot>tr.primary>th, .table>tfoot>tr>td.primary, .table>tfoot>tr>th.primary,
