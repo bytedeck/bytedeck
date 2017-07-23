@@ -837,5 +837,6 @@ def flagged_submissions(request):
 
     context = {
         "submissions": flagged_subs,
+        "active_id": None,
     }
     return render(request, "quest_manager/flagged.html", context)

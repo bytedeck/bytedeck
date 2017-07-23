@@ -43,7 +43,7 @@
               {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
             </div>
             <div class="col-xs-2">{{s.user}} <br />
-              <small>{{s.user.profile.first_name|add:' '|add:s.user.profile.last_name|truncatechars:15}}</small>
+              <small>{{ s.user.profile.preferred_full_name }}</small>
              </div>
             <div class="col-xs-3">
               {% if s.is_approved %}
