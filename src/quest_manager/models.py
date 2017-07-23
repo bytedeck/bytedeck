@@ -419,6 +419,9 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.exclude_quests_not_visible_to_students()
         return qs.select_related('quest')
 
+    def flagged(self, user):
+        return self.get_queryset().filter(flagged_by=user)
+
     def all_for_quest(self, quest):
         return self.get_queryset(True).get_quest(quest)
 
@@ -631,8 +634,7 @@ class QuestSubmissionManager(models.Manager):
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL,
-                             related_name="quest_submission_user")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
     ordinal = models.PositiveIntegerField(default=1,
                                           help_text='indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
@@ -647,6 +649,9 @@ class QuestSubmission(models.Model):
     # all references to gamelab changed to "skipped"
     game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
     semester = models.ForeignKey('courses.Semester')
+    flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   related_name="quest_submission_flagged_by",
+                                   help_text="flagged by a teacher for follow up")
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

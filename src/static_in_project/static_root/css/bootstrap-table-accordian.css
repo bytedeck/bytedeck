@@ -64,6 +64,26 @@
     padding-right: 18px;
 }
 
+.table-accordian thead > tr > th.detail,
+.table-accordian tbody > tr:not(.detail-view) > td:first-of-type {
+    display: none;
+}
+
+.table-accordian thead > tr > th:nth-child(2),
+.table-accordian tbody > tr:not(.detail-view) > td:nth-child(2) {
+    border-left: none !important;
+}
+
+.bootstrap-table .table > tbody > tr.detail-view > td {
+    padding: 0;
+}
+
+/*********************************************
+ *
+ *  ACCORDIAN -- DETAILED VIEW
+ *
+ *********************************************/
+
 /*
 .detail-view {
     border-color: ;

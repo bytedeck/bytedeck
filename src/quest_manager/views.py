@@ -733,9 +733,9 @@ def skip(request, submission_id):
 
 @login_required
 def skipped(request, quest_id):
-    '''A combination of the start and complete views, but automatically approved
+    """A combination of the start and complete views, but automatically approved
     regardless, and game_lab_transfer = True
-    '''
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None:  # might be because quest was already started
@@ -823,3 +823,19 @@ def ajax(request):
         return HttpResponse(json_data, content_type='application/json')
     else:
         raise Http404
+
+
+########################
+#
+# FLAGGED SUBMISSIONS
+#
+########################
+
+@staff_member_required
+def flagged_submissions(request):
+    flagged_subs = QuestSubmission.objects.flagged(user=request.user)
+
+    context = {
+        "submissions": flagged_subs,
+    }
+    return render(request, "quest_manager/flagged.html", context)
