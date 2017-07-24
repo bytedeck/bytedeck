@@ -1,6 +1,9 @@
 import numpy
 from datetime import timedelta, date, datetime
 
+from django.db.models.signals import pre_save, post_save
+from django.dispatch import receiver
+
 from prerequisites.models import IsAPrereqMixin
 
 from quest_manager.models import QuestSubmission
@@ -390,6 +393,15 @@ class CourseStudent(models.Model):
             return self.user.profile.xp_cached / self.semester.days_so_far()
         else:
             return 0
+
+
+@receiver(post_save, sender=CourseStudent)
+def coursestudent_post_save_callback(instance, **kwargs):
+    """
+    This model's objects are edited by teachers using the admin menu.
+    If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
+    """
+    instance.user.profile.xp_invalidate_cache()
 
 
 class MarkDistributionHistogram(Chart):

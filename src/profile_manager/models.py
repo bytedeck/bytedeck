@@ -105,6 +105,12 @@ class Profile(models.Model):
 
     objects = ProfileManager()
 
+    #################################
+    #
+    #   "Get Name" methods
+    #
+    #################################
+
     def __str__(self):
         profile = ""
         if self.first_name:
@@ -208,7 +214,17 @@ class Profile(models.Model):
             hidden_quest_list.remove(quest_id)
             self.save_hidden_quests_from_list(hidden_quest_list)
 
-    # END HIDDEN QUEST MANAGEMENT
+    #################################
+    #
+    #   Courses and blocks
+    #
+    #################################
+
+    def num_courses(self):
+        return self.current_courses().count()
+
+    def current_courses(self):
+        return CourseStudent.objects.all_for_user_semester(self.user, config.hs_active_semester)
 
     def has_past_courses(self):
         semester = config.hs_active_semester
@@ -232,6 +248,12 @@ class Profile(models.Model):
         else:
             return None
 
+    #################################
+    #
+    #   XP and Marks
+    #
+    #################################
+
     def xp_invalidate_cache(self):
         xp = QuestSubmission.objects.calculate_xp(self.user)
         xp += BadgeAssertion.objects.calculate_xp(self.user)
@@ -254,12 +276,6 @@ class Profile(models.Model):
         # xp += CourseStudent.objects.calculate_xp(self.user, date)
         return xp
 
-    def num_courses(self):
-        return self.current_courses().count()
-
-    def current_courses(self):
-        return CourseStudent.objects.all_for_user_semester(self.user, config.hs_active_semester)
-
     def mark(self):
         # course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
@@ -275,6 +291,12 @@ class Profile(models.Model):
             if semester and semester.chillax_line_started():
                 return int(self.xp_per_course()) >= int(semester.chillax_line())
         return False
+
+    #################################
+    #
+    #   Ranks
+    #
+    #################################
 
     def rank(self):
         return Rank.objects.get_rank(self.xp_cached)
@@ -294,6 +316,12 @@ class Profile(models.Model):
             return self.xp_cached - self.rank().xp
         except:
             return 0
+
+    #################################
+    #
+    #   Miscellaneous
+    #
+    #################################
 
     def last_submission_completed(self):
         return QuestSubmission.objects.user_last_submission_completed(self.user)

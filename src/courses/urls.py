@@ -13,10 +13,8 @@ urlpatterns = [
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),
     url(r'^marks/$', views.mark_calculations, name='my_marks'),
     url(r'^marks/(?P<user_id>[0-9]+)/$', views.mark_calculations, name='marks'),
-    url(r'^close_semester/$',
-        views.end_active_semester, name='end_active_semester'),
-    url(r'^ajax/progress_chart/(?P<user_id>[0-9]+)/$',
-        views.ajax_progress_chart, name='ajax_progress_chart'),
+    url(r'^close_semester/$', views.end_active_semester, name='end_active_semester'),
+    url(r'^ajax/progress_chart/(?P<user_id>[0-9]+)/$', views.ajax_progress_chart, name='ajax_progress_chart'),
 
     url(r'^charts/bar_chart/(?P<user_id>[0-9]+)/$', ChartView.from_chart(MarkDistributionHistogram()),
         name='mark_distribution_chart'),
