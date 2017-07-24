@@ -269,11 +269,11 @@ class Profile(models.Model):
         return self.xp_cached / course_count
 
     def xp_to_date(self, date):
-        # TODO: Combine this with xp()
+        # TODO: Combine this with other methods?
         xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)
         xp += BadgeAssertion.objects.calculate_xp_to_date(self.user, date)
         # TODO: Add manual adjustments to calculation
-        # xp += CourseStudent.objects.calculate_xp(self.user, date)
+        xp += CourseStudent.objects.calculate_xp(self.user)
         return xp
 
     def mark(self):
