@@ -6,6 +6,11 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. Install Git: `sudo apt install git`.  If working in Windows, install [Git Bash](https://git-for-windows.github.io/)
 1. Pick/create a location for the project, e.g: `~/Developer`
 
+#### Fork the repository
+1. Go to https://github.com/timberline-secondary/hackerspace
+2. Click the "Fork" button on the top right corner. 
+3. This will allow you to have your own copy of the project on your GitHub account.
+
 #### Clone the repository
 1. Move to the parent directory of the project: `cd ~/Developer`
 2. `git clone https://github.com/timberline-secondary/hackerspace.git`
