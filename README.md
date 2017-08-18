@@ -7,13 +7,16 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. Pick/create a location for the project, e.g: `~/Developer`
 
 #### Fork the repository
-1. Go to https://github.com/timberline-secondary/hackerspace
-2. Click the "Fork" button on the top right corner. 
-3. This will allow you to have your own copy of the project on your GitHub account.
+1. Create a Github account.
+2. Go to https://github.com/timberline-secondary/hackerspace
+3. Click the "Fork" button on the top right corner. 
+4. This will allow you to have your own copy of the project on your GitHub account.
 
 #### Clone the repository
 1. Move to the parent directory of the project: `cd ~/Developer`
-2. `git clone https://github.com/timberline-secondary/hackerspace.git`
+2. Go to your forked repository.
+3. Click "Clone or download" and copy the url.
+4. `git clone yoururlhere`
 3. This will download the project into ~/Developer/hackerspace/
 
 #### Python Virtual Environment
