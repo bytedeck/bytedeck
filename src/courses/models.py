@@ -35,6 +35,8 @@ class RankManager(models.Manager):
         return RankQuerySet(self.model, using=self._db).order_by('xp')
 
     def get_rank(self, user_xp=0):
+        if user_xp < 0:
+            user_xp = 0
         return self.get_queryset().get_ranks_lte(user_xp).last()
 
     def get_next_rank(self, user_xp=0):
