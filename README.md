@@ -32,7 +32,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 5. Later (don't do it now), when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. `pip install -r requirments-top.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
+1. `pip install -r requirements-top.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
 2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
 
 #### Creating the SQLite database (Easy Option)
@@ -67,3 +67,13 @@ LMS for Timberline Secondary School's Digital Hackerspace
 1. Set Settings to: `hackerspace_online/settings` (this is relative to the root above)
 1. OK, OK.
 1. Hit the green play button to test.
+
+#### Committing changes.
+1. Move into your cloned repository: `cd ~/Developer/hackerspace`
+2. Add an upstream remote: `git remote add upstream git@github.com:timberline-secondary/hackerspace.git`
+3. Pull in changes from the source: `git fetch upstream`
+4. Merge them: `git merge upstream/master`
+5. Make your changes.
+6. Commit your changes `git commit -am "yourchangeslistedhere"`
+7. Go to your forked repository and click on "Pull Request".
+8. Complete the fields and create the pull request. 

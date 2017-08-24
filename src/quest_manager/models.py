@@ -68,6 +68,7 @@ class XPItem(models.Model):
                                     and reappear at midnight. If this is blank, then midnight assumed.')
     icon = models.ImageField(upload_to='icons/', blank=True, null=True)  # needs Pillow for ImageField
 
+
     class Meta:
         abstract = True
         ordering = ["-sort_order", "-time_expired", "-date_expired", "name"]
@@ -130,6 +131,11 @@ class XPItem(models.Model):
         return self.active and \
                QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
                Prereq.objects.all_conditions_met(self, user)
+
+class Icon(models.Model):
+    icon_name = models.CharField(max_length=50, unique=True)
+    icon_image = models.ImageField()
+
 
 
 class QuestQuerySet(models.query.QuerySet):
