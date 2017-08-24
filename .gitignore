@@ -5,6 +5,8 @@ production_*.py
 # python manage.py collectstatic
 static_in_venv/
 
+
+
 # Linux:
 bin/
 include/
@@ -15,6 +17,9 @@ Scripts/
 tcl/
 Include/
 Lib/
+
+# Mac:
+*.DS_Store
 
 # PyCharm
 .idea
