@@ -81,8 +81,9 @@
     border-left: none !important;
 }
 
-.bootstrap-table .table > tbody > tr.detail-view > td {
-    padding: 0;
+/* mimic bootstrap .panel-heading */
+.bootstrap-table .table > tbody > tr.row-heading > td {
+    padding: 15px;
 }
 
 /*********************************************
@@ -95,6 +96,10 @@
 .detail-view {
     border-color: ;
 }*/
+
+.bootstrap-table .table > tbody > tr.detail-view > td {
+    padding: 0;
+}
 
 .detail-view .list-group-item:first-child {
     border-top-left-radius: 0px;

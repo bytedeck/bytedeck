@@ -76,7 +76,12 @@ def comment(request, ann_id):
 
 
 @login_required
-def list(request, ann_id=None):
+def list2(request, ann_id=None):
+    return list(request, ann_id, template='announcements/list2.html')
+
+
+@login_required
+def list(request, ann_id=None, template='announcements/list.html'):
     if request.user.is_staff:
         object_list = Announcement.objects.get_active()
     else:
@@ -111,7 +116,9 @@ def list(request, ann_id=None):
         'object_list': object_list,
         'active_id': active_id,
     }
-    return render(request, 'announcements/list.html', context)
+    return render(request, template, context)
+
+
 
 
 @staff_member_required

@@ -37,6 +37,7 @@ urlpatterns = [
     url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='submission_active'),
     url(r'^available/$', views.quest_list, name='quests'),
     url(r'^available/$', views.quest_list, name='available'),
+    url(r'^available2/$', views.quest_list2, name='available2'),
     url(r'^available/all/$', views.quest_list, name='available_all'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^completed/$', views.quest_list, name='completed'),

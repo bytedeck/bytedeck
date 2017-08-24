@@ -4,6 +4,7 @@ from django.conf.urls import url
 
 urlpatterns = [
     url(r'^$', views.list, name='list'),  # function based view
+    url(r'^b/$', views.list2, name='list2'),  # function based view
     # url(r'^$', views.List.as_view(), name='list'),  # CBV
     # url(r'^create/$', views.create, name='create'),
     url(r'^create/$', views.Create.as_view(), name='create'),  # CBV
