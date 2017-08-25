@@ -13,7 +13,6 @@
                   },
                   success: function (data) {
                       var jsonData = JSON.parse(data);
-                      console.log(jsonData)
 
                       //$(preview_content_selector).html(data.quest_info_html);
                       $(".accordian-trigger").each(function (index) {
@@ -25,8 +24,7 @@
                           var id = parseInt(html_id.match(/\d+$/)[0], 10);
 
                           var preview_content_selector = "#preview-content-" + id;
-                          console.log(preview_content_selector);
-                          console.log(jsonData[id]);
+
                           $(preview_content_selector).html(jsonData[id]);
                       });
 
