@@ -172,24 +172,41 @@ def quest_list(request, quest_id=None, submission_id=None):
 
 @login_required
 def ajax_quest_info(request, quest_id=None):
+
     if request.is_ajax() and request.method == "POST":
-        quest = get_object_or_404(Quest, pk=quest_id)
-        is_hidden = request.user.profile.is_quest_hidden(quest)
-        is_repeatable = quest.max_repeats != 0
-        is_prerequisite = quest.is_used_prereq()
 
         template = "quest_manager/preview_content_quests_avail.html"
-        quest_info_html = render_to_string(template, {"q": quest}, request=request)
 
-        data = {
-            "quest_info_html": quest_info_html,
-            "is_hidden": is_hidden,
-            "is_repeatable": is_repeatable,
-            "is_prerequisite": is_prerequisite,
-        }
-        # JsonResponse new in Django 1.7 is equivalent to:
-        # return HttpResponse(json.dumps(data), content_type='application/json')
-        return JsonResponse(data)
+        if quest_id:
+            quest = get_object_or_404(Quest, pk=quest_id)
+            is_hidden = request.user.profile.is_quest_hidden(quest)
+            is_repeatable = quest.is_repeatable()
+            is_prerequisite = quest.is_used_prereq()
+
+            template = "quest_manager/preview_content_quests_avail.html"
+            quest_info_html = render_to_string(template, {"q": quest}, request=request)
+
+            data = {
+                "quest_info_html": quest_info_html,
+                "is_hidden": is_hidden,
+                "is_repeatable": is_repeatable,
+                "is_prerequisite": is_prerequisite,
+            }
+
+            # JsonResponse new in Django 1.7 is equivalent to:
+            # return HttpResponse(json.dumps(data), content_type='application/json')
+            return JsonResponse(data)
+
+        else:  # all quests, used for staff only.
+            quests = Quest.objects.all()
+            all_quest_info_html = {}
+
+            for q in quests:
+                all_quest_info_html[q.id] = render_to_string(template, {"q": q}, request=request)
+
+            data = json.dumps(all_quest_info_html)
+            return JsonResponse(data, safe=False)
+
     else:
         raise Http404
 
@@ -300,7 +317,11 @@ def detail(request, quest_id):
             return redirect("quests:quests")
 
 
-# Quest APPROVAL VIEWS #################################
+#######################################
+#
+#  Quest APPROVAL VIEWS
+#
+# #################################
 
 @staff_member_required
 def approve(request, submission_id):

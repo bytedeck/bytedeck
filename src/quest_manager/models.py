@@ -106,7 +106,6 @@ class XPItem(models.Model):
 
         return False
 
-    @property
     def active(self):
         """
         Available as a property to make compatible with Badge.active attribute
@@ -130,6 +129,9 @@ class XPItem(models.Model):
         return self.active and \
                QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
                Prereq.objects.all_conditions_met(self, user)
+
+    def is_repeatable(self):
+        return self.max_repeats != 0
 
 
 class QuestQuerySet(models.query.QuerySet):

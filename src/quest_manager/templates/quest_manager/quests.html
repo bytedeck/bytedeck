@@ -21,68 +21,70 @@
 
 {% block content %}
 
-<ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
-  <li role="presentation" {% if available_tab_active %}class="active"{% endif%}>
-    <a href="{% url 'quests:available' %}">
-      Available
-      <span class="badge">{{num_available}}</span>
-    </a>
+  <ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
+    <li role="presentation" {% if available_tab_active %}class="active"{% endif %}>
+      <a href="{% url 'quests:available' %}">
+        Available
+        <span class="badge">{{ num_available }}</span>
+      </a>
 
-  </li>
-  <li role="presentation" {% if inprogress_tab_active %}class="active"{% endif%}>
-    <a href="{% url 'quests:inprogress' %}">
-      In Progress
-      <span class="badge">{{num_inprogress}}</span>
-    </a>
-  </li>
-  <li role="presentation" {% if completed_tab_active %}class="active"{% endif%}>
-    <a href="{% url 'quests:completed' %}">
-      Completed
-      <span class="badge">{{num_completed}}</span>
-    </a>
-  </li>
-  {% if request.user.profile.has_past_courses %}
-  <li role="presentation" {% if past_tab_active %}class="active"{% endif%}>
-    <a href="{% url 'quests:past' %}">
-      Past Courses
-      <span class="badge">{{num_completed}}</span>
-    </a>
-  </li>
-  {% endif %}
-</ul>
-<!-- Tab panes -->
-<div class="tab-content">
-  <div role="tabpanel"
-  class="tab-pane fade {% if available_tab_active %}in active{% endif%}" id="available">
-    {% if not request.user.profile.has_current_course and not request.user.is_staff %}
-      <p>You have not joined a course yet for this semester.</p>
-      <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+    </li>
+    <li role="presentation" {% if inprogress_tab_active %}class="active"{% endif %}>
+      <a href="{% url 'quests:inprogress' %}">
+        In Progress
+        <span class="badge">{{ num_inprogress }}</span>
+      </a>
+    </li>
+    <li role="presentation" {% if completed_tab_active %}class="active"{% endif %}>
+      <a href="{% url 'quests:completed' %}">
+        Completed
+        <span class="badge">{{ num_completed }}</span>
+      </a>
+    </li>
+    {% if request.user.profile.has_past_courses %}
+      <li role="presentation" {% if past_tab_active %}class="active"{% endif %}>
+        <a href="{% url 'quests:past' %}">
+          Past Courses
+          <span class="badge">{{ num_completed }}</span>
+        </a>
+      </li>
     {% endif %}
-  {% include 'quest_manager/tab_quests_available.html' %}
+  </ul>
+  <!-- Tab panes -->
+  <div class="tab-content">
+    <div role="tabpanel"
+         class="tab-pane fade {% if available_tab_active %}in active{% endif %}" id="available">
+      {% if not request.user.profile.has_current_course and not request.user.is_staff %}
+        <p>You have not joined a course yet for this semester.</p>
+        <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+      {% endif %}
+      {% include 'quest_manager/tab_quests_available.html' %}
+    </div>
+    <div role="tabpanel"
+         class="tab-pane fade {% if inprogress_tab_active %}in active{% endif %}" id="inprogress">
+      {% with submissions=in_progress_submissions %}
+        {% include 'quest_manager/tab_quests_submission.html' %}
+      {% endwith %}
+    </div>
+    <div role="tabpanel"
+         class="tab-pane fade {% if completed_tab_active %}in active{% endif %}" id="completed">
+      {% with submissions=completed_submissions completed=True %}
+        {% include 'quest_manager/tab_quests_submission.html' %}
+      {% endwith %}
+    </div>
+    {% if request.user.profile.has_past_courses %}
+      <div role="tabpanel"
+           class="tab-pane fade {% if past_tab_active %}in active{% endif %}" id="past_submissions">
+        {% with submissions=past_submissions past=True %}
+          {% include 'quest_manager/tab_quests_submission.html' %}
+        {% endwith %}
+      </div>
+    {% endif %}
   </div>
-  <div role="tabpanel"
-  class="tab-pane fade {% if inprogress_tab_active %}in active{% endif%}" id="inprogress">
-    {% with submissions=in_progress_submissions %}
-      {% include 'quest_manager/tab_quests_submission.html' %}
-    {% endwith %}
-  </div>
-  <div role="tabpanel"
-  class="tab-pane fade {% if completed_tab_active %}in active{% endif%}" id="completed">
-    {% with submissions=completed_submissions completed=True %}
-      {% include 'quest_manager/tab_quests_submission.html' %}
-    {% endwith %}
-  </div>
-  {% if request.user.profile.has_past_courses %}
-  <div role="tabpanel"
-  class="tab-pane fade {% if past_tab_active %}in active{% endif%}" id="past_submissions">
-    {% with submissions=past_submissions past=True %}
-      {% include 'quest_manager/tab_quests_submission.html' %}
-    {% endwith %}
-  </div>
-  {% endif %}
-</div>
 {% endblock %}
 
 {% block js %}
-  {% include "quest_manager/ajax_content_loading.html" %}
+  {% with quests_available_page=True %}
+    {% include "quest_manager/ajax_content_loading.html" %}
+  {% endwith %}
 {% endblock %}

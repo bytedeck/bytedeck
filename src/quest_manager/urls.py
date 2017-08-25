@@ -25,6 +25,7 @@ urlpatterns = [
     url(r'^ajax/$', views.ajax, name='ajax'),
     url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
+    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
