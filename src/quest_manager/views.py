@@ -1,5 +1,7 @@
 import json
 
+from django.contrib.auth.mixins import UserPassesTestMixin
+
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from django.views.decorators.cache import cache_page
@@ -9,7 +11,7 @@ from prerequisites.models import Prereq
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import reverse_lazy, reverse
@@ -22,16 +24,22 @@ from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQui
 from .models import Quest, QuestSubmission
 
 
-class QuestDelete(DeleteView):
+class QuestDelete(UserPassesTestMixin, DeleteView):
+    def test_func(self):
+        return self.request.user.is_staff or self.get_object().is_editable(self.request.user)
+
     model = Quest
     success_url = reverse_lazy('quests:quests')
 
-    @method_decorator(staff_member_required)
+    @user_passes_test
     def dispatch(self, *args, **kwargs):
         return super(QuestDelete, self).dispatch(*args, **kwargs)
 
 
-class QuestCreate(CreateView):
+class QuestCreate(UserPassesTestMixin, CreateView):
+    def test_func(self):
+        return self.request.user.is_staff or self.request.user.profile.is_TA
+
     model = Quest
     form_class = QuestForm
 
@@ -43,12 +51,33 @@ class QuestCreate(CreateView):
         context['submit_btn_value'] = "Create"
         return context
 
-    @method_decorator(staff_member_required)
-    def dispatch(self, *args, **kwargs):
-        return super(QuestCreate, self).dispatch(*args, **kwargs)
+    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
+    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
+    def get_form_kwargs(self):
+        # grab the current set of form #kwargs
+        kwargs = super(QuestCreate, self).get_form_kwargs()
+        # Update the kwargs with the user_id
+        kwargs['request'] = self.request
+        return kwargs
+
+    def form_valid(self, form):
+        # TA created quests should not be visible to students.
+        if self.request.user.profile.is_TA:
+            form.instance.visible_to_students = False
+            form.instance.editor = self.request.user
+        return super(QuestCreate, self).form_valid(form)
+
+    # @user_passes_test(test_func)
+    # def dispatch(self, *args, **kwargs):
+    #     return super(QuestCreate, self).dispatch(*args, **kwargs)
 
 
-class QuestUpdate(UpdateView):
+class QuestUpdate(UserPassesTestMixin, UpdateView):
+    def test_func(self):
+        # user self.get_object() because self.object doesn't exist yet
+        # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
+        return self.request.user.is_staff or self.get_object().is_editable(self.request.user)
+
     model = Quest
     form_class = QuestForm
 
@@ -67,9 +96,14 @@ class QuestUpdate(UpdateView):
             return reverse("quests:quests")
         return self.object.get_absolute_url()
 
-    @method_decorator(staff_member_required)
-    def dispatch(self, *args, **kwargs):
-        return super(QuestUpdate, self).dispatch(*args, **kwargs)
+    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
+    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
+    def get_form_kwargs(self):
+        # grab the current set of form #kwargs
+        kwargs = super(QuestUpdate, self).get_form_kwargs()
+        # Update the kwargs with the user_id
+        kwargs['request'] = self.request
+        return kwargs
 
 
 @login_required
@@ -78,11 +112,13 @@ def quest_list(request, quest_id=None, submission_id=None):
     in_progress_submissions = []
     completed_submissions = []
     past_submissions = []
+    draft_quests = []
 
     available_tab_active = False
     in_progress_tab_active = False
     completed_tab_active = False
     past_tab_active = False
+    drafts_tab_active = False
     remove_hidden = True
 
     active_quest_id = 0
@@ -111,6 +147,8 @@ def quest_list(request, quest_id=None, submission_id=None):
         completed_tab_active = True
     elif '/past/' in request.path_info:
         past_tab_active = True
+    elif '/drafts/' in request.path_info:
+        drafts_tab_active = True
     else:
         available_tab_active = True
         if '/all/' in request.path_info:
@@ -133,6 +171,9 @@ def quest_list(request, quest_id=None, submission_id=None):
         past_submissions = QuestSubmission.objects.all_completed_past(request.user)
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
+    elif drafts_tab_active:
+        draft_quests = Quest.objects.all_drafts(request.user)
+        draft_quests = paginate(draft_quests, page)
     else:
         if request.user.is_staff:
             available_quests = Quest.objects.all()
@@ -158,6 +199,7 @@ def quest_list(request, quest_id=None, submission_id=None):
         "in_progress_submissions": in_progress_submissions,
         # "num_inprogress": num_inprogress,
         "completed_submissions": completed_submissions,
+        "draft_quests": draft_quests,
         "past_submissions": past_submissions,
         # "num_completed": num_completed,
         "active_q_id": active_quest_id,
@@ -166,6 +208,7 @@ def quest_list(request, quest_id=None, submission_id=None):
         "inprogress_tab_active": in_progress_tab_active,
         "completed_tab_active": completed_tab_active,
         "past_tab_active": past_tab_active,
+        "drafts_tab_active": drafts_tab_active,
     }
     return render(request, "quest_manager/quests.html", context)
 

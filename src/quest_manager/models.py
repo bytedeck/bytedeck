@@ -55,7 +55,7 @@ class XPItem(models.Model):
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(default=True)
     archived = models.BooleanField(default=False,
-                                   help_text='Setting this will prevent it form appearing in admin quest lists.  '
+                                   help_text='Setting this will prevent it from appearing in admin quest lists.  '
                                              'To un-archive a quest, you will need to access it through Django Admin.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable, enter -1 for unlimited')
@@ -199,6 +199,8 @@ class QuestQuerySet(models.query.QuerySet):
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
+    def editable(self, user):
+        return self.filter(editor=user.id)
 
 class QuestManager(models.Manager):
     def get_queryset(self, include_archived=False):
@@ -233,6 +235,14 @@ class QuestManager(models.Manager):
         qs = self.get_active().get_conditions_met(user).available_without_course()
         return qs.get_list_not_submitted_or_inprogress(user)
 
+    def all_drafts(self, user):
+        qs = self.get_queryset().filter(visible_to_students=False)
+        if user.is_staff:
+            return qs
+        else: # TA
+            print(qs)
+            return qs.editable(user)
+
 
 class Quest(XPItem, IsAPrereqMixin):
     verification_required = models.BooleanField(default=True,
@@ -257,6 +267,9 @@ class Quest(XPItem, IsAPrereqMixin):
     instructor_notes = models.TextField(blank=True, null=True,
                                         help_text="This field is only visible to Staff. \
                                         Use it to place answer keys or other notes.")
+
+    editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
+                               help_text='A student TA is currently working on building this quest.')
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
@@ -309,12 +322,15 @@ class Quest(XPItem, IsAPrereqMixin):
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
-    def is_on_user_available_tab(self, user):
-        """
-        :param user:
-        :return: True if this quest should appear on the user's available quests list.
-        """
-        not_submitted_already = 1
+    # def is_on_user_available_tab(self, user):
+    #     """
+    #     :param user:
+    #     :return: True if this quest should appear on the user's available quests list.
+    #     """
+    #     not_submitted_already = 1
+
+    def is_editable(self, user):
+        return user == self.editor and not self.visible_to_students
 
 
 # class Feedback(models.Model):

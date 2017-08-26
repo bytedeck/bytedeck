@@ -41,6 +41,7 @@ urlpatterns = [
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^completed/$', views.quest_list, name='completed'),
     url(r'^past/$', views.quest_list, name='past'),
+    url(r'^drafts/$', views.quest_list, name='drafts'),
     url(r'^approvals/$', views.approvals, name='approvals'),
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
     url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),

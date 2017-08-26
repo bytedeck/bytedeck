@@ -10,9 +10,10 @@
 {% load crispy_forms_tags %}
 
 {% block heading_inner %} {{ heading }}
-  {% if request.user.is_staff %}
+  {% if request.user.is_staff or request.user.profile.is_TA %}
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button">New</a>
-  {% elif available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
+  {% endif %}
+  {% if available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
     <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">
       Show Hidden Quests <span class="badge badge-muted">{{ request.user.profile.num_hidden_quests }}</span>
     </a>
@@ -49,6 +50,16 @@
         </a>
       </li>
     {% endif %}
+
+    {% if request.user.profile.is_TA or request.user.is_staff %}
+      <li role="presentation" {% if drafts_tab_active %}class="active"{% endif %}>
+        <a href="{% url 'quests:drafts' %}">
+          Drafts
+          <span class="badge">{{ num_completed }}</span>
+        </a>
+      </li>
+    {% endif %}
+
   </ul>
   <!-- Tab panes -->
   <div class="tab-content">
@@ -78,6 +89,14 @@
         {% with submissions=past_submissions past=True %}
           {% include 'quest_manager/tab_quests_submission.html' %}
         {% endwith %}
+      </div>
+    {% endif %}
+    {% if request.user.profile.is_TA or request.user.is_staff %}
+      <div role="tabpanel"
+         class="tab-pane fade {% if drafts_tab_active %}in active{% endif %}" id="drafts">
+      {% with available_quests=draft_quests %}
+        {% include 'quest_manager/tab_quests_available.html' %}
+      {% endwith %}
       </div>
     {% endif %}
   </div>
