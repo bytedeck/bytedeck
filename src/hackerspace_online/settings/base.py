@@ -325,10 +325,19 @@ SUMMERNOTE_CONFIG = {
         ['para', ['ul', 'ol', 'paragraph']],
         ['height', ['height']],
         ['table', ['table']],
-        ['insert', ['link', 'picture', 'video', 'hr', 'faicon']],
+        ['insert', ['link', 'picture', 'video', 'hr', 'faicon', 'emoji']], #, 'nugget']],
         ['view', ['codeview']],
         ['help', ['help']],
     ],
+
+    # https://github.com/pHAlkaline/summernote-plugins/tree/master/plugins/nugget
+    'nugget': {
+        'list': [  # list of your nuggets
+            '[[Test Code]]',
+            '[[code nugget 2]]',
+            '[[code nugget 3]]'
+        ]
+    },
 
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
@@ -375,6 +384,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        os.path.join(STATIC_URL, 'summernote-emoji/summernote-ext-emoji.css'),
     ),
     'js': (
         # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
@@ -383,6 +393,8 @@ SUMMERNOTE_CONFIG = {
         # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
         # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+        os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
+        os.path.join(STATIC_URL, 'summernote-emoji/summernote-ext-emoji.js'),
     ),
 
     # And also for SummernoteInplaceWidget.

@@ -701,6 +701,12 @@
                 "youtube-square": "\uf166"
             };
 
+            var addListener = function () {
+                $('body').on('click', '.note-ext-faicon-search :input', function (e) {
+                    e.stopPropagation();
+                });
+            };
+
             // add context menu button
             context.memo('button.faicon', function () {
                 return ui.buttonGroup({
@@ -708,7 +714,7 @@
                     children: [
                         ui.button({
                             className: 'dropdown-toggle',
-                            contents: '<i class="fa fa-flag"/>' + ' ' + ui.icon(options.icons.caret, 'span'),
+                            contents: '<i class="fa fa-flag"/> ' + ui.icon(options.icons.caret, 'span'),
                             tooltip: 'Icon',
                             data: {
                                 toggle: 'dropdown'
@@ -734,6 +740,14 @@
                     ]
                 }).render();
             });
+
+            // This events will be attached when editor is initialized.
+            this.events = {
+                // This will be called after modules are initialized.
+                'summernote.init': function (we, e) {
+                    addListener();
+                },
+            };
 
             // You can create elements for plugin
             self.initialize = function () {
