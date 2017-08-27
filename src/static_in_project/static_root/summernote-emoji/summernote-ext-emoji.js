@@ -45,14 +45,14 @@ document.emojiSource = '/static/summernote-emoji/pngs/'; //path to emojis
             }
 
             var addListener = function () {
-                $('.emoji-dialog').click(function(e){
+                $('.emoji-dialog').click(function (e) {
                     e.stopPropagation();
                 });
-                $('button[data-original-title="Emoji"]').click(function(e){
+                $('button[data-original-title="Emoji"]').click(function (e) {
                     e.stopPropagation();
                 });
 
-                $(document).on('click', 'body', function(){
+                $(document).on('click', 'body', function () {
                     self.$panel.hide();
                 });
 
@@ -64,12 +64,12 @@ document.emojiSource = '/static/summernote-emoji/pngs/'; //path to emojis
                     var filteredList = filterEmoji($('#emoji-filter').val());
                     $("#emoji-dropdown .emoji-list").html(filteredList);
                 });
-                $(document).on('click', '.closeEmoji', function(){
+                $(document).on('click', '.closeEmoji', function () {
                     self.$panel.hide();
                 });
-                $(document).on('click', '.selectEmoji', function(){
+                $(document).on('click', '.selectEmoji', function () {
                     var img = new Image();
-                    img.src =document.emojiSource+$(this).attr('data-value')+'.png';
+                    img.src = document.emojiSource + $(this).attr('data-value') + '.png';
                     img.alt = $(this).attr('data-value');
                     img.className = 'emoji-icon-inline';
                     context.invoke('editor.insertNode', img);
@@ -87,8 +87,8 @@ document.emojiSource = '/static/summernote-emoji/pngs/'; //path to emojis
                     for (var i = 0; i < chunks[j].length; i++) {
                         var emo = chunks[j][i];
                         emoList += '<div class="col-xs-3">' +
-                        '<a href="javascript:void(0)" class="selectEmoji closeEmoji" data-value="' + emo + '"><span class="emoji-icon" style="background-image: url(\'' + document.emojiSource + emo + '.png\');"></span></a>' +
-                        '</div>';
+                            '<a href="javascript:void(0)" class="selectEmoji closeEmoji" data-value="' + emo + '"><span class="emoji-icon" style="background-image: url(\'' + document.emojiSource + emo + '.png\');"></span></a>' +
+                            '</div>';
                     }
                     emoList += '</div>';
                 }
@@ -111,7 +111,7 @@ document.emojiSource = '/static/summernote-emoji/pngs/'; //path to emojis
                     contents: '<i class="fa fa-smile-o"/> ' + ui.icon(options.icons.caret, 'span'),
                     tooltip: 'Emoji',
                     click: function () {
-                        if(document.emojiSource === undefined)
+                        if (document.emojiSource === undefined)
                             document.emojiSource = '';
 
                         self.$panel.show();
@@ -138,17 +138,17 @@ document.emojiSource = '/static/summernote-emoji/pngs/'; //path to emojis
             // You can create elements for plugin
             this.initialize = function () {
                 this.$panel = $('<div class="dropdown-menu dropdown-keep-open emoji-dialog animated fadeInUp" id="emoji-dropdown">' +
-                '<div class="row m-0-l m-0-r">' +
+                    '<div class="row m-0-l m-0-r">' +
                     '<div class="col-md-12">' +
-                        '<input type="text" class="form-control" placeholder="search..." id="emoji-filter"/>' +
-                        // '<i class="fa fa-times pull-right cursor-pointer closeEmoji"></i>' +
-                        '<br/>' +
+                    '<input type="text" class="form-control" placeholder="search..." id="emoji-filter"/>' +
+                    // '<i class="fa fa-times pull-right cursor-pointer closeEmoji"></i>' +
+                    '<br/>' +
                     '</div>' +
-                '</div>' +
-                '<div class="emoji-list">' +
-                render(emojis) +
-                '</div>' +
-                '</div>');//.hide();
+                    '</div>' +
+                    '<div class="emoji-list">' +
+                    render(emojis) +
+                    '</div>' +
+                    '</div>');//.hide();
 
                 this.$panel.appendTo('body');
                 //this.$panel.hide();
