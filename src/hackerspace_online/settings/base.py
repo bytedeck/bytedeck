@@ -384,7 +384,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
-        os.path.join(STATIC_URL, 'summernote-emoji/summernote-ext-emoji.css'),
+        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
     ),
     'js': (
         # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
@@ -394,7 +394,7 @@ SUMMERNOTE_CONFIG = {
         # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
-        os.path.join(STATIC_URL, 'summernote-emoji/summernote-ext-emoji.js'),
+        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
@@ -413,3 +413,5 @@ SUMMERNOTE_CONFIG = {
         'theme': 'monokai',
     },
 }
+
+
