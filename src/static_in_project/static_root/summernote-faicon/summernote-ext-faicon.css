@@ -1,0 +1,32 @@
+.note-ext-faicon-list {
+	display: block;
+	width: 200px;
+	height: 200px;
+	overflow: auto;
+	padding-left: 5px;
+}
+
+.note-ext-faicon-list button {
+    margin-top: 5px;
+    margin-right: 5px;
+    /*border: 1px solid #999;*/
+    /*border-radius: 5px;*/
+    /*color: #333;*/
+    /*margin-right: 5px;*/
+    /*margin-bottom: 5px;*/
+    /*padding-top: 3px;*/
+    /*display: inline-block;*/
+    /*height: 35px;*/
+    /*width: 35px;*/
+    /*font-size: 16px;*/
+    /*background-color: #fff;*/
+}
+
+/*.note-ext-faicon-list button:hover {*/
+	/*background-color: #333;*/
+/*}*/
+
+
+.note-ext-faicon-search {
+	margin: 5px;
+}

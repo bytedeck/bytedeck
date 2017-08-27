@@ -282,6 +282,13 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 # SOCIALACCOUNT_STORE_TOKENS #(=True)
 # Indicates whether or not the access tokens are stored in the database.
 
+#################################
+#
+# SUMMERNOTE WYSIWYG EDITOR
+# https://github.com/summernote/django-summernote
+#
+#################################
+
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode
     'iframe': True,  # or set False to use SummernoteInplaceWidget - no iframe mode
@@ -308,12 +315,20 @@ SUMMERNOTE_CONFIG = {
     # 'lang': 'ko-KR',
 
     # Customize toolbar buttons
-    # 'toolbar': [
-    #     ['style', ['style']],
-    #     ['style', ['bold', 'italic', 'underline', 'clear']],
-    #     ['para', ['ul', 'ol', 'height']],
-    #     ['insert', ['link']],
-    # ],
+    'toolbar': [
+        ['style', ['style']],
+        ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
+                  'strikethrough', 'clear']],
+        ['fontname', ['fontname']],
+        ['fontsize', ['fontsize']],
+        ['color', ['color']],
+        ['para', ['ul', 'ol', 'paragraph']],
+        ['height', ['height']],
+        ['table', ['table']],
+        ['insert', ['link', 'picture', 'video', 'hr', 'faicon']],
+        ['view', ['codeview']],
+        ['help', ['help']],
+    ],
 
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
@@ -332,18 +347,18 @@ SUMMERNOTE_CONFIG = {
 
     # Set common css/js media files
     # 'external_css': (
-    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
-    #     '//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css',
+    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.css',
+    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/theme/monokai.css',
     # ),
     # 'external_js': (
-    #     # Use already existing js?
-    #     '//code.jquery.com/jquery-1.9.1.min.js',
-    #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
+    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.js',
+    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
+    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
     # ),
-    'internal_css': (
-        # os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
-        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-    ),
+    # 'internal_css': (
+    #     # os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
+    #     # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+    # ),
     # 'internal_js': (
     #     os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
     #     os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
@@ -353,13 +368,22 @@ SUMMERNOTE_CONFIG = {
     #
     # You can add custom css/js for SummernoteWidget.
     'css': (
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.css',
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/theme/monokai.css',
         os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
         os.path.join(STATIC_URL, 'css/custom_common.css'),
         os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
     ),
-    # 'js': (
-    # ),
+    'js': (
+        # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
+        # os.path.join(STATIC_URL, 'codemirror/mode/javascript/javascript.js'),
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.js',
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+    ),
 
     # And also for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
@@ -370,4 +394,10 @@ SUMMERNOTE_CONFIG = {
 
     # You can disable file upload feature.
     # 'disable_upload': False,
+
+    # Codemirror as codeview
+    'codemirror': {
+        # Please visit http://summernote.org/examples/#codemirror-as-codeview
+        'theme': 'monokai',
+    },
 }
