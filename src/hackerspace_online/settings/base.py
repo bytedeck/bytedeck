@@ -325,7 +325,7 @@ SUMMERNOTE_CONFIG = {
         ['para', ['ul', 'ol', 'paragraph']],
         ['height', ['height']],
         ['table', ['table']],
-        ['insert', ['link', 'picture', 'video', 'hr', 'faicon', 'emoji']], #, 'nugget']],
+        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji']], #, 'nugget']],
         ['view', ['codeview']],
         ['help', ['help']],
     ],
@@ -395,6 +395,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
