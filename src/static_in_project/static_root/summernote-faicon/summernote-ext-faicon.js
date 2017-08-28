@@ -718,6 +718,10 @@
                             tooltip: 'Icon',
                             data: {
                                 toggle: 'dropdown'
+                            },
+                            click: function() {
+                                // Cursor position must be saved because is lost when dropdown is opened.
+                                context.invoke('editor.saveRange');
                             }
                         }),
                         ui.dropdown({
@@ -802,7 +806,9 @@
             self.insertIcon = function (icon_name, hex_code) {
                 var $fa = $('<span class="ext-faicon-subst fa">' + hex_code + '</span>').attr("data-icon", icon_name);
 
-                // console.log("insert icon: ", icon_name);
+                // We restore cursor position and element is inserted in correct pos.
+                context.invoke('editor.restoreRange');
+                context.invoke('editor.focus');
                 context.invoke('editor.insertNode', $fa[0]);
             };
 

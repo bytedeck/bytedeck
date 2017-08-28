@@ -28,9 +28,7 @@
         'emoji': function (context) {
             var self = this;
             var ui = $.summernote.ui;
-            var $editor = context.layoutInfo.editor;
             var options = context.options;
-            var lang = options.langInfo;
 
             // Don't close when clicking in search input
             var addListener = function () {
@@ -44,42 +42,44 @@
                 // This will be called after modules are initialized.
                 'summernote.init': function (we, e) {
                     addListener();
-                },
-
-
+                }
             };
 
             context.memo('button.emoji', function () {
-              return ui.buttonGroup({
-                  className: 'note-ext-emoji',
-                  children: [
-                      ui.button({
-                          className: 'dropdown-toggle',
-                          contents: '<i class="fa fa-smile-o"/> ' + ui.icon(options.icons.caret, 'span'),
-                          tooltip: 'Emoji',
-                          data: {
-                              toggle: 'dropdown'
-                          }
-                      }),
-                      ui.dropdown({
-                          className: 'dropdown-emoji',
-                          items: [
-                              '  <div class="note-ext-emoji-search">',
-                              '   <input type="text" placeholder="search..." class="form-control" />',
-                              '  </div>',
-                              '  <div class="note-ext-emoji-list">',
-                              '     <div class="note-ext-emoji-loading">',
-                              '         <i class="fa fa-spinner fa-spin fa-fw"></i> Loading...',
-                              '     </div>',
-                              '  </div>',
-                          ].join(''),
-                          callback: function ($dropdown) {
-                              self.$search = $('.note-ext-emoji-search :input', $dropdown);
-                              self.$list = $('.note-ext-emoji-list', $dropdown);
-                          }
-                      })
-                  ]
-              }).render();
+                return ui.buttonGroup({
+                    className: 'note-ext-emoji',
+                    children: [
+                        ui.button({
+                            className: 'dropdown-toggle',
+                            contents: '<i class="fa fa-smile-o"/> ' + ui.icon(options.icons.caret, 'span'),
+                            tooltip: 'Emoji',
+                            data: {
+                                toggle: 'dropdown'
+                            },
+                            click: function() {
+                                // Cursor position must be saved because is lost when dropdown is opened.
+                                context.invoke('editor.saveRange');
+                            }
+                        }),
+                        ui.dropdown({
+                            className: 'dropdown-emoji',
+                            items: [
+                                '  <div class="note-ext-emoji-search">',
+                                '   <input type="text" placeholder="search..." class="form-control" />',
+                                '  </div>',
+                                '  <div class="note-ext-emoji-list">',
+                                '     <div class="note-ext-emoji-loading">',
+                                '         <i class="fa fa-spinner fa-spin fa-fw"></i> Loading...',
+                                '     </div>',
+                                '  </div>'
+                            ].join(''),
+                            callback: function ($dropdown) {
+                                self.$search = $('.note-ext-emoji-search :input', $dropdown);
+                                self.$list = $('.note-ext-emoji-list', $dropdown);
+                            }
+                        })
+                    ]
+                }).render();
             });
 
             self.initialize = function () {
@@ -88,8 +88,8 @@
 
                 // http://summernote.org/examples/#hint-for-emoji
                 $.ajax({
-                  url: 'https://api.github.com/emojis',
-                  // async: false
+                    url: 'https://api.github.com/emojis'
+                    // async: false
                 }).then(function(data) {
                     window.emojis = Object.keys(data);
                     window.emojiUrls = data;
@@ -102,8 +102,8 @@
                         //console.log(index + ": " + value);
                         $list.append(
                             '<button type="button" title="' + name + '" ' +
-                                'class="note-emoji-btn btn btn-link"' +
-                                'tabindex="-1">' +
+                            'class="note-emoji-btn btn btn-link" ' +
+                            'tabindex="-1">' +
                             '    <img src="' + url + '" />' +
                             '</button>'
                         );
@@ -112,7 +112,7 @@
                     $("button", $list).click(function (event) {
                         var $button = $(this);
                         var $img = $('img', $button);
-                        //event.preventDefault(); // else, editor form is submitted
+                        event.preventDefault();
                         context.invoke('emoji.insertEmoji', $button.attr('title'), $img.attr('src'));
                     });
                 });
@@ -142,21 +142,24 @@
                         }
                         else {
                             $item.hide();
-                        }
+                        }s
                     });
                 }
             };
 
             self.insertEmoji = function (name, url) {
                 var img = new Image();
-                    img.src = url;
-                    img.alt = name;
-                    img.title = name;
-                    img.className = 'emoji-img-inline';
-                    context.invoke('editor.insertNode', img);
+                img.src = url;
+                img.alt = name;
+                img.title = name;
+                img.className = 'emoji-img-inline';
+
+                // We restore cursor position and element is inserted in correct pos.
+                context.invoke('editor.restoreRange');
+                context.invoke('editor.focus');
+                context.invoke('editor.insertNode', img);
             };
 
         }
     });
 }));
-
