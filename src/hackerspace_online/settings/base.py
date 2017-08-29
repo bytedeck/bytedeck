@@ -330,14 +330,24 @@ SUMMERNOTE_CONFIG = {
         ['help', ['help']],
     ],
 
-    # https://github.com/pHAlkaline/summernote-plugins/tree/master/plugins/nugget
-    'nugget': {
-        'list': [  # list of your nuggets
-            '[[Test Code]]',
-            '[[code nugget 2]]',
-            '[[code nugget 3]]'
-        ]
-    },
+    # customize popover options:
+    # http://summernote.org/deep-dive/#custom-toolbar-popover
+    # 'popover': {
+    #     'image': [
+    #         ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25', 'imageSize15']],
+    #         ['float', ['floatLeft', 'floatRight', 'floatNone']],
+    #         ['remove', ['removeMedia']]
+    #     ],
+    # },
+
+    # # https://github.com/pHAlkaline/summernote-plugins/tree/master/plugins/nugget
+    # 'nugget': {
+    #     'list': [  # list of your nuggets
+    #         '[[Test Code]]',
+    #         '[[code nugget 2]]',
+    #         '[[code nugget 3]]'
+    #     ]
+    # },
 
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
