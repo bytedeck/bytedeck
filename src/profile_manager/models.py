@@ -4,7 +4,7 @@ from ast import literal_eval
 from django.utils.functional import cached_property
 
 from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent
+from courses.models import Rank, CourseStudent, Block
 from django.core.validators import RegexValidator
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
@@ -224,7 +224,7 @@ class Profile(models.Model):
         return self.current_courses().count()
 
     def current_courses(self):
-        return CourseStudent.objects.all_for_user_semester(self.user, config.hs_active_semester)
+        return CourseStudent.objects.current_courses(self.user)
 
     def has_past_courses(self):
         semester = config.hs_active_semester
@@ -235,18 +235,22 @@ class Profile(models.Model):
             return False
 
     def has_current_course(self):
-        current_courses = CourseStudent.objects.current_courses(self.user)
+        current_courses = self.current_courses()
         if current_courses:
             return True
         else:
             return False
 
     def blocks(self):
-        current_courses = CourseStudent.objects.current_courses(self.user)
+        current_courses = self.current_courses()
         if current_courses:
             return current_courses.values_list('block__block', flat=True)
         else:
             return None
+
+    def teachers(self):
+        teachers = self.current_courses().values_list('block__current_teacher', flat=True)
+        return teachers
 
     #################################
     #

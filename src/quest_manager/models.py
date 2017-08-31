@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
@@ -397,7 +398,14 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         if teacher is None:
             return self
         else:
-            return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
+            # Why doesn't this work?!? it only works for some teachers? with or without pk
+            # return self.filter(user__coursestudent__block__current_teacher=teacher.pk).distinct()
+
+            pk_sub_list = [
+                sub.pk for sub in self
+                if teacher.pk in sub.user.profile.teachers()
+                ]
+            return self.filter(pk__in=pk_sub_list)
 
     def exclude_archived_quests(self):
         return self.exclude(quest__archived=True)
@@ -497,8 +505,8 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
-            qs = self.get_queryset(True).not_approved().for_teacher_only(teacher).completed(
-                config.hs_approve_oldest_first)
+            qs = self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)\
+                .for_teacher_only(teacher)
             return qs
         return self.get_queryset(True).get_user(user).not_approved().completed()
 
