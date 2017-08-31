@@ -82,6 +82,15 @@ ul.left-aligned, ol.left-aligned {
     padding-left: 20px;
 }
 
+/********* EMOJI ************************/
+img.emoji-img-inline {
+    display: inline-block;
+    margin-top:-0.2em;
+    height: 1.2em;
+    width: auto;
+
+}
+
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
     padding-bottom: 0px;
