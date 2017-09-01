@@ -107,6 +107,7 @@ class XPItem(models.Model):
 
         return False
 
+    @property  # required for prerequisite checking
     def active(self):
         """
         Available as a property to make compatible with Badge.active attribute
