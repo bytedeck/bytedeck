@@ -318,7 +318,7 @@ SUMMERNOTE_CONFIG = {
     'toolbar': [
         ['style', ['style']],
         ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                  'strikethrough', 'clear']],
+                  'strikethrough', 'add-text-tags', 'clear']],
         ['fontname', ['fontname']],
         ['fontsize', ['fontsize']],
         ['color', ['color']],
@@ -395,6 +395,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
     ),
     'js': (
         # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
@@ -406,6 +407,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
