@@ -404,7 +404,7 @@ SUMMERNOTE_CONFIG = {
         # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
         # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
+        # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
