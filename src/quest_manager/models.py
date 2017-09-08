@@ -285,6 +285,12 @@ class Quest(XPItem, IsAPrereqMixin):
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
         if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
+
+            # https://github.com/timberline-secondary/hackerspace/issues/135
+            # This might be a legacy issue? not sure how this could happen...
+            if not time_of_last:
+                return True
+
             time_since_last = timezone.now() - time_of_last
             hours_since_last = time_since_last.total_seconds() // 3600
             # and the proper amount of time has passed
