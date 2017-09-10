@@ -49,7 +49,8 @@ class BadgeAssertionForm(forms.ModelForm):
 
         self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
         # It appears that sometimes a profile does not exists causing this to fail and the user to no appear
-        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile.user.id, obj.username)
+        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile if obj.profile else "No Profile",
+                                                                           obj.username)
 
 
 class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
