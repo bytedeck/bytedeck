@@ -48,38 +48,38 @@ class BadgeAssertionForm(forms.ModelForm):
         super(BadgeAssertionForm, self).__init__(*args, **kwargs)
 
         self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
-        # It appears that sometimes a profile does not exists causing this to fail and the user to no appear
+        # It appears that sometimes a profile does not exists causing this to fail and the user field to not appear
         self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (
             obj.profile if hasattr(obj, 'profile') else obj.username, obj.username)
 
 
-class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
-    model = Profile
-    # queryset = Profile.objects.all()
-    search_fields = [
-        'first_name__istartswith',
-        'last_name__istartswith',
-        'preferred_name__istartswith',
-    ]
-    # queryset = Profile.objects.all_for_active_semester()
-
-    # SHOULD BE USING USER NOT PROFILE!
-    # model = User
-    # search_fields = [
-    #     'first_name__istartswith',
-    #     'last_name__istartswith',
-    #     'username__istartswith',
-    # ]
-    #
-    # def label_from_instance(self, obj):
-    #     return obj.get_full_name().upper()
-
+# class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
+#     model = Profile
+#     # queryset = Profile.objects.all()
+#     search_fields = [
+#         'first_name__istartswith',
+#         'last_name__istartswith',
+#         'preferred_name__istartswith',
+#         'user__username',
+#     ]
+#     queryset = Profile.objects.all_for_active_semester()
+#
+#     # SHOULD BE USING USER NOT PROFILE!
+#     # model = User
+#     # search_fields = [
+#     #     'first_name__istartswith',
+#     #     'last_name__istartswith',
+#     #     'username__istartswith',
+#     # ]
+#     #
+#     # def label_from_instance(self, obj):
+#     #     return obj.get_full_name().upper()
 
 
 class BulkBadgeAssertionForm(forms.Form):
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     badge = forms.ModelChoiceField(queryset=None, required=True)
-    students = forms.ModelMultipleChoiceField(queryset=None, widget=StudentsCustomTitleWidget())
+    students = forms.ModelMultipleChoiceField(queryset=None)
 
     def __init__(self, *args, **kwds):
         super(BulkBadgeAssertionForm, self).__init__(*args, **kwds)
@@ -87,3 +87,14 @@ class BulkBadgeAssertionForm(forms.Form):
         # https://github.com/nitely/django-djconfig/issues/14
         self.fields['students'].queryset = Profile.objects.all_for_active_semester()
         self.fields['badge'].queryset = Badge.objects.all_manually_granted()
+
+        self.fields['students'].widget = ModelSelect2MultipleWidget(
+            model=Profile,
+            queryset=Profile.objects.all_for_active_semester(),
+            search_fields=[
+                'first_name__istartswith',
+                'last_name__istartswith',
+                'preferred_name__istartswith',
+                'user__username__istartswith',
+            ]
+        )
