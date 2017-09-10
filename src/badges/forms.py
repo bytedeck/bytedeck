@@ -47,9 +47,9 @@ class BadgeAssertionForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(BadgeAssertionForm, self).__init__(*args, **kwargs)
 
-        #self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
-        self.fields['user'].queryset = User.objects.order_by('username')
-        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile, obj.username)
+        self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
+        #self.fields['user'].queryset = User.objects.order_by('username')
+        #self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile, obj.username)
 
 
 class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
