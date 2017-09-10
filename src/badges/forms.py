@@ -48,8 +48,8 @@ class BadgeAssertionForm(forms.ModelForm):
         super(BadgeAssertionForm, self).__init__(*args, **kwargs)
 
         self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
-        #self.fields['user'].queryset = User.objects.order_by('username')
-        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile.username, obj.username)
+        # It appears that sometimes a profile does not exists causing this to fail and the user to no appear
+        self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (obj.profile.user.id, obj.username)
 
 
 class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
