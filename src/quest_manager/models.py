@@ -274,7 +274,7 @@ class Quest(XPItem, IsAPrereqMixin):
 
     objects = QuestManager()
 
-    icon = models.ForeignKey(Icon)
+    icon = models.ForeignKey(Icon, on_delete=models.CASCADE)
 
     def get_icon_url(self):
         if self.icon:
