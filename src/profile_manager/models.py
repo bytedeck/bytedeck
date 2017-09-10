@@ -347,6 +347,7 @@ class Profile(models.Model):
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
+    print("creating profile for: " + current_user.username)
     if kwargs["created"]:
         new_profile = Profile(user=current_user)
 
@@ -365,7 +366,6 @@ def create_profile(sender, **kwargs):
             affected_users=staff_list,
             icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
             verb='.  New user registered: ')
-
 
 post_save.connect(create_profile, sender=User)
 

@@ -1,12 +1,31 @@
 from django.contrib import admin
+from django.contrib import messages
+
 from portfolios.models import Artwork
-from .models import Profile
+from django.contrib.auth.models import User
+from .models import Profile, create_profile
 
 # Register your models here.
 
 
+def create_missing_profiles(modeladmin, request, queryset):
+    users = User.objects.all()
+    new_profiles = []
+    for user in users:
+        if not hasattr(user, 'profile'):
+            #print(user.username + ": No profile ********************************")
+            create_profile(None, **{'instance': user, 'created': True})
+            new_profiles.append(user.username)
+
+    if new_profiles:
+        msg_str = "New profiles created for: " + str(new_profiles)
+        messages.success(request, msg_str)
+
+
 class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'grad_year', )
+
+    actions = [create_missing_profiles]
 
     # readonly_fields = ('user_id', )
     #
