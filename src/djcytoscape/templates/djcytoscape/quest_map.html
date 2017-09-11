@@ -37,7 +37,10 @@
 
     {%  endif %}
 
-    <p><a id="fullscreen" role="button" class="pull-right btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a></p>
+    <p id="fullscreen" class="pull-right">
+      <a id="btn-print" role="button" class="btn btn-default">Print <i class="fa fa-print"></i></a>
+      <a id="btn-fullscreen" role="button" class="btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a>
+    </p>
 
     <p>Click on a quest to go to it.  A blue quest or badge will take you to a connected map.
       Some quest are available based on your Rank; see the <a href="{% url 'courses:ranks' %}">Ranks page</a>
@@ -128,10 +131,31 @@
 
     {{ scape.style_set.javascript|safe }}
 
-    $("#fullscreen").click(function() {
+    $("#btn-fullscreen").click(function() {
         $("#cy").toggleClass("fullscreen");
-        $(this).toggleClass("fullscreen-toggle")
+        $("#fullscreen").toggleClass("fullscreen-toggle");
     })
+
+    $("#btn-print").click(function() {
+        var png64 = cy.png({
+            full: true
+        });
+        var windowContent = '<!DOCTYPE html>';
+        windowContent += '<html>'
+        windowContent += '<head><title>Print canvas</title></head>';
+        windowContent += '<body>'
+        windowContent += '<img src="' + png64 + '">';
+        windowContent += '</body>';
+        windowContent += '</html>';
+        var printWin = window.open();
+        printWin.document.open();
+        printWin.document.write(windowContent);
+        printWin.document.close();
+        printWin.focus();
+        printWin.print();
+    });
+
+
 
 </script>
 
