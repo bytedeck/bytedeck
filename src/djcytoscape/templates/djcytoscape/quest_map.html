@@ -37,9 +37,13 @@
 
     {%  endif %}
 
+    <p><a id="fullscreen" role="button" class="pull-right btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a></p>
+
     <p>Click on a quest to go to it.  A blue quest or badge will take you to a connected map.
       Some quest are available based on your Rank; see the <a href="{% url 'courses:ranks' %}">Ranks page</a>
       to view the Rank-based maps.</p>
+
+
 
     {% if scape.parent_scape %}
         <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
@@ -48,7 +52,7 @@
 
 {%  endblock %}
 {% block js %}
-<script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>
+{#<script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>#}
 <script src="{% static 'djcytoscape/js/cytoscape.min.js' %}"></script>
 
 <script src="{% static 'djcytoscape/js/dagre.js' %}"></script>
@@ -123,6 +127,11 @@
     {% endif %}
 
     {{ scape.style_set.javascript|safe }}
+
+    $("#fullscreen").click(function() {
+        $("#cy").toggleClass("fullscreen");
+        $(this).toggleClass("fullscreen-toggle")
+    })
 
 </script>
 

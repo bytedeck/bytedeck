@@ -551,6 +551,9 @@ class CytoScape(models.Model):
     last_regeneration = models.DateTimeField(default=timezone.now)
     container_element_id = models.CharField(max_length=50, default="cy",
                                             help_text="id of the html element where the graph's canvas will be placed")
+    autobreak = models.BooleanField(default=True,
+                                    help_text="Stop the map when reaching a quest with a ~ or a badge with a *."
+                                              "If this is unchecked, the map is gonna be CRAZY!")
 
     class Meta:
         unique_together = (('initial_content_type', 'initial_object_id'),)
@@ -883,15 +886,17 @@ class CytoScape(models.Model):
             if created and not self.is_transition_node(new_node):
                 self.add_reliant(obj, new_node)
 
-    @staticmethod
-    def is_transition_node(node):
+    def is_transition_node(self, node):
         """
         :return: True if node.label begins with the tilde '~' or contains an astrix '*'
         """
-        return node.label[0] is "~" or "*" in node.label
+        if self.autobreak:
+            return node.label[0] is "~" or "*" in node.label
+        else:
+            return False
 
     @staticmethod
-    def generate_map(initial_object, name, parent_scape=None, container_element_id="cy"):
+    def generate_map(initial_object, name, parent_scape=None, container_element_id="cy", autobreak=True):
 
         if parent_scape:
             style_set = parent_scape.style_set
@@ -904,6 +909,7 @@ class CytoScape(models.Model):
             parent_scape=parent_scape,
             container_element_id=container_element_id,
             style_set=style_set,
+            autobreak=autobreak,
         )
         scape.save()
         scape.calculate_nodes()

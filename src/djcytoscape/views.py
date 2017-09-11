@@ -74,7 +74,7 @@ def primary(request):
 
 
 @staff_member_required
-def generate_map(request, ct_id=None, obj_id=None, scape_id=None):
+def generate_map(request, ct_id=None, obj_id=None, scape_id=None, autobreak=True):
     """
     :param request:
     :param ct_id: Content Type for Generic Foreign Key (initial object)
@@ -94,7 +94,7 @@ def generate_map(request, ct_id=None, obj_id=None, scape_id=None):
             obj = ct.get_object_for_this_type(id=obj_id)
             if not name:
                 name = str(obj)
-            new_scape = CytoScape.generate_map(initial_object=obj, name=name, parent_scape=scape)
+            new_scape = CytoScape.generate_map(initial_object=obj, name=name, parent_scape=scape, autobreak=autobreak)
             return redirect('djcytoscape:quest_map', scape_id=new_scape.id)
 
     else:
