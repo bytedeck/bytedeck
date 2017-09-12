@@ -61,7 +61,7 @@
     <a id="profile-menu" class="list-group-item
         {% if '/profiles/' in request.path_info and not '/list/' in request.path_info %}
         active{% endif %}"
-       href="{% url 'profiles:profile_detail' request.user.id %}">
+       href="{% url 'profiles:profile_detail' request.user.profile.id %}">
       <i class="fa fa-user fa-fw"></i>&nbsp; Profile
     </a>
     <a id="aportfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
@@ -106,7 +106,7 @@
 
 </ul>
   <ul class="nav visible-xs xs-sidebar-menu" id="xs-user-menu">
-    <li><a href="{% url 'profiles:profile_detail' request.user.id %}"><i class="fa fa-user fa-fw"></i></a></li>
+    <li><a href="{% url 'profiles:profile_detail' request.user.profile.id %}"><i class="fa fa-user fa-fw"></i></a></li>
     <li><a href="{% url 'portfolios:detail' request.user.id %}" class="text-center">
         <i class="fa fa-picture-o fa-fw"></i></a></li>
   </ul>
