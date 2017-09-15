@@ -835,7 +835,7 @@ def submission(request, submission_id=None, quest_id=None):
 def ajax(request):
     if request.is_ajax() and request.method == "POST":
 
-        submission_count = QuestSubmission.objects.all_awaiting_approval().count()
+        submission_count = QuestSubmission.objects.all_awaiting_approval(teacher=request.user).count()
         sub_data = {
             "count": submission_count,
         }
