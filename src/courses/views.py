@@ -71,7 +71,7 @@ def add_course_student(request, user_id):
         new_course_student.user = user
         new_course_student.save()
         # messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-        return redirect('profiles:profile_detail', pk=user.id)
+        return redirect('profiles:profile_detail', pk=user.profile.id)
 
     context = {
         "user": user,

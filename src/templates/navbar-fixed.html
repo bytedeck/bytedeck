@@ -67,7 +67,7 @@
                     </a>
                 </li>
                 <li id="profile">
-                    <a title="Profile" href="{% url 'profiles:profile_detail' request.user.id %}">
+                    <a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
                         <i class="{% if request.user.is_staff %}fa fa-user-secret
             {% else %} {{request.user.profile.rank.fa_icon}} {% endif %}"></i>
                         &nbsp; {{ request.user }}
@@ -96,7 +96,7 @@
                     <li><a href='javascript:var%20script=document.createElement("script");script.src="http://google-gravity-bookmarklet.googlecode.com/svn/trunk/bookmarklet/";document.body.appendChild(script);void(0);'>Turn on Gravity</a></li>
                     <li role="separator" class="divider"></li>
                     <li class="dropdown-header">Profile</li>
-                    <li><a href="{% url 'profiles:profile_detail' request.user.id %}">View Profile</a></li>
+                    <li><a href="{% url 'profiles:profile_detail' request.user.profile.id %}">View Profile</a></li>
                     <li><a href="{% url 'notifications:list'%}">Notifications</a></li>
                   </ul>
                 </li> -->

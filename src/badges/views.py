@@ -187,7 +187,7 @@ def assertion_delete(request, assertion_id):
                          ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
                           ))
         assertion.delete()
-        return redirect('profiles:profile_detail', pk=user.id)
+        return redirect('profiles:profile_detail', pk=user.profile.id)
 
     template_name = 'badges/assertion_confirm_delete.html'
     return render(request, template_name, {'object': assertion})
