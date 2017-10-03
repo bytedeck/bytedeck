@@ -1,11 +1,13 @@
 {% load quest_tags %}
 
 <div id='preview-btns-{{ q.id }}' class="pull-right">
-  {% if  request.user.is_staff %}
+  {% if  request.user.is_staff or request.user == q.editor %}
+    {% if not no_details %} <!-- no_details if you are already viewing the details =) -->
     <a class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button"
       title = "View quest details" >
       <i class="fa fa-eye"></i>
     </a>
+    {% endif %}
     <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
       title = "Edit the quest" >
       <i class="fa fa-edit"></i>
@@ -46,6 +48,13 @@
       <a title="Add this to your list of hidden quests"
          class="btn btn-default" role="button" href="{% url 'quests:hide' q.id %}" >
         <i class="fa fa-eye-slash"></i>
+      </a>
+    {% endif %}
+
+    {% if request.user.profile.is_TA %}
+      <a title="Create a new quest using this one as a template. By default this quest will be a prerequisite for the new one."
+         class="btn btn-default" role="button" href="{% url 'quests:quest_copy' q.id %}" >
+        <i class="fa fa-copy"></i>
       </a>
     {% endif %}
 

@@ -46,13 +46,14 @@ class QuestForm(forms.ModelForm):
                   'max_repeats', 'hours_between_repeats',
                   'specific_teacher_to_notify',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
-                  'available_outside_course', 'archived')
+                  'available_outside_course', 'archived', 'editor')
 
-    def __init__(self, request, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
-        # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
 
-        if request.user.profile.is_TA:
+        # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
+        if user.profile.is_TA:
             self.fields['visible_to_students'].widget = forms.HiddenInput()
             # self.fields['max_repeats'].widget = forms.HiddenInput()
             # self.fields['hours_between_repeats'].widget = forms.HiddenInput()
@@ -63,8 +64,25 @@ class QuestForm(forms.ModelForm):
             # self.fields['time_available'].widget = forms.HiddenInput()
             # self.fields['date_expired'].widget = forms.HiddenInput()
             # self.fields['time_expired'].widget = forms.HiddenInput()
-            # self.fields['available_outside_course'].widget = forms.HiddenInput()
+            self.fields['available_outside_course'].widget = forms.HiddenInput()
             self.fields['archived'].widget = forms.HiddenInput()
+            self.fields['editor'].widget = forms.HiddenInput()
+
+
+class QuestFormTA(QuestForm):
+    def __init__(self, request, *args, **kwargs):
+        self.fields['visible_to_students'].widget = forms.HiddenInput()
+        # self.fields['max_repeats'].widget = forms.HiddenInput()
+        # self.fields['hours_between_repeats'].widget = forms.HiddenInput()
+        # self.fields['specific_teacher_to_notify'].widget = forms.HiddenInput()
+        # self.fields['hideable'].widget = forms.HiddenInput()
+        # self.fields['sort_order'].widget = forms.HiddenInput()
+        # self.fields['date_available'].widget = forms.HiddenInput()
+        # self.fields['time_available'].widget = forms.HiddenInput()
+        # self.fields['date_expired'].widget = forms.HiddenInput()
+        # self.fields['time_expired'].widget = forms.HiddenInput()
+        # self.fields['available_outside_course'].widget = forms.HiddenInput()
+        self.fields['archived'].widget = forms.HiddenInput()
 
 
 class SubmissionForm(forms.Form):

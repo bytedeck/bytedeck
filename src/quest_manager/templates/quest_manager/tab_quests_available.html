@@ -4,6 +4,7 @@
     > in progress (tab_quests_submission.html)
     > completed (tab_quests_submission.html)
     > past courses (tab_quests_submission.html)
+    > DRAFTS (tab_quests_available.html)
 -->
 
 {% if available_quests %}
@@ -43,7 +44,9 @@
               <img class="img-responsive panel-title-img img-rounded"
                 src="{{ q.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-xs-5">{{q.name}}</div>
+            <div class="col-xs-5">{{q.name}}
+              {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
+            </div>
             <div class="col-xs-1 text-right">{{q.xp}}  </div>
             <div class="col-xs-2 text-center"><small>
               {% if q.campaign %}{{q.campaign}}{% endif %}

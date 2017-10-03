@@ -23,7 +23,7 @@ def create_missing_profiles(modeladmin, request, queryset):
 
 
 class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'grad_year', )
+    list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'grad_year', 'is_TA',)
 
     actions = [create_missing_profiles]
 
@@ -32,8 +32,8 @@ class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     # def user_id(self, obj):
     #     return obj.user.pk
 
-    #list_filter = ['is_completed', 'is_approved', 'semester']
-    #search_fields = ['user']
+    list_filter = ['is_TA', 'grad_year', ]
+    search_fields = ['first_name', 'last_name', 'user__username']
 
     # # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
     # def get_queryset(self, request):

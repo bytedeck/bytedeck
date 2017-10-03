@@ -58,7 +58,7 @@ class XPItem(models.Model):
                                    help_text='Setting this will prevent it from appearing in admin quest lists.  '
                                              'To un-archive a quest, you will need to access it through Django Admin.')
     sort_order = models.IntegerField(default=0)
-    max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable, enter -1 for unlimited')
+    max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=timezone.now)  # timezone aware!
     time_available = models.TimeField(default=time().min)  # midnight local time
@@ -200,7 +200,11 @@ class QuestQuerySet(models.query.QuerySet):
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
     def editable(self, user):
-        return self.filter(editor=user.id)
+        if user.is_staff:
+            return self
+        else:
+            return self.filter(editor=user.id)
+
 
 class QuestManager(models.Manager):
     def get_queryset(self, include_archived=False):
@@ -239,8 +243,7 @@ class QuestManager(models.Manager):
         qs = self.get_queryset().filter(visible_to_students=False)
         if user.is_staff:
             return qs
-        else: # TA
-            print(qs)
+        else:  # TA
             return qs.editable(user)
 
 
@@ -249,7 +252,7 @@ class Quest(XPItem, IsAPrereqMixin):
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
                                                 granted without the teacher seeing the submission.")
-    hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest form their list of \
+    hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest from their list of \
                                                  available quests. ")
     available_outside_course = models.BooleanField(default=False,
                                                    help_text="Allows student to view and submit this quest without "
@@ -269,7 +272,7 @@ class Quest(XPItem, IsAPrereqMixin):
                                         Use it to place answer keys or other notes.")
 
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
-                               help_text='A student TA is currently working on building this quest.')
+                               help_text='Provides a student TA access to work on the draft of this quest.')
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
@@ -330,7 +333,10 @@ class Quest(XPItem, IsAPrereqMixin):
     #     not_submitted_already = 1
 
     def is_editable(self, user):
-        return user == self.editor and not self.visible_to_students
+        if user.is_staff:
+            return True
+        else:
+            return user == self.editor and not self.visible_to_students
 
 
 # class Feedback(models.Model):

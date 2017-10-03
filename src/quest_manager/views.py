@@ -20,25 +20,28 @@ from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView, CreateView
-from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
+from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm, QuestFormTA
 from .models import Quest, QuestSubmission
+
+
+def is_staff_or_TA(user):
+    return user.is_staff or user.profile.is_TA
 
 
 class QuestDelete(UserPassesTestMixin, DeleteView):
     def test_func(self):
-        return self.request.user.is_staff or self.get_object().is_editable(self.request.user)
+        return self.get_object().is_editable(self.request.user)
 
     model = Quest
     success_url = reverse_lazy('quests:quests')
 
-    @user_passes_test
     def dispatch(self, *args, **kwargs):
         return super(QuestDelete, self).dispatch(*args, **kwargs)
 
 
 class QuestCreate(UserPassesTestMixin, CreateView):
     def test_func(self):
-        return self.request.user.is_staff or self.request.user.profile.is_TA
+        return is_staff_or_TA(self.request.user)
 
     model = Quest
     form_class = QuestForm
@@ -57,7 +60,7 @@ class QuestCreate(UserPassesTestMixin, CreateView):
         # grab the current set of form #kwargs
         kwargs = super(QuestCreate, self).get_form_kwargs()
         # Update the kwargs with the user_id
-        kwargs['request'] = self.request
+        kwargs['user'] = self.request.user
         return kwargs
 
     def form_valid(self, form):
@@ -76,7 +79,7 @@ class QuestUpdate(UserPassesTestMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
-        return self.request.user.is_staff or self.get_object().is_editable(self.request.user)
+        return self.get_object().is_editable(self.request.user)
 
     model = Quest
     form_class = QuestForm
@@ -102,7 +105,7 @@ class QuestUpdate(UserPassesTestMixin, UpdateView):
         # grab the current set of form #kwargs
         kwargs = super(QuestUpdate, self).get_form_kwargs()
         # Update the kwargs with the user_id
-        kwargs['request'] = self.request
+        kwargs['user'] = self.request.user
         return kwargs
 
 
@@ -176,7 +179,7 @@ def quest_list(request, quest_id=None, submission_id=None):
         draft_quests = paginate(draft_quests, page)
     else:
         if request.user.is_staff:
-            available_quests = Quest.objects.all()
+            available_quests = Quest.objects.all().visible()
             # num_available = available_quests.count()
         else:
             if request.user.profile.has_current_course():
@@ -300,17 +303,22 @@ def ajax_submission_info(request, submission_id=None):
         raise Http404
 
 
-@staff_member_required
+@user_passes_test(is_staff_or_TA)
 def quest_copy(request, quest_id):
     new_quest = get_object_or_404(Quest, pk=quest_id)
     new_quest.pk = None  # autogen a new primary key (quest_id by default)
-    new_quest.name = "Copy of " + new_quest.name
+    new_quest.name = new_quest.name + " - COPY"
     # print(quest_to_copy)
     # print(new_quest)
     # new_quest.save()
 
-    form = QuestForm(request.POST or None, instance=new_quest)
+    form = QuestForm(request.POST or None, instance=new_quest, user=request.user)
+
     if form.is_valid():
+        if request.user.profile.is_TA:
+            form.instance.visible_to_students = False
+            form.instance.editor = request.user
+
         form.save()
         # make the copied quest a prerequisite for the new quest
         copied_quest = get_object_or_404(Quest, pk=quest_id)
@@ -342,7 +350,7 @@ def detail(request, quest_id):
     q = get_object_or_404(Quest, pk=quest_id)
 
     # Display the quest
-    if request.user.is_staff or q.is_available(request.user):
+    if q.is_editable(request.user) or q.is_available(request.user):
         context = {
             "heading": q.name,
             "q": q,
