@@ -108,6 +108,16 @@ class QuestUpdate(UserPassesTestMixin, UpdateView):
         kwargs['user'] = self.request.user
         return kwargs
 
+    def form_valid(self, form):
+        # TA created quests should not be visible to students.
+        if self.request.user.profile.is_TA:
+            form.instance.visible_to_students = False
+            form.instance.editor = self.request.user
+        elif form.instance.visible_to_students:
+            form.instance.editor = None
+
+        return super(QuestUpdate, self).form_valid(form)
+
 
 @login_required
 def quest_list(request, quest_id=None, submission_id=None):
