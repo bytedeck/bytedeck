@@ -186,7 +186,6 @@ def quest_list(request, quest_id=None, submission_id=None):
         # available_quests = []
     elif drafts_tab_active:
         draft_quests = Quest.objects.all_drafts(request.user)
-        draft_quests = paginate(draft_quests, page)
     else:
         if request.user.is_staff:
             available_quests = Quest.objects.all().visible()
