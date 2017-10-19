@@ -47,7 +47,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 #### Creating the PostgreSQL database (Advanced Option)
 1. You can follow [these instructions](https://www.digitalocean.com/community/tutorials/how-to-use-postgresql-with-your-django-application-on-ubuntu-16-04) if you are on Linux (won't work on Windows).  Use the Python3 options.
 
-#### Runniing the server
+#### Running the server
 1. `./src/manage.py runserver`
 2. Segmentation Fault?  try running it again...
 3. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
