@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib import messages
 
 from django_summernote.admin import SummernoteModelAdmin
 
@@ -6,6 +7,20 @@ from django_summernote.admin import SummernoteModelAdmin
 from prerequisites.admin import PrereqInline
 
 from .models import Quest, Category, QuestSubmission, CommonData
+
+
+def publish_selected_quests(modeladmin, request, queryset):
+    num_updates = queryset.update(visible_to_students=True, editor=None)
+
+    msg_str = str(num_updates) + " quest(s) updated. Editors have been removed and the quest is now visible to students."
+    messages.success(request, msg_str)
+
+
+def archive_selected_quests(modeladmin, request, queryset):
+    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None);
+
+    msg_str = str(num_updates) + " quest(s) archived. These quests will now only be visible through this admin menu."
+    messages.success(request, msg_str)
 
 
 class FeedbackAdmin(admin.ModelAdmin):
@@ -37,13 +52,15 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
 
 class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
-                    'common_data', 'campaign',)
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required']
+                    'common_data', 'campaign', 'editor')
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor']
     search_fields = ['name']
     inlines = [
         # TaggedItemInline
         PrereqInline,
     ]
+
+    actions = [publish_selected_quests, archive_selected_quests]
 
     change_list_filter_template = "admin/filter_listing.html"
 
