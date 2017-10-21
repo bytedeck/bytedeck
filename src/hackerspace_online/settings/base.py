@@ -396,6 +396,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
     ),
     'js': (
         # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
@@ -421,8 +422,10 @@ SUMMERNOTE_CONFIG = {
     # 'disable_upload': False,
 
     # Codemirror as codeview
+    # http://summernote.org/examples/#codemirror-as-codeview
     'codemirror': {
-        # Please visit http://summernote.org/examples/#codemirror-as-codeview
+        'mode': 'htmlmixed',
+        'lineNumbers': 'true',
         'theme': 'monokai',
     },
 }
