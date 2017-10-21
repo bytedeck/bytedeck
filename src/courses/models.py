@@ -397,7 +397,7 @@ class CourseStudent(models.Model):
 
     def __str__(self):
         return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course) + \
-            " " + str(self.grade_fk.value)
+            " " #+ str(self.grade_fk.value)
 
     def get_absolute_url(self):
         return reverse('courses:list')
