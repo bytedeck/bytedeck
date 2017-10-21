@@ -377,8 +377,8 @@ class CourseStudent(models.Model):
     semester = models.ForeignKey(Semester)
     block = models.ForeignKey(Block)
     course = models.ForeignKey(Course)
-    grade = models.PositiveIntegerField(choices=GRADE_CHOICES)
-    grade_fk = models.ForeignKey(Grade, null=True)
+    grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
+    grade_fk = models.ForeignKey(Grade, verbose_name="Grade")
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)
@@ -390,14 +390,14 @@ class CourseStudent(models.Model):
     class Meta:
         unique_together = (
             ('semester', 'block', 'user'),
-            ('user', 'course', 'grade'),
+            ('user', 'course', 'grade_fk'),
         )
         verbose_name = "Student Course"
         ordering = ['-semester', 'block']
 
     def __str__(self):
         return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course) + \
-            " " #+ str(self.grade_fk.value)
+            " " + str(self.grade_fk.value)
 
     def get_absolute_url(self):
         return reverse('courses:list')

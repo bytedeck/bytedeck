@@ -5,17 +5,17 @@ from django.contrib import admin
 from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade
 
 
-def convert_selected_grade_to_fk(modeladmin, request, queryset):
-    for course_student in queryset:
-        current_grade_field = course_student.grade
-        grade_fk, created = Grade.objects.get_or_create(
-            name=str(current_grade_field),
-            value=current_grade_field,
-        )
-
-        if course_student.grade_fk is None:
-            course_student.grade_fk = grade_fk
-            course_student.save()
+# def convert_selected_grade_to_fk(modeladmin, request, queryset):
+#     for course_student in queryset:
+#         current_grade_field = course_student.grade
+#         grade_fk, created = Grade.objects.get_or_create(
+#             name=str(current_grade_field),
+#             value=current_grade_field,
+#         )
+#
+#         if course_student.grade_fk is None:
+#             course_student.grade_fk = grade_fk
+#             course_student.save()
 
 
 class ExcludedDateInline(admin.TabularInline):
@@ -34,10 +34,10 @@ class RankAdmin(admin.ModelAdmin):
 
 
 class CourseStudentAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('__str__', 'user', 'semester', 'course', 'grade', 'grade_fk', 'final_grade', 'active')
-    actions = [convert_selected_grade_to_fk]
+    list_display = ('__str__', 'user', 'semester', 'course', 'grade_fk', 'final_grade', 'active')
+    # actions = [convert_selected_grade_to_fk]
 
-    list_filter = ['course', 'grade', 'grade_fk', ]
+    list_filter = ['course', 'grade_fk', ]
     search_fields = ['user__username']
 
 
