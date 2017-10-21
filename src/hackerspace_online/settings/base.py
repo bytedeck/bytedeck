@@ -427,6 +427,7 @@ SUMMERNOTE_CONFIG = {
         'mode': 'htmlmixed',
         'lineNumbers': 'true',
         'theme': 'monokai',
+        'lineWrapping': 'true'
     },
 }
 
