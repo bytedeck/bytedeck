@@ -181,6 +181,11 @@ class Prereq(models.Model, IsAPrereqMixin):
         additional conditions NOT and a number to indicate how many times the condition much be met.
     or_prereq: An optional alternate object who's condition can me met instead of prereq: prereq OR or_prereq
     """
+
+    name = models.CharField(max_length=256, null=True, blank=True,
+                            help_text="Providing a name to a prereq allows it to be used itself as a prerequisite. "
+                                      "One use for this to to chain more than two OR conditions.")
+
     parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent')
     parent_object_id = models.PositiveIntegerField()
     parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
@@ -318,7 +323,6 @@ class Prereq(models.Model, IsAPrereqMixin):
 
     @staticmethod
     def model_is_registered(content_type):
-
         # Check if class has the method `condition_met_as_prerequisite`
         # http://stackoverflow.com/questions/25295327/how-to-check-if-a-python-class-has-particular-method-or-not
         mc = content_type.model_class()

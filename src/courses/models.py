@@ -1,6 +1,7 @@
 import numpy
 from datetime import timedelta, date, datetime
 
+from django.db.models import Max
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
@@ -73,6 +74,25 @@ class Rank(models.Model, IsAPrereqMixin):
     def get_map(self):
         from djcytoscape.models import CytoScape
         return CytoScape.objects.get_map_for_init(self)
+
+
+class Grade(models.Model, IsAPrereqMixin):
+    name = models.CharField(max_length=20, unique=True)
+    value = models.PositiveIntegerField(unique=True)
+
+    def __str__(self):
+        return str(self.name)
+
+    class Meta:
+        ordering = ["value"]
+
+    def condition_met_as_prerequisite(self, user, num_required):
+        # num_required is not used for this one
+        coursestudents = CourseStudent.objects.current_courses(user)
+        if coursestudents.filter(grade_fk__value=self.value):
+            return True
+        else:
+            return False
 
 
 class SemesterManager(models.Manager):
@@ -358,6 +378,7 @@ class CourseStudent(models.Model):
     block = models.ForeignKey(Block)
     course = models.ForeignKey(Course)
     grade = models.PositiveIntegerField(choices=GRADE_CHOICES)
+    grade_fk = models.ForeignKey(Grade, null=True)
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)
@@ -375,7 +396,8 @@ class CourseStudent(models.Model):
         ordering = ['-semester', 'block']
 
     def __str__(self):
-        return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course)
+        return self.user.username + ", " + str(self.semester) + ", " + self.block.block + ": " + str(self.course) + \
+            " " + str(self.grade_fk.value)
 
     def get_absolute_url(self):
         return reverse('courses:list')

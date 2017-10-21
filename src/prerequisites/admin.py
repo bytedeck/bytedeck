@@ -26,6 +26,8 @@ class PrereqInline(GenericTabularInline):
 
     extra = 1
 
+    exclude = ['name', ]
+
     autocomplete_lookup_fields = {
         'generic': [
             ['prereq_content_type', 'prereq_object_id'],
@@ -34,8 +36,15 @@ class PrereqInline(GenericTabularInline):
     }
 
 
+def auto_name_selected_prereqs(modeladmin, request, queryset):
+    for prereq in queryset:
+        prereq.name = str(prereq)
+        prereq.save()
+
+
 class PrereqAdmin(admin.ModelAdmin):
-    list_display = ('id', 'parent', '__str__',)
+    list_display = ('id', 'parent', '__str__', 'name')
+    actions = [auto_name_selected_prereqs]
 
 
 admin.site.register(Prereq, PrereqAdmin)
