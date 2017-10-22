@@ -50,11 +50,14 @@
       var $editable=context.layoutInfo.editable;
       var options=context.options;
       var lang=options.langInfo;
+
       context.memo('button.videoAttributes',function(){
         var button=ui.button({
           contents:options.videoAttributes.icon,
           tooltip:lang.videoAttributes.tooltip,
           click:function(e){
+            // Cursor position must be saved because is lost when popup is opened.
+            context.invoke('editor.saveRange');
             context.invoke('videoAttributes.show');
           }
         });
@@ -256,6 +259,10 @@
             if($videoSize.val()==0)$video.addClass('embed-responsive');else $video.css({'float':$videoAlignment.val()});
             $video.addClass('note-video-clip');
             $videoHTML.html($video);
+
+            // We restore cursor position and element is inserted in correct pos.
+            context.invoke('editor.restoreRange');
+            context.invoke('editor.focus');
             context.invoke('editor.insertNode',$videoHTML[0]);
           });
         };
