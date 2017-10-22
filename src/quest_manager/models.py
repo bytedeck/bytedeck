@@ -19,6 +19,7 @@ from djconfig import config
 from prerequisites.models import Prereq, IsAPrereqMixin
 from badges.models import BadgeAssertion
 from comments.models import Comment
+from utilities.models import Icon
 
 
 class Category(models.Model):
@@ -289,9 +290,11 @@ class Quest(XPItem, IsAPrereqMixin):
 
     objects = QuestManager()
 
+    icon = models.ForeignKey(Icon, on_delete=models.CASCADE)
+
     def get_icon_url(self):
-        if self.icon and hasattr(self.icon, 'url'):
-            return self.icon.url
+        if self.icon:
+            return self.icon
         else:
             return static('img/default_icon.png')
 
