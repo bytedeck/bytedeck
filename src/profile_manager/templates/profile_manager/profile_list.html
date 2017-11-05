@@ -38,8 +38,11 @@
             <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
                 Avatar
             </th>
-            <th data-sortable='true' data-field='first'>
+            <th data-sortable='true' data-field='first' data-visible="false">
                 First Name
+            </th>
+            <th data-sortable='true' data-field='preferred'>
+                Preferred Name
             </th>
             <th data-sortable='true' data-field='last'>
                 Last Name
@@ -96,6 +99,7 @@
                 {% endif %}>
 
                 <td><img class="icon-md img-rounded" src="{{ object.get_avatar_url }}" alt="avatar"/></td>
+                <td>{{ object.first_name }}</td>
                 <td>{{ object.get_preferred_name }}</td>
                 <td>{{ object.last_name|default:"-" }}</td>
                 <td>{{ object.alias_clipped|default:"-" }}</td>
