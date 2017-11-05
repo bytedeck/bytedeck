@@ -348,8 +348,9 @@ class Profile(models.Model):
 
 def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
-    print("creating profile for: " + current_user.username)
+
     if kwargs["created"]:
+        print("creating profile for: " + current_user.username)
         new_profile = Profile(user=current_user)
 
         # if user's name matches student number (e.g 9912345), set student number:

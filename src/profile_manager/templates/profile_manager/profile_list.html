@@ -23,9 +23,15 @@
            data-sort-order='asc'
            data-search='true'
            data-show-columns='true'
+           {% if request.user.is_staff %}
+            data-show-export="true"
+            data-export-types="['csv']"
+           {% endif %}
+
            data-icons='icons'
            data-icons-prefix='fa'
            data-classes="table table-no-bordered table-hover"
+
     >
         <thead>
         <tr>
@@ -154,12 +160,18 @@
 {% endblock %}
 
 {% block js %}
-  <!-- Bootstrap Tables: Latest compiled and minified JavaScript -->
+
 <!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
 <!-- <script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.js"></script> -->
 <script src="{% static 'js/bootstrap-table.min.js' %}"></script>
-<!-- Latest compiled and minified Locales -->
-<!--<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/locale/bootstrap-table-zh-CN.min.js"></script>-->
+<script src="{% static 'js/tableExport.min.js' %}"></script>
+<script src="{% static 'js/bootstrap-table-export.js' %}"></script>
+<script>
+  window.icons = {
+      export: 'fa-share',
+      columns: 'fa-th-list',
+  }
+</script>
 
 {#  <script src="{% static 'js/bootstrap-table-filter-control.js'%}"></script>#}
 {% endblock %}
