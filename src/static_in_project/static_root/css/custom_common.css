@@ -108,6 +108,18 @@ img.emoji-img-inline {
 
 }
 
+
+/************* IMG *************************/
+
+img.note-float-right, img.pull-right {
+    margin-left: 10px;
+}
+
+img.note-float-left, img.pull-left {
+    margin-right: 10px;
+}
+
+
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
     padding-bottom: 0px;
