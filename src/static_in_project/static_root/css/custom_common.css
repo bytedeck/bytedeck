@@ -119,6 +119,12 @@ img.note-float-left, img.pull-left {
     margin-right: 10px;
 }
 
+/*************** Lists *******************/
+
+.list-spaced > li {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
 
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
