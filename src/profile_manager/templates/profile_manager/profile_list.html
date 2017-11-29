@@ -63,7 +63,7 @@
                 {% if request.user.is_staff %}data-visible="false"{% endif %}>
                 XP
             </th>
-            <th data-sortable='true' data-field='mark'
+            <th data-sortable='true' data-field='mark' data-formatter="%s%"
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 Mark
             </th>
@@ -111,10 +111,7 @@
                     {{ object.xp_cached }}
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
-                <td>{% if object.visible_to_other_students or request.user.is_staff %}
-                    {{ object.mark_value|floatformat }}%
-                    {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
-                </td>
+                <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
                         <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
