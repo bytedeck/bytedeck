@@ -32,7 +32,7 @@ class ArtworkForm(forms.ModelForm):
         video_url = cleaned_data.get("video_url")
 
         if not (image_file or video_file or video_url):
-            msg = "At least on of these three fields must be provided."
+            msg = "At least one of these three fields must be provided."
             self.add_error('image_file', msg)
             self.add_error('video_file', msg)
             self.add_error('video_url', msg)
