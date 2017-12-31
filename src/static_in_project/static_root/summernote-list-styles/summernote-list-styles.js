@@ -38,16 +38,18 @@
             var options = context.options;
             var lang = options.langInfo;
             var listStyleTypes = options.listStyleTypes.styles;
-            var listStyleLabels = lang.listStyleTypes.labelsListStyleTypes
+            var listStyleLabels = lang.listStyleTypes.labelsListStyleTypes;
 
-            var list = ''
+            var list = '';
             var index = 0;
             for (const listStyleType of listStyleTypes) {
-                list += '<li><a href="#" data-value=' + listStyleType + '>'
-                list += '<ol><li style="list-style-type: ' + listStyleType + ';">'
-                list += listStyleLabels[index] + '</li></ol></a></li>'
+                list += '<li><a href="#">';
+                list += '<ol><li style="list-style-type: ' + listStyleType + ';">';
+                list += listStyleLabels[index] + '</li></ol></a></li>';
                 index++;
             }
+
+            list += '<li><a href="#" data-class="list-spaced">Spaced List</a></li>';
 
             context.memo('button.listStyles', function () {
                 return ui.buttonGroup([
@@ -64,8 +66,13 @@
                         contents: list,
                         callback: function ($dropdown) {
                             $dropdown.find('a').each(function () {
-                                $(this).click(function () {
-                                    self.updateStyleType( $(this).find("li").css('list-style-type') );
+                                let $this = $(this);
+                                $this.click(function () {
+                                    if( $this.attr('data-class')) {
+                                        self.updateListClass( $this.data('class') );
+                                    }
+                                    else
+                                        self.updateStyleType( $this.find("li").css('list-style-type') );
                                 });
                             });
                         }
@@ -74,12 +81,21 @@
             });
 
             self.updateStyleType = function (style) {
+                self.getParentList().css('list-style-type', style);
+            };
+
+            self.updateListClass = function (CSSClass) {
+                self.getParentList().toggleClass(CSSClass);
+            };
+
+            self.getParentList = function() {
                 if (window.getSelection) {
                     var $focusNode = $(window.getSelection().focusNode);
-                    var $parentList = $focusNode.closest('div.note-editable ol, div.note-editable ul');
-                    $parentList.css('list-style-type', style);
+                    return $focusNode.closest('div.note-editable ol, div.note-editable ul');
                 }
-            };
+                else
+                    return null;
+            }
 
         }
     });
