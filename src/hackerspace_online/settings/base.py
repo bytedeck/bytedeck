@@ -323,7 +323,7 @@ SUMMERNOTE_CONFIG = {
         ['fontname', ['fontname']],
         ['fontsize', ['fontsize']],
         ['color', ['color']],
-        ['para', ['ul', 'ol', 'paragraph']],
+        ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
         ['height', ['height']],
         ['table', ['table']],
         ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji']], #, 'nugget']],
@@ -394,6 +394,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
     ),
     'js': (
@@ -408,6 +409,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
