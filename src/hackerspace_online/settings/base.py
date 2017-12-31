@@ -341,6 +341,10 @@ SUMMERNOTE_CONFIG = {
         'link': [
             ['link', ['linkDialogShow', 'unlink']]
         ],
+        'table': [
+            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
+            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']]
+        ],
     },
 
     # Need authentication while uploading attachments.
