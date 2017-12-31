@@ -331,24 +331,17 @@ SUMMERNOTE_CONFIG = {
         ['help', ['help']],
     ],
 
-    # customize popover options:
-    # http://summernote.org/deep-dive/#custom-toolbar-popover
-    # 'popover': {
-    #     'image': [
-    #         ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25', 'imageSize15']],
-    #         ['float', ['floatLeft', 'floatRight', 'floatNone']],
-    #         ['remove', ['removeMedia']]
-    #     ],
-    # },
-
-    # # https://github.com/pHAlkaline/summernote-plugins/tree/master/plugins/nugget
-    # 'nugget': {
-    #     'list': [  # list of your nuggets
-    #         '[[Test Code]]',
-    #         '[[code nugget 2]]',
-    #         '[[code nugget 3]]'
-    #     ]
-    # },
+    'popover': {
+        'image': [
+            ['custom', ['imageShapes']],
+            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
+            ['float', ['floatLeft', 'floatRight', 'floatNone']],
+            ['remove', ['removeMedia']]
+        ],
+        'link': [
+            ['link', ['linkDialogShow', 'unlink']]
+        ],
+    },
 
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
@@ -410,6 +403,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
