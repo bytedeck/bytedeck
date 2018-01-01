@@ -292,6 +292,8 @@ class Quest(XPItem, IsAPrereqMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
+        if self.campaign and self.campaign.icon and hasattr(self.campaign.icon, 'url'):
+            return self.campaign.icon.url
         else:
             return static('img/default_icon.png')
 
