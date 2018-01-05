@@ -1,3 +1,22 @@
+/********** CUSTOM APPLIED STYLES ***********/
+
+ul.left-aligned, ol.left-aligned {
+    padding-left: 20px;
+}
+
+.list-spaced > li {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.tight {
+    line-height: 1.2;
+}
+
+/********* Navbar ******************/
+
+
+
 .navbar-fixed-top {
     margin-bottom: 0px !important;
 }
@@ -95,10 +114,6 @@ iframe {
     margin: -60px 0 0; /* negative fixed header height */
 }
 
-ul.left-aligned, ol.left-aligned {
-    padding-left: 20px;
-}
-
 /********* EMOJI ************************/
 img.emoji-img-inline {
     display: inline-block;
@@ -120,11 +135,6 @@ img.note-float-left, img.pull-left {
 }
 
 /*************** Lists *******************/
-
-.list-spaced > li {
-    margin-top: 10px;
-    margin-bottom: 10px;
-}
 
 ol > ol {
     list-style-type: lower-alpha;
