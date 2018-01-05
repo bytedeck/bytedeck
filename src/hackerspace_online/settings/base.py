@@ -344,7 +344,7 @@ SUMMERNOTE_CONFIG = {
         'table': [
             ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
             ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeader', 'tableStyles']]
+            ['custom', ['tableHeaders', 'tableStyles']]
         ],
     },
 

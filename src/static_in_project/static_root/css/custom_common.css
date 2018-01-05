@@ -249,7 +249,7 @@ ol > ol > ol {
 }
 
 .popover {
-    width: 400px;
+    max-width: 400px; /* Is this still required? What was this for? */
     /*width: auto;*/
 }
 
