@@ -126,6 +126,15 @@ img.note-float-left, img.pull-left {
     margin-bottom: 10px;
 }
 
+ol > ol {
+    list-style-type: lower-alpha;
+}
+
+ol > ol > ol {
+    list-style-type: lower-roman;
+}
+
+
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
     padding-bottom: 0px;

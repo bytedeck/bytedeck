@@ -343,7 +343,8 @@ SUMMERNOTE_CONFIG = {
         ],
         'table': [
             ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']]
+            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
+            ['custom', ['tableHeader', 'tableStyles']]
         ],
     },
 
@@ -410,6 +411,8 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
         os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
