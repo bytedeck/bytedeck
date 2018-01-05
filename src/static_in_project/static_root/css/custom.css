@@ -1,4 +1,10 @@
 
+figure.bordered {
+    border: 1px solid #ddd;
+    background-color: white;
+}
+
+
 .navbar-fixed-top.chillax {
     background-color: #BEFFFA;
     color: white;

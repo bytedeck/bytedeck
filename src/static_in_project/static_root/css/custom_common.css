@@ -13,6 +13,44 @@ ul.left-aligned, ol.left-aligned {
     line-height: 1.2;
 }
 
+/********** Figures ****************/
+
+figure {
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+figure.bordered {
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 4px;
+    padding: 4px;
+    max-width: 100%;
+}
+
+figure > img {
+    margin-bottom: .5rem;
+    line-height: 1;
+    max-width: 100%;
+    height: auto;
+}
+
+figcaption {
+    font-size: 90%;
+    color: #636c72;
+}
+
+figure.pull-right {
+    margin-left: 15px;
+    width: 40%; /* just a default */
+}
+
+figure.pull-left {
+    margin-right: 15px;
+    width: 40%; /* just a default */
+}
+
+
 /********* Navbar ******************/
 
 

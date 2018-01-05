@@ -6,6 +6,15 @@ Light: #3e444c
 Text: #c8c8c8
 */
 
+figure {
+
+}
+
+figure.bordered {
+    border-color:#0c0d0e;
+    background-color: #272b30;
+}
+
 .navbar-fixed-top.chillax {
   background-color: #337AB7;
   background-image: none;
