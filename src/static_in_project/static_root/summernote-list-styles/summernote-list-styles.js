@@ -65,6 +65,10 @@
         list += listStyleLabels[index] + "</li></ol></a></li>";
         index++;
       }
+      list += '<hr style="margin: 5px 0px">';
+      list += '<li><a href="#" data-class="list-spaced">'
+           //+ '<i class="note-icon-menu-check"> </i> '
+           + 'Spaced List</a></li>'
 
       context.memo("button.listStyles", function() {
         return ui
@@ -89,7 +93,12 @@
               callback: function($dropdown) {
                 $dropdown.find("a").each(function() {
                   $(this).click(function() {
-                    self.updateStyleType( $(this).data("value") )
+                    var listStyleType = ($(this).data("value"));
+                    if (listStyleType != undefined)
+                      self.updateStyleType( listStyleType );
+                    else {
+                      self.getParentList().toggleClass($(this).data("class"));
+                    }
                   });
                 });
               } // callback
