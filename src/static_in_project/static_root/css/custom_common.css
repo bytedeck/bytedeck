@@ -18,9 +18,6 @@ ul.left-aligned, ol.left-aligned {
 figure {
     display: inline-block;
     margin-bottom: 1rem;
-}
-
-figure.bordered {
     border-width: 1px;
     border-style: solid;
     border-radius: 4px;
@@ -38,6 +35,7 @@ figure > img {
 figcaption {
     font-size: 90%;
     color: #636c72;
+   line-height: 1.2;
 }
 
 figure.pull-right {

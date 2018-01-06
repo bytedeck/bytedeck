@@ -7,10 +7,6 @@ Text: #c8c8c8
 */
 
 figure {
-
-}
-
-figure.bordered {
     border-color:#0c0d0e;
     background-color: #272b30;
 }
