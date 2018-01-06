@@ -40,12 +40,12 @@ figcaption {
 
 figure.pull-right {
     margin-left: 15px;
-    width: 40%; /* just a default */
+    max-width: 40%; /* just a default */
 }
 
 figure.pull-left {
     margin-right: 15px;
-    width: 40%; /* just a default */
+    max-width: 40%; /* just a default */
 }
 
 
@@ -517,49 +517,6 @@ ul.list-group ul, ul.list-group ol {
     display: none;
 }
 
-/*Make the container act like container-fluid at small and medium sizes*/
-
-/*LESS to mimic Bootstrap without importing the less files.*/
-/*@screen-xs-max: 767px;
-@screen-sm-min: 768px;
-@screen-sm-max: 991px;
-@screen-md-min: 992px;
-@screen-md-max: 1199px;
-@screen-lg-min: 1200px;*/
-
-/*xs only*/
-@media (max-width: 767px) {
-
-}
-
-/*small and up*/
-@media (min-width: 768px) {
-
-}
-
-/*sm only*/
-@media (min-width: 768px) and (max-width: 991px) {
-
-}
-
-/*md and up*/
-@media (min-width: 992px) {
-
-}
-
-/*md only*/
-@media (min-width: 992px) and (max-width: 1199px) {
-
-}
-
-/*lg and up*/
-@media (min-width: 1200px) {
-    .container-fluid {
-        width: 1170px;
-    }
-
-}
-
 /************ TABS *****************************************/
 /*Get rid of the focus outline on selected tabs.  For accessibility, the tabs are
 already distinguished*/
@@ -632,7 +589,55 @@ kbd
     padding:.1em .6em;
 }
 
-@media screen and (max-width: 768px) {
+/*Make the container act like container-fluid at small and medium sizes*/
+
+/*LESS to mimic Bootstrap without importing the less files.*/
+/*@screen-xs-max: 767px;
+@screen-sm-min: 768px;
+@screen-sm-max: 991px;
+@screen-md-min: 992px;
+@screen-md-max: 1199px;
+@screen-lg-min: 1200px;*/
+
+
+
+/*xs only*/
+@media (max-width: 767px) {
+
+
+}
+
+/*small and up*/
+@media (min-width: 768px) {
+
+}
+
+/*sm only*/
+@media (min-width: 768px) and (max-width: 991px) {
+
+}
+
+/*md and up*/
+@media (min-width: 992px) {
+
+}
+
+/*md only*/
+@media (min-width: 992px) and (max-width: 1199px) {
+
+}
+
+/*lg and up*/
+@media (min-width: 1200px) {
+    .container-fluid {
+        width: 1170px;
+    }
+
+}
+
+
+/* mobile in portrait and landscape, small browser */
+@media screen and (max-width: 767px) {
 
     .row-offcanvas {
         position: relative;
@@ -663,6 +668,24 @@ kbd
     }
 
 }
+
+/* mobile in portrait and tiny squashed browsers */
+@media screen and (max-width: 439px) {
+
+    /********** Figures ***************/
+
+    figure {
+        display: block;
+        max-width: 100% !important;
+    }
+
+    figure.pull-right, figure.pull-left {
+        margin-left: 0px;
+        float: none !important;
+    }
+
+}
+
 
 
 /*************** SECRET ****************/
