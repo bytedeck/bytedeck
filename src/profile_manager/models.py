@@ -17,6 +17,7 @@ from django.db.models.signals import post_save
 from django.templatetags.static import static
 from django.utils import timezone
 from djconfig import config
+from utilities.models import RestrictedFileField
 
 
 class ProfileQuerySet(models.query.QuerySet):
@@ -108,9 +109,11 @@ class Profile(models.Model):
     hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
     is_TA = models.BooleanField(default=False, help_text="TAs can create new quests for teacher approval.")
 
-    custom_stylesheet = models.FileField(null=True, blank=True, upload_to=user_directory_path,
-                                         help_text='ADVANCED: A CSS file to customize the Hackerspace.  You can use  \
-                                                   this to tweak something, or create a completely new theme!')
+    custom_stylesheet = RestrictedFileField(null=True, blank=True, upload_to=user_directory_path,
+                                            content_types=['text/css', 'text/plain'],
+                                            max_upload_size=512000,
+                                            help_text='ADVANCED: A CSS file to customize the Hackerspace.  You can use  \
+                                                   this to tweak something, or create a completely new theme.')
 
     objects = ProfileManager()
 
