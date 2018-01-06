@@ -7,7 +7,8 @@ class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ['student_number', 'first_name', 'preferred_name', 'preferred_internal_only',
-                  'last_name', 'alias', 'avatar', 'grad_year',  'visible_to_other_students', 'dark_theme']
+                  'last_name', 'alias', 'avatar', 'grad_year',  'visible_to_other_students', 'dark_theme',
+                  'custom_stylesheet']
 
     def __init__(self, *args, **kwargs):
         super(ProfileForm, self).__init__(*args, **kwargs)

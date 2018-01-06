@@ -18,6 +18,10 @@
     {% block head %}{% endblock %}
 
     <style>{% block head_css %}{% endblock %}</style>
+    {% if request.user.profile.custom_stylesheet %}
+      <link rel="stylesheet" href="{{ request.user.profile.custom_stylesheet.url }}">
+    {% endif %}
+
 </head>
 
 <body>

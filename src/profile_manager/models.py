@@ -56,6 +56,10 @@ class ProfileManager(models.Manager):
         return self.get_queryset().visible()
 
 
+def user_directory_path(instance, filename):
+    # file will be uploaded to MEDIA_ROOT/<use_id>/<filename>
+    return '{0}/customstyles/{1}'.format(instance.user.username, filename)
+
 class Profile(models.Model):
     student_number_regex_string = r"^(9[89])(\d{5})$"
     student_number_validator = RegexValidator(regex=student_number_regex_string,
@@ -103,6 +107,10 @@ class Profile(models.Model):
     dark_theme = models.BooleanField(default=False)
     hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
     is_TA = models.BooleanField(default=False, help_text="TAs can create new quests for teacher approval.")
+
+    custom_stylesheet = models.FileField(null=True, blank=True, upload_to=user_directory_path,
+                                         help_text='ADVANCED: A CSS file to customize the Hackerspace.  You can use  \
+                                                   this to tweak something, or create a completely new theme!')
 
     objects = ProfileManager()
 
