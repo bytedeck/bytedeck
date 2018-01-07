@@ -53,6 +53,7 @@ figure.pull-left {
 div.three-wide, div.two-wide {
     width: 100%;
     display: block;
+    margin-bottom: 10px;
 }
 
 div.three-wide > figure, div.three-wide > img {
@@ -68,7 +69,6 @@ div.two-wide > figure, div.two-wide > img {
 div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     margin-right: 0;
 }
-
 
 /********* Navbar ******************/
 
@@ -706,9 +706,9 @@ kbd
     }
 
     div.three-wide > figure, div.three-wide > img,  div.two-wide > figure, div.two-wide > img {
-    margin-right: 0;
-    width: 100%;
-}
+        margin-right: 0;
+        width: 100%;
+    }
 
 }
 
