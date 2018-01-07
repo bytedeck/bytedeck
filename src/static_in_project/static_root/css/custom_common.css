@@ -718,6 +718,15 @@ kbd
         float: none !important;
     }
 
+    div.pack {
+        flex-direction: column;
+        margin: 0 !important;
+    }
+
+    div.pack > div.pack-wrap {
+        margin: 0 0 10px 0 !important;
+    }
+
     div.three-wide > figure, div.three-wide > img,  div.two-wide > figure, div.two-wide > img {
         margin-right: 0;
         width: 100%;
