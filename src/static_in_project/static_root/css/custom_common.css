@@ -35,7 +35,7 @@ figure > img {
 figcaption {
     font-size: 90%;
     color: #636c72;
-   line-height: 1.2;
+    line-height: 1.2;
 }
 
 figure.pull-right {
@@ -46,6 +46,27 @@ figure.pull-right {
 figure.pull-left {
     margin-right: 15px;
     max-width: 40%; /* just a default */
+}
+
+/** arrays of figures and images ***/
+
+div.three-wide, div.two-wide {
+    width: 100%;
+    display: block;
+}
+
+div.three-wide > figure, div.three-wide > img {
+    margin-right: 2%;
+    width: 32%;
+}
+
+div.two-wide > figure, div.two-wide > img {
+    margin-right: 2%;
+    width: 49%;
+}
+
+div.three-wide > :last-of-type, div.two-wide > :last-of-type {
+    margin-right: 0;
 }
 
 
@@ -683,6 +704,11 @@ kbd
         margin-left: 0px;
         float: none !important;
     }
+
+    div.three-wide > figure, div.three-wide > img,  div.two-wide > figure, div.two-wide > img {
+    margin-right: 0;
+    width: 100%;
+}
 
 }
 
