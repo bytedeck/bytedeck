@@ -14,12 +14,6 @@ ul.left-aligned, ol.left-aligned {
 }
 
 /********* Packed **************/
-div.pack > div.pack-wrap:not(:last-child) {
-  margin-right: 2%;
-}
-div.pack > div.pack-wrap > figure {
-  margin: 0;
-}
 
 div.pack {
     margin-bottom: 10px;
@@ -704,7 +698,7 @@ kbd
 }
 
 /* mobile in portrait and tiny squashed browsers */
-@media screen and (max-width: 439px) {
+@media screen and (max-width: 480px) {
 
     /********** Figures ***************/
 
@@ -718,14 +712,14 @@ kbd
         float: none !important;
     }
 
-    div.pack {
-        flex-direction: column;
-        margin: 0 !important;
-    }
+    /*div.pack {*/
+        /*flex-direction: column;*/
+        /*margin: 0 !important;*/
+    /*}*/
 
-    div.pack > div.pack-wrap {
-        margin: 0 0 10px 0 !important;
-    }
+    /*div.pack > div.pack-wrap {*/
+        /*margin: 0 0 10px 0 !important;*/
+    /*}*/
 
     div.three-wide > figure, div.three-wide > img,  div.two-wide > figure, div.two-wide > img {
         margin-right: 0;
@@ -738,7 +732,7 @@ kbd
 
 /*************** SECRET ****************/
 
-.secret-link, secret-link:hover {
+.secret-link, .secret-link:hover {
     color: #333 !important;
     cursor: default;
 }

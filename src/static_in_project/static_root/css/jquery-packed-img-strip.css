@@ -1,0 +1,28 @@
+div.pack {
+  display: flex;
+  /*box-sizing: border-box;*/
+}
+
+div.pack > figure {
+  margin: 0;
+}
+
+div.pack > figure:not(:last-child), div.pack > div:not(:last-child) {
+  margin-right: 10px;
+}
+
+div.pack > figure > img ,div.pack > div > img {
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 560px) {
+  div.pack {
+    flex-wrap: wrap;
+  }
+  div.pack > figure, div.pack > div {
+    flex: 1 0 auto !important;
+    max-width: 100%;
+    margin: 0 0 10px 0 !important;
+  }
+}

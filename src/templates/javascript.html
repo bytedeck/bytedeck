@@ -29,7 +29,7 @@
 {#<script src="{% static 'js/bootstrap-tour.min.js' %}"></script>#}
 
 <script src="{% static 'js/jquery-double-submission.js' %}"></script>
-<script src="{% static 'js/packed-responsive-strip.js' %}"></script>
+<script src="{% static 'js/jquery-packed-img-strip.js' %}"></script>
 
 
 
@@ -101,9 +101,6 @@
         setTimeout(function(){ $('.dismiss-in-5').slideUp(); }, 5000);
       }
 
-      // packed responsive strip
-      $("div.pack").pack();
-
       ajaxNotificationsBadge()
       setInterval(ajaxNotificationsBadge, timeout);
 
@@ -155,7 +152,9 @@
 
     }); //(document).ready(function(){
 
-
+    $(window).on('load', function() {
+    		$("div.pack").pack();  // need images loaded before packing
+	  });
 
 
 </script>
