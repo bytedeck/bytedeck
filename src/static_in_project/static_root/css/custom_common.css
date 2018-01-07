@@ -13,6 +13,19 @@ ul.left-aligned, ol.left-aligned {
     line-height: 1.2;
 }
 
+/********* Packed **************/
+div.pack > div.pack-wrap:not(:last-child) {
+  margin-right: 2%;
+}
+div.pack > div.pack-wrap > figure {
+  margin: 0;
+}
+
+div.pack {
+    margin-bottom: 10px;
+}
+
+
 /********** Figures ****************/
 
 figure {

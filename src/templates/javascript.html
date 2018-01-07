@@ -29,6 +29,7 @@
 {#<script src="{% static 'js/bootstrap-tour.min.js' %}"></script>#}
 
 <script src="{% static 'js/jquery-double-submission.js' %}"></script>
+<script src="{% static 'js/packed-responsive-strip.js' %}"></script>
 
 
 
@@ -99,6 +100,9 @@
       if ($('.dismiss-in-5').length) {
         setTimeout(function(){ $('.dismiss-in-5').slideUp(); }, 5000);
       }
+
+      // packed responsive strip
+      $("div.pack").pack();
 
       ajaxNotificationsBadge()
       setInterval(ajaxNotificationsBadge, timeout);
