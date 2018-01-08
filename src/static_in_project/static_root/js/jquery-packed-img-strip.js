@@ -13,7 +13,7 @@
           var img = this;
           $(this).wrap('<div />');
           var flexWrapper = $(this).parent();
-        } else { // <figure>
+        } else { // <figure> or <a>
           var img = $(this).find("img")[0];
           var flexWrapper = $(this)
         }

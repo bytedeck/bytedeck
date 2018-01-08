@@ -13,18 +13,11 @@ ul.left-aligned, ol.left-aligned {
     line-height: 1.2;
 }
 
-/********* Packed **************/
-
-div.pack {
-    margin-bottom: 10px;
-}
-
-
 /********** Figures ****************/
 
 figure {
     display: inline-block;
-    margin-bottom: 1rem;
+    margin-bottom: 10px;
     border-width: 1px;
     border-style: solid;
     border-radius: 4px;
@@ -33,7 +26,7 @@ figure {
 }
 
 figure > img {
-    margin-bottom: .5rem;
+    margin-bottom: 5px;
     line-height: 1;
     max-width: 100%;
     height: auto;

@@ -1,17 +1,18 @@
 div.pack {
   display: flex;
+  margin-bottom: 10px;
   /*box-sizing: border-box;*/
 }
 
-div.pack > figure {
+div.pack > * {
   margin: 0;
 }
 
-div.pack > figure:not(:last-child), div.pack > div:not(:last-child) {
+div.pack > *:not(:last-child) {
   margin-right: 10px;
 }
 
-div.pack > figure > img ,div.pack > div > img {
+div.pack img {
   width: 100%;
   height: auto;
 }
@@ -20,9 +21,13 @@ div.pack > figure > img ,div.pack > div > img {
   div.pack {
     flex-wrap: wrap;
   }
-  div.pack > figure, div.pack > div {
+  div.pack > * {
     flex: 1 0 auto !important;
     max-width: 100%;
-    margin: 0 0 10px 0 !important;
+    margin: 0 !important;
   }
+  div.pack > *:not(:last-child) {
+    margin-bottom: 10px !important;
+  }
+
 }
