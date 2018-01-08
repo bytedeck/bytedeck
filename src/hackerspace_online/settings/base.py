@@ -413,7 +413,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        os.path.join(STATIC_URL, 'js/packed-responsive-strip.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
