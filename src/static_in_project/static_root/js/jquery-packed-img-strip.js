@@ -18,7 +18,6 @@
           var flexWrapper = $(this)
         }
         let aspect = img.naturalWidth / img.naturalHeight;
-        console.log(flexWrapper);
         flexWrapper.css({ flex: aspect + "" });
       });
 

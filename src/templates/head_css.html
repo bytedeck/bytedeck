@@ -24,6 +24,9 @@
 <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
 <link rel="stylesheet" href="{% static 'css/bootstrap-table-accordion.css' %}" >
 
+<link href="{% static 'css/jquery-packed-img-strip.css' %}" rel="stylesheet">
+{#<link href="{% static 'css/featherlight.min.css' %}" rel="stylesheet">#}
+
 {% if request.user.profile.dark_theme %}
   <link href="{% static 'css/custom_slate.css' %}" rel="stylesheet">
 {% else %}
@@ -32,7 +35,7 @@
 
 <link href="{% static 'css/custom_common.css' %}" rel="stylesheet">
 
-<link href="{% static 'css/jquery-packed-img-strip.css' %}" rel="stylesheet">
+
 
 <!-- Bootstrap DateTimePicker Widget -->
 <link href="{% static 'css/datetimepicker.css' %}" rel="stylesheet">

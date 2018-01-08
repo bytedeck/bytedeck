@@ -31,8 +31,7 @@
 <script src="{% static 'js/jquery-double-submission.js' %}"></script>
 <script src="{% static 'js/jquery-packed-img-strip.js' %}"></script>
 
-
-
+{#<script src="{% static 'js/featherlight.js' %}"></script>#}
 
 <script>
     var timeout = 30000; //milliseconds
@@ -154,6 +153,7 @@
 
     $(window).on('load', function() {
     		$("div.pack").pack();  // need images loaded before packing
+        //$('img.pop').featherlight($(this));
 	  });
 
 
