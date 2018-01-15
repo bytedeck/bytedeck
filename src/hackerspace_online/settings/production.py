@@ -20,7 +20,7 @@ ALLOWED_HOSTS = []
 # ALLOWED_HOSTS = [www.hackerspace.sd72.bc.ca, hackerspace.sd72.bc.ca]
 
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
+EMAIL_HOST_USER = 'admin@email.com'
 EMAIL_HOST_PASSWORD =""
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
