@@ -22,7 +22,7 @@
               <a class='btn btn-danger btn-xs' title='Delete this comment'
                 href="{% url 'comments:delete' comment.id %}"><i class="fa fa-fw fa-trash-o"></i></a>
               <a class='btn btn-danger btn-xs' title='Ban this user from public comments'
-                href="{% url 'profiles:comment_ban' comment.user.id %}"><i class="fa fa-fw fa-ban"></i></a>
+                href="{% url 'profiles:comment_ban' comment.user.profile.id %}"><i class="fa fa-fw fa-ban"></i></a>
             </div>
             {% endif %}
             <h5 class="media-heading">  <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
