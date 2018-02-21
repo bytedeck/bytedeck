@@ -7,6 +7,13 @@ from djconfig.forms import ConfigForm
 
 
 class HackerspaceConfigForm(ConfigForm):
+
+    hs_site_name = forms.CharField(label="Site Name, Full", initial="Timberline's Digital Hackerspace", required=True,
+                                   max_length=50, help_text="This name will appear throughout the site.")
+
+    hs_site_name_short = forms.CharField(label="Site Name, Short", initial="Hackerspace", required=True,
+                                   max_length=20, help_text="Used when the full site name is too cumbersome.")
+
     hs_closed = forms.BooleanField(label="Closed for Maintenance", initial=False,
                                    required=False)
     # hs_tour_on = forms.BooleanField(label="Activate Pop-up Welcome Tour",
@@ -14,7 +21,9 @@ class HackerspaceConfigForm(ConfigForm):
     # hs_view_active_semester_only = forms.BooleanField(label="View Students and Submissions from active semester only",
     #                                                   initial=False, required=False)
     hs_hackerspace_ai = forms.ModelChoiceField(label="User for automated stuff",
-                                               queryset=User.objects.filter(is_staff=True), initial=1, required=True)
+                                               queryset=User.objects.filter(is_staff=True), initial=1, required=True,
+                                               help_text="This user will appear as granted automatic badges etc. "
+                                                         "Suggestion: create a new staff user named `Hackerspace_AI` or similar.")
 
     hs_suggestion_badge = forms.ModelChoiceField(label="Suggestion Badge",
                                                  queryset=Badge.objects.all(), initial=1, required=True)
