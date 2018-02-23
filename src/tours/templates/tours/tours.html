@@ -13,7 +13,7 @@ $(document).ready(function() {
         backdrop: true,
         title: "Welcome!",
         content: "<p>Now that you've successfully registered with \
-        <b>Timberline's Digital Hackerspace - Online</b>, \
+        <b>{{ config.hs_site_name }} - Online</b>, \
         I've prepared a tour to show you around.</p> \
         <p>Use the buttons below to navigate through the tour.</p> \
         <p>If you grow weary of my tour, you can hit the <em>End Tour</em> button, \
@@ -24,7 +24,7 @@ $(document).ready(function() {
         // backdrop: true,
         element: "#navbar",
         placement: 'bottom',
-        title: "Hackerspace Tour Guide",
+        title: "{{ config.hs_site_name_short }} Tour Guide",
         content: "<p>Here are a few tips for the tour.  If you stay on the marked trail, you won't have a problem.  There will be plenty of time to explore later.  But just in case...</p> \
         <p><b>If you get lost</b> during the tour, just refresh your browser and I'll pick back up where we left off.</p> \
         <p><b>As a last resort</b>, in case you get blown up by a creeper or something, close the browser tab and come back and we can try again.</p> \

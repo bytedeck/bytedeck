@@ -1,3 +1,5 @@
+from djconfig import config
+
 from comments.models import Comment
 
 from django.conf import settings
@@ -75,13 +77,10 @@ class Announcement(models.Model):
         return self.datetime_released > timezone.now()
 
     def send_by_mail(self):
-        subject = "Test email from Hackerspace Online"
-        from_email = ("Timberline's Digital Hackerspace <" +
-                      settings.EMAIL_HOST_USER +
-                      ">")
+        subject = "Test email from " + config.hs_site_name
+        from_email = (config.hs_site_name + " <" + settings.EMAIL_HOST_USER + ">")
         to_emails = [from_email]
-        email_message = "from %s: %s via %s" % (
-            "Dear Bloggins", "sup", from_email)
+        email_message = "from %s: %s via %s" % ("Dear Bloggins", "sup", from_email)
 
         html_email_message = "<h1> if this is showing you received an HTML message</h1>"
 

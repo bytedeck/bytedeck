@@ -12,7 +12,7 @@
     <meta name="author" content="">
     <link rel="icon" href="{% static 'icon/favicon.ico' %}">
 
-    <title>{% block head_title%}{% endblock%} Timberline's Digital Hackerspace</title>
+    <title>{% block head_title%}{% endblock%} {{ config.hs_site_name }}</title>
 
     {% include 'head_css.html' %}
     {% block head %}{% endblock %}
@@ -63,7 +63,7 @@
     {% else %}
     <img class="img-responsive jumbo-banner banner1"
          src="{% static 'img/banner_closed.jpg' %}"
-         alt="Timberline's Digital Hackerspace is Closed for Maintenance"/>
+         alt="{{ config.hs_site_name }} is Closed for Maintenance"/>
     {% endif %}
 </div> <!-- /container -->
 
