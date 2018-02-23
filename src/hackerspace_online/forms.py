@@ -20,6 +20,10 @@ class HackerspaceConfigForm(ConfigForm):
                                              help_text="Selected from images uploaded via Admin through the "
                                                        "Utilies > Image Resources model.")
 
+    hs_banner_image_dark = forms.ModelChoiceField(label="Banner Image, Dark Theme", required=False,
+                                                  queryset=ImageResource.objects.all(),
+                                                  help_text="Same as above but used for the dark theme.")
+
     hs_default_icon = forms.ModelChoiceField(label="Default Icon", required=False, queryset=ImageResource.objects.all(),
                                              help_text="Selected from images uploaded via Admin through the "
                                                        "Utilies > Image Resources model.  "
@@ -70,6 +74,12 @@ class HackerspaceConfigForm(ConfigForm):
     def clean_hs_banner_image(self):
         if self.cleaned_data['hs_banner_image']:
             return self.cleaned_data['hs_banner_image'].pk
+        else:
+            return None
+
+    def clean_banner_image_dark(self):
+        if self.cleaned_data['hs_banner_image_dark']:
+            return self.cleaned_data['hs_banner_image_dark'].pk
         else:
             return None
 
