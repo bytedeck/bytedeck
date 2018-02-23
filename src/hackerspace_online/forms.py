@@ -5,6 +5,8 @@ from django import forms
 from django.contrib.auth.models import User
 from djconfig.forms import ConfigForm
 
+from utilities.models import ImageResource
+
 
 class HackerspaceConfigForm(ConfigForm):
 
@@ -13,6 +15,15 @@ class HackerspaceConfigForm(ConfigForm):
 
     hs_site_name_short = forms.CharField(label="Site Name, Short", initial="Hackerspace", required=True,
                                    max_length=20, help_text="Used when the full site name is too cumbersome.")
+
+    hs_banner_image = forms.ModelChoiceField(label="Banner Image", required=False, queryset=ImageResource.objects.all(),
+                                             help_text="Selected from images uploaded via Admin through the "
+                                                       "Utilies > Image Resources model.")
+
+    hs_default_icon = forms.ModelChoiceField(label="Default Icon", required=False, queryset=ImageResource.objects.all(),
+                                             help_text="Selected from images uploaded via Admin through the "
+                                                       "Utilies > Image Resources model.  "
+                                                       "This becomes the default icon for quests and badges.")
 
     hs_closed = forms.BooleanField(label="Closed for Maintenance", initial=False,
                                    required=False)
@@ -45,17 +56,25 @@ class HackerspaceConfigForm(ConfigForm):
     #                                    initial=False, required=False)
 
     def clean_hs_active_semester(self):
-        # Untested, may not even work
         return self.cleaned_data['hs_active_semester'].pk
 
     def clean_hs_suggestion_badge(self):
-        # Untested, may not even work
         return self.cleaned_data['hs_suggestion_badge'].pk
 
     def clean_hs_voting_badge(self):
-        # Untested, may not even work
         return self.cleaned_data['hs_voting_badge'].pk
 
     def clean_hs_hackerspace_ai(self):
-        # Untested, may not even work
         return self.cleaned_data['hs_hackerspace_ai'].pk
+
+    def clean_hs_banner_image(self):
+        if self.cleaned_data['hs_banner_image']:
+            return self.cleaned_data['hs_banner_image'].pk
+        else:
+            return None
+
+    def clean_hs_default_icon(self):
+        if self.cleaned_data['hs_default_icon']:
+            return self.cleaned_data['hs_default_icon'].pk
+        else:
+            return None
