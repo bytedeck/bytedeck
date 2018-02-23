@@ -26,3 +26,17 @@ class RestrictedFileField(models.FileField):
         )
 
 
+class ImageResource(models.Model):
+    """
+
+    """
+    name = models.CharField(max_length=50)
+    image = models.ImageField(upload_to='images/', height_field='height', width_field='width')
+    height = models.PositiveIntegerField(editable=False)
+    width = models.PositiveIntegerField(editable=False)
+    datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
+    datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
+
+
+
+
