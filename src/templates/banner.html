@@ -1,9 +1,6 @@
 {% load staticfiles %}
+{% load utility_tags %}
 <img id="banner"
-     src="{% if request.user.profile.dark_theme %}
-                 {% static 'img/banner_slate.svg' %}
-              {% else %}
-                 {% static 'img/banner.svg' %}
-              {% endif %}"
-     class="img-responsive" alt="{{ config.hs_site_name }} Banner"
+     src="{% banner_url %}"
+     class="img img-rounded img-responsive" alt="{{ config.hs_site_name }} Banner"
 />

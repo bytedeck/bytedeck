@@ -16,7 +16,8 @@ class HackerspaceConfigForm(ConfigForm):
     hs_site_name_short = forms.CharField(label="Site Name, Short", initial="Hackerspace", required=True,
                                    max_length=20, help_text="Used when the full site name is too cumbersome.")
 
-    hs_banner_image = forms.ModelChoiceField(label="Banner Image", required=False, queryset=ImageResource.objects.all(),
+    hs_banner_image = forms.ModelChoiceField(label="Banner Image", required=False,
+                                             queryset=ImageResource.objects.all(),
                                              help_text="Selected from images uploaded via Admin through the "
                                                        "Utilies > Image Resources model.")
 
@@ -77,7 +78,7 @@ class HackerspaceConfigForm(ConfigForm):
         else:
             return None
 
-    def clean_banner_image_dark(self):
+    def clean_hs_banner_image_dark(self):
         if self.cleaned_data['hs_banner_image_dark']:
             return self.cleaned_data['hs_banner_image_dark'].pk
         else:
