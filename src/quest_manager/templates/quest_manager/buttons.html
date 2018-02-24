@@ -36,7 +36,7 @@
 
     {% if request.user.profile.game_lab_transfer_process_on %}
       <a title="Mark this quest as completed, but you won't get XP for it"
-         class="btn btn-warning" href="{% url 'quests:skipped' q.id %}" role="button">Skip Quest</a>
+         class="btn btn-warning" href="{% url 'quests:skip_for_quest' q.id %}" role="button">Skip Quest</a>
     {% endif %}
 
     {% if q|is_hidden:request.user %}
