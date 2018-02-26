@@ -826,7 +826,7 @@ def skipped(request, quest_id):
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     if new_sub is None:  # might be because quest was already started
         # so try to get the started Quest
-        submission = QuestSubmission.objects.all_for_user_quest(request.user, quest).last()
+        submission = QuestSubmission.objects.all_for_user_quest(request.user, quest, True).last()
         if submission is None:
             raise Http404
     else:
