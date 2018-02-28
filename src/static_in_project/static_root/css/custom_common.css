@@ -13,6 +13,9 @@ ul.left-aligned, ol.left-aligned {
     line-height: 1.2;
 }
 
+
+
+
 /********** Figures ****************/
 
 figure {
@@ -582,6 +585,27 @@ already distinguished*/
 .sidebar-menu-nav > li > a:focus {
     background-color: transparent;
 }
+
+.list-group-item.left-side, .list-group-item.right-side {
+  margin: 0;
+  float: left;
+  border-bottom: none;
+}
+
+.list-group-item.left-side {
+  border-top-right-radius: 0px ;
+  width: 80%;
+}
+
+.list-group-item.right-side {
+  width: 20%;
+  border-top-right-radius: 4px;
+  border-top-left-radius: 0px;
+  border-bottom-right-radius: 0px;
+  border-bottom-left-radius: 0px;
+  border-left: none;
+}
+
 
 /*this allows us to use contextual badges (-success, -primary, etc)*/
 .label-as-badge {
