@@ -73,6 +73,9 @@
   </div>
   <div class="panel-body">
     {{ quest.instructor_notes | safe }}
+      {% if quest.specific_teacher_to_notify %}
+          <hr><p>* <b>{{ quest.specific_teacher_to_notify }}</b> is notified about this submissions of this quest.</p>
+      {% endif %}
   </div>
 </div>
 {% endif %}
