@@ -355,7 +355,7 @@ def quest_copy(request, quest_id):
 def detail(request, quest_id):
     """
     Display the quest if it is available to the user or if user is staff, otherwise check for a completed submission
-    and display that.  If no submission, then display a page saying the user doesn't have access to this quest.
+    and display that.  If no submission, and not available, then display a restricted version.
     :param request:
     :param quest_id:
     :return:
@@ -363,23 +363,27 @@ def detail(request, quest_id):
 
     q = get_object_or_404(Quest, pk=quest_id)
 
-    # Display the quest
-    if q.is_editable(request.user) or q.is_available(request.user):
-        context = {
-            "heading": q.name,
-            "q": q,
-        }
-        return render(request, 'quest_manager/detail.html', context)
-    # Check if the user has a submission to view
+    if q.is_available(request.user) or q.is_editable(request.user):
+        available = True
     else:
+        # Display submission if quest is not available
         submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, active_semester_only=False)
         if submissions:
             sub = submissions.latest('time_approved')
             return submission(request, sub.id)
-
         else:
-            messages.error(request, "Sorry, the quest \"" + q.name + "\" is not available to you.")
-            return redirect("quests:quests")
+            # No submission either, so display quest flagged as unavailable
+            available = False
+
+    context = {
+        "heading": q.name,
+        "q": q,
+        "available": available,
+    }
+
+    return render(request, 'quest_manager/detail.html', context)
+
+
 
 
 #######################################

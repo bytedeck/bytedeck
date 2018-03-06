@@ -4,16 +4,31 @@
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
-  {% with no_details=True %}
-    {% include "quest_manager/buttons.html" %}
-  {% endwith %}
+    {% if available %}
+        {% with no_details=True %}
+            {% include "quest_manager/buttons.html" %}
+        {% endwith %}
+    {% else %}
+        <div id="quest-preview-{{ q.id }}" class="panel panel-danger panel-top">
+            <div class="panel-heading">
+                <h3 class="panel-title"><i class="fa fa-warning"></i> Quest Preview</h3>
+            </div>
+            <div class="panel-body">
+                <p>You do not yet meet the prerequisites to start this quest.
+                    This preview allows you to view the content of future quests.</p>
+            </div>
+        </div>
+    {% endif %}
 
-  {% with q as quest %}
-    {% include "quest_manager/quest_detail_content.html" %}
-  {% endwith %}
+    {% with q as quest %}
+        {% include "quest_manager/quest_detail_content.html" %}
+    {% endwith %}
 
-  {% with no_details=True %}
-    {% include "quest_manager/buttons.html" %}
-  {% endwith %}
+    {% if available %}
+        {% with no_details=True %}
+            {% include "quest_manager/buttons.html" %}
+        {% endwith %}
+    {% endif %}
+
 
 {% endblock %}
