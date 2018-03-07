@@ -733,6 +733,10 @@ def complete(request, submission_id):
 @login_required
 def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
+
+    if not quest.is_available(request.user):
+        raise Http404
+
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
     # if new_sub is None:
     #     print("This quest is not available, why is it showing up?")
