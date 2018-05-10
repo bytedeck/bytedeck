@@ -1,9 +1,11 @@
 ## Hackerspace test environment installation (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
+This guide assumes you are running Linux.  If not, then you can use the [Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) if you have Windows 10.  Another option is [Git Bash](https://git-for-windows.github.io/)
+
 #### Preparation
 1. Install Python 3: `sudo apt install python3`
-1. Install Git: `sudo apt install git`.  If working in Windows, install [Git Bash](https://git-for-windows.github.io/)
+1. Install Git: `sudo apt install git`. 
 1. Pick/create a location for the project, e.g: `~/Developer`
 
 #### Fork the repository
