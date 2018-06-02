@@ -5,7 +5,8 @@
 <nav class="navbar navbar-default navbar-fixed-top {% if request.user.profile.chillax %} chillax {% endif %}">
     <div class="container-fluid">
         <div class="navbar-header">
-            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar"
+            <button type="button" class="navbar-toggle collapsed"
+                    data-toggle="collapse" data-target="#navbar"
                     aria-expanded="false" aria-controls="navbar">
                 <span class="sr-only">Toggle navigation</span>
                 <span class="icon-bar"></span>
@@ -13,12 +14,13 @@
                 <span class="icon-bar"></span>
             </button>
 
+            <!-- mobile notifications button -->
             <button type="button" class="navbar-toggle collapsed mobile-notifications"
-                    data-toggle="collapse" data-target="#notification_dropdown"
-                    aria-expanded="false" aria-controls="notification_dropdown"><!--
+                    data-toggle="collapse" data-target="#mobile-notifications-dropdown"
+                    aria-expanded="false" aria-controls="mobile-notifications-dropdown"><!--
                 --><span class="sr-only">Toggle notifications</span><!--
                 --><i class="fa fa-bell"></i><!--
-             <span id="notification_badge2" class="badge alert-danger"></span>
+                --><span class="badge alert-danger notification-badge"></span><!--
             --></button>
 
             <!-- Stuff that doesn't collapse on mobile -->
@@ -46,12 +48,15 @@
                 </li>
                 {% endif %}
             </ul>
+        </div> <!-- navbar-header -->
 
-        </div>
+
+{#        <ul class="collapse navbar-collapse nav navbar-nav visible-xs-block notification-dropdown"#}
+{#            id="mobile-notification-dropdown">#}
+{#        </ul>#}
 
 
         <div id="navbar" class="navbar-collapse collapse">
-
             <ul class="nav navbar-nav navbar-right">
                 {% if request.user.is_authenticated %}
                 {% if request.user.is_staff %}
@@ -72,13 +77,14 @@
                         <!-- <li class="dropdown-header">Debug</li> -->
                     </ul>
                 </li>
-                {% endif %}
+                {% else %}
                 <li id="menu-xp">
                     <a href="{% url 'courses:marks' request.user.id %}"
                        class="navbar-text-large-container">XP:
                         <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
                     </a>
                 </li>
+                {% endif %}
                 <li id="profile" class="navbar-group">
                     <a title="Profile" class="navbar-avatar"
                        href="{% url 'profiles:profile_detail' request.user.profile.id %}">
@@ -93,13 +99,17 @@
                         </i>
                     </a>
                 </li>
-                <li id='notifications-menu' class="dropdown">
+
+                <!-- only show this in wide view, this is repeated above for the mobile collapsed menu -->
+                <li id='notifications-menu' class="dropdown hidden-xs">
                     <a title="Notifications" href="#"
-                       class="dropdown-toggle notification-toggle" data-toggle="dropdown"
+                       class="dropdown-toggle notification-toggle"
+                       data-toggle="collapse" data-target="#notification-dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">
-                        <i class="fa fa-bell"></i>&nbsp;<span id="notification_badge" class="badge alert-danger"></span>
+                        <i class="fa fa-bell"></i><!--
+                     --><span id="notification_badge" class="badge alert-danger notification-badge"></span>
                     </a>
-                    <ul class="dropdown-menu" id="notification_dropdown">
+                    <ul class="dropdown-menu notification-dropdown" id="notification-dropdown">
                     </ul>
                 </li>
 
@@ -146,9 +156,13 @@
 
 
 
+{#        <div class="navbar navbar-centered">#}
+{#            <a href="{% url 'courses:marks' request.user.id %}"#}
+{#               class="navbar-text-large-container">XP:#}
+{#                <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>#}
+{#            </a>#}
+{#        </div>#}
 
 
-
-
-    </div>
+    </div> <!-- .container-fluid -->
 </nav>

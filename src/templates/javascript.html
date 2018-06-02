@@ -65,7 +65,7 @@
         success: function(data){
           var count = data.count;
           if(count!=0) {
-            $("#notification_badge").html(count);
+            $(".notification-badge").html(count);
             var announcements_count = 0;
             $(data.notifications).each(function(){
               var link = this;
@@ -118,28 +118,30 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            $("#notification_dropdown").html("");
+            $menu = $("#notification-dropdown");
+            $menu.html("");
+
             var count = data.count;
             // console.log(count);
             if(count!=0) {
               // $("#notification_badge").html(count);
-              $("#notification_dropdown").append("<li class='dropdown-header'>New Notifications</li>");
+              $menu.append("<li class='dropdown-header'>New Notifications</li>");
               $(data.notifications).each(function(){
                 var link = this;
-                $("#notification_dropdown").append("<li>"+link + "</li>");
+                $menu.append("<li>"+link + "</li>");
               })
               // console.log(data.notifications);
-              $("#notification_dropdown").append("<li role='separator' class='divider'></li>");
+              $menu.append("<li role='separator' class='divider'></li>");
             }
             var overflow = "";
             if(count > data.limit) {
               overflow = "<i class='fa fa-fw fa-2x fa-stack-overflow text-danger'></i>";
             }
             var url = "{% url 'notifications:list' %}";
-            $("#notification_dropdown").append("<li><a href='"+url+"'>"+ overflow+" View All Notifications</a></li>");
+            $menu.append("<li><a href='"+url+"'>"+ overflow+" View All Notifications</a></li>");
             if(count>1) {
               var url_mark = "{% url 'notifications:read_all' %}";
-              $("#notification_dropdown").append("<li><a href='" + url_mark + "'>Mark all read</a></li>");
+              $menu.append("<li><a href='" + url_mark + "'>Mark all read</a></li>");
             }
           },
           error: function(rs, e) {
