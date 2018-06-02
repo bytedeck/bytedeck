@@ -79,9 +79,41 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     margin-right: 0;
 }
 
-/********* Navbar ******************/
+/***************************
+*
+*      NAVBAR
+*
+****************************/
 
+/* https://codepen.io/bootstrapped/pen/KwYGwq */
+.navbar-brand {
+    padding: 0px;
+}
 
+.navbar-brand > img {
+    max-height: 100%;
+    width: auto;
+    padding: 7px 15px; /* creates large logo within navbar */
+
+}
+
+.navbar-nav > li > a.navbar-avatar {
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+
+.navbar-avatar {
+    /* leaves room for learger img within navbar */
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+
+.navbar-avatar > img {
+    box-sizing: content-box;
+    height: 36px;
+    width: 36px;
+    border-radius: 4px;
+}
 
 .navbar-fixed-top {
     margin-bottom: 0px !important;
@@ -95,7 +127,7 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     margin-bottom: -3px;
 }
 
-.navbar .navbar-nav > li > a {
+.navbar-nav > li > a {
     border-left: none;
     border-right: none;
 }
@@ -104,6 +136,43 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     padding-left: 5px !important;
     padding-right: 5px !important;
 }
+
+li.navbar-group > a {
+    display: inline-block;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+li.navbar-group > a:first-child {
+    padding-left: 15px;
+}
+
+li.navbar-group > a:last-child {
+    padding-right: 15px;
+}
+
+.navbar-no-collapse {
+    float: left;
+    margin: 0;
+}
+
+.navbar-no-collapse > li {
+    float: left;
+}
+
+.navbar-no-collapse >li>a {
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+
+button.mobile-notifications {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+
+/*********************************/
+
 
 .fullscreen {
     position:fixed !important;
@@ -122,18 +191,7 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     z-index:9000 !important;
 }
 
-/*
-.navbar-packed-listitem:first-of-type > a{
- padding-left: 10px !important;
- padding-right: 5px !important;
-}
 
-
-.navbar-packed-listitem:last-of-type > a{
- padding-left: 5px !important;
- padding-right: 10px !important;
-}
-*/
 .jumbo-banner {
     padding-top: 20px;
 }
@@ -651,7 +709,6 @@ kbd
 @screen-lg-min: 1200px;*/
 
 
-
 /*xs only*/
 @media (max-width: 767px) {
 
@@ -717,6 +774,13 @@ kbd
     #sidebar a, #sidebar-footer a {
         padding-left: 10px;
     }
+
+    .navbar-no-collapse >li>a {
+        font-size: 20px;
+        /*padding-top: 15px;*/
+        /*padding-bottom: 15px;*/
+    }
+
 
 }
 

@@ -58,6 +58,7 @@
     </div>
     {% endfor %}
     {% endif %}
+
     {% if not config.hs_closed or request.user.is_staff %}
       {% block content_outer %}{% endblock %}
     {% else %}

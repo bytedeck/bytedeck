@@ -22,3 +22,13 @@ def banner_url(context):
             return banner_image.image.url
         else:
             return static('img/banner_slate.svg')
+
+
+@register.simple_tag
+def site_logo_url():
+    if config.hs_site_logo:
+        site_logo = get_object_or_404(ImageResource, pk=config.hs_site_logo)
+        return site_logo.image.url
+    else:
+        return static('img/default_icon.png')
+
