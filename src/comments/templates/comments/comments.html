@@ -5,47 +5,47 @@
     {% if request.user.is_staff or not comment.flagged %}
       <li class="list-group-item {% if comment.flagged %} list-group-item-danger{% endif %}"
           id="comment-{{comment.id}}">
-        <div class="media">
-          <div class="media-left">
-            <img class="media-object icon-md img-rounded" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>
-          </div>
-          <div class="media-body">
-            {% if request.user.is_staff %}
-            <div class="pull-right">
-              {% if comment.flagged %}
-              <a class='btn btn-success btn-xs' title='Unflag this comment'
-                href="{% url 'comments:unflag' comment.id %}"><i class="fa fa-fw fa-flag"></i></a>
-              {% else %}
-              <a class='btn btn-warning btn-xs' title='Flag this comment'
-                href="{% url 'comments:flag' comment.id %}"><i class="fa fa-fw fa-flag"></i></a>
-              {% endif %}
-              <a class='btn btn-danger btn-xs' title='Delete this comment'
-                href="{% url 'comments:delete' comment.id %}"><i class="fa fa-fw fa-trash-o"></i></a>
-              <a class='btn btn-danger btn-xs' title='Ban this user from public comments'
-                href="{% url 'profiles:comment_ban' comment.user.profile.id %}"><i class="fa fa-fw fa-ban"></i></a>
-            </div>
-            {% endif %}
-            <h5 class="media-heading">  <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
-              {% if request.user.is_staff %}
-              <small>({{comment.user.profile.preferred_full_name}}
-              Current Mark: {{comment.user.profile.mark|floatformat:0}}%)
-              </small>
-              {% endif %}
-              <small>&ndash; {{comment.timestamp|timesince}} ago</small>
-              {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
-            </h5>
-              <div class="markdown">{{comment.text|safe|linebreaks}}</div>
-              <ul>
-              {% for document in comment.document_set.all %}
-                <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
-                  {{ document.docfile|filename }}</a>
-                    <a href="{% url 'portfolios:art_add' document.id %}"
-                    class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
-                </li>
-              {% endfor %}
-              </ul>
-          </div>
+
+        <img class="icon-md img-rounded pull-left" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>
+
+        {% if request.user.is_staff %}
+        <div class="pull-right">
+          {% if comment.flagged %}
+          <a class='btn btn-success btn-xs' title='Unflag this comment'
+            href="{% url 'comments:unflag' comment.id %}"><i class="fa fa-fw fa-flag"></i></a>
+          {% else %}
+          <a class='btn btn-warning btn-xs' title='Flag this comment'
+            href="{% url 'comments:flag' comment.id %}"><i class="fa fa-fw fa-flag"></i></a>
+          {% endif %}
+          <a class='btn btn-danger btn-xs' title='Delete this comment'
+            href="{% url 'comments:delete' comment.id %}"><i class="fa fa-fw fa-trash-o"></i></a>
+          <a class='btn btn-danger btn-xs' title='Ban this user from public comments'
+            href="{% url 'profiles:comment_ban' comment.user.profile.id %}"><i class="fa fa-fw fa-ban"></i></a>
         </div>
+        {% endif %}
+
+        <h3 class="comment-heading">  <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
+          {% if request.user.is_staff %}
+          <small>({{comment.user.profile.preferred_full_name}}
+          Current Mark: {{comment.user.profile.mark|floatformat:0}}%)
+          </small>
+          {% endif %}
+          <small>&ndash; {{comment.timestamp|timesince}} ago</small>
+          {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
+        </h3>
+        <div class="comment-heading-divider"></div>
+
+        <div class="markdown comment-content">{{comment.text|safe|linebreaks}}</div>
+        <ul>
+        {% for document in comment.document_set.all %}
+        <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
+          {{ document.docfile|filename }}</a>
+            <a href="{% url 'portfolios:art_add' document.id %}"
+            class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
+        </li>
+        {% endfor %}
+        </ul>
+
       </li>
     {% endif %}
   {% endfor %}

@@ -389,19 +389,23 @@ ol > ol > ol {
 }
 
 .icon-sm {
-    width: 24px
+    width: 24px;
+    height:24px;
 }
 
 .icon-md {
-    width: 32px
+    width: 32px;
+    height:32px;
 }
 
 .icon-md2 {
-    width: 48px
+    width: 48px;
+    height:48px;
 }
 
 .icon-lg {
-    width: 64px
+    width: 64px;
+    height:64px;
 }
 
 .icon-xl {
@@ -607,9 +611,17 @@ li.file-link {
     width: 48px;
 }
 
-.comment-heading hr {
+.comment-heading-divider {
     margin-top: 10px;
     margin-bottom: 10px;
+}
+
+h3.comment-heading {
+    margin-top: 5px
+}
+
+.comment-content img {
+    max-width: 100%;
 }
 
 /***********ACCORDIAN COMMENTS *******************************/
