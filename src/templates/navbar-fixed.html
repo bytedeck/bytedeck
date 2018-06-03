@@ -15,13 +15,24 @@
             </button>
 
             <!-- mobile notifications button -->
-            <button type="button" class="navbar-toggle collapsed mobile-notifications"
-                    data-toggle="collapse" data-target="#mobile-notifications-dropdown"
-                    aria-expanded="false" aria-controls="mobile-notifications-dropdown"><!--
+            <button type="button" class="navbar-toggle notification-toggle collapsed mobile-notifications"
+                    data-toggle="collapse" data-target="#mobile-notification-dropdown"
+                    aria-expanded="false" aria-controls="mobile-notification-dropdown"><!--
                 --><span class="sr-only">Toggle notifications</span><!--
                 --><i class="fa fa-bell"></i><!--
                 --><span class="badge alert-danger notification-badge"></span><!--
             --></button>
+
+            <!-- mobile XP -->
+            <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
+                <li>
+                    <a href="{% url 'courses:marks' request.user.id %}"
+                        class="navbar-text-large-container">XP:
+                        <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
+                    </a>
+                </li>
+            </ul>
+
 
             <!-- Stuff that doesn't collapse on mobile -->
             <a title="Home" class="navbar-brand" href="{% url 'home' %}">
@@ -29,7 +40,6 @@
             </a>
 
             <ul class="nav navbar-nav navbar-no-collapse">
-                <li>&nbsp;</li>
                 {% if request.user.is_authenticated %}
                 <li class="navbar-packed-listitem">
                     <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
@@ -50,10 +60,14 @@
             </ul>
         </div> <!-- navbar-header -->
 
+        <div class="visible-xs-block mobile-notification-dropdown-container">
+            <div id="mobile-notification-dropdown" class="navbar-collapse collapse">
+                <ul class="nav navbar-nav navbar-right notification-dropdown">
+                    <li>I SHOULD BE INVISIBLE</li>
+                </ul>
+            </div>
 
-{#        <ul class="collapse navbar-collapse nav navbar-nav visible-xs-block notification-dropdown"#}
-{#            id="mobile-notification-dropdown">#}
-{#        </ul>#}
+        </div>
 
 
         <div id="navbar" class="navbar-collapse collapse">
@@ -103,8 +117,7 @@
                 <!-- only show this in wide view, this is repeated above for the mobile collapsed menu -->
                 <li id='notifications-menu' class="dropdown hidden-xs">
                     <a title="Notifications" href="#"
-                       class="dropdown-toggle notification-toggle"
-                       data-toggle="collapse" data-target="#notification-dropdown"
+                       class="dropdown-toggle notification-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">
                         <i class="fa fa-bell"></i><!--
                      --><span id="notification_badge" class="badge alert-danger notification-badge"></span>
@@ -116,7 +129,8 @@
                 <li id="extras-menu" class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">
-                        <i class="fa fa-bars"></i>
+                        <i class="fa fa-bars hidden-xs"></i><!--
+                     --><span class="visible-xs-block">More <span class="caret"></span></span>
                     </a>
                     <ul class="dropdown-menu">
                         <li><a href="{% url 'courses:ranks' %}"><i class="fa fa-fw fa-star-o"></i>&nbsp;&nbsp;Ranks List</a></li>

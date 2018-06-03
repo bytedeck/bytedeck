@@ -118,7 +118,7 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            $menu = $("#notification-dropdown");
+            $menu = $(".notification-dropdown");
             $menu.html("");
 
             var count = data.count;
