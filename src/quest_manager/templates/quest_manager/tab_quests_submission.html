@@ -8,12 +8,13 @@
 {% load crispy_forms_tags %}
 {% if submissions %}
 
+
   <div class="row panel-heading">
-    <div class="col-xs-1 col-icon"></div>
-    <div class="col-xs-5">Quest</div>
-    <div class="col-xs-1">XP   </div>
-    <div class="col-xs-2">Campaigns</div>
-    <div class="col-xs-3">Status</div>
+    <div class="col-sm-1 col-xs-2 col-icon"></div>
+    <div class="col-sm-5 col-xs-8">Quest</div>
+    <div class="col-sm-1 col-xs-2 text-right">XP</div>
+    <div class="col-sm-2 hidden-xs text-center">Campaign</div>
+    <div class="col-xs-3 hidden-xs ">Status</div>
   </div>
   <div class="panel-group panel-group-packed"
     id="accordian-{% if completed %}completed{% else %}inprogress{% endif %}"
@@ -36,33 +37,16 @@
 
         <div class="row">
           <h4 class="panel-title">
-            <div class="col-xs-1 col-icon">
+            <div class="col-sm-1 col-xs-2 col-icon">
               <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-xs-5">{{s.quest.name}}</div>
-            <div class="col-xs-1">{{s.quest.xp}}  </div>
-            <div class="col-xs-2"><small>
+            <div class="col-sm-5 col-xs-8">{{s.quest.name}}</div>
+            <div class="col-sm-1 col-xs-2 text-right">{{s.quest.xp}}  </div>
+            <div class="col-sm-2 hidden-xs"><small>
               {% if s.quest.campaign %}{{ s.quest.campaign }} {% else %}-{% endif %}
             </small></div>
-            <div class="col-xs-3">
-              {% if s.is_approved %}
-                Approved<br/>
-                <small>{{s.time_approved}}</small>
-              {% elif s.is_awaiting_approval %}
-                Submitted<br/>
-                <small>{{s.time_completed}}</small>
-              {% elif s.is_returned %}
-                Returned<br/>
-                <small>
-                  {% if s.time_returned %}
-                    {{s.time_returned|timesince}} ago
-                  {% else %}
-                    Unknown time ago
-                  {% endif %}
-                </small>
-              {% else %}
-                In progress
-              {% endif %}
+            <div class="col-sm-3 hidden-xs">
+              {% include "quest_manager/submitted_time.html" %}
             </div>
           </h4>
         </div>

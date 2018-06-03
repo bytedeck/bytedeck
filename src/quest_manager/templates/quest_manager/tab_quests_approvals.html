@@ -10,12 +10,12 @@
 
 {% if tab.submissions %}
   <div class="row panel-heading">
-    <div class="col-xs-1 col-icon"></div>
-    <div class="col-xs-4">Quest</div>
-    <div class="col-xs-1">XP   </div>
-    <div class="col-xs-1">Blocks</div>
-    <div class="col-xs-2">User</div>
-    <div class="col-xs-3">{{tab.time_heading}}</div>
+    <div class="col-sm-1 col-xs-2 col-icon"></div>
+    <div class="col-sm-4 col-xs-5">Quest</div>
+    <div class="col-sm-1 col-xs-2">XP</div>
+    <div class="col-sm-1 hidden-xs">Blocks</div>
+    <div class="col-sm-2 col-xs-3">User</div>
+    <div class="col-sm-3 hidden-xs">{{tab.time_heading}}</div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
@@ -34,33 +34,19 @@
 
         <div class="row">
           <h4 class="panel-title">
-            <div class="col-xs-1 col-icon">
+            <div class="col-sm-1 col-xs-2 col-icon">
               <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-xs-4">{{s.quest.name}}</div>
-            <div class="col-xs-1">{{s.quest.xp}}  </div>
-            <div class="col-xs-1">
+            <div class="col-sm-4 col-xs-5">{{s.quest.name}}</div>
+            <div class="col-sm-1 col-xs-2">{{s.quest.xp}}  </div>
+            <div class="col-sm-1 hidden-xs">
               {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
             </div>
-            <div class="col-xs-2">{{s.user}} <br />
+            <div class="col-sm-2 col-xs-3">{{s.user}} <br />
               <small>{{ s.user.profile.preferred_full_name }}</small>
              </div>
-            <div class="col-xs-3">
-              {% if s.is_approved %}
-                <small>{{s.time_approved|timesince}} ago</small>
-              {% elif s.is_awaiting_approval %}
-                <small>{{s.time_completed|timesince}} ago</small>
-              {% elif s.is_returned %}
-                <small>
-                  {% if s.time_returned %}
-                    {{s.time_returned|timesince}} ago
-                  {% else %}
-                    Unknown time ago
-                  {% endif %}
-                </small>
-              {% else %}
-                In progress
-              {% endif %}
+            <div class="col-sm-3 hidden-xs">
+              {% include "quest_manager/submitted_time.html" %}
             </div>
           </h4>
         </div>

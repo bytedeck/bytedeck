@@ -1,8 +1,22 @@
 {% load crispy_forms_tags %}
+    <li class="list-group-item list-group-item-info visible-xs-block">Status</li>
+    <li class="list-group-item visible-xs-block">
+    <div class="row">
+        <div class="col-xs-6">
+            Blocks<br>
+            {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </div>
+        <div class="col-xs-6">
+            {% with label=True %}{% include "quest_manager/submitted_time.html" %}{% endwith %}
+        </div>
+
+    </div>
+
+    </li>
   <li class="list-group-item list-group-item-info">Submission Details</li>
-  <li class="list-group-item list-group-item">{{s.quest.submission_details|safe}}</li>
+  <li class="list-group-item">{{s.quest.submission_details|safe}}</li>
   <li class="list-group-item list-group-item-info">Instructor Notes</li>
-  <li class="list-group-item list-group-item">{{s.quest.instructor_notes|safe}}
+  <li class="list-group-item">{{s.quest.instructor_notes|safe}}
       {% if s.quest.specific_teacher_to_notify %}
           <hr><p>* <b>{{ s.quest.specific_teacher_to_notify }}</b> was notified about this quest submission.</p>
       {% endif %}

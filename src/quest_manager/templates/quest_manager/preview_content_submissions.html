@@ -1,4 +1,8 @@
 <!-- inserted via AJAX into tab_quest_submissions -->
+<li class="list-group-item list-group-item-info visible-xs-block">Status</li>
+<li class="list-group-item visible-xs-block">
+    {% with label=True %}{% include "quest_manager/submitted_time.html" %}{% endwith %}
+</li>
 <li class="list-group-item list-group-item-info">Submission Instructions</li>
 <li class="list-group-item list-group-item-buttons">
   <div class="pull-right">
