@@ -51,11 +51,14 @@
       <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
       <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
     </a>
+
+    {% if config.hs_suggestions_on %}
     <a id="suggestions-menu" class="list-group-item
         {% if '/suggestions/' in request.path_info %}active{% endif %}"
        href="{% url 'suggestions:list' %}">
       <i class="fa fa-lightbulb-o fa-fw"></i>&nbsp; Suggestions
     </a>
+    {% endif %}
 
     <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
        href="{% url 'profiles:profile_list_current' %}">

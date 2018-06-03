@@ -22,8 +22,9 @@
 
 {% block content %}
   <br>
-
-  {% if request.user.is_staff or semester.is_open and request.user.profile.has_current_course %}
+  {% if not config.hs_suggestions_on %}
+      <p>Suggestions have been deactivated on this site due to lack of student participation. Sorry!</p>
+  {% elif request.user.is_staff or semester.is_open and request.user.profile.has_current_course %}
     <div class="panel panel-primary">
       <div class="panel-heading" title="This section is only visible to you">
         How to get XP by helping to improve the {{ config.hs_site_name_short }}.

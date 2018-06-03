@@ -263,6 +263,9 @@ def down_vote(request, id):
 
 @login_required
 def vote(request, id, vote_score):
+    if not config.hs_suggestions_on:
+        raise Http404
+
     suggestion = get_object_or_404(Suggestion, id=id)
 
     if vote_score == 1:

@@ -45,15 +45,20 @@ class HackerspaceConfigForm(ConfigForm):
                                                queryset=User.objects.filter(is_staff=True), initial=1, required=True,
                                                help_text="This user will appear as granted automatic badges etc. "
                                                          "Suggestion: create a new staff user named `Hackerspace_AI` or similar.")
+    hs_suggestions_on = forms.BooleanField(label="Turn on Suggestions", initial=True,
+                                            required=False)
 
     hs_suggestion_badge = forms.ModelChoiceField(label="Suggestion Badge",
-                                                 queryset=Badge.objects.all(), initial=1, required=True)
+                                                 queryset=Badge.objects.all(), initial=1, required=True,
+                                                 help_text="This is only relevant if Suggestions are turned on.")
 
     hs_voting_badge = forms.ModelChoiceField(label="Voting Badge",
-                                             queryset=Badge.objects.all(), initial=1, required=True)
+                                             queryset=Badge.objects.all(), initial=1, required=True,
+                                             help_text="This is only relevant if Suggestions are turned on.")
 
     hs_num_votes = forms.IntegerField(label="Number of Votes Required for Badge",
-                                      min_value=0, initial=5, required=True)
+                                      min_value=0, initial=5, required=True,
+                                      help_text="This is only relevant if Suggestions are turned on.")
 
     hs_active_semester = forms.ModelChoiceField(label="Active Semester",
                                                 queryset=Semester.objects.all(), initial=1, required=True)
