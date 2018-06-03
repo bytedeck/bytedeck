@@ -10,7 +10,10 @@
 */
 
 .note-editor.note-frame {
-  border-radius: 0px;
+    border-radius: 0px;
+    border-left-style: none;
+    border-top-style: none;
+    border-right-style: none;
 }
 
 .panel {

@@ -450,6 +450,10 @@ td.notification-icons .fa-stack {
     min-height: 544px;
 }
 
+iframe#id_comment_text_iframe {
+    border-radius: 0px;
+}
+
 iframe.summernotewidget.form-control {
     padding: 0px;
     /*border: none;*/
