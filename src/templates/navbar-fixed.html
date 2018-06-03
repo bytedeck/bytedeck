@@ -24,6 +24,7 @@
             --></button>
 
             <!-- mobile XP -->
+            {% if request.user.is_authenticated and not request.user.is_staff %}
             <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
                 <li>
                     <a href="{% url 'courses:marks' request.user.id %}"
@@ -32,6 +33,7 @@
                     </a>
                 </li>
             </ul>
+            {% endif %}
 
 
             <!-- Stuff that doesn't collapse on mobile -->
@@ -63,7 +65,6 @@
         <div class="visible-xs-block mobile-notification-dropdown-container">
             <div id="mobile-notification-dropdown" class="navbar-collapse collapse">
                 <ul class="nav navbar-nav navbar-right notification-dropdown">
-                    <li>I SHOULD BE INVISIBLE</li>
                 </ul>
             </div>
 
