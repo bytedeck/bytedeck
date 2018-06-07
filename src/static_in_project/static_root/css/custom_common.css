@@ -93,27 +93,33 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
 .navbar-brand > img {
     max-height: 100%;
     width: auto;
-    padding: 7px 15px; /* creates large logo within navbar */
+    padding: 7px 10px; /* creates large logo within navbar */
 
 }
 
-.navbar-nav > li > a.navbar-avatar {
-    padding-top: 0px;
-    padding-bottom: 0px;
-}
+/*.navbar-nav > li > a.navbar-avatar {*/
+    /*padding-top: 0px;*/
+    /*padding-bottom: 0px;*/
+/*}*/
 
 .navbar-avatar {
     /* leaves room for learger img within navbar */
-    padding-top: 7px;
-    padding-bottom: 7px;
-}
-
-.navbar-avatar > img {
-    box-sizing: content-box;
+    /*padding-top: 7px;*/
+    /*padding-bottom: 7px;*/
+    margin-top: -8px;
+    margin-bottom: -8px;
     height: 36px;
     width: 36px;
-    border-radius: 4px;
+    margin-right: 10px;
+
 }
+
+/*.navbar-avatar > img {*/
+    /*box-sizing: content-box;*/
+    /*height: 36px;*/
+    /*width: 36px;*/
+    /*border-radius: 4px;*/
+/*}*/
 
 .navbar-fixed-top {
     margin-bottom: 0px !important;
@@ -123,9 +129,9 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     font-size: 24px;
 }
 
-.navbar-text-large-container {
-    margin-bottom: -3px;
-}
+/*.navbar-text-large-container {*/
+    /*margin-bottom: -3px;*/
+/*}*/
 
 .navbar-nav > li > a {
     border-left: none;
@@ -163,6 +169,8 @@ li.navbar-group > a:last-child {
 .navbar-no-collapse >li>a {
     padding-top: 15px;
     padding-bottom: 15px;
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 button.mobile-notifications {
@@ -181,12 +189,17 @@ button.mobile-notifications {
     position: relative;
     float: right;
     margin: 0;
+    /*padding-left: 15px;*/
+    /*padding-right: 15px;*/
     /*color: #777;*/
     /*margin-bottom: -3px;*/
 }
 
-.navbar-mobile-xp > li > a {
-    padding: 15px 0px;
+.navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
+    padding-top: 14px;
+    padding-bottom: 13px;
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 /*********************************/
@@ -811,9 +824,9 @@ kbd
         padding-left: 10px;
     }
 
-    .navbar-no-collapse >li>a {
-        font-size: 20px;
-    }
+    /*.navbar-no-collapse >li>a {*/
+        /*font-size: 20px;*/
+    /*}*/
 
 
 }
@@ -855,10 +868,6 @@ kbd
     li.navbar-packed-listitem > a {
         padding-left: 2px;
         padding-right: 2px;
-    }
-
-    .navbar-no-collapse >li>a {
-        font-size: 16px;
     }
 
 

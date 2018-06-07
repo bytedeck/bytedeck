@@ -14,6 +14,10 @@
                 <span class="icon-bar"></span>
             </button>
 
+
+            <!-- mobile XP -->
+            {% if request.user.is_authenticated and not request.user.is_staff %}
+
             <!-- mobile notifications button -->
             <button type="button" class="navbar-toggle notification-toggle collapsed mobile-notifications"
                     data-toggle="collapse" data-target="#mobile-notification-dropdown"
@@ -23,8 +27,6 @@
                 --><span class="badge alert-danger notification-badge"></span><!--
             --></button>
 
-            <!-- mobile XP -->
-            {% if request.user.is_authenticated and not request.user.is_staff %}
             <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
                 <li>
                     <a href="{% url 'courses:marks' request.user.id %}"
@@ -43,17 +45,17 @@
 
             <ul class="nav navbar-nav navbar-no-collapse">
                 {% if request.user.is_authenticated %}
-                <li class="navbar-packed-listitem">
+                <li class="">
                     <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
-                <li class="navbar-packed-listitem">
+                <li class="">
                     <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a></li>
-                <li class="navbar-packed-listitem">
+                <li class="">
                     <a title="Quest Maps" href="{% url 'maps:primary' %}"><i class="fa fa-map-signs fa-fw"></i></a></li>
-                <li class="navbar-packed-listitem">
+                <li class="">
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i></a>
                 </li>
                     {% if request.user.is_staff %}
-                    <li class="navbar-packed-listitem">
+                    <li class="">
                         <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
                             <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
                         </a>
@@ -100,22 +102,21 @@
                     </ul>
                 </li>
                 {% else %}
-                <li id="menu-xp" class="hidden-xs">
+                <li id="menu-xp" class="hidden-xs navbar-xp">
                     <a href="{% url 'courses:marks' request.user.id %}"
                        class="navbar-text-large-container">XP:
                         <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
                     </a>
                 </li>
                 {% endif %}
-                <li id="profile" class="navbar-group">
-                    <a title="Profile" class="navbar-avatar"
-                       href="{% url 'profiles:profile_detail' request.user.profile.id %}">
-                        <img src="{{ request.user.profile.get_avatar_url }}">
-                    </a><!--
-                 --><a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
-                        {{ request.user }}
+                <li id="profile">
+                     <a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
+                        <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
                     </a><!-- removes whitespace
-                 --><a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
+                 -->
+                </li>
+                <li>
+                    <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
                         <i class="{% if request.user.is_staff %}fa fa-user-secret
                             {% else %} {{request.user.profile.rank.fa_icon}} {% endif %}">
                         </i>
