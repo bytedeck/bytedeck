@@ -173,11 +173,15 @@ li.navbar-group > a:last-child {
     padding-right: 10px;
 }
 
-button.mobile-notifications {
+button.btn-mobile-navbar {
     padding-top: 6px;
     padding-bottom: 6px;
     margin-right: 15px;
     margin-left: 15px;
+}
+
+button.btn-mobile-navbar.btn-mobile-navbar-left {
+    margin-left: 0px;
 }
 
 .mobile-notification-dropdown-container > .navbar-collapse {
@@ -189,10 +193,6 @@ button.mobile-notifications {
     position: relative;
     float: right;
     margin: 0;
-    /*padding-left: 15px;*/
-    /*padding-right: 15px;*/
-    /*color: #777;*/
-    /*margin-bottom: -3px;*/
 }
 
 .navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
@@ -853,23 +853,19 @@ kbd
     }
 
     .navbar-brand > img {
-        padding: 10px 7px;
+        margin-left: -7px;
     }
 
     .navbar-toggle {
         margin-right: 7px;
     }
 
-    button.mobile-notifications {
-        margin-right: 7px;
-        margin-left: 7px;
-    }
+
 
     li.navbar-packed-listitem > a {
         padding-left: 2px;
         padding-right: 2px;
     }
-
 
 }
 

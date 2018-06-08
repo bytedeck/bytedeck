@@ -14,12 +14,21 @@
                 <span class="icon-bar"></span>
             </button>
 
+            <a title="Home" class="navbar-brand" href="{% url 'home' %}">
+                <img alt="Logo" src="{% site_logo_url %}">
+            </a>
 
-            <!-- mobile XP -->
             {% if request.user.is_authenticated and not request.user.is_staff %}
+            <!-- mobile main menu button (has to be after brand to stay to its right-->
+            <button type="button" class="navbar-toggle collapsed mobile-main-menu pull-left btn-mobile-navbar btn-mobile-navbar-left"
+                    data-toggle="collapse" data-target="#mobile-main-menu-dropdown"
+                    aria-expanded="false" aria-controls="mobile-main-menu-dropdown">
+                <span class="sr-only">Toggle main menu</span><!--
+                --><i class="fa fa-fw fa-shield"></i>
+            </button>
 
             <!-- mobile notifications button -->
-            <button type="button" class="navbar-toggle notification-toggle collapsed mobile-notifications"
+            <button type="button" class="navbar-toggle notification-toggle collapsed btn-mobile-navbar"
                     data-toggle="collapse" data-target="#mobile-notification-dropdown"
                     aria-expanded="false" aria-controls="mobile-notification-dropdown"><!--
                 --><span class="sr-only">Toggle notifications</span><!--
@@ -27,6 +36,7 @@
                 --><span class="badge alert-danger notification-badge"></span><!--
             --></button>
 
+            <!-- mobile XP -->
             <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
                 <li>
                     <a href="{% url 'courses:marks' request.user.id %}"
@@ -38,26 +48,40 @@
             {% endif %}
 
 
-            <!-- Stuff that doesn't collapse on mobile -->
-            <a title="Home" class="navbar-brand" href="{% url 'home' %}">
-                <img alt="Logo" src="{% site_logo_url %}">
-            </a>
+        </div> <!-- navbar-header -->
 
-            <ul class="nav navbar-nav navbar-no-collapse">
+        <div class="visible-xs-block mobile-notification-dropdown-container">
+            <div id="mobile-notification-dropdown" class="navbar-collapse collapse">
+                <ul class="nav navbar-nav notification-dropdown">
+                </ul>
+            </div>
+
+        </div>
+
+        <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse navbar-left">
+            <ul class="nav navbar-nav main-menu-dropdown">
                 {% if request.user.is_authenticated %}
                 <li class="">
-                    <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>
+                    <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>
+                    <span class="visible-xs-inline">Quests</span></a>
+                </li>
                 <li class="">
-                    <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a></li>
+                    <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>
+                    <span class="visible-xs-inline">Badges</span></a>
+                </li>
                 <li class="">
-                    <a title="Quest Maps" href="{% url 'maps:primary' %}"><i class="fa fa-map-signs fa-fw"></i></a></li>
+                    <a title="Quest Maps" href="{% url 'maps:primary' %}"><i class="fa fa-map-signs fa-fw"></i>
+                    <span class="visible-xs-inline">Maps</span></a>
+                </li>
                 <li class="">
-                    <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i></a>
+                    <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
+                    <span class="visible-xs-inline">Announcements</span></a>
                 </li>
                     {% if request.user.is_staff %}
                     <li class="">
                         <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
                             <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
+                        <span class="visible-xs-inline">Approvals</span>
                         </a>
                     </li>
                     {% endif %}
@@ -65,15 +89,18 @@
                 <li>
                     <a title="Public Portfolios" href="{% url 'portfolios:public_list' %}">
                         <i class="fa fa-picture-o fa-fw"></i>
+                    <span class="visible-xs-inline">Public Portfolios</span>
                     </a>
                 </li>
                 {% endif %}
             </ul>
-        </div> <!-- navbar-header -->
+        </div>
 
-        <div class="visible-xs-block mobile-notification-dropdown-container">
-            <div id="mobile-notification-dropdown" class="navbar-collapse collapse">
-                <ul class="nav navbar-nav navbar-right notification-dropdown">
+
+        <div class="visible-xs-block mobile-main-menu-dropdown-container">
+            <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse">
+                <ul class="nav navbar-nav navbar-right main-menu-dropdown">
+
                 </ul>
             </div>
 
