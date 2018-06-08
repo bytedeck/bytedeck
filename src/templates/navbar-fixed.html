@@ -18,7 +18,7 @@
                 <img alt="Logo" src="{% site_logo_url %}">
             </a>
 
-            {% if request.user.is_authenticated and not request.user.is_staff %}
+            {% if request.user.is_authenticated %}
             <!-- mobile main menu button (has to be after brand to stay to its right-->
             <button type="button" class="navbar-toggle collapsed mobile-main-menu pull-left btn-mobile-navbar btn-mobile-navbar-left"
                     data-toggle="collapse" data-target="#mobile-main-menu-dropdown"
@@ -36,15 +36,17 @@
                 --><span class="badge alert-danger notification-badge"></span><!--
             --></button>
 
-            <!-- mobile XP -->
-            <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
-                <li>
-                    <a href="{% url 'courses:marks' request.user.id %}"
-                        class="navbar-text-large-container">XP:
-                        <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
-                    </a>
-                </li>
-            </ul>
+                {% if not request.user.is_staff %} %}
+                    <!-- mobile XP -->
+                <ul class="nav navbar-nav navbar-mobile-xp visible-xs-block">
+                    <li>
+                        <a href="{% url 'courses:marks' request.user.id %}"
+                            class="navbar-text-large-container">XP:
+                            <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
+                        </a>
+                    </li>
+                </ul>
+                {% endif %}
             {% endif %}
 
 
@@ -94,16 +96,6 @@
                 </li>
                 {% endif %}
             </ul>
-        </div>
-
-
-        <div class="visible-xs-block mobile-main-menu-dropdown-container">
-            <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse">
-                <ul class="nav navbar-nav navbar-right main-menu-dropdown">
-
-                </ul>
-            </div>
-
         </div>
 
 
