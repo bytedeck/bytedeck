@@ -134,13 +134,14 @@
                     </a><!-- removes whitespace
                  -->
                 </li>
+                {% if not request.user.is_staff %}
                 <li>
                     <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
-                        <i class="{% if request.user.is_staff %}fa fa-user-secret
-                            {% else %} {{request.user.profile.rank.fa_icon}} {% endif %}">
-                        </i>
+                        <i class="{{request.user.profile.rank.fa_icon}}"></i>
+                        <span class="visible-xs-inline-block">&nbsp;&nbsp;{{request.user.profile.rank}}</span>
                     </a>
                 </li>
+                {% endif %}
 
                 <!-- only show this in wide view, this is repeated above for the mobile collapsed menu -->
                 <li id='notifications-menu' class="dropdown hidden-xs">

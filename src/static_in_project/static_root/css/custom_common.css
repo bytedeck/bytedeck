@@ -106,8 +106,8 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
     /* leaves room for learger img within navbar */
     /*padding-top: 7px;*/
     /*padding-bottom: 7px;*/
-    margin-top: -8px;
-    margin-bottom: -8px;
+    margin-top: -9px;
+    margin-bottom: -9px;
     height: 36px;
     width: 36px;
     margin-right: 10px;
