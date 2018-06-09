@@ -21,9 +21,9 @@
      <a id="quests-menu" class="list-group-item left-side
         {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info and not '/inprogress/' in request.path_info %}active{% endif %}"
        href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
-     <a title="Jump to your In Progress quest list." class="list-group-item right-side
-       {% if 'quests/inprogress/' in request.path_info %}active{% endif %}"                             "
-        href="{% url 'quests:inprogress' %}"><i class="fa fa-shield fa-rotate-45"></i></a>
+     <a title="Jump to your In Progress quest list." class="list-group-item right-side text-center
+       {% if 'quests/inprogress/' in request.path_info %}active{% endif %}"
+        href="{% url 'quests:inprogress' %}"><i class="fa fa-shield fa-flip-horizontal"></i></a>
     </div>
 {#    <a id="quests-menu" class="list-group-item#}
 {#        {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info %}active{% endif %}"#}
@@ -101,30 +101,6 @@
 
   </div>
 
-  <!-- tiny only nav-->
-
-
-{#  <ul class="nav visible-xs xs-sidebar-menu" id="xs-menu">#}
-{#    <li><a href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a></li>#}
-{#    <li><a href="{% url 'badges:list' %}" class="text-center"><i class="fa fa-certificate fa-fw"></i></a></li>#}
-{#    <li><a href="{% url 'maps:primary' %}" class="text-center"><i class="fa fa-map-signs fa-fw"></i></a></li>#}
-{#  </ul>#}
-{#<ul class="nav visible-xs xs-sidebar-menu" id="xs-second-menu">#}
-{#  <li><a href="{% url 'announcements:list' %}" class="text-center"><i class="fa fa-newspaper-o fa-fw"></i></a></li>#}
-{#  <li><a href=""{% url 'suggestions:list' %}" class="text-center"><i class="fa fa-lightbulb-o fa-fw"></i></a></li>#}
-{#      <li><a href="{% url 'profiles:profile_list' %}"><i class="fa fa-users fa-fw"></i></a></li>#}
-{##}
-{#</ul>#}
-{#  <ul class="nav visible-xs xs-sidebar-menu" id="xs-user-menu">#}
-{#    <li><a href="{% url 'profiles:profile_detail' request.user.profile.id %}"><i class="fa fa-user fa-fw"></i></a></li>#}
-{#    <li><a href="{% url 'portfolios:detail' request.user.id %}" class="text-center">#}
-{#        <i class="fa fa-picture-o fa-fw"></i></a></li>#}
-{#  </ul>#}
-{#  {% if request.user.is_staff %}#}
-{#    <ul class="nav visible-xs xs-sidebar-menu" id="xs-menu-staff">#}
-{#      <li><a href="{% url 'quests:approvals' %}"><i class="fa fa-shield fa-fw"></i></a></li>#}
-{#    </ul>#}
-{#  {% endif %}#}
 </div>
 
 <!-- /sidebar -->

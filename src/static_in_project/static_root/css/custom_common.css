@@ -721,6 +721,8 @@ already distinguished*/
   border-bottom-right-radius: 0px;
   border-bottom-left-radius: 0px;
   border-left: none;
+  padding-left:0px;
+  padding-right: 0px;
 }
 
 
