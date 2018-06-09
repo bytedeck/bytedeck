@@ -7,13 +7,25 @@
 <li class="list-group-item list-group-item-buttons">
   <div class="pull-right">
     {% if not completed and not past %}
-      <a class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">Drop</a>
-      <a class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">Continue</a>
+
+      <a title="Drop Quest: remove this quest from your In Progress tab and delete all submission comments."
+           class="btn btn-danger" href="{% url 'quests:drop' s.id %}" role="button">
+            <i class="fa fa-fw fa-trash"></i><span class="visible-lg-inline-block icon-text">Drop</span>
+      </a>
+
+      <a title="Continue Quest: continue working on this quest."
+           class="btn btn-primary" href="{% url 'quests:submission' s.id %}" role="button">
+            <i class="fa fa-fw fa-play-circle"></i><span class="visible-lg-inline-block icon-text">Continue</span>
+      </a>
+
       {% if request.user.profile.game_lab_transfer_process_on %}
         <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
       {% endif %}
     {% else %}
-      <a class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">View Details</a>
+      <a title="View Details: view the content of this quest or add to the submission."
+         class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">
+          <i class="fa fa-fw fa-info-circle"></i><span class="visible-lg-inline-block icon-text">View Details</span>
+      </a>
     {% endif %}
   </div>
   {{s.quest.submission_details|safe}}

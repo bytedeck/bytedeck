@@ -396,6 +396,10 @@ ol > ol > ol {
 
 /************ ICONS **********************/
 
+.icon-text {
+    padding-left: 3px;
+}
+
 .icon-xs {
     width: 16px;
     border-radius: 2px;
