@@ -326,7 +326,7 @@ SUMMERNOTE_CONFIG = {
         ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
         ['height', ['height']],
         ['table', ['table']],
-        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji']], #, 'nugget']],
+        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']], #, 'nugget']],
         ['view', ['codeview']],
         ['help', ['help']],
     ],
@@ -397,6 +397,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js': (
         # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
@@ -413,6 +414,8 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'js/summernote-math.js'),
     ),
 
     # And also for SummernoteInplaceWidget.
