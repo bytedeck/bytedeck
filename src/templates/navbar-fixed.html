@@ -81,7 +81,7 @@
                         {% endif %}
                         {% if request.user.profile.is_TA or request.user.is_staff %}
                         <li role="separator" class="divider"></li>
-                        <li><a href="{% url 'quests:quests' %}">Drafts</a></li>
+                        <li><a href="{% url 'quests:drafts' %}">Drafts</a></li>
                         {% endif %}
                     </ul>
                 </li>
