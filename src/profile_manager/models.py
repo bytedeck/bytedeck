@@ -61,6 +61,7 @@ def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/<use_id>/<filename>
     return '{0}/customstyles/{1}'.format(instance.user.username, filename)
 
+
 class Profile(models.Model):
     student_number_regex_string = r"^(9[89])(\d{5})$"
     student_number_validator = RegexValidator(regex=student_number_regex_string,

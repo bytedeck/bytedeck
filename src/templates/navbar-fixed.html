@@ -63,24 +63,48 @@
         <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse navbar-left">
             <ul class="nav navbar-nav main-menu-dropdown">
                 {% if request.user.is_authenticated %}
-                <li class="">
-                    <a title="Quests" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>
-                    <span class="visible-xs-inline">Quests</span></a>
+                 <li class="dropdown">
+                    <a href="#" class="dropdown-toggle"
+                       data-toggle="dropdown" role="button" aria-haspopup="true"
+                       aria-expanded="false">
+                        <i class="fa fa-shield fa-fw"></i>
+                        <span class="visible-xs-inline">Quests</span>
+                        <span class="caret"></span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <!-- <li class="dropdown-header">Content</li> -->
+                        <li><a href="{% url 'quests:quests' %}">Available</a></li>
+                        <li><a href="{% url 'quests:inprogress' %}">In Progress</a></li>
+                        <li><a href="{% url 'quests:completed' %}">Completed</a></li>
+                        {% if request.user.profile.has_past_courses %}
+                            <li><a href="{% url 'quests:past' %}">Past Courses</a></li>
+                        {% endif %}
+                        {% if request.user.profile.is_TA or request.user.is_staff %}
+                        <li role="separator" class="divider"></li>
+                        <li><a href="{% url 'quests:quests' %}">Drafts</a></li>
+                        {% endif %}
+                    </ul>
                 </li>
-                <li class="">
+                <li>
                     <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>
                     <span class="visible-xs-inline">Badges</span></a>
                 </li>
-                <li class="">
+                <li>
                     <a title="Quest Maps" href="{% url 'maps:primary' %}"><i class="fa fa-map-signs fa-fw"></i>
                     <span class="visible-xs-inline">Maps</span></a>
                 </li>
-                <li class="">
+                <li>
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
                     <span class="visible-xs-inline">Announcements</span></a>
                 </li>
                     {% if request.user.is_staff %}
-                    <li class="">
+                    <li>
+                        <a title="Students" href="{% url 'profiles:profile_list_current' %}">
+                            <i class="fa fa-users fa-fw"></i>
+                        <span class="visible-xs-inline">Students</span>
+                        </a>
+                    </li>
+                    <li>
                         <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
                             <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
                         <span class="visible-xs-inline">Approvals</span>
