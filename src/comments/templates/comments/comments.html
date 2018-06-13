@@ -35,7 +35,7 @@
         </h3>
         <div class="comment-heading-divider"></div>
 
-        <div class="markdown comment-content">{{comment.text|safe|linebreaks}}</div>
+        <div class="comment-content">{{comment.text|safe}}</div>
         <ul>
         {% for document in comment.document_set.all %}
         <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
