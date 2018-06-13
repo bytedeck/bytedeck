@@ -198,6 +198,20 @@ class ArtworkDelete(DeleteView):
 #     else:
 #         raise Http404("Sorry, this isn't your art!")
 
+def is_acceptable_image_type(filename):
+    # Get extension from filename to determine filetype...very hacky...
+    # TODO use MIMETYPES
+    name, ext = os.path.splitext(filename)
+    img_ext_list = [".png", ".gif", ".jpg"]
+    return ext in img_ext_list
+
+
+def is_acceptable_vid_type(filename):
+    # Get extension from filename to determine filetype...very hacky...
+    name, ext = os.path.splitext(filename)
+    vid_ext_list = [".ogg", ".avi", ".mp4", ".mkv", ".webm", ".ogv"]
+    return ext in vid_ext_list
+
 
 @login_required
 def art_add(request, doc_id):
@@ -205,26 +219,21 @@ def art_add(request, doc_id):
     doc_user = doc.comment.user
     if request.user.is_staff or doc_user == request.user:
         filename = os.path.basename(doc.docfile.name)
-        # Get extension from filename to determine filetype...very hacky...
-        img_ext_list = [".png", ".gif", ".jpg"]
-        vid_ext_list = [".ogg", ".avi", ".mp4", ".mkv", ".webm", ".ogv"]
-        name, ext = os.path.splitext(filename)
 
-        if ext in img_ext_list:
+        if is_acceptable_image_type(filename):
             image_file = doc.docfile
             video_file = None
-        elif ext in vid_ext_list:
+        elif is_acceptable_vid_type(filename):
             image_file = None
             video_file = doc.docfile
         else:
             raise Http404("Unsupported image or video format.  See your teacher if"
                           " you think this format should be supported.")
-        # TODO: WHY IS THIS A TUPLE?!
-        portfolio = doc_user.portfolio,
-        portfolio = portfolio[0]
+
+        portfolio, created = Portfolio.objects.get_or_create(user=doc_user)
 
         Artwork.create(
-            title=name,
+            title=os.path.splitext(filename)[0],
             image_file=image_file,
             video_file=video_file,
             portfolio=portfolio,

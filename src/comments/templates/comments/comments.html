@@ -40,8 +40,11 @@
         {% for document in comment.document_set.all %}
         <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
           {{ document.docfile|filename }}</a>
-            <a href="{% url 'portfolios:art_add' document.id %}"
+            {% if document.is_valid_portfolio_type %}
+            <a title = "Add {{ document.docfile|filename }} to your portfolio."
+                       href="{% url 'portfolios:art_add' document.id %}"
             class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
+            {% endif %}
         </li>
         {% endfor %}
         </ul>

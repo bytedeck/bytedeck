@@ -1,3 +1,4 @@
+import os
 import re
 
 from bs4 import BeautifulSoup
@@ -12,6 +13,8 @@ from django.utils.html import urlize
 # from quest_manager.models import Quest
 
 # Create your models here.
+
+
 class CommentQuerySet(models.query.QuerySet):
     def get_user(self, recipient):
         return self.filter(recipient=recipient)
@@ -160,6 +163,13 @@ class Comment(models.Model):
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     comment = models.ForeignKey(Comment)
+
+    def is_valid_portfolio_type(self):
+        # import here to prevent circular imports!
+        from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
+        filename = os.path.basename(self.docfile.name)
+        return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
+
 
 
 from notifications.models import deleted_object_receiver

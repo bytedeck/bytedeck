@@ -3,12 +3,19 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
 
+### [1.11.0] 2018-?-?
+* Many mobile tweaks
+* Added LaTeX math support
+* Quest submenu in top navbar
+
 ### [1.10.2] 2018-06-02 - The mobile device update
 * force responsive images in submissions (so large images no longer extend past the content area)
 * create mobile menu for notifications
 * turn off suggestions
 * various mobile layout tweaks
 * remove left menu on mobile, added to top menu bar.
+* [bugfix] only offer to add valid media to portfolios
+* [bugfix] create portfolio when adding if it doesn't exist (instead of error)
 
 ### [1.10.1] 2018-03-06
 * new button to access in-progress quests directly (much faster)
