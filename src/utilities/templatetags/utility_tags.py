@@ -3,7 +3,7 @@ from django.contrib.staticfiles.templatetags.staticfiles import static
 from django.shortcuts import get_object_or_404
 from djconfig import config
 
-from utilities.models import ImageResource
+from utilities.models import ImageResource, MenuItem
 
 register = template.Library()
 
@@ -32,3 +32,7 @@ def site_logo_url():
     else:
         return static('img/default_icon.png')
 
+
+@register.simple_tag
+def menu_links():
+    return MenuItem.objects.all(visible=True)

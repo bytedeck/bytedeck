@@ -41,5 +41,26 @@ class ImageResource(models.Model):
         return self.name
 
 
+class MenuItem(models.Model):
+
+    label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.")
+    fa_icon = models.CharField(max_length=50, default="link",
+                               help_text="The Font Awesome icon to display beside the text. "
+                                                        "Options from fontawesome.com/v4.7.0/icons/  E.g. 'star-o'")
+    url = models.URLField(help_text="Relative links will work too.  E.g. '/courses/ranks/'")
+    open_link_in_new_tab = models.BooleanField()
+    sort_order = models.IntegerField(default=0, help_text="Lowest will be at the top.")
+    visible = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order"]
+
+    def __str__(self):
+        return '<a href="{}"><i class="fa fa-fw fa-{}"></i></a>'.format(self.url, self.fa_icon)
+
+
+
+
+
 
 
