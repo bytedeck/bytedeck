@@ -63,7 +63,7 @@
         <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse navbar-left">
             <ul class="nav navbar-nav main-menu-dropdown">
                 {% if request.user.is_authenticated %}
-                 <li class="dropdown">
+                 <li class="dropdown dropdown-hover">
                     <a href="#" class="dropdown-toggle"
                        data-toggle="dropdown" role="button" aria-haspopup="true"
                        aria-expanded="false">
@@ -127,7 +127,7 @@
             <ul class="nav navbar-nav navbar-right">
                 {% if request.user.is_authenticated %}
                 {% if request.user.is_staff %}
-                <li class="dropdown">
+                <li class="dropdown dropdown-hover">
                     <a href="#" class="dropdown-toggle"
                        data-toggle="dropdown" role="button" aria-haspopup="true"
                        aria-expanded="false">Admin <span class="caret"></span></a>
@@ -179,26 +179,18 @@
                     </ul>
                 </li>
 
-                <li id="extras-menu" class="dropdown">
+                <li id="extras-menu" class="dropdown dropdown-hover">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">
                         <i class="fa fa-bars hidden-xs"></i><!--
                      --><span class="visible-xs-block">More <span class="caret"></span></span>
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{% url 'courses:ranks' %}"><i class="fa fa-fw fa-star-o"></i>&nbsp;&nbsp;Ranks List</a></li>
-                        <li><a href="/pages/FAQ"><i class="fa fa-fw fa-question-circle-o"></i>&nbsp;&nbsp;FAQ</a></li>
-                        <li><a href="https://github.com/timberline-secondary/hackerspace/blob/master/CHANGELOG.md">
-                          <i class="fa fa-fw fa-cog"></i>&nbsp;&nbsp;Changelog</a>
-                        </li>
-
-                        <li>
-                            <a href="https://docs.google.com/spreadsheets/d/1dICnxDSHkQV2HMuuYLNsQLdUGFrSMskdFe_vSz41_Zw/edit#gid=1467638221">
-                                <i class="fa fa-fw fa-dollar"></i>&nbsp;&nbsp;{{ config.hs_site_name_short }} Budget</a>
-                        </li>
-                        <!-- <li><a href="#">#</a></li> -->
-                        <!-- <li role="separator" class="divider"></li>
-                        <li class="dropdown-header">Debug</li> -->
+                        {% menu_list %}
+                        {% if request.user.is_staff %}
+                            <li role="separator" class="divider"></li>
+                            <li><a href="/admin/utilities/menuitem/"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a></li>
+                        {% endif %}
                     </ul>
                 </li>
                 <li><a href="{% url 'account_logout' %}">Sign Out</a></li>

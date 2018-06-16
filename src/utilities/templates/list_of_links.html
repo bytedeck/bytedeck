@@ -1,0 +1,5 @@
+{% for link in links %}
+    <li>{{ link | safe }}</li>
+{% empty %}
+    <li><a href="#">No links yet</a></li>
+{% endfor %}

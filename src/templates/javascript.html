@@ -35,6 +35,16 @@
 <script src="{% static 'js/jquery-double-submission.js' %}"></script>
 <script src="{% static 'js/jquery-packed-img-strip.js' %}"></script>
 
+<script>
+    $(function() {
+        $(".dropdown.dropdown-hover").hover(
+            function(){ $(this).addClass('open') },
+            function(){ $(this).removeClass('open') }
+        );
+    });
+</script>
+
+
 {#<script src="{% static 'js/featherlight.js' %}"></script>#}
 
 <script>

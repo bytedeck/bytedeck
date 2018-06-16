@@ -33,6 +33,10 @@ def site_logo_url():
         return static('img/default_icon.png')
 
 
-@register.simple_tag
-def menu_links():
-    return MenuItem.objects.all(visible=True)
+# https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
+
+@register.inclusion_tag('list_of_links.html')
+def menu_list():
+    links = MenuItem.objects.filter(visible=True)
+    return {'links': links}
+

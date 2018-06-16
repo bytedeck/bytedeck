@@ -1,3 +1,5 @@
+from django.utils.safestring import mark_safe
+
 from utilities import forms
 from django.db import models
 
@@ -45,9 +47,10 @@ class MenuItem(models.Model):
 
     label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.")
     fa_icon = models.CharField(max_length=50, default="link",
-                               help_text="The Font Awesome icon to display beside the text. "
-                                                        "Options from fontawesome.com/v4.7.0/icons/  E.g. 'star-o'")
-    url = models.URLField(help_text="Relative links will work too.  E.g. '/courses/ranks/'")
+                               help_text=mark_safe("The Font Awesome icon to display beside the text. E.g. 'star-o'. "
+                                                   "Options from <a target='_blank'"
+                                                   "href='http://fontawesome.com/v4.7.0/icons/'>Font Awesome</a>."))
+    url = models.URLField(help_text="Relative URLs will work too.  E.g. '/courses/ranks/'")
     open_link_in_new_tab = models.BooleanField()
     sort_order = models.IntegerField(default=0, help_text="Lowest will be at the top.")
     visible = models.BooleanField(default=True)
@@ -56,7 +59,10 @@ class MenuItem(models.Model):
         ordering = ["sort_order"]
 
     def __str__(self):
-        return '<a href="{}"><i class="fa fa-fw fa-{}"></i></a>'.format(self.url, self.fa_icon)
+        target = 'target="_blank"' if self.open_link_in_new_tab else ''
+        return '<a href="{0}" {1}>' \
+               '<i class="fa fa-fw fa-{2}"></i>&nbsp;&nbsp;{3}' \
+               '</a>'.format(self.url, target, self.fa_icon, self.label)
 
 
 
