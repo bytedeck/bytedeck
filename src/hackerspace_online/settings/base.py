@@ -84,6 +84,9 @@ INSTALLED_APPS = (
     # https://github.com/matthisk/django-jchart
     'jchart',
 
+    # https://github.com/timonweb/django-url-or-relative-url-field
+    'url_or_relative_url_field',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 

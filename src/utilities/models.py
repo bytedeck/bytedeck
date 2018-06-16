@@ -2,6 +2,7 @@ from django.utils.safestring import mark_safe
 
 from utilities import forms
 from django.db import models
+from url_or_relative_url_field.fields import URLOrRelativeURLField
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
@@ -50,7 +51,7 @@ class MenuItem(models.Model):
                                help_text=mark_safe("The Font Awesome icon to display beside the text. E.g. 'star-o'. "
                                                    "Options from <a target='_blank'"
                                                    "href='http://fontawesome.com/v4.7.0/icons/'>Font Awesome</a>."))
-    url = models.URLField(help_text="Relative URLs will work too.  E.g. '/courses/ranks/'")
+    url = URLOrRelativeURLField(help_text="Relative URLs will work too.  E.g. '/courses/ranks/'")
     open_link_in_new_tab = models.BooleanField()
     sort_order = models.IntegerField(default=0, help_text="Lowest will be at the top.")
     visible = models.BooleanField(default=True)

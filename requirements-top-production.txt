@@ -11,8 +11,11 @@ django-jchart==0.4.1
 django-postgrespool==0.3.1
 Django-Select2==5.10.0
 django-summernote==0.8.8.2
+django-url-or-relative-url-field==0.1.1
 numpy==1.13.0
 Pillow==4.1.1
 #pipdeptree==0.10.1
 python-memcached==1.58
 workdays==1.4
+
+
