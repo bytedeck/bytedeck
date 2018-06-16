@@ -3,10 +3,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
 
-### [1.11.0] 2018-?-?
+### [1.11.0] 2018-05-15 - Math!
 * Many mobile tweaks
 * Added LaTeX math support
 * Quest submenu in top navbar
+* [teacher only] Customizable menu links
 
 ### [1.10.2] 2018-06-02 - The mobile device update
 * force responsive images in submissions (so large images no longer extend past the content area)
