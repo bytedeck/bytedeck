@@ -189,12 +189,6 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     margin-left: -15px;
 }
 
-.navbar-mobile-xp {
-    position: relative;
-    float: right;
-    margin: 0;
-}
-
 .navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
     padding-top: 14px;
     padding-bottom: 13px;
@@ -830,10 +824,18 @@ kbd
         padding-left: 10px;
     }
 
-    /*.navbar-no-collapse >li>a {*/
-        /*font-size: 20px;*/
-    /*}*/
+    .navbar-mobile-xp-container {
+        margin: 0 auto;
+        display: table !important;
+    }
 
+    .navbar-mobile-xp {
+        margin: 0;
+    }
+
+    .navbar .navbar-nav > li > a {
+        border: none;
+    }
 
 }
 
