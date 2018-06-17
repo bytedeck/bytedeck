@@ -50,6 +50,7 @@ class CommentManager(models.Manager):
 
         # format unformatted links
         # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
+
         soup = BeautifulSoup(text, "html.parser")
         text_nodes = soup.find_all(text=True)
         for textNode in text_nodes:
@@ -58,7 +59,9 @@ class CommentManager(models.Manager):
             urlized_text = urlize(textNode, trim_url_limit=50)
             textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
 
-        soup = BeautifulSoup(soup.renderContents())
+        # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
+        soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
+
         # All links in comments: force open in new tab
         links = soup.find_all('a')
         for link in links:
