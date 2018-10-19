@@ -1,6 +1,6 @@
 {% load crispy_forms_tags %}
-    <li class="list-group-item list-group-item-info visible-xs-block">Status</li>
-    <li class="list-group-item visible-xs-block">
+<li class="list-group-item list-group-item-info visible-xs-block">Status</li>
+<li class="list-group-item visible-xs-block">
     <div class="row">
         <div class="col-xs-6">
             Blocks<br>
@@ -12,20 +12,27 @@
 
     </div>
 
-    </li>
-  <li class="list-group-item list-group-item-info">Submission Details</li>
-  <li class="list-group-item">{{s.quest.submission_details|safe}}</li>
-  <li class="list-group-item list-group-item-info">Instructor Notes</li>
-  <li class="list-group-item">{{s.quest.instructor_notes|safe}}
-      {% if s.quest.specific_teacher_to_notify %}
-          <hr><p>* <b>{{ s.quest.specific_teacher_to_notify }}</b> was notified about this quest submission.</p>
-      {% endif %}
-  </li>
-  <li class="list-group-item list-group-item-info">Submission Comments</li>
-  {% with s.get_comments as target_comments %}
+</li>
+<li class="list-group-item list-group-item-info">Submission Details</li>
+<li class="list-group-item">{{s.quest.submission_details|safe}}</li>
+<li class="list-group-item list-group-item-info">Instructor Notes</li>
+<li class="list-group-item">{{s.quest.instructor_notes|safe}}
+    {% if s.quest.specific_teacher_to_notify %}
+        <hr><p>* <b>{{ s.quest.specific_teacher_to_notify }}</b> was notified about this quest submission.</p>
+    {% endif %}
+</li>
+<li class="list-group-item list-group-item-info">Submission Comments</li>
+{% with s.get_comments as target_comments %}
     {% include "comments/comments.html" %}
-  {% endwith %}
-  <li class="list-group-item list-group-item-info">
+{% endwith %}
+<li class="list-group-item list-group-item-info">
     Quick Reply Form
-    {% include 'quest_manager/quick_buttons.html' %}
-  </li>
+</li>
+
+<li class="list-group-item">
+    <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
+          action="{% url 'quests:approve' s.id %}">{% csrf_token %}
+        {{ quick_reply_form | crispy }}
+        {% include "quest_manager/buttons_approvals.html" %}
+    </form>
+</li>
