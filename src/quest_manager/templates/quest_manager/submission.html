@@ -61,19 +61,9 @@
         {{ submission_form | crispy }}
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
-          {% if submission.is_approved %}
-            <input type='submit' name='comment_button' class='btn btn-primary' value='Add Comment' />
-          {% else %}
-            <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
-          {% endif %}
-            <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
-            <a class="btn btn-warning"
-              id= "btn_quick_text{{submission.id}}" role="button"
-              title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
-            <a class="pull-right btn btn-default" href="{% url 'quests:skip' submission.id %}"
-              title="Do not grant XP for this quest (or badges resulting) but mark as complete."
-              role="button">Skip</a>
-          {% with submission as s %}{% include 'quest_manager/quick_buttons.html' %}{% endwith %}
+          {% with submission as s %}
+            {% include "quest_manager/buttons_approvals.html" %}
+          {% endwith %}
         {% else %}
           {% if submission.is_approved %}
             <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />

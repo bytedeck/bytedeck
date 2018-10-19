@@ -69,31 +69,7 @@
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ quick_reply_form | crispy }}
-            <div>
-              {% if not s.is_approved %}
-                <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
-
-              {% endif %}
-                <input type='submit' name='comment_button' class='btn btn-primary' value='Comment' />
-                <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
-                <a class="btn btn-warning" data-target="#quick_reply{{s.id}}" id= "btn_quick_text{{s.id}}" role="button"
-                  title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
-
-              <div class="dropdown pull-right">
-                <button class="btn btn-default dropdown-toggle" type="button" id="dropdownMenu{{ s.id }}"
-                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
-                  More...
-                  <span class="caret"></span>
-                </button>
-                <ul class="dropdown-menu" aria-labelledby="dropdownMenu{{ s.id }}">
-                  <li><a href="{% url 'quests:skip' s.id %}"
-                    title="Do not grant XP for this quest (or badges resulting) but mark as complete.">Skip</a></li>
-                  <li><a href="{% url 'quests:flag' s.id %}"
-                    title="Flag this quest for future follow up.  It will appear in your flagged submissions list.
-                           This does not leave a comment or approve the quest.">Flag</a></li>
-                </ul>
-              </div>
-            </div>
+            {% include "quest_manager/buttons_approvals.html" %}
           </form>
         </li>
 
