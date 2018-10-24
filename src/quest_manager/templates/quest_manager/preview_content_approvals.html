@@ -29,10 +29,10 @@
     Quick Reply Form
 </li>
 
-<li class="list-group-item">
-    <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
-          action="{% url 'quests:approve' s.id %}">{% csrf_token %}
-        {{ quick_reply_form | crispy }}
-        {% include "quest_manager/buttons_approvals.html" %}
-    </form>
-</li>
+{#<li class="list-group-item">#}
+{#    <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"#}
+{#          action="{% url 'quests:approve' s.id %}">{% csrf_token %}#}
+{#        {{ quick_reply_form | crispy }}#}
+{#        {% include "quest_manager/buttons_approvals.html" %}#}
+{#    </form>#}
+{#</li>#}
