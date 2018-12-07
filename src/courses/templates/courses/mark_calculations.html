@@ -133,7 +133,15 @@
 
       <h3>Chillax Line</h3>
       <p>{% if obj.semester.chillax_line_started %}
-        You are free to chillax if your XP is at or above: {{ obj.semester.chillax_line|floatformat:"0" }} XP
+        You are free to chillax if your XP {% if num_courses > 1 %}in all courses{% endif %} is at or above:
+          {% if num_courses > 1 %}
+              {# Multiply by 2 #}
+{#              {{ obj.semester.chillax_line|floatformat:"0" }}#}
+              {% widthratio obj.semester.chillax_line 1 2 %}
+          {% else %}
+              {{ obj.semester.chillax_line}}
+          {% endif %}
+          XP
       {% else %}
         The Chillax Line has not started yet.  It will begin the day after 1st Interim marks are taken.
       {% endif %}

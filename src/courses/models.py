@@ -232,7 +232,9 @@ class Semester(models.Model):
         return config.hs_chillax_line_active
 
     def chillax_line(self):
-        return 1000 * config.hs_chillax_line * self.fraction_complete()
+        cline = config.hs_chillax_line
+        fraction = self.fraction_complete()
+        return round(1000 * cline * fraction)
 
     def get_student_mark_list(self, students_only=False):
         students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
