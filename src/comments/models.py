@@ -7,7 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
 from django.db import models
-from django.utils.html import urlize
+from django.utils.html import urlize, escape
 
 
 # from quest_manager.models import Quest
@@ -42,7 +42,7 @@ class CommentManager(models.Manager):
     # def all(self):
     #     return self.get_queryset.get_active().get_no_parents()
 
-    def create_comment(self, user=None, text=None, path=None, target=None, parent=None):
+    def create_comment(self, user=None, text=None, path=None, target=None, parent=None, convert_newlines=True):
         if not path:
             raise ValueError("Must include a path when adding a comment")
         if not user:
@@ -53,10 +53,16 @@ class CommentManager(models.Manager):
 
         soup = BeautifulSoup(text, "html.parser")
         text_nodes = soup.find_all(text=True)
+        # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
+        # text_nodes2 = [escape(x) for x in soup.strings]
         for textNode in text_nodes:
+            escaped_text = escape(textNode)
+            if convert_newlines:
+                escaped_text = '<br>'.join(escaped_text.splitlines())
+
             if textNode.parent and getattr(textNode.parent, 'name') == 'a':
                 continue  # skip already formatted links
-            urlized_text = urlize(textNode, trim_url_limit=50)
+            urlized_text = urlize(escaped_text, trim_url_limit=50)
             textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
 
         # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
