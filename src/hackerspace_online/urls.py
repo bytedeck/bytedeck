@@ -45,6 +45,7 @@ urlpatterns = [
     url(r'^suggestions/', include('suggestions.urls', namespace='suggestions')),
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
+    url(r'^utilities/', include('utilities.urls', namespace='utilities')),
 
     # admin
     url(r'^admin/', admin.site.urls),

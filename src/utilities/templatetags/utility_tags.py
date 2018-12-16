@@ -35,7 +35,7 @@ def site_logo_url():
 
 # https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
 
-@register.inclusion_tag('list_of_links.html')
+@register.inclusion_tag('utilities/list_of_links.html')
 def menu_list():
     links = MenuItem.objects.filter(visible=True)
     return {'links': links}
