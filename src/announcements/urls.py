@@ -2,6 +2,8 @@ from announcements import views
 
 from django.conf.urls import url
 
+app_name = 'announcements'
+
 urlpatterns = [
     url(r'^$', views.list, name='list'),  # function based view
     url(r'^b/$', views.list2, name='list2'),  # function based view

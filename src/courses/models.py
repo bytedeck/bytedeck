@@ -11,7 +11,7 @@ from quest_manager.models import QuestSubmission
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -257,7 +257,8 @@ class Block(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     current_teacher = models.ForeignKey(settings.AUTH_USER_MODEL,
                                         null=True, blank=True,
-                                        limit_choices_to={'is_staff': True}, )
+                                        limit_choices_to={'is_staff': True},
+                                        on_delete=models.SET_NULL)
 
     def __str__(self):
         return self.block
@@ -267,8 +268,8 @@ class Block(models.Model):
 
 
 class ExcludedDate(models.Model):
-    semester = models.ForeignKey(Semester)
-    date_type = models.ForeignKey(DateType)
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    date_type = models.ForeignKey(DateType, on_delete=models.SET_NULL, null=True)
     date = models.DateField(unique=True)
 
     def __str__(self):
@@ -375,12 +376,12 @@ class CourseStudentManager(models.Manager):
 class CourseStudent(models.Model):
     GRADE_CHOICES = ((9, 9), (10, 10), (11, 11), (12, 12), (13, 'Adult'))
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
-    semester = models.ForeignKey(Semester)
-    block = models.ForeignKey(Block)
-    course = models.ForeignKey(Course)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
+    block = models.ForeignKey(Block, on_delete=models.SET_NULL, null=True)
+    course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True)
     grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
-    grade_fk = models.ForeignKey(Grade, verbose_name="Grade")
+    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True)
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)

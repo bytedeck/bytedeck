@@ -13,7 +13,7 @@ def home(request):
     if request.user.is_staff:
         return redirect('quests:approvals')
 
-    if request.user.is_authenticated():
+    if request.user.is_authenticated:
         return redirect('quests:quests')
 
     return render(request, "home.html", {})

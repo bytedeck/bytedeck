@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
-from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Q, Max, Sum
 from django.templatetags.static import static
@@ -12,6 +11,8 @@ from django.templatetags.static import static
 # from django.contrib.contenttypes import generic
 
 from datetime import time
+
+from django.urls import reverse
 from django.utils import timezone
 
 from djconfig import config
@@ -262,9 +263,10 @@ class Quest(XPItem, IsAPrereqMixin):
     specific_teacher_to_notify = models.ForeignKey(settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True},
                                                 blank=True, null=True,
                                                 help_text="Notifications related to this quest will be sent to this "
-                                                          "teacher even if they do not teach the student.")
-    campaign = models.ForeignKey(Category, blank=True, null=True)
-    common_data = models.ForeignKey(CommonData, blank=True, null=True)
+                                                          "teacher even if they do not teach the student.",
+                                                on_delete = models.SET_NULL)
+    campaign = models.ForeignKey(Category, blank=True, null=True, on_delete=models.SET_NULL)
+    common_data = models.ForeignKey(CommonData, blank=True, null=True, on_delete=models.SET_NULL)
     instructions = models.TextField(blank=True)
     submission_details = models.TextField(blank=True)
     instructor_notes = models.TextField(blank=True, null=True,
@@ -272,7 +274,8 @@ class Quest(XPItem, IsAPrereqMixin):
                                         Use it to place answer keys or other notes.")
 
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
-                               help_text='Provides a student TA access to work on the draft of this quest.')
+                               help_text='Provides a student TA access to work on the draft of this quest.',
+                               on_delete=models.SET_NULL)
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
@@ -367,7 +370,7 @@ TAG_CHOICES = (
 # Demo of ContentType foreign key.  Model not actually in use
 class TaggedItem(models.Model):
     tag = models.SlugField(choices=TAG_CHOICES)
-    content_type = models.ForeignKey(ContentType)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
 
     def get_absolute_url(self):
@@ -680,8 +683,8 @@ class QuestSubmissionManager(models.Manager):
 
 
 class QuestSubmission(models.Model):
-    quest = models.ForeignKey(Quest)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user")
+    quest = models.ForeignKey(Quest, on_delete=models.SET_NULL, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user", on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField(default=1,
                                           help_text='indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
@@ -695,10 +698,11 @@ class QuestSubmission(models.Model):
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     # all references to gamelab changed to "skipped"
     game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
-    semester = models.ForeignKey('courses.Semester')
+    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
-                                   help_text="flagged by a teacher for follow up")
+                                   help_text="flagged by a teacher for follow up",
+                                   on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

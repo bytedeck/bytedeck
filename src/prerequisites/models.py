@@ -186,13 +186,14 @@ class Prereq(models.Model, IsAPrereqMixin):
                             help_text="Providing a name to a prereq allows it to be used itself as a prerequisite. "
                                       "One use for this to to chain more than two OR conditions.")
 
-    parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent')
+    parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent', on_delete=models.CASCADE)
     parent_object_id = models.PositiveIntegerField()
     parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
 
     # the required prerequisite object and options
     prereq_content_type = models.ForeignKey(ContentType, related_name='prereq_item',
-                                            verbose_name="Type of Prerequisite")
+                                            verbose_name="Type of Prerequisite",
+                                            on_delete=models.CASCADE)
     prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
     prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
     prereq_count = models.PositiveIntegerField(default=1)
@@ -200,7 +201,8 @@ class Prereq(models.Model, IsAPrereqMixin):
 
     # an optional alternate prerequisite object and options
     or_prereq_content_type = models.ForeignKey(ContentType, related_name='or_prereq_item',
-                                               verbose_name="OR Type of Prerequisite", blank=True, null=True)
+                                               verbose_name="OR Type of Prerequisite", blank=True, null=True,
+                                               on_delete=models.SET_NULL)
     or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True,
                                                       verbose_name="OR Prerequisite")
     or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")

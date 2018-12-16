@@ -4,7 +4,7 @@ from comments.models import Comment
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -53,7 +53,7 @@ class Announcement(models.Model):
     sticky = models.BooleanField(default=False)
     sticky_until = models.DateTimeField(null=True, blank=True, help_text='blank = sticky never expires')
     icon = models.ImageField(upload_to='announcement_icons/', null=True, blank=True)
-    author = models.ForeignKey(settings.AUTH_USER_MODEL)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     datetime_released = models.DateTimeField(default=timezone.now)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text='blank = never')
     draft = models.BooleanField(default=True,

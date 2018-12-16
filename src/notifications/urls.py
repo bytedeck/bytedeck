@@ -2,6 +2,8 @@ from notifications import views
 
 from django.conf.urls import url
 
+app_name = 'notifications'
+
 urlpatterns = [
     url(r'^$', views.list, name='list'),  # function based view
     url(r'^unread/$', views.list_unread, name='list_unread'),  # function based view

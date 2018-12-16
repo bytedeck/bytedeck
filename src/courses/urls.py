@@ -6,6 +6,8 @@ from jchart.views import ChartView
 
 from courses.models import MarkDistributionHistogram
 
+app_name = 'courses'
+
 urlpatterns = [
     url(r'^$', views.CourseStudentList.as_view(), name='list'),
     url(r'^create/$', views.CourseStudentCreate.as_view(), name='create'),

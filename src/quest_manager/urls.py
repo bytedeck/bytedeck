@@ -17,7 +17,7 @@ from quest_manager import views
 
 from django.conf.urls import url
 
-# Admin site customizations
+app_name = 'quest_manager'
 
 urlpatterns = [
     url(r'^$', views.quest_list, name=''),

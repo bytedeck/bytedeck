@@ -7,6 +7,8 @@ from django.conf.urls import url
 
 # Admin site customizations
 
+app_name = 'profile_manager'
+
 urlpatterns = [
     url(r'^list/all/$', views.ProfileList.as_view(), name='profile_list'),
     url(r'^list/current/$', views.ProfileListCurrent.as_view(), name='profile_list_current'),

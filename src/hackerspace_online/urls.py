@@ -26,6 +26,8 @@ from django.contrib import admin
 admin.site.site_header = "Hackerspace Administration"
 admin.site.site_title = "Hackerspace Admin"
 
+app_name = 'hackerspace_online'
+
 urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^$', views.home, name='home'),
@@ -45,7 +47,7 @@ urlpatterns = [
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
 
     # admin
-    url(r'^admin/', include(admin.site.urls)),
+    url(r'^admin/', admin.site.urls),
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth

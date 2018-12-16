@@ -1,7 +1,7 @@
 from badges.models import Badge, BadgeAssertion
 from courses.models import Semester
 from django.conf import settings
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -68,7 +68,7 @@ class Suggestion(models.Model):
                 )
 
     title = models.CharField(max_length=50, help_text="Briefly describes the suggestion")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     description = models.TextField(
         help_text="A detailed explanation includes WHAT the suggestion is, \
         WHY the suggestions will improve the Hackerspace, \
@@ -150,8 +150,8 @@ class VoteManager(models.Manager):
 
 
 class Vote(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
-    suggestion = models.ForeignKey(Suggestion)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    suggestion = models.ForeignKey(Suggestion, on_delete=models.CASCADE)
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
     vote = models.SmallIntegerField(help_text="up vote is +1, down vote is -1")
 

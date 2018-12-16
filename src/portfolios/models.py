@@ -3,7 +3,7 @@ import uuid
 import embed_video
 import os
 from django.templatetags.static import static
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.conf import settings
 from django.utils import timezone

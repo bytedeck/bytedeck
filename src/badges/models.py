@@ -1,9 +1,10 @@
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
+
 from prerequisites.models import Prereq, IsAPrereqMixin
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.urlresolvers import reverse
 from django.db import models
 from django.db.models import Max, Sum
 from django.templatetags.static import static
@@ -79,8 +80,8 @@ class Badge(models.Model, IsAPrereqMixin):
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.TextField(blank=True, null=True)
-    series = models.ForeignKey(BadgeSeries, blank=True, null=True)
-    badge_type = models.ForeignKey(BadgeType)
+    series = models.ForeignKey(BadgeSeries, blank=True, null=True, on_delete=models.SET_NULL)
+    badge_type = models.ForeignKey(BadgeType, on_delete=models.CASCADE)
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True)  # needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
@@ -239,15 +240,16 @@ class BadgeAssertionManager(models.Manager):
 
 
 class BadgeAssertion(models.Model):
-    badge = models.ForeignKey(Badge)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField(default=1, help_text='indicating the nth time user has received this badge')
     # time_issued = models.DateTimeField(default = timezone.now())
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
-    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by')
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by',
+                                  on_delete=models.SET_NULL)
     game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
-    semester = models.ForeignKey('courses.Semester', default=1)
+    semester = models.ForeignKey('courses.Semester', default=1, on_delete=models.SET_DEFAULT)
 
     objects = BadgeAssertionManager()
 

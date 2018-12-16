@@ -7,7 +7,7 @@ from courses.models import Rank
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -196,7 +196,8 @@ class CytoElement(models.Model):
     # TODO: make a callable for limit choices to, so that limited to nodes within the same scape
     data_parent = models.ForeignKey('self', blank=True, null=True, related_name="parents",
                                     limit_choices_to={'group': NODES},
-                                    help_text="indicates the compound node parent; blank/null => no parent")
+                                    help_text="indicates the compound node parent; blank/null => no parent",
+                                    on_delete=models.CASCADE)
     data_source = models.ForeignKey('self', on_delete=models.CASCADE, blank=True, null=True, related_name="sources",
                                     help_text="edge comes from this node")
     data_target = models.ForeignKey('self', on_delete=models.CASCADE, blank=True, null=True, related_name="targets",
@@ -531,7 +532,7 @@ class CytoScape(models.Model):
                                     models.Q(app_label='courses', model='rank')
 
     name = models.CharField(max_length=250)
-    style_set = models.ForeignKey(CytoStyleSet, null=True)
+    style_set = models.ForeignKey(CytoStyleSet, null=True, on_delete=models.SET_NULL)
 
     # initial_object = models.OneToOneField(Quest)
 
@@ -544,7 +545,8 @@ class CytoScape(models.Model):
     initial_content_object = GenericForeignKey('initial_content_type', 'initial_object_id')
 
     parent_scape = models.ForeignKey('self', blank=True, null=True,
-                                     help_text="The map/scape preceding this one, so it can be linked back to")
+                                     help_text="The map/scape preceding this one, so it can be linked back to",
+                                     on_delete=models.CASCADE)
     is_the_primary_scape = models.BooleanField(default=False,
                                                help_text="There can only be one primary map/scape. Making this True "
                                                          "will change all other map/scapes will be set to False.")

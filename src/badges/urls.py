@@ -2,6 +2,8 @@ from badges import views
 
 from django.conf.urls import url
 
+app_name = 'badges'
+
 urlpatterns = [
     url(r'^$', views.badge_list, name='list'),
     url(r'^create/$', views.badge_create, name='badge_create'),

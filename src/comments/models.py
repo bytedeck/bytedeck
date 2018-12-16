@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.utils.html import urlize, escape
 
@@ -99,8 +99,8 @@ class CommentManager(models.Manager):
 
 
 class Comment(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL)
-    parent = models.ForeignKey("self", null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
     path = models.CharField(max_length=350)
     text = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -109,7 +109,7 @@ class Comment(models.Model):
     flagged = models.BooleanField(default=False)
 
     target_content_type = models.ForeignKey(ContentType, related_name='comment_target',
-                                            null=True, blank=True)
+                                            null=True, blank=True, on_delete=models.SET_NULL)
     target_object_id = models.PositiveIntegerField(null=True, blank=True)
     target_object = GenericForeignKey("target_content_type", "target_object_id")
 
@@ -171,7 +171,7 @@ class Comment(models.Model):
 ##### Document Handler ############################################
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
-    comment = models.ForeignKey(Comment)
+    comment = models.ForeignKey(Comment, on_delete=models.SET_NULL, null=True)
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!

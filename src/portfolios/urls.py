@@ -1,7 +1,8 @@
 from django.conf.urls import url
 from portfolios import views
 
-app_name = 'portfolios'  # needed for static files to get picked up... why?
+app_name = 'portfolios'
+
 urlpatterns = [
     url(r'^$', views.PortfolioList.as_view(), name='list'),
     url(r'^public/$', views.public_list, name='public_list'),

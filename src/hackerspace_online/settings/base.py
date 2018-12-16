@@ -108,9 +108,9 @@ INSTALLED_APPS = (
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
 #SITE_ID = 1
-MIDDLEWARE_CLASSES = []
+MIDDLEWARE = []
 
-MIDDLEWARE_CLASSES += [
+MIDDLEWARE += [
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',

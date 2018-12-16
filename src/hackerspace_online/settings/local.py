@@ -63,7 +63,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project",  "media_root")
 # END STATIC #######################################
 
 # DEBUG TOOLBAR
-MIDDLEWARE_CLASSES += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
 INSTALLED_APPS += ('debug_toolbar',
                    'template_timings_panel',
                    # http://django-cachalot.readthedocs.io

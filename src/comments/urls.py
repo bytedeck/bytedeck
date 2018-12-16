@@ -2,6 +2,8 @@ from comments import views
 
 from django.conf.urls import url
 
+app_name = 'comments'
+
 urlpatterns = [
     url(r'^(?P<id>\d+)/thread/$', views.comment_thread, name='threads'),
     url(r'^(?P<id>\d+)/flag/$', views.flag, name='flag'),

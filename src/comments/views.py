@@ -66,7 +66,7 @@ def comment_thread(request, id):
 
 @login_required
 def comment_create(request):
-    if request.method == "POST" and request.user.is_authenticated():
+    if request.method == "POST" and request.user.is_authenticated:
         parent_id = request.POST.get('parent_id')
         # quest_id = request.POST.get('quest_id')
         target_content_type_id = request.POST.get('target_content_type_id')

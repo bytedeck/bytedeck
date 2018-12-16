@@ -4,6 +4,8 @@ from django.conf.urls import url
 
 # Admin site customizations
 
+app_name = 'suggestions'
+
 urlpatterns = [
     url(r'^$', views.suggestion_list, name='list'),
     url(r'^beta/$', views.suggestion_list_beta, name='list_beta'),

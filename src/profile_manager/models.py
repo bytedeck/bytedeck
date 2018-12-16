@@ -5,13 +5,13 @@ from django.utils.functional import cached_property
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent, Block
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, validate_comma_separated_integer_list
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from django.db.models.signals import post_save
 from django.templatetags.static import static
@@ -75,7 +75,7 @@ class Profile(models.Model):
             grad_year_choices.append((year, year))  # (actual value, human readable name) tuples
         return grad_year_choices
 
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, null=False)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
@@ -107,7 +107,8 @@ class Profile(models.Model):
         verbose_name='Use preferred first name internally only',
         default=False, help_text="Check this if you don't want your preferred first name used in any public areas.")
     dark_theme = models.BooleanField(default=False)
-    hidden_quests = models.CommaSeparatedIntegerField(max_length=255, null=True, blank=True)  # list of quest IDs
+    hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=255,
+                                     null=True, blank=True)  # list of quest IDs
     is_TA = models.BooleanField(default=False, help_text="TAs can create new quests for teacher approval.")
 
     custom_stylesheet = RestrictedFileField(null=True, blank=True, upload_to=user_directory_path,
