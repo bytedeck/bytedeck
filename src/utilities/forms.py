@@ -9,9 +9,7 @@ from utilities.models import VideoResource
 class VideoForm(forms.ModelForm):
     class Meta:
         model = VideoResource
-        fields = ["name", "video_file"]
-
-
+        fields = ["title", "video_file"]
 
 
 

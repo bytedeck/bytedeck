@@ -5,8 +5,20 @@
 {% block heading_inner %}{{ heading }}{% endblock %}
 
 {% block content %}
-dsfdsfsfsd
-    {{ heading }}
+    <form enctype="multipart/form-data" method="POST" action="">
+        <h3>Upload New Video Resource</h3>
+        {% csrf_token %}
+        {{ form | crispy }}
+        <input type="submit" value="Upload New Video"/>
+    </form>
+    <hr>
+    <h3>Current Video Resources</h3>
+    <ul>
+    {% for vid in videos %}
+        <li><a href="{{ vid.video_file.url }}">{{ vid.title }}</a></li>
+    {% endfor %}
+    </ul>
+
 {% endblock %}
 
 

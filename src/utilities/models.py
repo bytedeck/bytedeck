@@ -50,13 +50,13 @@ class VideoResource(models.Model):
     """
 
     """
-    name = models.CharField(max_length=50)
+    title = models.CharField(max_length=50)
     video_file = models.FileField(upload_to='videos/') # verbose_name=""
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
 
     def __str__(self):
-        return self.name + ": " + str(self.video_file)
+        return self.title + ": " + str(self.video_file)
 
 
 class MenuItem(models.Model):

@@ -13,7 +13,7 @@ class MenuItemAdmin(admin.ModelAdmin):
 
 
 class VideoResourceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'video_file')
+    list_display = ('id', 'title', 'video_file')
 
 
 admin.site.register(ImageResource, ImageResourceAdmin)
