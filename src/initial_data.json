@@ -313,5 +313,37 @@
     },
     "model": "badges.badge",
     "pk": 1
+  },
+    {
+    "fields": {
+      "datetime_last_edit": "2016-07-06T06:01:58.032Z",
+      "series": null,
+      "icon": "",
+      "active": true,
+      "short_description": "You done did good!",
+      "name": "Pat on the back",
+      "badge_type": 3,
+      "datetime_created": "2016-07-06T06:01:19.555Z",
+      "sort_order": null,
+      "xp": 5
+    },
+    "model": "badges.badge",
+    "pk": 2
+  },
+  {
+    "fields": {
+      "datetime_last_edit": "2016-07-06T06:01:59.032Z",
+      "series": null,
+      "icon": "",
+      "active": true,
+      "short_description": "You found something your teacher asked you to look for... like typos or broken links etc.",
+      "name": "Treasure Hunter",
+      "badge_type": 3,
+      "datetime_created": "2016-07-06T06:01:20.555Z",
+      "sort_order": null,
+      "xp": 2
+    },
+    "model": "badges.badge",
+    "pk": 3
   }
 ]
