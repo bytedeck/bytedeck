@@ -43,6 +43,7 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 2. Populate the database with some default data: `./src/manage.py loaddata src/initial_data`
 3. Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
 4. Windows w/Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
+5. Create the cache table: `./src/manage.py createcachetable`
 
 #### Creating the PostgreSQL database (Advanced Option)
 1. You can follow [these instructions](https://www.digitalocean.com/community/tutorials/how-to-use-postgresql-with-your-django-application-on-ubuntu-16-04) if you are on Linux (won't work on Windows).  Use the Python3 options.
