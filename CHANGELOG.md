@@ -5,7 +5,8 @@ This file chronologically records all notable changes to this website, including
 
 ### [0.12.1]
 
-* [code] resolve security vulnerabilities in dependencies
+* [code] Django 2.0.x (2.1 still has conflicts with some dependencies)
+* [code] Resolve security vulnerabilities in dependencies
 * [code] First migrations commit
 
 ### [0.12.0] 2018-12-18
