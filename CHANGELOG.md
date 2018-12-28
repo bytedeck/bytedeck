@@ -1,15 +1,21 @@
 # Hackerspace Changelog
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
-[Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/)
+[Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.11.0] 2018-05-15 - Math!
+### [0.12.0] 2018-05-15
+* File resource for uploading local videos and zip files.
+* Resolve warnings for django2
+* Start a better defined branching and release model for code base
+* [bugfix] quick reply parsing
+
+### [0.11.0] 2018-05-15 - Math!
 * Many mobile tweaks
 * Added LaTeX math support
 * Quest submenu in top navbar
 * [teacher only] Customizable menu links
 
-### [1.10.2] 2018-06-02 - The mobile device update
+### [0.10.2] 2018-06-02 - The mobile device update
 * force responsive images in submissions (so large images no longer extend past the content area)
 * create mobile menu for notifications
 * turn off suggestions
@@ -18,20 +24,20 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] only offer to add valid media to portfolios
 * [bugfix] create portfolio when adding if it doesn't exist (instead of error)
 
-### [1.10.1] 2018-03-06
+### [0.10.1] 2018-03-06
 * new button to access in-progress quests directly (much faster)
 * students can view unavailable quests as a preview
 * indicator when specific teachers are notified by particular quests
 * [bugfix] skipped quests bugging out
 
-### [1.10.0] 2018-02-23 - The Studio Tyee update
+### [0.10.0] 2018-02-23 - The Studio Tyee update
 * [Teacher only] Site name and banner as a configurable setting (support for Studio Tyee)
 
-### [1.9.1] 2018-02-03
+### [0.9.1] 2018-02-03
 * [teacher only] export data as json (for use with browser extension to upload marks to CIMS)
 * [bugifx] comment ban was banning wrong person
 
-### [1.9.0] 2018-01-07
+### [0.9.0] 2018-01-07
 * User custom stylesheets!
 * New styling options in text editor (summernote plugins)
 * [teacher only] Export of student data for report cards
@@ -40,7 +46,7 @@ This file chronologically records all notable changes to this website, including
 * CSS tweaks for images and lists
 * [bugfix] Sort marks properly
 
-### [1.8.0] 2017-10-21
+### [0.8.0] 2017-10-21
 * Students can create and edit quests by turning on the TA flag in their profile
 * codemirror formatting when using codeview
 * New histogram chart on student XP page
@@ -58,17 +64,17 @@ This file chronologically records all notable changes to this website, including
 * Other minor tweaks
  
 
-### [1.7.0] 2017-05-28
+### [0.7.0] 2017-05-28
 * Updated Django to 1.11 LTS (support to 2020)
 * Fixed bugs preventing initial migrations when setting up the django app
 
-### [1.6.0]
+### [0.6.0]
 * Bulk badge granting
 * TOC generator for FAQ
 * List all dates that badges were granted in profile (as opposed to only the latest one)
 * XP Chart formatting tweaks
 
-### [1.5.0] 2017-02-01
+### [0.5.0] 2017-02-01
 * This changelog!
 * Archive quests
 * XP is now cached so it doesn't recalculate unless a new quest is approve/returned or badge awarded.
