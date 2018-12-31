@@ -84,9 +84,13 @@ class SubmissionForm(forms.Form):
                            )
 
 
-class BadgeSelect2MultipleWidget(ModelSelect2MultipleWidget):
+class BadgeLabel:
     def label_from_instance(self, obj):
         return "{} ({} XP)".format(str(obj), obj.xp)
+
+
+class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
+    pass
 
 
 class SubmissionFormStaff(SubmissionForm):
@@ -110,9 +114,8 @@ class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
-class BadgeModelChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return "{} ({} XP)".format(str(obj), obj.xp)
+class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
+    pass
 
 
 class SubmissionQuickReplyForm(forms.Form):
