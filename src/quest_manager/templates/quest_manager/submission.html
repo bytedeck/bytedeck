@@ -1,10 +1,14 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
+{% block head %}
+    {{ submission_form.media.css }}
+{% endblock %}
+
 {% block head_css %}
-.reply_comment {
-  display: none;
-}
+    .reply_comment {
+      display: none;
+    }
 {% endblock %}
 
 {% block heading_inner %}{{ heading }}<br/>
@@ -79,25 +83,26 @@
 
 {% endblock %}
 {% block js %}
-<script>
-$(document).ready(function() {
-    {% if anchor %}
-        // http://stackoverflow.com/questions/8149155/animate-scrolltop-not-working-in-firefox
-        $('body,html').animate({
-            'scrollTop':   $('#{{ anchor }}').offset().top
-        }, 1000);
-    {% endif %}
+    <script>
+        $(document).ready(function() {
+            {% if anchor %}
+                // http://stackoverflow.com/questions/8149155/animate-scrolltop-not-working-in-firefox
+                $('body,html').animate({
+                    'scrollTop':   $('#{{ anchor }}').offset().top
+                }, 1000);
+            {% endif %}
 
 
-    // Copied from quest_approvals.html
-    $('[id^=btn_quick_text]').on('click', function () {
-        var msg = ' Please read the submission instructions more carefully. Thanks! ';
+            // Copied from quest_approvals.html
+            $('[id^=btn_quick_text]').on('click', function () {
+                var msg = ' Please read the submission instructions more carefully. Thanks! ';
 
-        var iframe_txt = $("#id_comment_text_iframe").contents().find('div.note-editable');
-        console.log(iframe_txt.html());
-        iframe_txt.append(msg);
-    });
+                var iframe_txt = $("#id_comment_text_iframe").contents().find('div.note-editable');
+                console.log(iframe_txt.html());
+                iframe_txt.append(msg);
+            });
+        });
+    </script>
 
-
-});
-</script>{% endblock %}
+    {{ submission_form.media.js }}
+{% endblock %}

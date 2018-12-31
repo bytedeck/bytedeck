@@ -1,9 +1,7 @@
 # Create your tests here.
-import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-from djconfig.utils import override_djconfig
 
 from badges.models import BadgeAssertion, Badge
 
