@@ -1,3 +1,5 @@
+from django_select2.forms import ModelSelect2MultipleWidget
+
 from badges.models import Badge
 
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
@@ -69,22 +71,6 @@ class QuestForm(forms.ModelForm):
             self.fields['editor'].widget = forms.HiddenInput()
 
 
-class QuestFormTA(QuestForm):
-    def __init__(self, request, *args, **kwargs):
-        self.fields['visible_to_students'].widget = forms.HiddenInput()
-        # self.fields['max_repeats'].widget = forms.HiddenInput()
-        # self.fields['hours_between_repeats'].widget = forms.HiddenInput()
-        # self.fields['specific_teacher_to_notify'].widget = forms.HiddenInput()
-        # self.fields['hideable'].widget = forms.HiddenInput()
-        # self.fields['sort_order'].widget = forms.HiddenInput()
-        # self.fields['date_available'].widget = forms.HiddenInput()
-        # self.fields['time_available'].widget = forms.HiddenInput()
-        # self.fields['date_expired'].widget = forms.HiddenInput()
-        # self.fields['time_expired'].widget = forms.HiddenInput()
-        # self.fields['available_outside_course'].widget = forms.HiddenInput()
-        self.fields['archived'].widget = forms.HiddenInput()
-
-
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=SummernoteWidget())
     # docfile = forms.FileField(label='Add a file to your submission',
@@ -98,24 +84,44 @@ class SubmissionForm(forms.Form):
                            )
 
 
+class BadgeLabel:
+    def label_from_instance(self, obj):
+        return "{} ({} XP)".format(str(obj), obj.xp)
+
+
+class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
+    pass
+
+
 class SubmissionFormStaff(SubmissionForm):
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
-    award = forms.ModelChoiceField(queryset=None, label='Grant an Award', required=False)
+    awards = forms.ModelMultipleChoiceField(queryset=None, label='Grant Awards', required=False)
 
     def __init__(self, *args, **kwds):
         super(SubmissionFormStaff, self).__init__(*args, **kwds)
 
-        self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        self.fields['awards'].queryset = Badge.objects.all_manually_granted()
+        self.fields['awards'].widget = BadgeSelect2MultipleWidget(
+            model=Badge,
+            queryset=Badge.objects.all_manually_granted(),
+            search_fields=[
+                'name__icontains',
+            ]
+        )
 
 
 class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
+class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
+    pass
+
+
 class SubmissionQuickReplyForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
-    award = forms.ModelChoiceField(queryset=None, label='Grant an Award', required=False)
+    award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
     def __init__(self, *args, **kwds):
         super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)

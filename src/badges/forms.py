@@ -53,29 +53,6 @@ class BadgeAssertionForm(forms.ModelForm):
             obj.profile if hasattr(obj, 'profile') else obj.username, obj.username)
 
 
-# class StudentsCustomTitleWidget(ModelSelect2MultipleWidget):
-#     model = Profile
-#     # queryset = Profile.objects.all()
-#     search_fields = [
-#         'first_name__istartswith',
-#         'last_name__istartswith',
-#         'preferred_name__istartswith',
-#         'user__username',
-#     ]
-#     queryset = Profile.objects.all_for_active_semester()
-#
-#     # SHOULD BE USING USER NOT PROFILE!
-#     # model = User
-#     # search_fields = [
-#     #     'first_name__istartswith',
-#     #     'last_name__istartswith',
-#     #     'username__istartswith',
-#     # ]
-#     #
-#     # def label_from_instance(self, obj):
-#     #     return obj.get_full_name().upper()
-
-
 class BulkBadgeAssertionForm(forms.Form):
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     badge = forms.ModelChoiceField(queryset=None, required=True)

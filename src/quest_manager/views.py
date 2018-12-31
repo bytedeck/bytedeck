@@ -20,7 +20,7 @@ from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView, CreateView
-from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm, QuestFormTA
+from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission
 
 
@@ -398,23 +398,32 @@ def approve(request, submission_id):
     origin_path = submission.get_absolute_url()
 
     if request.method == "POST":
-
         # currently only the big form has files.  Need a more robust way to determine...
-        if request.FILES:
-            form = SubmissionForm(request.POST, request.FILES)
+        if request.FILES or request.POST.get("awards"):
+            if request.user.is_staff:
+                form = SubmissionFormStaff(request.POST, request.FILES)
+            else:
+                form = SubmissionForm(request.POST, request.FILES)
         else:
             form = SubmissionQuickReplyForm(request.POST)
 
         if form.is_valid():
             # handle badge assertion
             comment_text_addition = ""
+
             badge = form.cleaned_data.get('award')
+
             if badge:
-                # badge = get_object_or_404(Badge, pk=badge_id)
-                new_assertion = BadgeAssertion.objects.create_assertion(submission.user, badge, request.user)
-                messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-                comment_text_addition = "<p></br><i class='fa fa-certificate text-warning'></i> The <b>" + \
-                                        badge.name + "</b> badge was granted for this quest <i class='fa fa-certificate text-warning'></i></p>"
+                badges = [badge]
+            else:
+                badges = form.cleaned_data.get('awards')
+            if badges:
+                for badge in badges:
+                    # badge = get_object_or_404(Badge, pk=badge_id)
+                    new_assertion = BadgeAssertion.objects.create_assertion(submission.user, badge, request.user)
+                    messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+                    comment_text_addition += "<p></br><i class='fa fa-certificate text-warning'></i> The <b>" + \
+                                            badge.name + "</b> badge was granted for this quest <i class='fa fa-certificate text-warning'></i></p>"
 
             # handle with quest comments
             blank_comment_text = ""
