@@ -110,10 +110,15 @@ class SubmissionReplyForm(forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
+class BadgeModelChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return "{} ({} XP)".format(str(obj), obj.xp)
+
+
 class SubmissionQuickReplyForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
-    award = forms.ModelChoiceField(queryset=None, label='Grant an Award', required=False)
+    award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
     def __init__(self, *args, **kwds):
         super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
