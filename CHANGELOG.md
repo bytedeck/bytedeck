@@ -3,11 +3,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [0.12.0] 2018-05-15
+### [0.12.1]
+
+* [code] Django 2.0.x (2.1 still has conflicts with some dependencies)
+* [code] Resolve security vulnerabilities in dependencies
+* [code] First migrations commit
+
+### [0.12.0] 2018-12-18
 * File resource for uploading local videos and zip files.
-* Resolve warnings for django2
-* Start a better defined branching and release model for code base
 * [bugfix] quick reply parsing
+* [code] Start a better defined branching and release model for code base
+* [code] Resolve warnings for django2
 
 ### [0.11.0] 2018-05-15 - Math!
 * Many mobile tweaks
@@ -27,11 +33,11 @@ This file chronologically records all notable changes to this website, including
 ### [0.10.1] 2018-03-06
 * new button to access in-progress quests directly (much faster)
 * students can view unavailable quests as a preview
-* indicator when specific teachers are notified by particular quests
+* [teacher only] indicator when specific teachers are notified by particular quests
 * [bugfix] skipped quests bugging out
 
 ### [0.10.0] 2018-02-23 - The Studio Tyee update
-* [Teacher only] Site name and banner as a configurable setting (support for Studio Tyee)
+* [teacher only] Site name and banner as a configurable setting (support for Studio Tyee)
 
 ### [0.9.1] 2018-02-03
 * [teacher only] export data as json (for use with browser extension to upload marks to CIMS)

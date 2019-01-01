@@ -31,7 +31,6 @@ media_root/
 
 pip-selfcheck.json
 
-migrations/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
