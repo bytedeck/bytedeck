@@ -182,20 +182,24 @@ class BadgeAssertionManager(models.Manager):
     def get_assertion_ordinal(self, user, badge):
         return self.num_assertions(user, badge) + 1
 
-    def create_assertion(self, user, badge, issued_by=None, transfer=False):
+    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None):
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
             issued_by = get_object_or_404(User, pk=config.hs_hackerspace_ai)
+
+        if not active_semester:
+            active_semester = config.hs_active_semester
+
         new_assertion = BadgeAssertion(
             badge=badge,
             user=user,
             ordinal=ordinal,
             issued_by=issued_by,
             game_lab_transfer=transfer,
-            semester_id=config.hs_active_semester,
+            semester_id=active_semester
         )
         new_assertion.save()
-        user.profile.xp_invalidate_cache() # recalculate user's XP
+        user.profile.xp_invalidate_cache()  # recalculate user's XP
         return new_assertion
 
     def check_for_new_assertions(self, user, transfer=False):

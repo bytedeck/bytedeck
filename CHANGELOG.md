@@ -3,8 +3,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [0.12.1]
+### [0.13.0]
+* [teachers] grant multiple awards at once in full-reply
+* [teachers] display XP value of awards when selecting them
 
+### [0.12.1]
 * [code] Django 2.0.x (2.1 still has conflicts with some dependencies)
 * [code] Resolve security vulnerabilities in dependencies
 * [code] First migrations commit
