@@ -1,4 +1,5 @@
 # Create your tests here.
+import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -12,6 +13,8 @@ class ViewTests(TestCase):
     fixtures = ['initial_data.json']
 
     def setUp(self):
+        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
+
         User = get_user_model()
         self.test_password = 'password'
 
@@ -22,10 +25,10 @@ class ViewTests(TestCase):
 
         self.test_badge = Badge.objects.get(pk=1)  # create by fixture
 
-        self.test_assertion = BadgeAssertion.objects.create(user=self.test_student1,
-                                                            badge=self.test_badge,
-                                                            issued_by=self.test_teacher,
-                                                            )
+        self.test_assertion = BadgeAssertion.objects.create_assertion(user=self.test_student1,
+                                                                      badge=self.test_badge,
+                                                                      issued_by=self.test_teacher,
+                                                                      )
 
     def test_all_badge_page_status_codes_for_anonymous(self):
         # If not logged in then should redirect to home page
