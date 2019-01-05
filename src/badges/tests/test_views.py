@@ -3,6 +3,7 @@ import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from model_mommy import mommy
 
 from badges.models import BadgeAssertion, Badge
 
@@ -10,25 +11,27 @@ from badges.models import BadgeAssertion, Badge
 class ViewTests(TestCase):
 
     # includes some basic model data
-    fixtures = ['initial_data.json']
+    # fixtures = ['initial_data.json']
 
     def setUp(self):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
 
         User = get_user_model()
-        self.test_password = 'password'
 
-        # need a teacher before students can be created or the profile creation will fail......why?
+        # need a teacher and a student with known password so tests can log in as each
+        self.test_password = "password"
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = User.objects.create_user('test_student2', password=self.test_password)
+        self.test_student2 = mommy.make(User)
+        #
+        # self.test_badge = Badge.objects.get(pk=1)  # create by fixture
+        self.test_badge = mommy.make(Badge)
+        self.test_assertion = mommy.make(BadgeAssertion)
 
-        self.test_badge = Badge.objects.get(pk=1)  # create by fixture
-
-        self.test_assertion = BadgeAssertion.objects.create_assertion(user=self.test_student1,
-                                                                      badge=self.test_badge,
-                                                                      issued_by=self.test_teacher,
-                                                                      )
+        # self.test_badge = mommy.make(Badge)
+        # self.test_assertion = mommy.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
         # If not logged in then should redirect to home page
@@ -76,6 +79,9 @@ class ViewTests(TestCase):
         self.assertEquals(self.client.get(reverse('badges:bulk_grant_badge', args=[b_pk])).status_code, 200)
         self.assertEquals(self.client.get(reverse('badges:bulk_grant')).status_code, 200)
         self.assertEquals(self.client.get(reverse('badges:revoke', args=[a_pk])).status_code, 200)
+
+
+# class ViewTests(TestCase):
 
 
     # def test_view_url_by_name(self):

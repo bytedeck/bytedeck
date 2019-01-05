@@ -1,23 +1,19 @@
 import re
-from ast import literal_eval
-
-from django.utils.functional import cached_property
-
-from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent, Block
-from django.core.validators import RegexValidator, validate_comma_separated_integer_list
-from notifications.signals import notify
-from quest_manager.models import QuestSubmission
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.urls import reverse
+from django.core.validators import RegexValidator, validate_comma_separated_integer_list
 from django.db import models
 from django.db.models.signals import post_save
 from django.templatetags.static import static
+from django.urls import reverse
 from django.utils import timezone
 from djconfig import config
 
+from badges.models import BadgeAssertion
+from courses.models import Rank, CourseStudent, Block
+from notifications.signals import notify
+from quest_manager.models import QuestSubmission
 from utilities.models import RestrictedFileField
 
 
@@ -364,7 +360,6 @@ def create_profile(sender, **kwargs):
     current_user = kwargs["instance"]
 
     if kwargs["created"]:
-        print("creating profile for: " + current_user.username)
         new_profile = Profile(user=current_user)
 
         # if user's name matches student number (e.g 9912345), set student number:
