@@ -1,14 +1,14 @@
-from django.http import Http404
-from notifications.signals import notify
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.urls import reverse_lazy
+from django.http import Http404
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView
+
+from notifications.signals import notify
 from .forms import BadgeForm, BadgeAssertionForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeType, BadgeAssertion
 
@@ -59,7 +59,7 @@ class BadgeUpdate(UpdateView):
         return super(BadgeUpdate, self).dispatch(*args, **kwargs)
 
 
-@staff_member_required
+@staff_member_required(login_url='/')
 def badge_create(request):
     form = BadgeForm(request.POST or None, request.FILES or None)
     if form.is_valid():
