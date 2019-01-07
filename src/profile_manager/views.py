@@ -1,18 +1,18 @@
-from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Semester, Block
-from django.http import Http404
-from djconfig import config
-from notifications.signals import notify
-from quest_manager.models import QuestSubmission
-
 from collections import defaultdict
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
-from django.views.generic.edit import UpdateView, CreateView
+from django.views.generic.edit import UpdateView
+
+from badges.models import BadgeAssertion
+from courses.models import CourseStudent
+from notifications.signals import notify
+from quest_manager.models import QuestSubmission
 from .forms import ProfileForm
 from .models import Profile
 
@@ -54,17 +54,18 @@ class ProfileListCurrent(ProfileList):
         return context
 
 
-class ProfileCreate(CreateView):
-    model = Profile
-    form_class = ProfileForm
-    template_name = 'profile_manager/form.html'
-
-    @method_decorator(login_required)
-    def form_valid(self, form):
-        data = form.save(commit=False)
-        data.user = self.request.user
-        data.save()
-        return super(ProfileCreate, self).form_valid(form)
+# Profiles are automatically created with each user, so there is never a teacher to create on manually.
+# class ProfileCreate(CreateView):
+#     model = Profile
+#     form_class = ProfileForm
+#     template_name = 'profile_manager/form.html'
+#
+#     @method_decorator(login_required)
+#     def form_valid(self, form):
+#         data = form.save(commit=False)
+#         data.user = self.request.user
+#         data.save()
+#         return super(ProfileCreate, self).form_valid(form)
 
 
 class ProfileDetail(DetailView):
@@ -135,7 +136,7 @@ class ProfileUpdate(UpdateView):
             raise Http404("Sorry, this profile isn't yours!")
 
 
-@staff_member_required()
+@staff_member_required(login_url='/')
 def recalculate_current_xp(request):
     profiles_qs = Profile.objects.all_for_active_semester()
     for profile in profiles_qs:
@@ -155,7 +156,7 @@ def tour_complete(request):
     return redirect('quests:quests')
 
 
-@staff_member_required
+@staff_member_required(login_url='/')
 def GameLab_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
@@ -163,12 +164,12 @@ def GameLab_toggle(request, profile_id):
     return redirect_to_previous_page(request)
 
 
-@staff_member_required
+@staff_member_required(login_url='/')
 def comment_ban_toggle(request, profile_id):
     return comment_ban(request, profile_id, toggle=True)
 
 
-@staff_member_required
+@staff_member_required(login_url='/')
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
     if toggle:
@@ -204,7 +205,6 @@ def comment_ban(request, profile_id, toggle=False):
     return redirect_to_previous_page(request)
 
 
-@staff_member_required
 def redirect_to_previous_page(request):
     # http://stackoverflow.com/questions/12758786/redirect-return-to-same-previous-page-in-django
     return redirect(request.META.get('HTTP_REFERER', '/'))

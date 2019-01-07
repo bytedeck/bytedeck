@@ -1,25 +1,20 @@
-import numpy
 from datetime import timedelta, date, datetime
 
-from django.db.models import Max
-from django.db.models.signals import pre_save, post_save
-from django.dispatch import receiver
-
-from prerequisites.models import IsAPrereqMixin
-
-from quest_manager.models import QuestSubmission
-
+import numpy
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.urls import reverse
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.urls import reverse
 from django.utils import timezone
-from django.utils.functional import cached_property
 from djconfig import config
-
-from workdays import networkdays, workday
 from jchart import Chart
-from jchart.config import Axes, DataSet, rgba
+from jchart.config import DataSet, rgba
+from workdays import networkdays, workday
+
+from prerequisites.models import IsAPrereqMixin
+from quest_manager.models import QuestSubmission
 
 
 # Create your models here.
@@ -137,16 +132,21 @@ class SemesterManager(models.Manager):
         return active_sem
 
 
+def default_end_date():
+        return date.today() + timedelta(days=135)
+
+
 class Semester(models.Model):
     SEMESTER_CHOICES = ((1, 1), (2, 2),)
 
     number = models.PositiveIntegerField(choices=SEMESTER_CHOICES)
-    first_day = models.DateField(blank=True, null=True)
-    last_day = models.DateField(blank=True, null=True)
+    first_day = models.DateField(blank=True, null=True, default=date.today)
+    last_day = models.DateField(blank=True, null=True, default=default_end_date)
     active = models.BooleanField(default=False)
-    closed = models.BooleanField(default=False,
-                                 help_text="All student courses in this semester have been closed \
-        and final marks recorded.")
+    closed = models.BooleanField(
+        default=False,
+        help_text="All student courses in this semester have been closed and final marks recorded."
+    )
 
     objects = SemesterManager()
 
