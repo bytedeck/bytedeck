@@ -4,8 +4,8 @@ from django.test import TestCase, SimpleTestCase
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
 
+from courses.models import Semester
 from profile_manager.models import Profile, smart_list
-from quest_manager.models import Quest
 
 
 class ProfileTestModel(TestCase):
@@ -35,15 +35,13 @@ class ProfileTestModel(TestCase):
 
     def test_profile_num_hidden_quests(self):
         self.assertEqual(self.profile.num_hidden_quests(), 0)
-        # TODO add some hidden quests and test
 
     def test_profile_get_hidden_quests_as_list(self):
         self.assertEqual(self.profile.get_hidden_quests_as_list(), [])
-        # TODO add some hidden quests and test
 
     def test_profile_hidden_quests(self):
         num_to_hide = 3
-        quests_to_hide = mommy.make(Quest, _quantity=num_to_hide)
+        quests_to_hide = mommy.make('quest_manager.quest', _quantity=num_to_hide)
         hidden_quest_list = [str(q.pk) for q in quests_to_hide]
 
         self.profile.save_hidden_quests_from_list(hidden_quest_list)
@@ -53,7 +51,7 @@ class ProfileTestModel(TestCase):
         quest_hidden = quests_to_hide[0]
         self.assertTrue(self.profile.is_quest_hidden(quest_hidden))
 
-        quest_not_hidden = mommy.make(Quest)
+        quest_not_hidden = mommy.make('quest_manager.quest')
         self.assertFalse(self.profile.is_quest_hidden(quest_not_hidden))
         self.assertEqual(self.profile.get_hidden_quests_as_list(), hidden_quest_list)
 
@@ -62,6 +60,59 @@ class ProfileTestModel(TestCase):
 
         self.profile.unhide_quest(quest_hidden.id)
         self.assertFalse(self.profile.is_quest_hidden(quest_hidden))
+
+    def test_profile_current_courses(self):
+        # no current courses to start
+        self.assertFalse(self.profile.current_courses().exists())
+        sem = mommy.make('courses.semester')
+        # add one and test
+        course_registration = mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration)])
+        # add a second
+        course_registration2 = mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration), repr(course_registration2)])
+
+    def test_profile_has_current_course(self):
+        self.assertFalse(self.profile.has_current_course())
+        sem = mommy.make('courses.semester')
+        mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        self.assertTrue(self.profile.has_current_course())
+
+    def test_profile_blocks(self):
+        self.assertIsNone(self.profile.blocks())
+        sem = mommy.make(Semester)
+        mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        self.assertIsNotNone(self.profile.blocks())
+        # TODO fully test this with multiple blocks
+
+    def test_profile_teachers(self):
+        self.assertEqual(list(self.profile.teachers()), [])
+
+        sem = mommy.make(Semester)
+        course_registration = mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        # Still no teachers since no teacher assign to this course's block yet
+        self.assertEqual(list(self.profile.teachers()), [None])  # why is this a list of None instead of just empty?
+
+        self.assertTrue(self.profile.has_current_course())
+        course_registration.block = mommy.make('courses.block', current_teacher=self.teacher)
+
+        # TODO should have teachers now... why not working? Should not be None...
+        # self.assertEqual(list(self.profile.teachers()), [None])
+
+    def test_profile_current_teachers(self):
+        self.assertFalse(self.profile.current_teachers().exists())
+
+        sem = mommy.make(Semester)
+        course_registration = mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+
+        # Still no teachers since no teacher assign to this course's block yet
+        self.assertFalse(self.profile.current_teachers().exists())
+
+        course_registration.block = mommy.make('courses.block', current_teacher=self.teacher)
+
+        # print(course_registration)
+        # print(self.profile.current_teachers()) # why is this empty?!?!
+
 
 
 class SmartListTests(SimpleTestCase):

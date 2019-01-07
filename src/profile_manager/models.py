@@ -132,7 +132,7 @@ class Profile(models.Model):
             if self.alias:
                 profile += ", aka " + self.alias_clipped()
         else:
-            profile = self.user.username()
+            profile = self.user.username
         return profile
 
     class Meta:
