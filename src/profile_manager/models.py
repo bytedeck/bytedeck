@@ -132,7 +132,7 @@ class Profile(models.Model):
             if self.alias:
                 profile += ", aka " + self.alias_clipped()
         else:
-            profile = self.user.username
+            profile = self.user.username()
         return profile
 
     class Meta:
@@ -216,13 +216,13 @@ class Profile(models.Model):
     def hide_quest(self, quest_id):
         hidden_quest_list = self.get_hidden_quests_as_list()
         if str(quest_id) not in hidden_quest_list:
-            hidden_quest_list.append(quest_id)
+            hidden_quest_list.append(str(quest_id))
             self.save_hidden_quests_from_list(hidden_quest_list)
 
     def unhide_quest(self, quest_id):
         hidden_quest_list = self.get_hidden_quests_as_list()
         if str(quest_id) in hidden_quest_list:
-            hidden_quest_list.remove(quest_id)
+            hidden_quest_list.remove(str(quest_id))
             self.save_hidden_quests_from_list(hidden_quest_list)
 
     #################################
