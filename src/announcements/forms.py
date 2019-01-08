@@ -1,7 +1,8 @@
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 from django import forms
 from django.db import models
-from django_summernote.widgets import SummernoteWidget
+from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
+
 from .models import Announcement
 
 
@@ -29,22 +30,16 @@ def make_custom_datetimefield(f):
 
 
 class AnnouncementForm(forms.ModelForm):
-    formfield_callback = make_custom_datetimefield
+    # formfield_callback = make_custom_datetimefield
 
     class Meta:
         model = Announcement
         exclude = ['author']
 
-# class ProfileForm(forms.Form):
-#     class Meta:
-#         model = Profile
-#         # fields = ['name','xp']
-#         widgets = {
-#
-#         }
-#         fields = '__all__'
+        # If you don't like <iframe>, then use inplace widget
+        # Or if you're using django-crispy-forms, please use this.
+        widgets = {
+            'content': SummernoteInplaceWidget(),
+        }
 
-# class ProfileUpdateForm(forms.ModelForm):
-#     class Meta:
-#         model = Profile
-#         fields = '__all__'
+

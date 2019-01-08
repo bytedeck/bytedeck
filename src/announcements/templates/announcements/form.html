@@ -3,16 +3,24 @@
 {% load staticfiles %}
 
 {% block head %}
-  <!-- need these loaded first for date-time picker widgets to work I think -->
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-  <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
-  {{ form.media }}
+    <!-- need these loaded first for date-time picker and summernote widgets to work -->
+    <script
+			  src="https://code.jquery.com/jquery-2.2.4.min.js"
+			  integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
+			  crossorigin="anonymous">
+    </script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+            integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+            crossorigin="anonymous">
+    </script>
+    <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
+    {{ form.media }}
 {% endblock %}
 
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
-<form action="{{ action_value }}" method="post">{% csrf_token %}
+<form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
   <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
   {{ form|crispy }}
@@ -20,3 +28,8 @@
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
 {% endblock %}
+
+{% block js %}
+
+{% endblock %}
+
