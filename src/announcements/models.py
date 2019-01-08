@@ -47,6 +47,7 @@ class AnnouncementManager(models.Manager):
 
 class Announcement(models.Model):
     title = models.CharField(max_length=80)
+    datetime_released = models.DateTimeField(default=timezone.now)
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
@@ -54,7 +55,6 @@ class Announcement(models.Model):
     sticky_until = models.DateTimeField(null=True, blank=True, help_text='blank = sticky never expires')
     icon = models.ImageField(upload_to='announcement_icons/', null=True, blank=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
-    datetime_released = models.DateTimeField(default=timezone.now)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text='blank = never')
     draft = models.BooleanField(default=True,
                                 help_text="note that announcements previously saved as drafts will only send out a  \
