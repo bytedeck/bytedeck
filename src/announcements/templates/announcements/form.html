@@ -4,12 +4,7 @@
 
 {% block head %}
     <!-- need these loaded first for date-time picker and summernote widgets to work -->
-
-    <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
-
-    <!-- form.media -->
     {{ form.media }}
 {% endblock %}
 

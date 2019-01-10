@@ -286,24 +286,11 @@ SUMMERNOTE_CONFIG = {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
         # },
 
-        # ['style', ['style']],
-        #     ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-        #               'strikethrough', 'add-text-tags', 'clear']],
-        # ['fontname', ['fontname']],
-        # ['fontsize', ['fontsize']],
-        # ['color', ['color']],
-        # ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
-        # ['height', ['height']],
-        # ['table', ['table']],
-        # ['insert',
-        #  ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']],  # , 'nugget']],
-        # ['view', ['codeview']],
-        # ['help', ['help']],
-
     },
 
     # Need authentication while uploading attachments.
-    # 'attachment_require_authentication': True,
+    'attachment_require_authentication': True,
+    'attachment_filesize_limit': 4096 * 4096,
 
     # Set `upload_to` function for attachments.
     # 'attachment_upload_to': my_custom_upload_to_func(),
@@ -332,7 +319,6 @@ SUMMERNOTE_CONFIG = {
     ),
     'js_for_inplace': (
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        # # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
@@ -340,7 +326,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
     ),
 
@@ -404,132 +390,4 @@ SUMMERNOTE_CONFIG = {
     # and call `initSummernote()` on your page.
     # 'lazy': True,
 
-}
-
-SUMMERNOTE_CONFIG_OLD = {
-    # Using SummernoteWidget - iframe mode
-    'iframe': True,  # or set False to use SummernoteInplaceWidget - no iframe mode
-    # need iframe for embedding youtube
-
-    # Using Summernote Air-mode
-    'airMode': False,
-
-    # Use native HTML tags (`<b>`, `<i>`, ...) instead of style attributes
-    # (Firefox, Chrome only)
-    # 'styleWithTags': True,
-
-    # Set text direction : 'left to right' is default.
-    'direction': 'ltr',
-
-    # Change editor size
-    'width': '100%',
-    'height': '460',
-
-    # Use proper language setting automatically (default)
-    'lang': None,
-
-    # Or, set editor language/locale forcely
-    # 'lang': 'ko-KR',
-
-    # Customize toolbar buttons
-    'toolbar': [
-        ['style', ['style']],
-        ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                  'strikethrough', 'add-text-tags', 'clear']],
-        ['fontname', ['fontname']],
-        ['fontsize', ['fontsize']],
-        ['color', ['color']],
-        ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
-        ['height', ['height']],
-        ['table', ['table']],
-        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']],  # , 'nugget']],
-        ['view', ['codeview']],
-        ['help', ['help']],
-    ],
-
-    'popover': {
-        'image': [
-            ['custom', ['imageShapes']],
-            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
-            ['float', ['floatLeft', 'floatRight', 'floatNone']],
-            ['remove', ['removeMedia']]
-        ],
-        'link': [
-            ['link', ['linkDialogShow', 'unlink']]
-        ],
-        'table': [
-            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeaders', 'tableStyles']]
-        ],
-    },
-
-    # Need authentication while uploading attachments.
-    'attachment_require_authentication': True,
-
-    'attachment_filesize_limit': 4096 * 4096,
-
-    # Set `upload_to` function for attachments.
-    # 'attachment_upload_to': my_custom_upload_to_func(),
-
-    # Set custom storage class for attachments.
-    # 'attachment_storage_class': 'my.custom.storage.class.name',
-
-    # Set custom model for attachments (default: 'django_summernote.Attachment')
-    # 'attachment_model': 'my.custom.attachment.model',
-    # must inherit 'django_summernote.AbstractAttachment'
-
-    #
-    # You can add custom css/js for SummernoteWidget.
-    'css': (
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.css',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/theme/monokai.css',
-        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-        os.path.join(STATIC_URL, 'css/custom_common.css'),
-        os.path.join(STATIC_URL, 'css/custom.css'),
-        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
-        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
-    ),
-    'js': (
-        # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
-        # os.path.join(STATIC_URL, 'codemirror/mode/javascript/javascript.js'),
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.js',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
-        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
-        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
-        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
-        os.path.join(STATIC_URL, 'js/summernote-math.js'),
-    ),
-
-    # And also for SummernoteInplaceWidget.
-    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    # 'css_for_inplace': (
-    # ),
-    # 'js_for_inplace': (
-    # ),
-
-    # You can disable file upload feature.
-    # 'disable_upload': False,
-
-    # # Codemirror as codeview
-    # # http://summernote.org/examples/#codemirror-as-codeview
-    # 'codemirror': {
-    #     'mode': 'htmlmixed',
-    #     'lineNumbers': 'true',
-    #     'theme': 'monokai',
-    #     'lineWrapping': 'true'
-    # },
 }
