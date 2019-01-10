@@ -273,10 +273,10 @@ SUMMERNOTE_CONFIG = {
             ['fontname', ['fontname']],
             ['fontsize', ['fontsize']],
             ['color', ['color']],
-            ['para', ['ul', 'ol', 'paragraph']],
+            ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
             # ['height', ['height']],
             ['table', ['table']],
-            ['insert', ['link', 'picture', 'hr']],  # , 'nugget']],
+            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math',]],  # , 'nugget']],
             ['view', ['codeview']],
             ['help', ['help']],
         ],
@@ -285,6 +285,20 @@ SUMMERNOTE_CONFIG = {
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
         # },
+
+        # ['style', ['style']],
+        #     ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
+        #               'strikethrough', 'add-text-tags', 'clear']],
+        # ['fontname', ['fontname']],
+        # ['fontsize', ['fontsize']],
+        # ['color', ['color']],
+        # ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
+        # ['height', ['height']],
+        # ['table', ['table']],
+        # ['insert',
+        #  ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']],  # , 'nugget']],
+        # ['view', ['codeview']],
+        # ['help', ['help']],
 
     },
 
@@ -309,42 +323,72 @@ SUMMERNOTE_CONFIG = {
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
     'css_for_inplace': (
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js_for_inplace': (
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+        # # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'js/summernote-math.js'),
     ),
 
     # Codemirror as codeview
     # If any codemirror settings are defined, it will include codemirror files automatically.
     'css': (
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-        # os.path.join(STATIC_URL, 'css/custom_common.css'),
-        # os.path.join(STATIC_URL, 'css/custom.css'),
+        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        os.path.join(STATIC_URL, 'css/custom_common.css'),
+        os.path.join(STATIC_URL, 'css/custom.css'),
         # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        # os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
-        # os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
 
     # To use external plugins,
     # Include them within `css` and `js`.
-    'js': {
-    #     # os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-    #     # # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
-    #     # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
-    #     # os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-            os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
-    #     # os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
-    #     # os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
-    #     # os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-    #     # os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-    #     # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
-    #     # os.path.join(STATIC_URL, 'js/summernote-math.js'),
+    'js': (
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'js/summernote-math.js'),
+    ),
+
+    'popover': {
+        'image': [
+            ['custom', ['imageShapes']],
+            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
+            ['float', ['floatLeft', 'floatRight', 'floatNone']],
+            ['remove', ['removeMedia']]
+        ],
+        'link': [
+            ['link', ['linkDialogShow', 'unlink']]
+        ],
+        'table': [
+            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
+            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
+            ['custom', ['tableHeaders', 'tableStyles']]
+        ],
     },
 
     'codemirror': {
