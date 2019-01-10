@@ -107,7 +107,7 @@ INSTALLED_APPS = (
 )
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
-#SITE_ID = 1
+# SITE_ID = 1
 MIDDLEWARE = []
 
 MIDDLEWARE += [
@@ -206,7 +206,8 @@ SOCIALACCOUNT_PROVIDERS = \
           'METHOD': 'oauth2',
           # 'LOCALE_FUNC': 'path.to.callable',
           'VERIFIED_EMAIL': False,
-          'VERSION': 'v2.3'}}
+          'VERSION': 'v2.3'}
+     }
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
@@ -239,7 +240,6 @@ ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 # Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 
-
 #################################
 #
 # SUMMERNOTE WYSIWYG EDITOR
@@ -249,12 +249,12 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode, default
-    # 'iframe': True,
+    'iframe': True,
 
     # Or, you can set it as False to use SummernoteInplaceWidget by default - no iframe mode
     # In this case, you have to load Bootstrap/jQuery stuff by manually.
     # Use this when you're already using Bootstraip/jQuery based themes.
-    'iframe': False,
+    # 'iframe': False,
 
     # You can put custom Summernote settings
     'summernote': {
@@ -269,12 +269,12 @@ SUMMERNOTE_CONFIG = {
         'toolbar': [
             ['style', ['style']],
             ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                      'strikethrough', 'clear']],
+                      'strikethrough', 'add-text-tags', 'clear']],
             ['fontname', ['fontname']],
             ['fontsize', ['fontsize']],
             ['color', ['color']],
             ['para', ['ul', 'ol', 'paragraph']],
-            ['height', ['height']],
+            # ['height', ['height']],
             ['table', ['table']],
             ['insert', ['link', 'picture', 'hr']],  # , 'nugget']],
             ['view', ['codeview']],
@@ -301,36 +301,51 @@ SUMMERNOTE_CONFIG = {
     # 'attachment_model': 'my.custom.attachment.model',  # must inherit 'django_summernote.AbstractAttachment'
 
     # You can disable attachment feature.
-    # 'disable_attachment': False,
-
-    # You can add custom css/js for SummernoteWidget.
-    # 'css': (
-    # ),
-    # 'js': (
-    # ),
+    # Currently only works for images anyway.  Turn on when it works with other files
+    # Images can still be embedded with the image tool
+    'disable_attachment': True,
 
     # You can also add custom css/js for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    # 'css_for_inplace': (
-    # ),
-    # 'js_for_inplace': (
-    # ),
+    'css_for_inplace': (
+        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+    ),
+    'js_for_inplace': (
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+    ),
 
     # Codemirror as codeview
     # If any codemirror settings are defined, it will include codemirror files automatically.
-    'css': {
+    'css': (
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        # os.path.join(STATIC_URL, 'css/custom_common.css'),
+        # os.path.join(STATIC_URL, 'css/custom.css'),
+        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        # os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         # os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-    },
+        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+    ),
 
     # To use external plugins,
     # Include them within `css` and `js`.
     'js': {
-        # os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-        # os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-        # os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+    #     # os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+    #     # # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
+    #     # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+    #     # os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
+            os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+    #     # os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+    #     # os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+    #     # os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+    #     # os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+    #     # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+    #     # os.path.join(STATIC_URL, 'js/summernote-math.js'),
     },
-
 
     'codemirror': {
         'mode': 'htmlmixed',
@@ -346,7 +361,6 @@ SUMMERNOTE_CONFIG = {
     # 'lazy': True,
 
 }
-
 
 SUMMERNOTE_CONFIG_OLD = {
     # Using SummernoteWidget - iframe mode
@@ -384,7 +398,7 @@ SUMMERNOTE_CONFIG_OLD = {
         ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
         ['height', ['height']],
         ['table', ['table']],
-        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']], #, 'nugget']],
+        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']],  # , 'nugget']],
         ['view', ['codeview']],
         ['help', ['help']],
     ],
@@ -475,5 +489,3 @@ SUMMERNOTE_CONFIG_OLD = {
     #     'lineWrapping': 'true'
     # },
 }
-
-
