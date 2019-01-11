@@ -1,14 +1,13 @@
-from django.shortcuts import get_object_or_404
-from django.urls import reverse
-
-from prerequisites.models import Prereq, IsAPrereqMixin
-
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Max, Sum
+from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
+from django.urls import reverse
 from djconfig import config
+
+from prerequisites.models import Prereq, IsAPrereqMixin
 
 
 # from courses.models import Semester
@@ -297,11 +296,16 @@ def post_save_receiver(sender, **kwargs):
     if kwargs["created"]:
         # need an issuing object, fix this better, should be generic something "Hackerspace or "Automatic".
         sender = assertion.issued_by
-        if sender == None:
+        if sender is None:
             sender = User.objects.filter(is_staff=True).first()
 
+        fa_icon = assertion.badge.badge_type.fa_icon
+
+        if not fa_icon:
+            fa_icon = "fa-certificate"
+
         icon = "<i class='text-warning fa fa-lg fa-fw "
-        icon += assertion.badge.badge_type.fa_icon
+        icon += fa_icon
         icon += "'></i>"
 
         notify.send(

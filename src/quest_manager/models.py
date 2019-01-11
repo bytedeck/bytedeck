@@ -267,8 +267,8 @@ class Quest(XPItem, IsAPrereqMixin):
                                                 on_delete = models.SET_NULL)
     campaign = models.ForeignKey(Category, blank=True, null=True, on_delete=models.SET_NULL)
     common_data = models.ForeignKey(CommonData, blank=True, null=True, on_delete=models.SET_NULL)
-    instructions = models.TextField(blank=True)
-    submission_details = models.TextField(blank=True)
+    instructions = models.TextField(blank=True, verbose_name='Quest Details')
+    submission_details = models.TextField(blank=True, verbose_name='Submission Instructions')
     instructor_notes = models.TextField(blank=True, null=True,
                                         help_text="This field is only visible to Staff. \
                                         Use it to place answer keys or other notes.")

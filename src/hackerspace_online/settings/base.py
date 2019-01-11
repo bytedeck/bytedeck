@@ -107,7 +107,7 @@ INSTALLED_APPS = (
 )
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
-#SITE_ID = 1
+# SITE_ID = 1
 MIDDLEWARE = []
 
 MIDDLEWARE += [
@@ -206,7 +206,8 @@ SOCIALACCOUNT_PROVIDERS = \
           'METHOD': 'oauth2',
           # 'LOCALE_FUNC': 'path.to.callable',
           'VERIFIED_EMAIL': False,
-          'VERSION': 'v2.3'}}
+          'VERSION': 'v2.3'}
+     }
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
@@ -238,52 +239,6 @@ ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 # Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
-# The URL (or URL name) to return to after the user logs out. This is the counterpart to Django’s LOGIN_REDIRECT_URL.
-# ACCOUNT_SIGNUP_FORM_CLASS #(=None)
-# A string pointing to a custom form class (e.g. ‘myapp.forms.SignupForm’) that is used during signup to ask the user for additional input (e.g. newsletter signup, birth date). This class should implement a def signup(self, request, user) method, where user represents the newly signed up user.
-# ACCOUNT_SIGNUP_PASSWORD_VERIFICATION #(=True)
-# When signing up, let the user type in their password twice to avoid typo’s.
-# ACCOUNT_UNIQUE_EMAIL #(=True)
-# Enforce uniqueness of e-mail addresses.
-# ACCOUNT_USER_MODEL_USERNAME_FIELD #(=”username”)
-# The name of the field containing the username, if any. See custom user models.
-# ACCOUNT_USER_MODEL_EMAIL_FIELD #(=”email”)
-# The name of the field containing the email, if any. See custom user models.
-# ACCOUNT_USER_DISPLAY #(=a callable returning user.get_username())
-# A callable (or string of the form ‘some.module.callable_name’) that takes a user as its only argument and returns the display name of the user. The default implementation returns user.get_username().
-# ACCOUNT_USERNAME_MIN_LENGTH #(=4)
-# An integer specifying the minimum allowed length of a username.
-# ACCOUNT_USERNAME_BLACKLIST #(=[])
-# A list of usernames that can’t be used by user.
-# ACCOUNT_USERNAME_REQUIRED #(=True)
-# The user is required to enter a username when signing up. Note that the user will be asked to do so even if ACCOUNT_AUTHENTICATION_METHOD is set to email. Set to False when you do not wish to prompt the user to enter a username.
-# ACCOUNT_PASSWORD_INPUT_RENDER_VALUE #(=False)
-# render_value parameter as passed to PasswordInput fields.
-# ACCOUNT_PASSWORD_MIN_LENGTH = 6 #(=1)
-# An integer specifying the minimum password length.
-# ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION #(=True)
-# The default behaviour is to automatically log users in once they confirm their email address. Note however that this only works when confirming the email address immediately after signing up, assuming users didn’t close their browser or used some sort of private browsing mode.
-# By changing this setting to False they will not be logged in, but redirected to the ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL
-# ACCOUNT_SESSION_REMEMBER #(=None)
-# Controls the life time of the session. Set to None to ask the user (“Remember me?”), False to not remember, and True to always remember.
-# ACCOUNT_SESSION_COOKIE_AGE #(=1814400)
-# How long before the session cookie expires in seconds. Defaults to 1814400 seconds, or 3 weeks.
-# SOCIALACCOUNT_ADAPTER #(=”allauth.socialaccount.adapter.DefaultSocialAccountAdapter”)
-# Specifies the adapter class to use, allowing you to alter certain default behaviour.
-# SOCIALACCOUNT_QUERY_EMAIL #(=ACCOUNT_EMAIL_REQUIRED)
-# Request e-mail address from 3rd party account provider? E.g. using OpenID AX, or the Facebook “email” permission.
-# SOCIALACCOUNT_AUTO_SIGNUP #(=True)
-# Attempt to bypass the signup form by using fields (e.g. username, email) retrieved from the social account provider. If a conflict arises due to a duplicate e-mail address the signup form will still kick in.
-# SOCIALACCOUNT_EMAIL_REQUIRED #(=ACCOUNT_EMAIL_REQUIRED)
-# The user is required to hand over an e-mail address when signing up using a social account.
-# SOCIALACCOUNT_EMAIL_VERIFICATION #(=ACCOUNT_EMAIL_VERIFICATION)
-# As ACCOUNT_EMAIL_VERIFICATION, but for social accounts.
-# SOCIALACCOUNT_FORMS #(={})
-# Used to override forms, for example: {‘signup’: ‘myapp.forms.SignupForm’}
-# SOCIALACCOUNT_PROVIDERS #(= dict)
-# Dictionary containing provider specific settings.
-# SOCIALACCOUNT_STORE_TOKENS #(=True)
-# Indicates whether or not the access tokens are stored in the database.
 
 #################################
 #
@@ -293,45 +248,117 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 #################################
 
 SUMMERNOTE_CONFIG = {
-    # Using SummernoteWidget - iframe mode
-    'iframe': True,  # or set False to use SummernoteInplaceWidget - no iframe mode
-    # need iframe for embedding youtube
+    # Using SummernoteWidget - iframe mode, default
+    'iframe': True,
 
-    # Using Summernote Air-mode
-    'airMode': False,
+    # Or, you can set it as False to use SummernoteInplaceWidget by default - no iframe mode
+    # In this case, you have to load Bootstrap/jQuery stuff by manually.
+    # Use this when you're already using Bootstraip/jQuery based themes.
+    # 'iframe': False,
 
-    # Use native HTML tags (`<b>`, `<i>`, ...) instead of style attributes
-    # (Firefox, Chrome only)
-    # 'styleWithTags': True,
+    # You can put custom Summernote settings
+    'summernote': {
+        # As an example, using Summernote Air-mode
+        'airMode': False,
 
-    # Set text direction : 'left to right' is default.
-    'direction': 'ltr',
+        # Change editor size
+        'width': '100%',
+        'height': '480',
 
-    # Change editor size
-    'width': '100%',
-    'height': '460',
+        # Customize toolbar buttons
+        'toolbar': [
+            ['style', ['style']],
+            ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
+                      'strikethrough', 'add-text-tags', 'clear']],
+            ['fontname', ['fontname']],
+            ['fontsize', ['fontsize']],
+            ['color', ['color']],
+            ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
+            # ['height', ['height']],
+            ['table', ['table']],
+            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math',]],  # , 'nugget']],
+            ['view', ['codeview']],
+            ['help', ['help']],
+        ],
 
-    # Use proper language setting automatically (default)
-    'lang': None,
+        # You can also add custom settings for external plugins
+        # 'print': {
+        #     'stylesheetUrl': '/some_static_folder/printable.css',
+        # },
 
-    # Or, set editor language/locale forcely
-    # 'lang': 'ko-KR',
+    },
 
-    # Customize toolbar buttons
-    'toolbar': [
-        ['style', ['style']],
-        ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                  'strikethrough', 'add-text-tags', 'clear']],
-        ['fontname', ['fontname']],
-        ['fontsize', ['fontsize']],
-        ['color', ['color']],
-        ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
-        ['height', ['height']],
-        ['table', ['table']],
-        ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'emoji', 'math']], #, 'nugget']],
-        ['view', ['codeview']],
-        ['help', ['help']],
-    ],
+    # Need authentication while uploading attachments.
+    'attachment_require_authentication': True,
+    'attachment_filesize_limit': 4096 * 4096,
+
+    # Set `upload_to` function for attachments.
+    # 'attachment_upload_to': my_custom_upload_to_func(),
+
+    # Set custom storage class for attachments.
+    # 'attachment_storage_class': 'my.custom.storage.class.name',
+
+    # Set custom model for attachments (default: 'django_summernote.Attachment')
+    # 'attachment_model': 'my.custom.attachment.model',  # must inherit 'django_summernote.AbstractAttachment'
+
+    # You can disable attachment feature.
+    # Currently only works for images anyway.  Turn on when it works with other files
+    # Images can still be embedded with the image tool
+    'disable_attachment': True,
+
+    # You can also add custom css/js for SummernoteInplaceWidget.
+    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
+    'css_for_inplace': (
+        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+    ),
+    'js_for_inplace': (
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
+        os.path.join(STATIC_URL, 'js/summernote-math.js'),
+    ),
+
+    # Codemirror as codeview
+    # If any codemirror settings are defined, it will include codemirror files automatically.
+    'css': (
+        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
+        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        os.path.join(STATIC_URL, 'css/custom_common.css'),
+        os.path.join(STATIC_URL, 'css/custom.css'),
+        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+    ),
+
+    # To use external plugins,
+    # Include them within `css` and `js`.
+    'js': (
+        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
+        # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
+        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
+        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
+        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
+        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
+        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
+        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'js/summernote-math.js'),
+    ),
 
     'popover': {
         'image': [
@@ -350,94 +377,17 @@ SUMMERNOTE_CONFIG = {
         ],
     },
 
-    # Need authentication while uploading attachments.
-    'attachment_require_authentication': True,
-
-    'attachment_filesize_limit': 4096 * 4096,
-
-    # Set `upload_to` function for attachments.
-    # 'attachment_upload_to': my_custom_upload_to_func(),
-
-    # Set custom storage class for attachments.
-    # 'attachment_storage_class': 'my.custom.storage.class.name',
-
-    # Set custom model for attachments (default: 'django_summernote.Attachment')
-    # 'attachment_model': 'my.custom.attachment.model',
-    # must inherit 'django_summernote.AbstractAttachment'
-
-    # Set common css/js media files
-    # 'external_css': (
-    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.css',
-    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/theme/monokai.css',
-    # ),
-    # 'external_js': (
-    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.js',
-    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
-    #     '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
-    # ),
-    # 'internal_css': (
-    #     # os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
-    #     # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-    # ),
-    # 'internal_js': (
-    #     os.path.join(STATIC_URL, 'django_summernote/jquery.ui.widget.js'),
-    #     os.path.join(STATIC_URL, 'django_summernote/jquery.iframe-transport.js'),
-    #     os.path.join(STATIC_URL, 'django_summernote/jquery.fileupload.js'),
-    #     os.path.join(STATIC_URL, 'django_summernote/summernote.min.js'),
-    # ),
-    #
-    # You can add custom css/js for SummernoteWidget.
-    'css': (
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.css',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/theme/monokai.css',
-        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
-        os.path.join(STATIC_URL, 'css/custom_common.css'),
-        os.path.join(STATIC_URL, 'css/custom.css'),
-        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
-        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
-    ),
-    'js': (
-        # os.path.join(STATIC_URL, 'codemirror/lib/codemirror.js'),
-        # os.path.join(STATIC_URL, 'codemirror/mode/javascript/javascript.js'),
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/codemirror.js',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/3.20.0/mode/xml/xml.js',
-        # '//cdnjs.cloudflare.com/ajax/libs/codemirror/2.36.0/formatting.js',
-        os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
-        # os.path.join(STATIC_URL, 'js/summernote-ext-nugget.js'),
-        os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
-        os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
-        os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.js'),
-        os.path.join(STATIC_URL, 'js/summernote-image-shapes.js'),
-        os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
-        os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
-        os.path.join(STATIC_URL, 'js/summernote-math.js'),
-    ),
-
-    # And also for SummernoteInplaceWidget.
-    # !!! Be sure to put {{ form.media }} in template before initiate summernote.
-    # 'css_for_inplace': (
-    # ),
-    # 'js_for_inplace': (
-    # ),
-
-    # You can disable file upload feature.
-    # 'disable_upload': False,
-
-    # Codemirror as codeview
-    # http://summernote.org/examples/#codemirror-as-codeview
     'codemirror': {
         'mode': 'htmlmixed',
         'lineNumbers': 'true',
+
+        # You have to include theme file in 'css' or 'css_for_inplace' before using it.
         'theme': 'monokai',
-        'lineWrapping': 'true'
     },
+
+    # Lazy initialize
+    # If you want to initialize summernote at the bottom of page, set this as True
+    # and call `initSummernote()` on your page.
+    # 'lazy': True,
+
 }
-
-

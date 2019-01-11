@@ -1,5 +1,4 @@
 {% load staticfiles %}
-
 <!DOCTYPE html>
 
 <html lang="en">
@@ -13,24 +12,40 @@
     <link rel="icon" href="{% static 'icon/favicon.ico' %}">
 
     <title>{% block head_title%}{% endblock%} {{ config.hs_site_name }}</title>
-
     {% include 'head_css.html' %}
+
+    <!-- Added at the top because too many components can't handle lazy loading of Jquery and BS at the bottom.. -->
+    <!-- Summernote and date-time picker for sure, probably others too -->
+    <script
+        src="https://code.jquery.com/jquery-2.2.4.min.js"
+        integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
+        crossorigin="anonymous"></script>
+
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+        integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+        crossorigin="anonymous"></script>
+
+    <!-- ** head block ** -->
     {% block head %}{% endblock %}
+    <!-- ** end head block ** -->
 
+    <!-- ** head_css block ** -->
     <style>{% block head_css %}{% endblock %}</style>
-    {% if request.user.profile.custom_stylesheet %}
-      <link rel="stylesheet" href="{{ request.user.profile.custom_stylesheet.url }}">
-    {% endif %}
+    <!-- ** end head_css block ** -->
 
+    {% if request.user.profile.custom_stylesheet %}<!-- User custom stylesheet -->
+    <link rel="stylesheet" href="{{ request.user.profile.custom_stylesheet.url }}">
+    {% endif %}
 </head>
 
 <body>
 <div id='popover-fake-orphan-anchor'></div>
 
+<!-- ** content_first block ** -->
 {% block content_first %}{% endblock %}
+<!-- ** end  content_first block ** -->
 {% include 'navbar-fixed.html' %}
 <div class="container-fluid" id="main-container">
-
     {% if messages %}
     {% for message in messages %}
     {% if 'error' in message.tags %}
@@ -60,7 +75,9 @@
     {% endif %}
 
     {% if not config.hs_closed or request.user.is_staff %}
-      {% block content_outer %}{% endblock %}
+        <!-- ** content_outer block ** -->
+        {% block content_outer %}{% endblock %}
+        <!-- ** end content_outer block ** -->
     {% else %}
     <img class="img-responsive jumbo-banner banner1"
          src="{% static 'img/banner_closed.jpg' %}"
@@ -68,13 +85,18 @@
     {% endif %}
 </div> <!-- /container -->
 
+<!-- ** content_last block ** -->
 {% block content_last %}{% endblock %}
+<!-- ** end content_last block ** -->
 
 {% include 'footer.html' %}
 
 {% include 'javascript.html' %}
-{% block js %}{% endblock %}
-{#{% block tour_js %}{% endblock %}#}
 
+<!-- ** js block ** -->
+{% block js %}{% endblock %}
+<!-- ** end js block ** -->
+
+{#{% block tour_js %}{% endblock %}#}
 </body>
 </html>

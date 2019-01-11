@@ -1,29 +1,16 @@
 {% load staticfiles %}
 <!-- ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
-<script
-			  src="https://code.jquery.com/jquery-2.2.4.min.js"
-			  integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
-			  crossorigin="anonymous"></script>
-<script
-			  src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
-			  integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
-			  crossorigin="anonymous"></script>
-
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
-        integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
-        crossorigin="anonymous"></script>
+{#<script#}
+{#    src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"#}
+{#    integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="#}
+{#    crossorigin="anonymous"></script>#}
 
 <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
 <script src="{% static 'js/ie10-viewport-bug-workaround.js' %}"></script>
 
-<!--https://github.com/chjj/marked-->
-{#<script src="{% static 'js/marked.min.js' %}"></script>#}
-
-
 <!-- KaTeX -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js"></script>
-
 
 <!-- ========================================================== -->
 <!-- Custom js -->
@@ -42,12 +29,7 @@
             function(){ $(this).removeClass('open') }
         );
     });
-</script>
 
-
-{#<script src="{% static 'js/featherlight.js' %}"></script>#}
-
-<script>
     var timeout = 30000; //milliseconds
 
     // this method contain your ajax request
@@ -171,6 +153,5 @@
     		$("div.pack").pack();  // need images loaded before packing
         //$('img.pop').featherlight($(this));
 	  });
-
 
 </script>
