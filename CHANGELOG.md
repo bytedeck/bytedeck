@@ -3,6 +3,9 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.13.3] 2019-01-11
+* [bugfix] fix summernote widgets
+
 ### [0.13.0]
 * [teachers] grant multiple awards at once in full-reply
 * [teachers] display XP value of awards when selecting them
