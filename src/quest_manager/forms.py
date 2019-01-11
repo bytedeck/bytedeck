@@ -5,40 +5,12 @@ from badges.models import Badge
 from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
 from django import forms
 from django.db import models
-from django_summernote.widgets import SummernoteWidget
+from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 from .formatChecker import MultiFileField
 from .models import Quest
 
 
-def make_custom_datetimefield(f):
-    formfield = f.formfield()
-    date_time_options = {
-        'showMeridian': False,
-        # 'todayBtn': True,
-        'todayHighlight': True,
-        'minuteStep': 5,
-        'pickerPosition': 'bottom-left',
-    }
-
-    if isinstance(f, models.DateTimeField):
-        formfield.widget = DateTimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
-    elif isinstance(f, models.DateField):
-        formfield.widget = DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
-        # formfield.widget = SelectDateWidget()
-    elif isinstance(f, models.TimeField):
-        formfield.widget = TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3)
-    elif isinstance(f, models.TextField):
-        formfield.widget = SummernoteWidget()
-    return formfield
-
-
-# Demo of how to create a form without using a model
-# class QuestFormCustom(forms.Form):
-#     quest = forms.CharField()  # default is required = True
-#     xp = forms.IntegerField()
-
 class QuestForm(forms.ModelForm):
-    formfield_callback = make_custom_datetimefield
 
     class Meta:
         model = Quest
@@ -49,6 +21,25 @@ class QuestForm(forms.ModelForm):
                   'specific_teacher_to_notify',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
+
+        date_time_options = {
+            'showMeridian': False,
+            # 'todayBtn': True,
+            'todayHighlight': True,
+            'minuteStep': 5,
+            'pickerPosition': 'bottom-left',
+        }
+
+        widgets = {
+            'instructions': SummernoteInplaceWidget(),
+            'submission_details': SummernoteInplaceWidget(),
+            'instructor_notes': SummernoteInplaceWidget(),
+            'date_available': DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
+
+            'time_available': TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
+            'date_expired': DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
+            'time_expired': TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
+        }
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
@@ -72,7 +63,7 @@ class QuestForm(forms.ModelForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=SummernoteWidget())
+    comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
     # docfile = forms.FileField(label='Add a file to your submission',
     #                                     required=False)
     # docfile = RestrictedFileField(label='Add a file to your submission (16MB limit)',
