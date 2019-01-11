@@ -3,13 +3,7 @@
 
 {% block head_title %}Quests | {% endblock %}
 {% block head_css %}{% endblock %}
-{% block head %}
-  <!-- need these loaded first for date-time picker widgets to work I think -->
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-  <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
-  {{ form.media.css }}
-    
-{% endblock %}
+{% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-shield pull-right"></i>{% block heading_inner %}{% endblock%}{% endblock %}
