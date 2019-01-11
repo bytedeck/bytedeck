@@ -16,7 +16,7 @@ django-grappelli==2.10.1
 django-jchart==0.4.2
 django-postgrespool==0.3.1
 django-select2==6.3.1
-django-summernote==0.8.11.4
+django-summernote==0.8.8.6
 django-url-or-relative-url-field==0.1.1
 idna==2.5
 model-mommy==1.6.0
