@@ -233,3 +233,47 @@ a.list-group-item-muted {
 .nav-tabs > li > a {
   border-color: #111;
 }
+
+
+/********* FORM STUFF **************/
+.form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control {
+    background-color: #3e444c;
+}
+
+
+/************** SUMMERNOTE ******************/
+/* TODO !important because summernote css is declared after this file... should fix that. */
+
+
+.note-editor.note-frame .note-editing-area .note-editable {
+    color: #c8c8c8 !important;;
+    background-color: #2e3338 !important;;
+}
+
+.note-editor.note-frame {
+    border-color: rgba(0,0,0,0.6) !important;;
+}
+
+.note-editor.note-frame .note-statusbar {
+    background-color: #3e444c !important;;
+}
+
+.note-icon-font {
+    background-color: #cc0000 !important;
+    color: #c8c8c8 !important;
+}
+
+.note-color-reset {
+	background-image: -webkit-linear-gradient(#484e55, #3a3f44 60%, #313539);
+	background-image: -o-linear-gradient(#484e55, #3a3f44 60%, #313539);
+	background-image: -webkit-gradient(linear, left top, left bottom, from(#484e55), color-stop(60%, #3a3f44), to(#313539));
+	background-image: linear-gradient(#484e55, #3a3f44 60%, #313539);
+}
+
+.note-color-reset:hover {
+	background-color: #0c0d0e !important;
+}
+
+.note-color-palette div .note-color-btn {
+    border-color: #272b30; !important;
+}

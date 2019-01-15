@@ -380,7 +380,7 @@ SUMMERNOTE_CONFIG = {
     'codemirror': {
         'mode': 'htmlmixed',
         'lineNumbers': 'true',
-
+        'lineWrapping': 'true',
         # You have to include theme file in 'css' or 'css_for_inplace' before using it.
         'theme': 'monokai',
     },
