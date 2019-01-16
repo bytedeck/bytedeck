@@ -248,7 +248,7 @@
           {% for assertion in assertions %}
             {% with duplicates=assertion.get_duplicate_assertions %}
             <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-            data-trigger="hover focus" data-placement="left" data-html="true"
+            data-trigger="hover focus" data-placement="auto left" data-html="true"
             title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
             data-content='
             <img class="icon-xl center-block img-rounded" src="{{assertion.badge.get_icon_url}}">

@@ -24,7 +24,7 @@
           {% if request.user.is_staff or badge.active %}
               <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
                 <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-                    data-trigger="focus" data-placement="left" data-html="true"
+                    data-trigger="focus" data-placement="auto left" data-html="true"
                     title="<h3 class='panel-title'>{{badge.name}}</h3>"
                     data-content='
                     {% if not badge.active %}
