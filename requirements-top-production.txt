@@ -1,5 +1,5 @@
 beautifulsoup4==4.6.0
-Django==2.0.9
+Django==2.0.10
 django-allauth==0.32.0
 django-crispy-forms==1.7.2
 django-datetime-widget==0.9.3 # Requires `pip install setuptool` first?
