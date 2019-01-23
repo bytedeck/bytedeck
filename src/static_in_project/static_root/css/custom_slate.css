@@ -240,9 +240,10 @@ a.list-group-item-muted {
     background-color: #3e444c;
 }
 
-.multifileinput {
+.multifileinput, .clearablefileinput {
     color: #c8c8c8;
 }
+
 
 
 /************** SUMMERNOTE ******************/

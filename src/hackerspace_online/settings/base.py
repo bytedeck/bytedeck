@@ -337,7 +337,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
         os.path.join(STATIC_URL, 'css/custom_common.css'),
         os.path.join(STATIC_URL, 'css/custom.css'),
-        # os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
+        os.path.join(STATIC_URL, 'css/custom_summernote_iframe.css'),
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.css'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
