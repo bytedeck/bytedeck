@@ -240,6 +240,10 @@ a.list-group-item-muted {
     background-color: #3e444c;
 }
 
+.multifileinput {
+    color: #c8c8c8;
+}
+
 
 /************** SUMMERNOTE ******************/
 /* TODO !important because summernote css is declared after this file... should fix that. */
@@ -277,3 +281,4 @@ a.list-group-item-muted {
 .note-color-palette div .note-color-btn {
     border-color: #272b30; !important;
 }
+
