@@ -49,11 +49,15 @@
     {% if messages %}
     {% for message in messages %}
     {% if 'error' in message.tags %}
-    <audio src="{% static 'sounds/error_small.mp3' %}" autoplay prelaod='auto'></audio>
+        {% if not request.user.profile.silent_mode %}
+            <audio src="{% static 'sounds/error_small.mp3' %}" autoplay prelaod='auto'></audio>
+        {% endif %}
     {% elif 'warning' in message.tags %}
     {% elif 'info' in message.tags %}
     {% elif 'success' in message.tags %}
-    <audio src="{% static 'sounds/success_small.mp3' %}" autoplay prelaod='auto'></audio>
+        {% if not request.user.profile.silent_mode %}
+            <audio src="{% static 'sounds/success_small.mp3' %}" autoplay prelaod='auto'></audio>
+        {% endif %}
     {% endif %}
     <div role="alert" class="alert alert-dismissible fade in
           {% if 'error' in message.tags %}alert-danger
