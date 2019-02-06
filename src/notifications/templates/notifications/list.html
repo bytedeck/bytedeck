@@ -13,8 +13,7 @@
 {% for note in notifications %}
 <tr>
   <td class='notification-icons'>{{note.font_icon|safe}}</td>
-  <td>{{note|safe}} </td>
-  <!-- <td>{{note.timestamp|timesince}} ago</td> -->
+  <td >{{note|safe}} </td>
   <td><small>{{note.timestamp}}<small></td>
   <td>{% if not note.unread %}Read {% else %} Unread {% endif %}</td>
 </tr>
