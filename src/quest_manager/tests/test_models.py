@@ -28,7 +28,7 @@ class CommonDataTestModel(TestCase):
         self.assertEqual(str(self.common_data), self.common_data.title)
 
 
-class QyestTestModel(TestCase):
+class QuestTestModel(TestCase):
 
     def setUp(self):
         self.quest = mommy.make(Quest)
@@ -52,16 +52,18 @@ class SubmissionTestModel(TestCase):
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)
-        self.submission = mommy.make(QuestSubmission)
+        self.submission = mommy.make(QuestSubmission, quest__name="Test")
         # self.badge = Recipe(Badge, xp=20).make()
 
         # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
 
-    def test_badge_assertion_creation(self):
+    def test_submission_assertion_creation(self):
         self.assertIsInstance(self.submission, QuestSubmission)
-        # self.assertEqual(str(self.submission), self.submission.quest.name)
+        self.assertEqual(str("Test"), self.submission.quest.name)
 
-    def test_badge_assertion_url(self):
+
+
+    def test_submission_assertion_url(self):
         self.assertEquals(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 #
 #     def test_badge_assertion_count(self):
