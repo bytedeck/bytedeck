@@ -714,7 +714,15 @@ class QuestSubmission(models.Model):
             ordinal_str = " (" + str(self.ordinal) + ")"
         else:
             ordinal_str = ""
-        return self.quest.name + ordinal_str
+
+        if self.quest:
+            name = self.quest.name
+        else:
+            name = "<DELETED QUEST>"
+        name += ordinal_str
+        # name = self.quest.name + ordinal_str
+        # print(name)
+        return name
 
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})

@@ -57,14 +57,19 @@ class SubmissionTestModel(TestCase):
 
         # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
 
-    def test_submission_assertion_creation(self):
+    def test_submission_creation(self):
         self.assertIsInstance(self.submission, QuestSubmission)
         self.assertEqual(str("Test"), self.submission.quest.name)
 
-
-
-    def test_submission_assertion_url(self):
+    def test_submission_url(self):
         self.assertEquals(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
+
+    def test_submission_without_quest(self):
+        # creating a submission without a quest, null=True so no Quest created.
+        sub = mommy.make(QuestSubmission)
+        self.assertIsNone(sub.quest)
+        self.assertIsNotNone(str(sub))
+
 #
 #     def test_badge_assertion_count(self):
 #         num = randint(1, 9)
