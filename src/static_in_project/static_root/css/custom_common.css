@@ -495,12 +495,17 @@ form .panel-body {
     padding-top: 0px;
 }
 
-/*Doesn't reach inside the iframe*/
-/*.note-editor {
-  border-top: none;
-  border-right: none;
-  border-left: none;
-}*/
+.panel-body .note-editor.note-frame.panel {
+    border-radius: 0px;
+    border-left: 0px;
+    border-right: 0px;
+    border-top: 0px;
+}
+
+.panel-body .note-editor.note-frame.panel .panel-heading,
+.panel-body .note-editor.note-frame.panel .note-statusbar {
+    border-radius: 0px;
+}
 
 /************ALERTS *************************/
 #main-container > .alert:first-of-type {

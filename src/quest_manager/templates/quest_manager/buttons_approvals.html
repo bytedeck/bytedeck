@@ -22,12 +22,14 @@
                    title="Flag this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest.">Flag</a></li>
             <li><a title="View the full quest details and the full comment form."
                    href="{% url 'quests:submission' s.id %}">Full Reply</a></li>
+            {% if s.quest %}
             <li><a title="Quick link to edit in case an error or typo in the quest is found."
                 target="_blank"
                 href="{% url 'quests:quest_update' s.quest.id %}">Edit Quest</a></li>
             <li><a title="View past submissions of this quest from other students."
                 target="_blank"
                 href="{% url 'quests:approved_for_quest' s.quest.id %}">Past Submissions</a></li>
+            {% endif %}
         </ul>
     </div>
 
