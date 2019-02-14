@@ -220,3 +220,16 @@ class SubmissionViewTests(TestCase):
     def test_student_quest_completion(self):
         # TODO self.assertEquals(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         pass
+
+    def test_submission_when_quest_not_visible(self):
+        """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
+        # log in a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Make quest invisible to students
+        self.quest1.visible_to_students = False
+        self.quest1.save()
+        self.assertFalse(self.quest1.visible_to_students)
+
+        self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 302)
