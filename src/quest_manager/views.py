@@ -1,25 +1,20 @@
 import json
 
-from django.contrib.auth.mixins import UserPassesTestMixin
-
-from badges.models import BadgeAssertion
-from comments.models import Comment, Document
-from django.views.decorators.cache import cache_page
-from djconfig import config
-from notifications.signals import notify
-from prerequisites.models import Prereq
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib.auth.models import User
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.urls import reverse_lazy, reverse
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.template.loader import render_to_string
-from django.utils.decorators import method_decorator
+from django.urls import reverse_lazy, reverse
 from django.views.generic.edit import DeleteView, UpdateView, CreateView
+
+from badges.models import BadgeAssertion
+from comments.models import Comment, Document
+from notifications.signals import notify
+from prerequisites.models import Prereq
 from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission
 
@@ -903,7 +898,7 @@ def submission(request, submission_id=None, quest_id=None):
     # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
-        "heading": sub.quest.name,
+        "heading": sub.quest_name(),
         "submission": sub,
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         # "comments": comments,
@@ -970,7 +965,7 @@ def unflag(request, submission_id):
     sub.save()
 
     messages.success(request, "Submission <a href='%s'>%s by %s</a> has been unflagged." %
-                     (sub.get_absolute_url(), sub.quest.name, sub.user))
+                     (sub.get_absolute_url(), sub.quest_name(), sub.user))
 
     return redirect("quests:approvals")
 

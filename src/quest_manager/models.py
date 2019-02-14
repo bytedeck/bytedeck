@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
@@ -6,20 +8,17 @@ from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
 from django.templatetags.static import static
+from django.urls import reverse
+from django.utils import timezone
+from djconfig import config
+
+from badges.models import BadgeAssertion
+from comments.models import Comment
+from prerequisites.models import Prereq, IsAPrereqMixin
+
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
-
-from datetime import time
-
-from django.urls import reverse
-from django.utils import timezone
-
-from djconfig import config
-
-from prerequisites.models import Prereq, IsAPrereqMixin
-from badges.models import BadgeAssertion
-from comments.models import Comment
 
 
 class Category(models.Model):
@@ -718,11 +717,15 @@ class QuestSubmission(models.Model):
         if self.quest:
             name = self.quest.name
         else:
-            name = "<DELETED QUEST>"
+            name = "[DELETED QUEST]"
         name += ordinal_str
-        # name = self.quest.name + ordinal_str
-        # print(name)
         return name
+
+    def quest_name(self):
+        if self.quest:
+            return self.quest.name
+        else:
+            return "[DELETED QUEST]"
 
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})

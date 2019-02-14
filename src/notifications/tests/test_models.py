@@ -1,9 +1,6 @@
-from random import randint
-
 import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.utils import timezone
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
 
@@ -23,11 +20,11 @@ class NotificationTestModel(TestCase):
         # self.badge = Recipe(Badge, xp=20).make()
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
 
-    def test_badge_assertion_creation(self):
+    def test_notification_creation(self):
         self.assertIsInstance(self.notification, Notification)
         self.assertIsNotNone(str(self.notification))
 
-        print(str(self.notification))
+        # print(str(self.notification))
     #
     # def test_badge_assertion_url(self):
     #     self.assertEquals(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
