@@ -142,6 +142,7 @@ class Notification(models.Model):
             "target_url": target_url,
         }
 
+        # print(self.target_object)
         url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
         if self.target_object:
             if self.action_object:

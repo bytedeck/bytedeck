@@ -10,7 +10,7 @@ from badges.models import BadgeAssertion
 from courses.models import Semester
 
 
-class ViewTests(TestCase):
+class ProfileViewTests(TestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
