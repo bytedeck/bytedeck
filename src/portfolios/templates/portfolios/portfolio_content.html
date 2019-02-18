@@ -1,5 +1,5 @@
     <h3>Description</h3>
-    <p>{{ p.description|default:"None." }}</p>
+    <p>{{ p.description|safe|default:"None." }}</p>
     <h3>Content</h3>
 
     <!-- Hidden html5 video divs -->

@@ -1,6 +1,10 @@
 {% extends "portfolios/base.html" %}
 {% load crispy_forms_tags %}
 
+{% block head %}
+    {{ form.media }}
+{% endblock %}
+
 {% block heading_inner %}Editing {{ p.user }}'s Portfolio
 <a class="btn btn-success" href="{% url 'portfolios:detail' p.pk %}" >View</a>
 {% endblock %}
