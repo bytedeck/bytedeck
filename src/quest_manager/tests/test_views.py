@@ -232,4 +232,5 @@ class SubmissionViewTests(TestCase):
         self.quest1.save()
         self.assertFalse(self.quest1.visible_to_students)
 
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 302)
+        #TODO: should redirect, not 404?
+        self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)

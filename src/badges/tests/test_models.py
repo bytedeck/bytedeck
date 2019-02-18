@@ -82,7 +82,7 @@ class BadgeAssertionTestModel(TestCase):
         badge_assertion = mommy.make(BadgeAssertion)
         self.assertEquals(badge_assertion.count_bootstrap_badge(), "")
 
-        num = randint(1, 9)
+        num = 2
         for _ in range(num):
             badge_assertion = BadgeAssertion.objects.create_assertion(
                 self.student,
