@@ -1,5 +1,7 @@
 from datetimewidget.widgets import DateWidget
 from django import forms
+from django_summernote.widgets import SummernoteInplaceWidget
+
 from portfolios.models import Portfolio, Artwork
 
 
@@ -7,6 +9,9 @@ class PortfolioForm(forms.ModelForm):
     class Meta:
         model = Portfolio
         fields = ['description', 'listed_locally', 'listed_publicly', ]
+        widgets = {
+            'description': SummernoteInplaceWidget(),
+        }
 
 
 class ArtworkForm(forms.ModelForm):

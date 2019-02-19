@@ -43,7 +43,7 @@
       <ul class="list-group">
         <li class="list-group-item">
           {% if request.user.is_staff %}
-          <div class="pull-right">
+          <div class="announcement-button-group">
             <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
             <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
             {% if object.draft %}

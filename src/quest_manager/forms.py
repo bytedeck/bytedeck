@@ -1,11 +1,9 @@
+from datetimewidget.widgets import DateWidget, TimeWidget
+from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
+from django_summernote.widgets import SummernoteInplaceWidget
 
 from badges.models import Badge
-
-from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
-from django import forms
-from django.db import models
-from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
 from .formatChecker import MultiFileField
 from .models import Quest
 
@@ -22,23 +20,30 @@ class QuestForm(forms.ModelForm):
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
 
-        date_time_options = {
+        date_options = {
             'showMeridian': False,
             # 'todayBtn': True,
             'todayHighlight': True,
-            'minuteStep': 5,
+            # 'minuteStep': 5,
             'pickerPosition': 'bottom-left',
+        }
+
+        time_options = {
+            'pickerPosition': 'bottom-left',
+            'maxView': 0,
         }
 
         widgets = {
             'instructions': SummernoteInplaceWidget(),
             'submission_details': SummernoteInplaceWidget(),
             'instructor_notes': SummernoteInplaceWidget(),
-            'date_available': DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
 
-            'time_available': TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
-            'date_expired': DateWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
-            'time_expired': TimeWidget(usel10n=True, options=date_time_options, bootstrap_version=3),
+            # NOT Use localization and set a default format
+            'date_available': DateWidget(options=date_options, bootstrap_version=3),
+
+            'time_available': TimeWidget(options=time_options, bootstrap_version=3),
+            'date_expired': DateWidget(options=date_options, bootstrap_version=3),
+            'time_expired': TimeWidget(options=date_options, bootstrap_version=3),
         }
 
     def __init__(self, *args, **kwargs):

@@ -1,9 +1,9 @@
-from datetimewidget.widgets import DateTimeWidget, DateWidget, TimeWidget
+from datetimewidget.widgets import DateTimeWidget
 from django import forms
-from django.db import models
-from django_summernote.widgets import SummernoteWidget, SummernoteInplaceWidget
+from django_summernote.widgets import SummernoteInplaceWidget
 
 from .models import Announcement
+
 
 # def make_custom_datetimefield(f):
 #     formfield = f.formfield()
@@ -52,9 +52,9 @@ class AnnouncementForm(forms.ModelForm):
         # > Or if you're using django-crispy-forms, please use this.
         widgets = {
             'content': SummernoteInplaceWidget(),
-            'sticky_until': DateTimeWidget(usel10n=True, options=datetime_options, bootstrap_version=3),
-            'datetime_released': DateTimeWidget(usel10n=True, options=datetime_options, bootstrap_version=3),
-            'datetime_expires': DateTimeWidget(usel10n=True, options=datetime_options, bootstrap_version=3),
+            'sticky_until': DateTimeWidget(options=datetime_options, bootstrap_version=3),
+            'datetime_released': DateTimeWidget(options=datetime_options, bootstrap_version=3),
+            'datetime_expires': DateTimeWidget(options=datetime_options, bootstrap_version=3),
         }
 
 
