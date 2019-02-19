@@ -3,6 +3,12 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.15.0] 2019-02-19
+* Formatted descriptions for portfolios
+* Security updates
+* [teachers] Fix announcement buttons
+* [bugfix] Date and Time widgets on quest creation
+
 ### [0.14.1] 2019-02-14
 * [bugfix] Deleted quest causing havoc.
 * [code] Basic tests added to several apps
