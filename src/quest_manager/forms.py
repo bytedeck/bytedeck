@@ -1,4 +1,4 @@
-from datetimewidget.widgets import DateWidget, TimeWidget
+from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
@@ -38,12 +38,11 @@ class QuestForm(forms.ModelForm):
             'submission_details': SummernoteInplaceWidget(),
             'instructor_notes': SummernoteInplaceWidget(),
 
-            # NOT Use localization and set a default format
-            'date_available': DateWidget(options=date_options, bootstrap_version=3),
+            'date_available': DatePickerInput(format='%Y-%m-%d'),
 
-            'time_available': TimeWidget(options=time_options, bootstrap_version=3),
-            'date_expired': DateWidget(options=date_options, bootstrap_version=3),
-            'time_expired': TimeWidget(options=date_options, bootstrap_version=3),
+            'time_available': TimePickerInput(),
+            'date_expired': DatePickerInput(format='%Y-%m-%d'),
+            'time_expired': TimePickerInput(),
         }
 
     def __init__(self, *args, **kwargs):

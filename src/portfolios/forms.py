@@ -1,4 +1,4 @@
-from datetimewidget.widgets import DateWidget
+from bootstrap_datepicker_plus import DatePickerInput
 from django import forms
 from django_summernote.widgets import SummernoteInplaceWidget
 
@@ -19,15 +19,7 @@ class ArtworkForm(forms.ModelForm):
         model = Artwork
         fields = ['title', 'description', 'date', 'image_file', 'video_file', 'video_url', ]
         widgets = {
-            'date': DateWidget(attrs={'id': "date_id"},
-                               options={
-                                       'autoclose': 'true',
-                                       'todayBtn': 'true',
-                                       'todayHighlight': 'true',
-                                       # 'pickerPosition': 'bottom-left',
-                               },
-                               usel10n=True,
-                               bootstrap_version=3)
+            'date': DatePickerInput(format='%Y-%m-%d'),
         }
 
     def clean(self):
