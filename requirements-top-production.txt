@@ -2,7 +2,7 @@ beautifulsoup4==4.6.0
 Django==2.0.13
 django-allauth==0.32.0
 django-crispy-forms==1.7.2
-django-datetime-widget==0.9.3 # Requires `pip install setuptool` first?
+django-bootstrap-datepicker-plus==3.0.5
 #django-debug-toolbar==1.8
 #django-debug-toolbar-template-timings==0.7
 django-djconfig==0.5.3
