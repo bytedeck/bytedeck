@@ -112,15 +112,15 @@
                         <span class="visible-xs-inline">Approvals</span>
                         </a>
                     </li>
+
                     {% endif %}
-                {% else %}
+                {% endif %}
                 <li>
                     <a title="Public Portfolios" href="{% url 'portfolios:public_list' %}">
                         <i class="fa fa-picture-o fa-fw"></i>
                     <span class="visible-xs-inline">Public Portfolios</span>
                     </a>
                 </li>
-                {% endif %}
             </ul>
         </div>
 
