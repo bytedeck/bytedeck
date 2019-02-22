@@ -82,4 +82,8 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 9. Select your recently pushed branch and create a pull request.
 10. Complete pull request.
 
+<<<<<<< HEAD
 #### BAGLEY WAS HERE
+=======
+####BAGLEY WAS HERE
+>>>>>>> upstream/develop
