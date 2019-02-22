@@ -83,4 +83,4 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 10. Complete pull request.
 
 #### BAGLEY WAS HERE
-FOR A LONG TIME
+FOR A LONG TIME!
