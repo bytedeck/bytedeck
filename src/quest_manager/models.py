@@ -343,6 +343,9 @@ class Quest(XPItem, IsAPrereqMixin):
             return user == self.editor and not self.visible_to_students
 
 
+
+
+
 # class Feedback(models.Model):
 #     user = models.ForeignKey(User, related_name='feedback_user')
 #     quest = models.ForeignKey(Quest, related_name='feedback_quest')

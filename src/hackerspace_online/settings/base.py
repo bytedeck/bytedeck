@@ -87,6 +87,9 @@ INSTALLED_APPS = (
     # https://github.com/timonweb/django-url-or-relative-url-field
     'url_or_relative_url_field',
 
+    # https://django-import-export.readthedocs.io
+    'import_export',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
