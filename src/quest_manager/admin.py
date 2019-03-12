@@ -4,6 +4,9 @@ from django.contrib import messages
 from django_summernote.admin import SummernoteModelAdmin
 
 # Register your models here.
+from import_export import resources
+from import_export.admin import ImportExportActionModelAdmin
+
 from prerequisites.admin import PrereqInline
 
 from .models import Quest, Category, QuestSubmission, CommonData
@@ -50,7 +53,14 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
         return qs
 
 
-class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
+class QuestResource(resources.ModelResource):
+    class Meta:
+        model = Quest
+        # exclude = ('id',)
+
+
+class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
+    resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
                     'common_data', 'campaign', 'editor')
     list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor']
@@ -72,6 +82,7 @@ class QuestAdmin(SummernoteModelAdmin):  # use SummenoteModelAdmin
     # fieldsets = [
     #     ('Available', {'fields': ['date_available', 'time_available']}),
     # ]
+
 
 
 admin.site.register(Quest, QuestAdmin)

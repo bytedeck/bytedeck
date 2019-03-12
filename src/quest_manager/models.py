@@ -1,3 +1,4 @@
+import uuid
 from datetime import time
 
 from django.conf import settings
@@ -248,6 +249,7 @@ class QuestManager(models.Manager):
 
 
 class Quest(XPItem, IsAPrereqMixin):
+    import_id = models.UUIDField(default=uuid.uuid4, editable=False)
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
