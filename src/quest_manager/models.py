@@ -249,7 +249,6 @@ class QuestManager(models.Manager):
 
 
 class Quest(XPItem, IsAPrereqMixin):
-    import_id = models.UUIDField(default=uuid.uuid4, editable=False)
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -277,6 +276,11 @@ class Quest(XPItem, IsAPrereqMixin):
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
                                help_text='Provides a student TA access to work on the draft of this quest.',
                                on_delete=models.SET_NULL)
+
+    import_id = models.UUIDField(blank=True, null=True, default=uuid.uuid4,  unique=True,
+                                 help_text="Only edit this if you want to link to a quest in another system so that "
+                                           "when importing from that other system, it will update this quest. "
+                                           "Otherwise do not edit this or it will break existing links!")
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
