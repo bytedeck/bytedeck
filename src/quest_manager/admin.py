@@ -56,7 +56,8 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
 class QuestResource(resources.ModelResource):
     class Meta:
         model = Quest
-        # exclude = ('id',)
+        import_id_fields = ('import_id',)
+        exclude = ('id',)
 
 
 class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
