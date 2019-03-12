@@ -16,6 +16,6 @@ class Migration(migrations.Migration):
             name='import_id',
             field=models.UUIDField(default=uuid.uuid4,
                                    help_text='Only edit this if you want to link to a quest in another system so that when importing from that other system, it will update this quest. Otherwise do not edit this or it will break existing links!',
-                                   unqiue=True),
+                                   unique=True),
         ),
     ]
