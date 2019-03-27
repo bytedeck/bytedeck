@@ -1,14 +1,15 @@
 from django.contrib import admin
 from django.contrib import messages
-
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django_summernote.admin import SummernoteModelAdmin
-
 # Register your models here.
 from import_export import resources
 from import_export.admin import ImportExportActionModelAdmin
+from import_export.fields import Field
 
 from prerequisites.admin import PrereqInline
-
+from prerequisites.models import Prereq
 from .models import Quest, Category, QuestSubmission, CommonData
 
 
@@ -54,10 +55,58 @@ class QuestSubmissionAdmin(admin.ModelAdmin):
 
 
 class QuestResource(resources.ModelResource):
+    prereq_quest_import_id = Field(column_name='prereq_quest_import_id')
+
     class Meta:
         model = Quest
         import_id_fields = ('import_id',)
         exclude = ('id',)
+
+    def dehydrate_prereq_quest_import_id(self, quest):
+        # save basic single/simple prerequisite quest, if there is one.
+        prereqs = Prereq.objects.all_parent(quest)
+        for p in prereqs:
+            if p.prereq_content_type == ContentType.objects.get_for_model(Quest):
+                return p.get_prereq().import_id
+
+    # def after_import_row(self, row, row_result, **kwargs):
+    #     print("row: " + str(row))
+    #     print("row_result: " + str(row_result))
+    #     print("kwargs: " + str(kwargs))
+
+    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
+        for dict in dataset.dict:
+            prereq_quest_import_id = dict["prereq_quest_import_id"]
+            import_id = dict["import_id"]
+
+            parent_quest = Quest.objects.get(import_id=import_id)
+
+            # check that the prereq quest exists as an import-linked quest via import_id
+            if prereq_quest_import_id:
+                try:
+                    prereq_quest = Quest.objects.get(import_id=prereq_quest_import_id)
+                except ObjectDoesNotExist:
+                    continue
+
+                existing_prereqs_groups = Prereq.objects.all_parent(parent_quest)
+
+                # generate list of objects for already existing primary prereq
+                existing_primary_prereqs = [p.get_prereq() for p in existing_prereqs_groups]
+
+                # check if the imported prereq already exists
+                if prereq_quest in existing_primary_prereqs:
+                    print("prereq already found:")
+                    print(prereq_quest)
+                    print("for quest: ")
+                    print(parent_quest)
+                    continue
+                else:
+                    print("No prereq found for quest:")
+                    print(parent_quest)
+                    print("Adding: ")
+                    print(prereq_quest)
+                    # Create a new prereq to this quest
+                    Prereq.add_simple_prereq(parent_quest, prereq_quest)
 
 
 class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
