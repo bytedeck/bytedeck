@@ -68,8 +68,8 @@ INSTALLED_APPS = (
     # https://github.com/summernote/django-summernote
     'django_summernote',
 
-    # https://github.com/asaglimbeni/django-datetime-widget
-    'datetimewidget',
+    # https://github.com/monim67/django-bootstrap-datepicker-plus
+    'bootstrap_datepicker_plus',
 
     # django-djconfig.readthedocs.org/en/
     'djconfig',
@@ -86,6 +86,9 @@ INSTALLED_APPS = (
 
     # https://github.com/timonweb/django-url-or-relative-url-field
     'url_or_relative_url_field',
+
+    # https://django-import-export.readthedocs.io
+    'import_export',
 
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
