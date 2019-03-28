@@ -62,7 +62,7 @@ class QuestResource(resources.ModelResource):
     class Meta:
         model = Quest
         import_id_fields = ('import_id',)
-        exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign')
+        exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
 
     def dehydrate_prereq_quest_import_id(self, quest):
         # save basic single/simple prerequisite quest, if there is one.
@@ -101,16 +101,8 @@ class QuestResource(resources.ModelResource):
 
             # check if the imported prereq already exists
             if prereq_quest in existing_primary_prereqs:
-                print("prereq already found:")
-                print(prereq_quest)
-                print("for quest: ")
-                print(parent_quest)
                 return False
             else:
-                print("No prereq found for quest:")
-                print(parent_quest)
-                print("Adding: ")
-                print(prereq_quest)
                 # Create a new prereq to this quest
                 Prereq.add_simple_prereq(parent_quest, prereq_quest)
         return True
