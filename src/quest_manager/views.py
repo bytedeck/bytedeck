@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -316,6 +317,7 @@ def ajax_submission_info(request, submission_id=None):
 def quest_copy(request, quest_id):
     new_quest = get_object_or_404(Quest, pk=quest_id)
     new_quest.pk = None  # autogen a new primary key (quest_id by default)
+    new_quest.import_id = uuid.uuid4()
     new_quest.name = new_quest.name + " - COPY"
     # print(quest_to_copy)
     # print(new_quest)

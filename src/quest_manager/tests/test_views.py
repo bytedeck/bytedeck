@@ -84,22 +84,28 @@ class QuestViewTests(TestCase):
         self.assertEquals(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEquals(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
 
-    # def test_all_quest_page_status_codes_for_teachers(self):
-    #     # log in a teacher
-    #     success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-    #     self.assertTrue(success)
-    #
-    #     s_pk = self.test_student1.pk
-    #     s2_pk = self.test_student2.pk
-    #
-    #     self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-    #     self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-    #     self.assertEquals(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-    #     self.assertEquals(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
-    #     self.assertEquals(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-    #     self.assertEquals(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-    #     self.assertEquals(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
-    #     # self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+    def test_all_quest_page_status_codes_for_teachers(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        s_pk = self.test_student1.pk
+        s2_pk = self.test_student2.pk
+
+        q_pk = self.quest1.pk
+        q2_pk = self.quest2.pk
+
+        self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
+        self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
+        self.assertEquals(self.client.get(reverse('profiles:profile_list')).status_code, 200)
+        self.assertEquals(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        self.assertEquals(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
+        self.assertEquals(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
+        self.assertEquals(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        # self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+
+        self.assertEquals(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
+        self.assertEquals(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
     #
     # def test_profile_recalculate_xp_status_codes(self):
     #     """Need to test this view with students in an active course"""
