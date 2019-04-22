@@ -6,6 +6,7 @@ This file chronologically records all notable changes to this website, including
 ### [?] 
 * [teachers] auto-format html when saved
 * [bugfix] clean comments (orphaned li, scripts removed)
+* [bugfix] remove old grade field in courses
 
 ### [0.16.2] 2019-04-08
 * [bugfix] copying quests error fixed
