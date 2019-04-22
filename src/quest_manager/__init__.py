@@ -1,1 +1,1 @@
-default_app_config = 'quest_manager.apps.QuestConfig'
+default_app_config = 'quest_manager.app.QuestConfig'
