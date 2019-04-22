@@ -72,7 +72,6 @@ class CommentManager(models.Manager):
         for link in links:
             link['target'] = '_blank'
 
-
         # Add missing ul tags (raw <li> elements can break the page!)
         # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
         ulgroup = 0
@@ -91,6 +90,9 @@ class CommentManager(models.Manager):
             # append rest of <li> group to previously created <ul>
             elif ulgroup > 0:
                 uls[ulgroup - 1].append(li)
+
+        # Remove script tags
+        [s.extract() for s in soup('script')]
 
         text = str(soup)
 

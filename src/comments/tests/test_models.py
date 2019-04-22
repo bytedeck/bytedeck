@@ -35,10 +35,31 @@ class CommentTestModel(TestCase):
                 user=self.student,
                 text=bad_text,
                 path="nothing",
-                target=None,
-                parent=None,
             )
 
             self.assertIn("<ul>", comment.text)
             self.assertIn("</ul>", comment.text)
 
+    def test_script_removal(self):
+        bad_text = "<p>stuff</p><script>do bad stuff</script>"
+
+        comment = Comment.objects.create_comment(
+            user=self.student,
+            text=bad_text,
+            path="nothing",
+        )
+
+        self.assertNotIn("<script>", comment.text)
+
+    def test_comment_text_unchanged(self):
+        text = "<p>This is some good html snippet that shouldn't be changed</p>"
+
+        comment = Comment.objects.create_comment(
+            user=self.student,
+            text=text,
+            path="nothing",
+            target=None,
+            parent=None,
+        )
+
+        self.assertHTMLEqual(comment.text, text)
