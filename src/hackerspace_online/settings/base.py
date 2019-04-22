@@ -163,6 +163,7 @@ CACHES = {
     'select2': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'cache_table',
+        'TIMEOUT': None,
     }
 }
 SELECT2_CACHE_BACKEND = 'select2'
