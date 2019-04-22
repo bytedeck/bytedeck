@@ -2,6 +2,11 @@
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
+
+### [?] 
+* [teachers] auto-format html when saved
+* [bugfix] clean comments (orphaned li, scripts removed)
+
 ### [0.16.2] 2019-04-08
 * [bugfix] copying quests error fixed
 
