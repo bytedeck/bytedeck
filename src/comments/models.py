@@ -1,12 +1,11 @@
 import os
-import re
 
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.urls import reverse
 from django.db import models
+from django.urls import reverse
 from django.utils.html import urlize, escape
 
 
@@ -72,6 +71,26 @@ class CommentManager(models.Manager):
         links = soup.find_all('a')
         for link in links:
             link['target'] = '_blank'
+
+
+        # Add missing ul tags (raw <li> elements can break the page!)
+        # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
+        ulgroup = 0
+        uls = []
+        for li in soup.findAll('li'):
+            previous_element = li.findPrevious()
+            # if <li> already wrapped in <ul>, do nothing
+            if previous_element and previous_element.name == 'ul':
+                continue
+            # if <li> is the first element of a <li> group, wrap it in a new <ul>
+            if not previous_element or previous_element.name != 'li':
+                ulgroup += 1
+                ul = soup.new_tag("ul")
+                li.wrap(ul)
+                uls.append(ul)
+            # append rest of <li> group to previously created <ul>
+            elif ulgroup > 0:
+                uls[ulgroup - 1].append(li)
 
         text = str(soup)
 
@@ -140,11 +159,11 @@ class Comment(models.Model):
             return False
 
     def flag(self):
-        self.flagged = True;
+        self.flagged = True
         self.save()
 
     def unflag(self):
-        self.flagged = False;
+        self.flagged = False
         self.save()
 
     def get_children(self):
