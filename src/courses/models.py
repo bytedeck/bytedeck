@@ -380,7 +380,7 @@ class CourseStudent(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
     block = models.ForeignKey(Block, on_delete=models.SET_NULL, null=True)
     course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True)
-    grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
+    # grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
     grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True)
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
