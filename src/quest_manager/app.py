@@ -6,4 +6,6 @@ class QuestConfig(AppConfig):
     verbose_name = 'Quests'
 
     def ready(self):
-        pass
+        # noinspection PyUnresolvedReferences
+        import quest_manager.signals
+
