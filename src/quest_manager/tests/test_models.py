@@ -1,9 +1,8 @@
-from random import randint
+import re
 
 import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.utils import timezone
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
 
@@ -42,6 +41,17 @@ class QuestTestModel(TestCase):
 
     def test_quest_url(self):
         self.assertEquals(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
+
+    def test_quest_html_formatting(self):
+        test_markup = "<p>this <span>span</span> tag should not break</p>"
+        self.quest.instructions = test_markup
+        # Auto formatting on save
+        self.quest.save()
+        formatted_markup = self.quest.instructions
+
+        # search for line breaks before or after span tags
+        matches_found = re.search('(([ ]+)?\n([ ]+)?</?span>)|(</?span>([ ]+)?\n([ ]+)?)', formatted_markup)
+        self.assertIsNone(matches_found)
 
 
 class SubmissionTestModel(TestCase):
