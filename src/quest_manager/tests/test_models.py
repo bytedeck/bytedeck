@@ -44,17 +44,14 @@ class QuestTestModel(TestCase):
 
     def test_quest_html_formatting(self):
         test_markup = "<p>this <span>span</span> tag should not break</p>"
-        print(self.quest.instructions)
         self.quest.instructions = test_markup
         # Auto formatting on save
         self.quest.save()
         formatted_markup = self.quest.instructions
 
         # search for line breaks before or after span tags
-        found = re.search('(([ ]+)?\n([ ]+)?</?span>)|(</?span>([ ]+)?\n([ ]+)?)', formatted_markup)
-        print(found)
-
-        print(self.quest.instructions)
+        matches_found = re.search('(([ ]+)?\n([ ]+)?</?span>)|(</?span>([ ]+)?\n([ ]+)?)', formatted_markup)
+        self.assertIsNone(matches_found)
 
 
 class SubmissionTestModel(TestCase):
