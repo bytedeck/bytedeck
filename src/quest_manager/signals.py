@@ -34,21 +34,26 @@ def tidy_html(markup):
 
     stripped_markup_soup = UglySoup(stripped_markup, "html.parser")
 
+    # We don't want line breaks/indentation for inline tags, especially span!
     inline_tags = ['span', 'a', 'b', 'i', 'u', 'em', 'strong',
                    'sup', 'sub', 'strike',
                    'code', 'var', 'mark', 'small', 'ins', 'del']
 
+    # find all the inline tags, save them into the list at i,
+    # and replace them with: the string "{unformatted_tag_list[{i}]"
     unformatted_tag_list = []
     for i, tag in enumerate(stripped_markup_soup.find_all(inline_tags)):
         unformatted_tag_list.append(str(tag))
         tag.replace_with('{' + 'unformatted_tag_list[{0}]'.format(i) + '}')
 
+    # need to regenerate the soup so it forgets the location of the tags we just swapped out
+    # otherwise it will still enter line breaks and indent at those locations
     markup = str(stripped_markup_soup)
-
     new_soup = UglySoup(markup, "html.parser")
 
     prettified = new_soup.improved_prettify()
 
+    # replace the tags we swapped out earlier
     prettified = prettified.format(unformatted_tag_list=unformatted_tag_list)
     return prettified
 
