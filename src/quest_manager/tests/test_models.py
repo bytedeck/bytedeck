@@ -53,6 +53,20 @@ class QuestTestModel(TestCase):
         matches_found = re.search('(([ ]+)?\n([ ]+)?</?span>)|(</?span>([ ]+)?\n([ ]+)?)', formatted_markup)
         self.assertIsNone(matches_found)
 
+    def test_quest_html_formatting_math(self):
+        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""
+        self.quest.instructions = test_markup
+        print("Test MARKUP:", test_markup)
+        # Auto formatting on save
+        self.quest.save()
+        formatted_markup = self.quest.instructions
+        print("Formatted MARKUP:", formatted_markup)
+
+        self.assertIn(test_markup, formatted_markup)
+
+        matches_found = re.search('({{)|(}})', formatted_markup)
+        self.assertIsNone(matches_found)
+
 
 class SubmissionTestModel(TestCase):
 
