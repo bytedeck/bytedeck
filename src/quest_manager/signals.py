@@ -1,8 +1,6 @@
 import re
 
 from bs4 import BeautifulSoup
-from bs4 import DEFAULT_OUTPUT_ENCODING
-from bs4 import Tag
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
@@ -18,7 +16,7 @@ class UglySoup(BeautifulSoup):
     def insert_after(self, successor):
         pass
 
-    def prettify_indented(self, encoding=None, formatter="minimal", indent_width=4):
+    def improved_prettify(self, encoding=None, formatter="minimal", indent_width=4):
         return self.r.sub(r'\1' * indent_width, self.prettify(encoding, formatter))
 
 
@@ -27,15 +25,30 @@ def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
 
 
-def tidy_html(content):
-    soup = UglySoup(content, "html.parser")
-    return soup.prettify_indented()
+def tidy_html(markup):
 
-    # config = {
-    #     # "break-before-br": True,
-    #     # "doctype": "omit",
-    #     # "output-html": True,
-    #     # "wrap": 0,
-    # }
-    # result, errors = Tidy().tidy_fragment(content, options=config)
-    # return result
+    # https://stackoverflow.com/questions/17583415/customize-beautifulsoups-prettify-by-tag
+
+    # Double curly brackets to avoid problems with .format()
+    stripped_markup = markup.replace('{', '{{').replace('}', '}}')
+
+    stripped_markup_soup = UglySoup(stripped_markup, "html.parser")
+
+    inline_tags = ['span', 'a', 'b', 'i', 'u', 'em', 'strong',
+                   'sup', 'sub', 'strike',
+                   'code', 'var', 'mark', 'small', 'ins', 'del']
+
+    unformatted_tag_list = []
+    for i, tag in enumerate(stripped_markup_soup.find_all(inline_tags)):
+        unformatted_tag_list.append(str(tag))
+        tag.replace_with('{' + 'unformatted_tag_list[{0}]'.format(i) + '}')
+
+    markup = str(stripped_markup_soup)
+
+    new_soup = UglySoup(markup, "html.parser")
+
+    prettified = new_soup.improved_prettify()
+
+    prettified = prettified.format(unformatted_tag_list=unformatted_tag_list)
+    return prettified
+
