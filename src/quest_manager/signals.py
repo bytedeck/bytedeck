@@ -55,5 +55,8 @@ def tidy_html(markup):
 
     # replace the tags we swapped out earlier
     prettified = prettified.format(unformatted_tag_list=unformatted_tag_list)
+    # revert the double braces to singles
+    prettified = prettified.replace('{{', '{').replace('}}', '}')
+
     return prettified
 
