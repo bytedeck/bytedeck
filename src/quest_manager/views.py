@@ -645,6 +645,12 @@ def complete(request, submission_id):
     # http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
     if request.method == "POST":
 
+        # for some reason Summernote is submitting the form in the background when an image is added or
+        # dropped into the widget We need to ignore that submission
+        # https://github.com/summernote/django-summernote/issues/362
+        if 'complete' not in request.POST and 'comment' not in request.POST:
+            raise Http404("unrecognized submit button")
+
         # form = CommentForm(request.POST or None, wysiwyg=True, label="")
         # form = SubmissionQuickReplyForm(request.POST)
         form = SubmissionForm(request.POST, request.FILES)
