@@ -8,6 +8,7 @@ from django.db.models.signals import post_save
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.functional import cached_property
 from djconfig import config
 
 from badges.models import BadgeAssertion
@@ -238,20 +239,14 @@ class Profile(models.Model):
     def current_courses(self):
         return CourseStudent.objects.current_courses(self.user)
 
+    @cached_property
     def has_past_courses(self):
         semester = config.hs_active_semester
-        past_courses = CourseStudent.objects.all_for_user_not_semester(self.user, semester)
-        if past_courses:
-            return True
-        else:
-            return False
+        return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
 
+    @cached_property
     def has_current_course(self):
-        current_courses = self.current_courses()
-        if current_courses:
-            return True
-        else:
-            return False
+        return self.current_courses().exists()
 
     def blocks(self):
         current_courses = self.current_courses()
