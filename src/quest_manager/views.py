@@ -189,10 +189,10 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
         draft_quests = Quest.objects.all_drafts(request.user)
     else:
         if request.user.is_staff:
-            available_quests = Quest.objects.all().visible()
+            available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
             # num_available = available_quests.count()
         else:
-            if request.user.profile.has_current_course():
+            if request.user.profile.has_current_course:
                 available_quests = Quest.objects.get_available(request.user, remove_hidden)
             # num_available = len(available_quests)
             else:
