@@ -5,3 +5,4 @@ django-debug-toolbar-template-timings==0.9
 model-mommy==1.6.0
 pipdeptree==0.13.1
 sqlparse==0.2.3
+freezegun==0.3.11
