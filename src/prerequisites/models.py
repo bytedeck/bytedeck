@@ -173,6 +173,30 @@ class PrereqManager(models.Manager):
 
 class Prereq(models.Model, IsAPrereqMixin):
     """
+    A Prereq object indicates some conditions (prerequisites) that must be met before gaining access to something else.
+
+    parent_object: The parent object is the thing with restricted access (for example, a quest, or a badge).  Access to it
+     is granted once the conditions are met.
+
+    prereq_object: This is the main condition that has to be met for a user to gain access to the parent object.
+     How that condition is met is determined by the Class's implementation of `condition_met_as_prerequisite()` from the
+     IsAPrereqMixin.  This object could be any model that implements the mixin (quest, badge, grade, course, etc)
+
+    or_prereq_object: This is an ALTERNATE condition that could be met instead of the condition laid out by prereq_object
+
+    Simple example:  Imagine a quest that a student only gains access to if they are in a grade 10 course:
+
+        Prereq
+            parent_object = quest_manager.models.Quest object <"Some Quest">
+            prereq_object = courses.models.Grade <"Grade 10">
+
+        Given a specific user, when the querying of available quests gets to this quest, it will find this Prereq and
+          call condition_met() on it. If condition_met() returns True (supposedly, because the student has a Grade 10
+          course) then this Prereq (Quest object <"Some Quest"> will not be filtered out of the user's available quests
+
+          See condition_met() for further details.
+
+
     Links two (or three) objects (of any registered content type) in a prerequisite relationship.
     Note that a Prereq can itself be a prereq (in combination with AND OR NOT, this allows for arbitrary complexity)
     parent: The owner of the prerequisite. Generally, for the parent to become 'active' the prereq_object conditions
@@ -267,6 +291,15 @@ class Prereq(models.Model, IsAPrereqMixin):
         """
         :param user:
         :return: True if the conditions for this complex Prereq have been met by the user
+
+        CONTINUE this simple example:  Imagine a quest that a student only gains access to if they are in a grade 10 course:
+
+        Prereq
+            parent_object = quest_manager.models.Quest object <"Some Quest">
+            prereq_object = courses.models.Grade <"Grade 10">
+
+        RAN OUT OF TIME SORRY... will finish later
+
         """
 
         # the first of two possible alternate prereq conditions
