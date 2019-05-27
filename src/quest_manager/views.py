@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -188,10 +189,10 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
         draft_quests = Quest.objects.all_drafts(request.user)
     else:
         if request.user.is_staff:
-            available_quests = Quest.objects.all().visible()
+            available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
             # num_available = available_quests.count()
         else:
-            if request.user.profile.has_current_course():
+            if request.user.profile.has_current_course:
                 available_quests = Quest.objects.get_available(request.user, remove_hidden)
             # num_available = len(available_quests)
             else:
@@ -316,6 +317,7 @@ def ajax_submission_info(request, submission_id=None):
 def quest_copy(request, quest_id):
     new_quest = get_object_or_404(Quest, pk=quest_id)
     new_quest.pk = None  # autogen a new primary key (quest_id by default)
+    new_quest.import_id = uuid.uuid4()
     new_quest.name = new_quest.name + " - COPY"
     # print(quest_to_copy)
     # print(new_quest)
@@ -642,6 +644,12 @@ def complete(request, submission_id):
 
     # http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
     if request.method == "POST":
+
+        # for some reason Summernote is submitting the form in the background when an image is added or
+        # dropped into the widget We need to ignore that submission
+        # https://github.com/summernote/django-summernote/issues/362
+        if 'complete' not in request.POST and 'comment' not in request.POST:
+            raise Http404("unrecognized submit button")
 
         # form = CommentForm(request.POST or None, wysiwyg=True, label="")
         # form = SubmissionQuickReplyForm(request.POST)

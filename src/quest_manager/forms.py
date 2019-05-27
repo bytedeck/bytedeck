@@ -4,7 +4,7 @@ from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
 
 from badges.models import Badge
-from .formatChecker import MultiFileField
+from utilities.fields import RestrictedFileFormField
 from .models import Quest
 
 
@@ -68,15 +68,12 @@ class QuestForm(forms.ModelForm):
 
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
-    # docfile = forms.FileField(label='Add a file to your submission',
-    #                                     required=False)
-    # docfile = RestrictedFileField(label='Add a file to your submission (16MB limit)',
-    #                                     required=False,
-    #                                     max_upload_size=16777216 )
-    files = MultiFileField(max_num=5, min_num=0, maximum_file_size=1024 * 1024 * 16,
-                           label='Add files (hold Ctrl to select up to 5 files, 16MB limit per file)',
-                           required=False
-                           )
+
+    files = RestrictedFileFormField(required=False,
+                                    max_upload_size=16777216,
+                                    widget=forms.ClearableFileInput(attrs={'multiple': True}),
+                                    label="Attach files",
+                                    help_text="Hold Ctrl to select multiple files, 16MB limit per file")
 
 
 class BadgeLabel:

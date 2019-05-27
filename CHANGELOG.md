@@ -3,6 +3,31 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.16.6a] 2019-05-17 - Upwork optimizations
+* Upwork optimization 1
+
+### [0.16.5] 2019-05-09
+* [bugfix] drag-and-drop images duplicate comments
+
+### [0.16.4] 2019-05-02
+* [bugfix] html auto-formatting
+
+### [0.16.3] 2019-04-23
+* styling tweaks in dark theme
+* security updates
+* [teachers] auto-format html when saved
+* [bugfix] clean comments (orphaned li, scripts removed)
+* [bugfix] remove old grade field in courses
+
+### [0.16.2] 2019-04-08
+* [bugfix] copying quests error fixed
+
+### [0.16.1] 2019-03-27
+* [bugfix] import quests error fixed
+
+### [0.16.0] 2019-03-27
+* [teachers] basic import/export of quests from admin menu
+
 ### [0.15.1] 2019-02-19
 * [bugfix] new datetime widgets to replace broken ones
 

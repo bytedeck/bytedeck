@@ -236,15 +236,37 @@ a.list-group-item-muted {
 
 
 /********* FORM STUFF **************/
-.form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control {
+.form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control  {
     background-color: #3e444c;
 }
 
-.multifileinput, .clearablefileinput {
-    color: #c8c8c8;
+.select2 {
+    width: 100% !important;
 }
 
 
+.select2-container--bootstrap .select2-selection {
+    color: #c8c8c8 !important;
+    background-color: #3e444c !important;
+    border-color: #000000 !important;
+}
+
+.select2-container--bootstrap.select2-container--focus .select2-selection, .select2-container--bootstrap.select2-container--open .select2-selection {
+    border-color: #66afe9 !important;
+}
+
+.select2-container--bootstrap .select2-results__option {
+    color: #3e444c !important;
+}
+
+.select2-container--bootstrap .select2-results__option--highlighted[aria-selected] {
+    background-color: #337ab7;
+    color: #fff !important;;
+}
+
+.multifileinput, .clearablefileinput, input, textarea {
+    color: #c8c8c8;
+}
 
 /************** SUMMERNOTE ******************/
 /* TODO !important because summernote css is declared after this file... should fix that. */

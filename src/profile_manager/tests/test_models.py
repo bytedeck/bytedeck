@@ -73,10 +73,19 @@ class ProfileTestModel(TestCase):
         self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration), repr(course_registration2)])
 
     def test_profile_has_current_course(self):
-        self.assertFalse(self.profile.has_current_course())
+        self.assertFalse(self.profile.has_current_course)
         sem = mommy.make('courses.semester')
         mommy.make('courses.CourseStudent', user=self.user, semester=sem)
-        self.assertTrue(self.profile.has_current_course())
+        profile = Profile.objects.get(pk=self.profile.id)  # Refresh profile to avoid cached_property
+        self.assertTrue(profile.has_current_course)
+
+    def test_profile_has_past_courses(self):
+        self.assertFalse(self.profile.has_past_courses)
+        sem = mommy.make('courses.semester')
+        sem = mommy.make('courses.semester')
+        mommy.make('courses.CourseStudent', user=self.user, semester=sem)
+        profile = Profile.objects.get(pk=self.profile.id)  # Refresh profile to avoid cached_property
+        self.assertTrue(profile.has_past_courses)
 
     def test_profile_blocks(self):
         self.assertIsNone(self.profile.blocks())
@@ -93,7 +102,7 @@ class ProfileTestModel(TestCase):
         # Still no teachers since no teacher assign to this course's block yet
         self.assertEqual(list(self.profile.teachers()), [None])  # why is this a list of None instead of just empty?
 
-        self.assertTrue(self.profile.has_current_course())
+        self.assertTrue(self.profile.has_current_course)
         course_registration.block = mommy.make('courses.block', current_teacher=self.teacher)
 
         # TODO should have teachers now... why not working? Should not be None...

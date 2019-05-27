@@ -145,10 +145,12 @@ class PrereqManager(models.Manager):
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):
         """
         Checks if all the prerequisites for this parent_object and user have been met.
-        If the parent_object has no prerequisites, then return according to the no_prereq_means parameter,
-        this is because different models might want different behaviour if there are no prereqs, they can
-        either be available (default, no_prereq_means=True) or unavailable (no_prereq_means=False).
-        This should be set in the mixin constructor... I'd tell you how to do it here but I haven't figured it out yet.
+        If the parent_object has Prereq object in which it is the Prereq.parent_object,
+        then return according to the no_prereq_means parameter,
+        [this is because different models might want different behaviour if there are no prereqs, they can
+        either be available (default, no_prereq_means=True) or unavailable (no_prereq_means=False).]
+
+        This should be set in the IsAPrereqMixin constructor... I'd tell you how to do it here but I haven't figured it out yet.
         I assume by the time this is published anywhere that someone is reading it other than myself, the mixin itself
         will explain better...
         """
@@ -173,6 +175,31 @@ class PrereqManager(models.Manager):
 
 class Prereq(models.Model, IsAPrereqMixin):
     """
+    A Prereq object indicates some conditions (prerequisites) that must be met before gaining access to something else.
+
+    parent_object: The parent object is the thing with restricted access (for example, a quest, or a badge).  Access to it
+     is granted once the conditions are met.
+
+    prereq_object: This is the main condition that has to be met for a user to gain access to the parent object.
+     How that condition is met is determined by the Class's implementation of `condition_met_as_prerequisite()` from the
+     IsAPrereqMixin.  This object could be any model that implements the mixin (quest, badge, grade, course, etc)
+
+    or_prereq_object: This is an ALTERNATE condition that could be met instead of the condition laid out by prereq_object
+
+    Simple example:  Imagine a quest that a student only gains access to if they are in a grade 10 course:
+
+        Prereq <
+            parent_object = quest_manager.models.Quest object <"Some Quest">
+            prereq_object = courses.models.Grade <"Grade 10">
+        >
+
+        Given a specific user, when the querying of available quests gets to this quest, it will find this Prereq and
+          call condition_met() on it. If condition_met() returns True (supposedly, because the student has a Grade 10
+          course) then this Prereq (Quest object <"Some Quest"> will not be filtered out of the user's available quests
+
+          See condition_met() for further details.
+
+
     Links two (or three) objects (of any registered content type) in a prerequisite relationship.
     Note that a Prereq can itself be a prereq (in combination with AND OR NOT, this allows for arbitrary complexity)
     parent: The owner of the prerequisite. Generally, for the parent to become 'active' the prereq_object conditions
@@ -267,6 +294,32 @@ class Prereq(models.Model, IsAPrereqMixin):
         """
         :param user:
         :return: True if the conditions for this complex Prereq have been met by the user
+
+        CONTINUE this simple example from Prereq:
+        Imagine a quest that a student only gains access to if they are in a grade 10 course:
+
+        Prereq <
+            parent_object = quest_manager.models.Quest <"Some Quest">
+            prereq_object = courses.models.Grade <"Grade 10">
+        >
+
+        When a user is querying the list of available objects (in this case, quests), each quest will look to see if it
+        is the parent_object for any Prereq objects.  If it is, that means there are some pre conditions that must be
+        met before it can make it into the query.  An example of this query can be found at QuestManager.get_available()
+        which in turn calls QuestQuerySet.get_conditions_met(), which, for each quest, calls
+        PrereqManager.all_conditions_met() -- see that one for more details.
+
+        If Quest <"Some Quest"> is passed to PrereqManager.all_conditions_met() for a user, it will search for
+        Prereq objects and find our example above.  In turn, it will call THIS method on that Prereq.
+
+        The example Prereq shows that Grade <"Grade 10"> is required before Quest <"Some Quest"> is available to the student.
+
+        THIS method will then call condition_met_as_prerequisite on Grade <"Grade 10"> FOR THAT USER.
+
+        condition_met_as_prerequisite() is a method that all models with the IsAPrereqMixin should have.
+
+        In this case, if they are currently in a grade 10 course it will return True, otherwise False,
+        but the specific implementation can be found in courses.models.Grade.condition_met_as_prerequisite().
         """
 
         # the first of two possible alternate prereq conditions
