@@ -1,5 +1,7 @@
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.fields import ArrayField
+from django.conf import settings
 from django.db import models
 from django.db.models.base import ObjectDoesNotExist
 
@@ -96,7 +98,7 @@ class PrereqQuerySet(models.query.QuerySet):
 
         # TODO: Make this more efficient, too slow!
         # build a list of object pks to use in the filter.
-        pk_met_list = [
+        pk_met_list =  [
             obj.pk for obj in self
             if Prereq.objects.all_conditions_met(obj, user)
             ]
@@ -390,3 +392,13 @@ class Prereq(models.Model, IsAPrereqMixin):
             return True
 
         return False
+
+
+class PrereqAllConditionsMet(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    ids = models.CharField(max_length=256)
+    model_name = models.CharField(max_length=256)
+
+    @classmethod
+    def update_for_user(user, model_name):
+        pass
