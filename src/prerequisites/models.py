@@ -1,3 +1,4 @@
+import json
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
@@ -399,6 +400,14 @@ class PrereqAllConditionsMet(models.Model):
     ids = models.CharField(max_length=256)
     model_name = models.CharField(max_length=256)
 
-    @classmethod
-    def update_for_user(user, model_name):
-        pass
+    def add_id(self, new_id):
+        ids = self.get_ids([])
+        if new_id not in ids:
+            ids.append(new_id)
+            self.ids = str(ids)
+            self.save()
+
+    def get_ids(self, default=None):
+        if self.ids:
+            return json.loads(self.ids)
+        return default

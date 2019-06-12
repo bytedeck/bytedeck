@@ -2,11 +2,11 @@
 
 from django.db import migrations
 
-from prerequisites.tasks import update_quest_conditions
+from prerequisites.tasks import update_quest_conditions_all
 
 
 def forwards(apps, schema_editor):
-    update_quest_conditions.apply_async(args=[1], queue='default')
+    update_quest_conditions_all.apply_async(args=[1], queue='default')
 
 
 def backwards(apps, schema_editor):

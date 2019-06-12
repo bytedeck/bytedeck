@@ -51,7 +51,7 @@ admin.site.register(Prereq, PrereqAdmin)
 
 
 class PrereqAllConditionsMetAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user_id', 'ids', 'model_name')
+    list_display = ('id', 'user_id', 'model_name')
 
 
 admin.site.register(PrereqAllConditionsMet, PrereqAllConditionsMetAdmin)

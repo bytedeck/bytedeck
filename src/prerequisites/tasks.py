@@ -1,9 +1,10 @@
+from django.core.cache import cache
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from celery import shared_task
 
 from quest_manager.models import Quest
 from prerequisites.models import Prereq, PrereqAllConditionsMet
-
-from django.contrib.auth import get_user_model
 
 
 User = get_user_model()
@@ -15,28 +16,47 @@ def update_quest_conditions_for_user(user_id):
     if not user:
         return
     pk_met_list = [obj.pk for obj in Quest.objects.all() if Prereq.objects.all_conditions_met(obj, user)]
-    model_name = '{}.{}'.format(Quest._meta.app_label, Quest._meta.model_name)
     met_list, created = PrereqAllConditionsMet.objects.update_or_create(
-        user=user, model_name=model_name, defaults={'ids': str(pk_met_list)})
+        user=user, model_name=Quest.get_model_name(), defaults={'ids': str(pk_met_list)})
     return met_list.id
 
 
-@shared_task(name='update_quest_conditions')
-def update_quest_conditions(user_id):
-    users = User.objects.filter(id__gte=user_id).values_list('id', flat=True)[:25]
-    for user_id in users:
-        update_quest_conditions_for_user.apply_async(args=[user_id], queue='default')
+@shared_task(name='update_conditions_for_quest')
+def update_conditions_for_quest(quest_id, start_from_user_id):
+    quest = Quest.objects.filter(id=quest_id).first()
+    if not quest:
+        return
+
+    users = User.objects.filter(id__gte=start_from_user_id)[:25]
+    for user in users:
+        if not Prereq.objects.all_conditions_met(quest, user):
+            return
+
+        filter_kwargs = {'user': user, 'model_name': Quest.get_model_name()}
+        met_list = PrereqAllConditionsMet.objects.filter(**filter_kwargs).first()
+        if met_list:
+            met_list.add_id(quest.id)
+        else:
+            met_list = PrereqAllConditionsMet.objects.create(ids=[quest.id], **filter_kwargs)
     else:
-        user = User.objects.filter(id__gte=user_id + 1).values('id').first()
+        user = User.objects.filter(id__gte=user.id + 1).values('id').first()
         if user:
-            update_quest_conditions.apply_async(args=[user_id + 1], queue='default', countdown=20)
+            update_conditions_for_quest.apply_async(
+                kwargs={'quest_id': quest.id, 'start_from_user_id': user['id'] + 1}, queue='default', countdown=20
+            )
 
 
-@shared_task(name='update_sigan')
-def update_sigan(user_id):
-    print(user_id)
+@shared_task(name='update_quest_conditions_all')
+def update_quest_conditions_all(start_from_user_id):
+    if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
+        return
 
+        cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
-@shared_task(name='update_sigan')
-def update_All(user_id):
-    print(user_id)
+    users = User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:25]
+    for uid in users:
+        update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
+    else:
+        user = User.objects.filter(id__gte=uid + 1).values('id').first()
+        if user:
+            update_quest_conditions_all.apply_async(args=[user['id']], queue='default', countdown=30)

@@ -303,6 +303,10 @@ class Quest(XPItem, IsAPrereqMixin):
 
     objects = QuestManager()
 
+    @classmethod
+    def get_model_name(cls):
+        return '{}.{}'.format(cls._meta.app_label, cls._meta.model_name)
+
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
@@ -353,6 +357,7 @@ class Quest(XPItem, IsAPrereqMixin):
             return True
         else:
             return user == self.editor and not self.visible_to_students
+
 
 
 
