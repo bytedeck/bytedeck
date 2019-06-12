@@ -27,14 +27,14 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/) using pip: `pip3 install virtualenv`
 1. If you are asked to upgrade pip: `pip3 install --upgrade pip`
 2. Move to the parent directory of the project: `cd ~/Developer` 
-2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace`
+2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace --python=python3`
 3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
 3. Activate your virtual environment: Linux: `source bin/activate` Windows w/Git Bash: `source Scripts/activate`
 4. You should now see "(hackerspace)" appear before your prompt.
 5. Later (don't do it now), when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. `pip install -r requirements-top.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
+1. `pip install -r requirements.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
 2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
 
 #### Creating the SQLite database (Easy Option)
