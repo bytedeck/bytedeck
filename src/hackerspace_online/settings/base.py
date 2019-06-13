@@ -90,6 +90,9 @@ INSTALLED_APPS = (
     # https://django-import-export.readthedocs.io
     'import_export',
 
+    # https://django-celery-results.readthedocs.io/en/latest/
+    'django_celery_results',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -106,7 +109,7 @@ INSTALLED_APPS = (
     'djcytoscape',
     'portfolios',
     'utilities',
-    # 'tours',
+   # 'tours',
 )
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
@@ -155,10 +158,17 @@ TEMPLATES = [
     },
 ]
 
+# Redis:
+REDIS_HOST = os.environ.get('REDIS_HOST', '0.0.0.0')
+REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-        'LOCATION': 'unix:/tmp/memcached.sock',
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
     },
     'select2': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
@@ -395,3 +405,16 @@ SUMMERNOTE_CONFIG = {
     # 'lazy': True,
 
 }
+
+# Celery:
+CELERY_BROKER_URL = "redis://{}:{}/0".format(REDIS_HOST, REDIS_PORT)
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_TIMEZONE = TIME_ZONE
+DJANGO_CELERY_RESULTS_TASK_ID_MAX_LENGTH = 191
+
+# allowed delay between conditions met updates for all users:
+CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped

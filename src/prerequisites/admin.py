@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 # from django.contrib.contenttypes.models import ContentType
 
-from .models import Prereq
+from .models import Prereq, PrereqAllConditionsMet
 
 
 # Register your models here.
@@ -48,3 +48,10 @@ class PrereqAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Prereq, PrereqAdmin)
+
+
+class PrereqAllConditionsMetAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user_id', 'model_name')
+
+
+admin.site.register(PrereqAllConditionsMet, PrereqAllConditionsMetAdmin)

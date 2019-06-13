@@ -1,4 +1,5 @@
 import uuid
+import json
 from datetime import time
 
 from django.conf import settings
@@ -15,8 +16,7 @@ from djconfig import config
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
-from prerequisites.models import Prereq, IsAPrereqMixin
-
+from prerequisites.models import Prereq, IsAPrereqMixin, PrereqAllConditionsMet
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
@@ -189,10 +189,7 @@ class QuestQuerySet(models.query.QuerySet):
         :param user:
         :return: A queryset of the prerequisite's that have been met so far
         """
-        pk_met_list = [
-            obj.pk for obj in self
-            if Prereq.objects.all_conditions_met(obj, user)
-            ]
+        pk_met_list = self.get_pk_met_list(user) or [0]
         return self.filter(pk__in=pk_met_list)
 
     def get_list_not_submitted_or_inprogress(self, user):
@@ -205,6 +202,15 @@ class QuestQuerySet(models.query.QuerySet):
             return self
         else:
             return self.filter(editor=user.id)
+
+    def get_pk_met_list(self, user):
+        model_name = '{}.{}'.format(Quest._meta.app_label, Quest._meta.model_name)
+        pk_met_list = PrereqAllConditionsMet.objects.filter(user=user, model_name=model_name).first()
+        if not pk_met_list:
+            from prerequisites.tasks import update_quest_conditions_for_user
+            pk_met_list = update_quest_conditions_for_user(user.id)
+            pk_met_list = PrereqAllConditionsMet.objects.get(id=pk_met_list)
+        return json.loads(pk_met_list.ids)
 
 
 class QuestManager(models.Manager):
@@ -297,6 +303,10 @@ class Quest(XPItem, IsAPrereqMixin):
 
     objects = QuestManager()
 
+    @classmethod
+    def get_model_name(cls):
+        return '{}.{}'.format(cls._meta.app_label, cls._meta.model_name)
+
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
@@ -347,6 +357,7 @@ class Quest(XPItem, IsAPrereqMixin):
             return True
         else:
             return user == self.editor and not self.visible_to_students
+
 
 
 
