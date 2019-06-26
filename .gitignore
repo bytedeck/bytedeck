@@ -26,6 +26,7 @@ Lib/
 
 #VS Code
 *.code-workspace
+.vscode/
 
 # user uploaded media files
 media_root/
