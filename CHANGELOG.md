@@ -3,6 +3,9 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.17.1] 2019-06-26
+* [bugfix] Fixed locked tasks
+
 ### [0.17.0] 2019-06-26 - Redis Caching
 * Add redis db and caching to improve performance
 
