@@ -24,6 +24,9 @@ Lib/
 # PyCharm
 .idea
 
+#VS Code
+*.code-workspace
+
 # user uploaded media files
 media_root/
 
