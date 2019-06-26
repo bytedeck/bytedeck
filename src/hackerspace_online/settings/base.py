@@ -415,6 +415,8 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'django-db'
 CELERY_TIMEZONE = TIME_ZONE
 DJANGO_CELERY_RESULTS_TASK_ID_MAX_LENGTH = 191
+CELERY_TASK_MAX_RETRIES = 10
+CELERY_TASKS_BUNCH_SIZE = 10
 
 # allowed delay between conditions met updates for all users:
 CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
