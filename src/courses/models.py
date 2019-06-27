@@ -9,6 +9,7 @@ from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
 from djconfig import config
+import djconfig
 from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
@@ -357,7 +358,7 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        config.reload_maybe() #prevent celery tasks from breaking when run manually
+        djconfig.reload_maybe() #prevent celery tasks from breaking when run manually
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
     def all_users_for_active_semester(self, students_only=False):
