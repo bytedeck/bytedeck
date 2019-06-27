@@ -357,6 +357,7 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
+        config.reload_maybe() #prevent celery tasks from breaking when run manually
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
     def all_users_for_active_semester(self, students_only=False):
