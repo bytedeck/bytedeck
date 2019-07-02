@@ -76,10 +76,10 @@ def update_quest_conditions_all(self, start_from_user_id):
 
         cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
-    users = User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]
+    users = list(User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])
     for uid in users:
         update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
-    else:
-        user = User.objects.filter(id__gte=uid + 1).values('id').first()
-        if user:
-            self.apply_async(args=[user['id']], queue='default', countdown=100)
+
+    if users:
+        user = User.objects.filter(id__gte=users[-1] + 1).values('id').first()
+        user and self.apply_async(args=[user['id']], queue='default', countdown=100)

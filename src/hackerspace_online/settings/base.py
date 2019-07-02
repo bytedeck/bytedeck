@@ -90,9 +90,6 @@ INSTALLED_APPS = (
     # https://django-import-export.readthedocs.io
     'import_export',
 
-    # https://django-celery-results.readthedocs.io/en/latest/
-    'django_celery_results',
-
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -412,9 +409,7 @@ CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
-CELERY_RESULT_BACKEND = 'django-db'
 CELERY_TIMEZONE = TIME_ZONE
-DJANGO_CELERY_RESULTS_TASK_ID_MAX_LENGTH = 191
 CELERY_TASK_MAX_RETRIES = 10
 CELERY_TASKS_BUNCH_SIZE = 10
 
