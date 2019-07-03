@@ -397,7 +397,7 @@ class Prereq(models.Model, IsAPrereqMixin):
 
 class PrereqAllConditionsMet(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    ids = models.CharField(max_length=256)
+    ids = models.TextField()
     model_name = models.CharField(max_length=256)
 
     def add_id(self, new_id):
