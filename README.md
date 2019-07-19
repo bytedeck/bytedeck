@@ -4,14 +4,14 @@ LMS for Timberline Secondary School's Digital Hackerspace
 This guide assumes you are running Linux.  If not, then you can use the [Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) if you have Windows 10.  Another option is [Git Bash](https://git-for-windows.github.io/)
 
 #### Preparation
-1. Install Python 3: `sudo apt install python3`
-1. Install Git: `sudo apt install git`. 
+1. Make sure you have python 3.5 installed: `python3 --version` or install it: `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt-get update && sudo apt-get install python3.5`
+1. Install Git: `sudo apt install git`.
 1. Pick/create a location for the project, e.g: `~/Developer`
 
 #### Fork the repository
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
-3. Click the "Fork" button on the top right corner. 
+3. Click the "Fork" button on the top right corner.
 4. This will allow you to have your own copy of the project on your GitHub account.
 
 #### Clone the repository
@@ -23,19 +23,15 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 
 #### Python Virtual Environment
 1. If on Windows, open Git Bash as an administrator, or use the [Linux Bash Shell in Windows 10](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/).  I fusing the Bash Shell in Windows 10, you can follow all the Linux instructions below.
-1. Install the Python package manager, pip: `sudo apt install python3-pip`
-3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/) using pip: `pip3 install virtualenv`
-1. If you are asked to upgrade pip: `pip3 install --upgrade pip`
-2. Move to the parent directory of the project: `cd ~/Developer` 
-2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace --python=python3`
-3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
-3. Activate your virtual environment: Linux: `source bin/activate` Windows w/Git Bash: `source Scripts/activate`
+1. Make sure you have the Python package manager pip installed: `pip --version`, or install it: `sudo apt install pip`
+2. Install [pipenv](https://docs.pipenv.org/en/latest/install/#installing-pipenv) using pip: `pip install --user --upgrade pipenv`
+3. Activate pipenv: `pipenv shell`
 4. You should now see "(hackerspace)" appear before your prompt.
 5. Later (don't do it now), when you are finished you can leave the environment by typing: `deactivate`
 
 #### Installing required python packages
-1. `pip install -r requirements.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
-2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
+1. `pipenv install` - it will install all required packages, `pipenv install --dev` install required packages for dev mode
+2. To install any new packeage use `pipenv install package_name`
 
 #### Creating the SQLite database (Easy Option)
 1. A basic database to get started.  You can move to a more advanced PostgreSQL database later if you like, or try now (see next section)
@@ -78,7 +74,7 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 5. Create a new branch: `git checkout -b yourbranchname`
 6. Make your changes and them commit: `git commit -am "yourchangeshere"`
 7. Push your branch to your fork of the project: `git push origin yourbranchname`
-8. Go to your fork of the repository. 
+8. Go to your fork of the repository.
 9. Select your recently pushed branch and create a pull request.
 10. Complete pull request.
 
