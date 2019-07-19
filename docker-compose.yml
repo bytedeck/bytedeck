@@ -14,7 +14,9 @@ services:
     # - redis_data:/data
   web:
     build: . # current directory
-    env_file: .env
+    #env_file: .env
+    environment: 
+      - REDIS_HOST=redis
     command: bash -c "python /app/src/manage.py migrate && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
