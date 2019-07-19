@@ -10,8 +10,6 @@ services:
     # env_file: .env
     # ports:
     # - ${REDIS_PORT}:6379
-    # volumes:
-    # - redis_data:/data
   web:
     build: . # current directory
     #env_file: .env
@@ -26,15 +24,16 @@ services:
     depends_on:
       # - db
       - redis
-  # celery:
-  #   build: .
-  #   env_file: .env
-  #   command: celery -A hackerspace_online worker -l info -c 3 -Q default
-  #   volumes:
-  #     - .:/app
-  #   depends_on:
-  #     - db
-  #     - redis
+  celery:
+    build: .
+    environment: 
+      - REDIS_HOST=redis
+    command: bash -c "cd src && 
+                      celery -A hackerspace_online worker -l info -c 3 -Q default"
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
 
 # volumes:
 #   postgres_data:
