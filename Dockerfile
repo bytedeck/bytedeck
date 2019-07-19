@@ -1,4 +1,4 @@
-FROM python:3.6-slim
+FROM python:3.5-slim
 
 #RUN apt-get update
 #RUN apt-get install -y --no-install-recommends build-essential;
@@ -14,18 +14,22 @@ ENV PYTHONUNBUFFERED 1
 RUN mkdir /app
 WORKDIR /app
 
-# copy the entire project into the app directory
+# copy the entire project into the app directory.
+# should we just copy over the code in src/ and requirements.txt?
 COPY . /app/
 
 # Install our dependancies (currently installing on the base image, not in venv)
 RUN pip install -r requirements.txt
+
+RUN adduser --disabled-password appuser
+USER appuser
 
 # The port
 EXPOSE 8000
 
 # Command to run when the container is started
 # now uses docker-compose.yml
-CMD ["python", "src/manage.py", "runserver", "0.0.0.0:8000"]
+#CMD ["python", "src/manage.py", "runserver", "0.0.0.0:8000"]
 
 
 
