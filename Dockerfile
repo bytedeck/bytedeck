@@ -21,8 +21,8 @@ COPY . /app/
 # Install our dependancies (currently installing on the base image, not in venv)
 RUN pip install -r requirements.txt
 
-# RUN adduser --disabled-password appuser
-# USER appuser
+RUN adduser --disabled-password appuser
+USER appuser
 
 # The port
 EXPOSE 8000
