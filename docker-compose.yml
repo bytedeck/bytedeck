@@ -1,10 +1,10 @@
 version: '3'
 
 services:
-  # db:
-  #   image: postgres:11-alpine
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data/
+  db:
+    image: postgres:11-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
   redis:
     image: "redis:alpine"
     # ports:
@@ -19,7 +19,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      # - db
+      - db
       - redis
   celery:
     build: .
@@ -31,8 +31,8 @@ services:
     depends_on:
       - redis
 
-# volumes:
-#   postgres_data:
-#   redis_data:
+volumes:
+  postgres_data:
+  redis_data:
   
 # Does this transfer to the non-containered code?
