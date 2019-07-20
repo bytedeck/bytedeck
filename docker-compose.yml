@@ -20,7 +20,8 @@ services:
     container_name: hackerspace_db
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-     env_file: .env
+    env_file:
+      .env
 
   redis:
     image: "redis:latest"
