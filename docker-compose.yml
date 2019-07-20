@@ -12,15 +12,15 @@ services:
       - .:/app
     ports:
       - "8000:8000"
-    # depends_on:
-    #   - db
+    depends_on:
+      - db
 
-  # db:
-  #   image: postgres:11-alpine
-  #   container_name: hackerspace_db
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data/
-  #    env_file: .env
+  db:
+    image: postgres:11-alpine
+    container_name: hackerspace_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+     env_file: .env
 
   redis:
     image: "redis:latest"
@@ -40,10 +40,10 @@ services:
     env_file:
       - .env
     depends_on:
-      # - db
+      - db
       - redis
       - web
 
 volumes:
-  # postgres_data:
+  postgres_data:
   redis_data:
