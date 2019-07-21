@@ -6,7 +6,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 
 ## Installing and running the project
 
-### Tools
+### Installing Tools
 
 Although the hackerspace uses several tools, you only need to set up a two of them thanks to docker!
 
@@ -14,7 +14,7 @@ The instructions below will help you get the hackerspace running using [docker](
 
 The instructions assume you are using Ubuntu (or another Debian based linux distro), although it is possible to get it working anywhere you can install docker.
 
-### Installing Docker
+#### Installing Docker
 
 Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
 https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
@@ -23,17 +23,19 @@ By the end, you should be able to run docker's test image:
 
 `$ sudo docker run hello-world`
 
-### Instal docker-compose
+#### Instal docker-compose
 `sudo apt install docker-compose`
 
-### Fork the repository
+### Getting the Code
+
+#### Fork the repository
 
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
 3. Click the "Fork" button on the top right corner. 
 4. This will allow you to have your own copy of the project on your GitHub account.
 
-### Clone the repository
+#### Clone the repository
 
 0. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
 1. Move into the parent directory of the project: `cd ~/Developer`
@@ -42,7 +44,7 @@ By the end, you should be able to run docker's test image:
 4. `git clone yoururlhere`
 3. This will download the project into ~/Developer/hackerspace/
 
-### Initial setup
+#### Initial setup
 All the steps required to initially set up the project have been placed into the `steup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
 
 1. Open a terminal
