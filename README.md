@@ -23,17 +23,17 @@ By the end, you should be able to run docker's test image:
 
 `$ sudo docker run hello-world`
 
-### Installing docker-compose
+### Instal docker-compose
 `sudo apt install docker-compose`
 
-#### Fork the repository
+### Fork the repository
 
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
 3. Click the "Fork" button on the top right corner. 
 4. This will allow you to have your own copy of the project on your GitHub account.
 
-#### Clone the repository
+### Clone the repository
 
 0. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
 1. Move into the parent directory of the project: `cd ~/Developer`
@@ -42,7 +42,7 @@ By the end, you should be able to run docker's test image:
 4. `git clone yoururlhere`
 3. This will download the project into ~/Developer/hackerspace/
 
-#### Initial setup
+### Initial setup
 All the steps required to initially set up the project have been placed into the `steup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
 
 1. Open a terminal
@@ -50,7 +50,7 @@ All the steps required to initially set up the project have been placed into the
 3. Run the setup script to buidl the docker image, and setup your django web app container: `bash setup.sh`
 4. Keep an eye out for errors as it goes through each step.
 
-#### Running the server
+### Running the server
 If everything has worked so far, you should now be able to run your own version of the Hackerspace website:
 
 1. make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
