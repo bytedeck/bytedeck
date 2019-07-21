@@ -10,8 +10,10 @@ services:
     # ports:
     # - ${REDIS_PORT}:6379
   web:
+    restart: unless-stopped
     build: . # current directory
-    env_file: .env
+    env_file: 
+      .env
     command: bash -c "python /app/src/manage.py migrate && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
