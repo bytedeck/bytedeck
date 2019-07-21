@@ -17,6 +17,7 @@ class QuestViewTests(TestCase):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
 
         User = get_user_model()
+        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
