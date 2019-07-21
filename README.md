@@ -73,7 +73,24 @@ web_1     | Quit the server with CONTROL-C.
 
 ## Setting up a VS Code development environment
 
-TODO
+(UNTESTED)
+
+1. Install Visual Studio Code: https://code.visualstudio.com/docs/setup/setup-overview
+1. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
+1. Install the following extensions:
+   1. Required: Python (Microsoft)
+   1. Required: Remote - Containers (Microsoft) 
+   1. Optional: Django Template (bibhasdn)
+   1. Optional: ESLint: (Dirk Baeumer)
+   1. Optional: GitLens (Eric Amodio)
+   1. Optional: Docker (Microsfot) 
+   1. Optional: Git Graph (mhutchie)
+   1. Optional: YAML (Red Hat)
+1. Restart VS Code so the extension work
+1. Open the project in VS Code (File > Open Folder)
+1. You should see a pop up askign if you want to open the project in a container, of not, open the command palette with Ctrl + Shift + P and type: "Remote-Containers" and select: "Reopen Folder in Container"
+1. VS Code will now spin up the projects conatainers, and your code will open with the django server running.
+1. You can now edit code with live results
 
 
 ## Contributing
