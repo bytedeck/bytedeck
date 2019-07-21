@@ -5,7 +5,7 @@ from mock import patch
 from model_mommy import mommy
 
 from badges.models import Badge, BadgeAssertion
-from courses.models import CourseStudent
+from courses.models import CourseStudent, Semester
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 
@@ -22,7 +22,8 @@ class PrerequisitesSignalsTest(TestCase):
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_badge_assertion(self, task):
-        badge_assertion = mommy.make(BadgeAssertion, user=self.student, game_lab_transfer=True)
+        sem = mommy.make(Semester) # not sure why model mommy doesn't create this automatically
+        badge_assertion = mommy.make(BadgeAssertion, user=self.student, game_lab_transfer=True, semester=sem)
         badge_assertion.game_lab_transfer = False
         badge_assertion.save()
         self.assertEqual(task.call_count, 2)
