@@ -6,7 +6,7 @@
 echo -e "\n####################################"
 echo "# BUIDING DOCKER IMAGE..."
 echo "####################################"
-docker build .
+docker-compose build
 
 # Migrations are already completed in docker-compose.yml web definitaon, so prob notneeded here
 echo -e "\n####################################"
