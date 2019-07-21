@@ -66,9 +66,9 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
-3. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
-4. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
-6. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
+5. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+6. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
+7. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
 
 
 ## Setting up a VS Code development environment
