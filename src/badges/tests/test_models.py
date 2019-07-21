@@ -50,12 +50,14 @@ class BadgeAssertionTestModel(TestCase):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
 
         User = get_user_model()
+        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester) # needed because BadgeAssertions use a default that might not exist yet
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)
-        self.assertion = mommy.make(BadgeAssertion)
+        self.assertion = mommy.make(BadgeAssertion, semester=self.sem)
         self.badge = Recipe(Badge, xp=20).make()
+        
 
-        self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
+        self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
 
     def test_badge_assertion_creation(self):
         self.assertIsInstance(self.assertion, BadgeAssertion)
@@ -79,14 +81,15 @@ class BadgeAssertionTestModel(TestCase):
 
     def test_badge_assertion_count_bootstrap_badge(self):
         """Returns empty string if count < 2, else returns proper count"""
-        badge_assertion = mommy.make(BadgeAssertion)
+        badge_assertion = mommy.make(BadgeAssertion, semester=self.sem)
         self.assertEquals(badge_assertion.count_bootstrap_badge(), "")
 
-        num = 2
+        num = 4
         for _ in range(num):
             badge_assertion = BadgeAssertion.objects.create_assertion(
                 self.student,
-                self.badge
+                self.badge,
+                issued_by=self.teacher
             )
             # Why doesn't below work?
             #badge_assertion = self.badge_assertion_recipe.make()
@@ -107,7 +110,8 @@ class BadgeAssertionTestModel(TestCase):
     def test_badge_assertion_manager_create_assertion(self):
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
-            mommy.make(Badge)
+            mommy.make(Badge),
+            self.teacher
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
 
@@ -118,7 +122,8 @@ class BadgeAssertionTestModel(TestCase):
         # give them a badge assertion and make sure the XP works
         BadgeAssertion.objects.create_assertion(
             self.student,
-            self.badge
+            self.badge,
+            self.teacher
         )
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, self.badge.xp)
