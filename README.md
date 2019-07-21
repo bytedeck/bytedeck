@@ -1,6 +1,8 @@
 ## Hackerspace test environment installation (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
+[![Build Status](https://travis-ci.org/timberline-secondary/hackerspace.svg?branch=develop)](https://travis-ci.org/timberline-secondary/hackerspace)
+
 This guide assumes you are running Linux.  If not, then you can use the [Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) if you have Windows 10.  Another option is [Git Bash](https://git-for-windows.github.io/)
 
 #### Preparation
