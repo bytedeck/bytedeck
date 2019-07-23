@@ -26,6 +26,11 @@ By the end, you should be able to run docker's test image:
 #### Instal docker-compose
 `sudo apt install docker-compose`
 
+Add yourself to the docker group:
+
+`sudo usermod -aG docker $USER`
+
+
 ### Getting the Code
 
 #### Fork the repository
