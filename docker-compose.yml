@@ -2,15 +2,17 @@ version: '2' # supported by default isntall on Ubuntu 18.04
 
 services:
   db:
-    image: postgres:9.5-alpine
+    image: postgres:9.5-alpine # Production server is using 9.5.17
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data/
   redis:
-    image: "redis:alpine"
+    image: "redis:5.0-alpine" # Production server is using 3.0.6
     # ports:
     # - ${REDIS_PORT}:6379
   web:
-    restart: unless-stopped
+    #restart: unless-stopped
     build: . # current directory
     env_file: 
       .env

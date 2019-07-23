@@ -3,5 +3,11 @@
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "web",
 	"workspaceFolder": "/app/",
-	"extensions": []
+	"extensions": [
+		"ms-python.python",
+		"eamodio.gitlens",
+		"bibhasdn.django-html",
+		"dbaeumer.vscode-eslint",
+		"mhutchie.git-graph"
+	]
 }
