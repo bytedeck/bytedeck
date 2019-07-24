@@ -3,6 +3,9 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.18] 2019-07-23 - Docker
+* Increase hidden quest limit
+* [dev] Refactor to docker use in development
 
 ### [0.17.2] 2019-07-02
 * [bugfix] Fixed celery caching errors
