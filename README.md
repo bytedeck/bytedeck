@@ -1,75 +1,104 @@
-## Hackerspace test environment installation (instructions for students)
 LMS for Timberline Secondary School's Digital Hackerspace
 
-This guide assumes you are running Linux.  If not, then you can use the [Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) if you have Windows 10.  Another option is [Git Bash](https://git-for-windows.github.io/)
+[![Build Status](https://travis-ci.org/timberline-secondary/hackerspace.svg?branch=develop)](https://travis-ci.org/timberline-secondary/hackerspace)
 
-#### Preparation
-1. Install Python 3: `sudo apt install python3`
-1. Install Git: `sudo apt install git`. 
-1. Pick/create a location for the project, e.g: `~/Developer`
+# Hackerspace development environment installation (instructions for students)
+
+## Installing and running the project
+
+### Installing Tools
+
+Although the hackerspace uses several tools, you only need to set up a two of them thanks to docker!
+
+The instructions below will help you get the hackerspace running using [docker](https://www.docker.com/), and then help you set up a development environment with [VS Code](https://code.visualstudio.com/).
+
+The instructions assume you are using Ubuntu (or another Debian based linux distro), although it is possible to get it working anywhere you can install docker.
+
+#### Installing Docker
+
+Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
+https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
+
+By the end, you should be able to run docker's test image:
+
+`$ sudo docker run hello-world`
+
+#### Instal docker-compose
+`sudo apt install docker-compose`
+
+Add yourself to the docker group:
+
+`sudo usermod -aG docker $USER`
+
+
+### Getting the Code
 
 #### Fork the repository
+
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
 3. Click the "Fork" button on the top right corner. 
 4. This will allow you to have your own copy of the project on your GitHub account.
 
 #### Clone the repository
-1. Move to the parent directory of the project: `cd ~/Developer`
-2. Go to your forked repository.
-3. Click "Clone or download" and copy the url.
+
+0. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
+1. Move into the parent directory of the project: `cd ~/Developer`
+2. Go to your forked repository in github
+3. Click "Clone or download" and copy the url, then paste it into the command:
 4. `git clone yoururlhere`
 3. This will download the project into ~/Developer/hackerspace/
 
-#### Python Virtual Environment
-1. If on Windows, open Git Bash as an administrator, or use the [Linux Bash Shell in Windows 10](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/).  I fusing the Bash Shell in Windows 10, you can follow all the Linux instructions below.
-1. Install the Python package manager, pip: `sudo apt install python3-pip`
-3. Install [virtualenv](https://virtualenv.pypa.io/en/stable/userguide/) using pip: `pip3 install virtualenv`
-1. If you are asked to upgrade pip: `pip3 install --upgrade pip`
-2. Move to the parent directory of the project: `cd ~/Developer` 
-2. Create the virtual environment named hackerspace.  This will place the virtual environment into the same folder as the project (just for convenience): `virtualenv hackerspace --python=python3`
-3. Move into the hackerspace dir: `cd hackerspace` (if using git bash, you should now see "(master)" at the end of your prompt
-3. Activate your virtual environment: Linux: `source bin/activate` Windows w/Git Bash: `source Scripts/activate`
-4. You should now see "(hackerspace)" appear before your prompt.
-5. Later (don't do it now), when you are finished you can leave the environment by typing: `deactivate`
+#### Initial setup
+All the steps required to initially set up the project have been placed into the `steup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
 
-#### Installing required python packages
-1. `pip install -r requirements.txt` (now that we're in our Python3 virtual environment we can just use pip instead of pip3, since our environment will default to python3 for everything)
-2. This does not include what is needed for a PostGres database or other production-specific stuff, only development requirements
+1. Open a terminal
+2. Move into the project directory: `cd ~/Developer/hackerspace`
+3. Run the setup script to buidl the docker image, and setup your django web app container: `bash setup.sh`
+4. Keep an eye out for errors as it goes through each step.
 
-#### Creating the SQLite database (Easy Option)
-1. A basic database to get started.  You can move to a more advanced PostgreSQL database later if you like, or try now (see next section)
-`./src/manage.py migrate`  This will create your database and create tables for all the models
-2. Populate the database with some default data: `./src/manage.py loaddata src/initial_data`
-3. Create a superuser in the database (i.e.teacher/administrator account): `./src/manage.py createsuperuser`
-4. Windows w/Git Bash: if you get an error, try: `winpty python src/manage.py createsuperuser`
-5. Create the cache table: `./src/manage.py createcachetable`
+### Running the server
+If everything has worked so far, you should now be able to run your own version of the Hackerspace website:
 
-#### Creating the PostgreSQL database (Advanced Option)
-1. You can follow [these instructions](https://www.digitalocean.com/community/tutorials/how-to-use-postgresql-with-your-django-application-on-ubuntu-16-04) if you are on Linux (won't work on Windows).  Use the Python3 options.
+1. make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
+1. Then run it: `docker-compose up`
+3. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery
+4. If everything works, then you should see something like this at the end:
+```
+web_1     | System check identified no issues (0 silenced).
+web_1     | July 21, 2019 - 00:00:45
+web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
+web_1     | Starting development server at http://0.0.0.0:8000/
+web_1     | Quit the server with CONTROL-C.
+```
+5. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+6. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
+7. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
 
-#### Running the server
-1. `./src/manage.py runserver`
-2. Segmentation Fault?  try running it again...
-3. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
-4. Log in as the superuser to see what a teacher/admin sees
-5. Sign up to create a student account.
-6. Stop running server (or any bash script in progress) with `Ctrl + C`
 
-#### Setting up PyCharm IDE
-1. Install some version of [PyCharmIDE](https://www.jetbrains.com/pycharm/download/#section=linux)
-1. File > Open, then choose the ~/Developer/hackerspace directory
-1. Run > Edit Configurations
-1. it "+" and choose Django Server
-1. Defaults should be good, but "Run Browser" option is handy, tick it if you want to auto open a browser when you run the server.
-1. Turn on Django support.  Click "Fix" button at bottom
-1. Tick "Enable Django Support
-1. Set Django project root to: ~/Developer/hackerspace/src
-1. Set Settings to: `hackerspace_online/settings` (this is relative to the root above)
-1. OK, OK.
-1. Hit the green play button to test.
+## Setting up a VS Code development environment
 
-#### Committing changes
+(UNTESTED)
+
+1. Install Visual Studio Code: https://code.visualstudio.com/docs/setup/setup-overview
+1. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
+1. Install the following extensions:
+   1. Required: Python (Microsoft)
+   1. Required: Remote - Containers (Microsoft) 
+   1. Optional: Django Template (bibhasdn)
+   1. Optional: ESLint: (Dirk Baeumer)
+   1. Optional: GitLens (Eric Amodio)
+   1. Optional: Docker (Microsfot) 
+   1. Optional: Git Graph (mhutchie)
+   1. Optional: YAML (Red Hat)
+1. Restart VS Code so the extension work
+1. Open the project in VS Code (File > Open Folder)
+1. You should see a pop up askign if you want to open the project in a container, of not, open the command palette with Ctrl + Shift + P and type: "Remote-Containers" and select: "Reopen Folder in Container"
+1. VS Code will now spin up the projects conatainers, and your code will open with the django server running.
+1. You can now edit code with live results
+
+
+## Contributing
 
 1. Move into your cloned directory. `cd ~/Developer/hackerspace`
 2. Add the upstream remote: `git remote add upstream git@github.com:timberline-secondary/hackerspace.git`
@@ -81,5 +110,3 @@ This guide assumes you are running Linux.  If not, then you can use the [Windows
 8. Go to your fork of the repository. 
 9. Select your recently pushed branch and create a pull request.
 10. Complete pull request.
-
-####BAGLEY WAS HERE

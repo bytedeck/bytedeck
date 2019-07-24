@@ -26,6 +26,7 @@ class ViewTests(TestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
         self.test_student2 = mommy.make(User)
 
+        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester) # needed because BadgeAssertions use a default that might not exist yet
         self.test_badge = mommy.make(Badge)
         self.test_assertion = mommy.make(BadgeAssertion)
 
@@ -94,20 +95,20 @@ class ViewTests(TestCase):
 # class ViewTests(TestCase):
 
 
-    # def test_view_url_by_name(self):
-    #     response = self.client.get(reverse('home'))
-    #     self.assertEquals(response.status_code, 200)
-    #
-    # def test_view_uses_correct_template(self):
-    #     response = self.client.get(reverse('home'))
-    #     self.assertEquals(response.status_code, 200)
-    #     self.assertTemplateUsed(response, 'home.html')
-    #
-    # def test_home_page_contains_correct_html(self):
-    #     response = self.client.get('/')
-    #     self.assertContains(response, '<h1>Homepage</h1>')
-    #
-    # def test_home_page_does_not_contain_incorrect_html(self):
-    #     response = self.client.get('/')
-    #     self.assertNotContains(
-    #         response, 'Hi there! I should not be on the page.')
+#     def test_view_url_by_name(self):
+#         response = self.client.get(reverse('home'))
+#         self.assertEquals(response.status_code, 200)
+    
+#     def test_view_uses_correct_template(self):
+#         response = self.client.get(reverse('home'))
+#         self.assertEquals(response.status_code, 200)
+#         self.assertTemplateUsed(response, 'home.html')
+    
+#     def test_home_page_contains_correct_html(self):
+#         response = self.client.get('/')
+#         self.assertContains(response, '<h1>Homepage</h1>')
+    
+#     def test_home_page_does_not_contain_incorrect_html(self):
+#         response = self.client.get('/')
+#         self.assertNotContains(
+#             response, 'Hi there! I should not be on the page.')

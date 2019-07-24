@@ -56,11 +56,11 @@ class QuestTestModel(TestCase):
     def test_quest_html_formatting_math(self):
         test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""
         self.quest.instructions = test_markup
-        print("Test MARKUP:", test_markup)
+        # print("Test MARKUP:", test_markup)
         # Auto formatting on save
         self.quest.save()
         formatted_markup = self.quest.instructions
-        print("Formatted MARKUP:", formatted_markup)
+        # print("Formatted MARKUP:", formatted_markup)
 
         self.assertIn(test_markup, formatted_markup)
 

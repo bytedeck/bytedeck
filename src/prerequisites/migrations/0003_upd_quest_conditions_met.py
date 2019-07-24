@@ -7,9 +7,10 @@ from prerequisites.tasks import update_quest_conditions_all
 
 
 def forwards(apps, schema_editor):
-    djconfig.reload_maybe()
-    update_quest_conditions_all.apply_async(args=[1], queue='default')
-
+    # These don't work if db is empty 
+    #djconfig.reload_maybe()
+    #update_quest_conditions_all.apply_async(args=[1], queue='default')
+    pass
 
 def backwards(apps, schema_editor):
     PrereqAllConditionsMet = apps.get_model("prerequisites", "PrereqAllConditionsMet")

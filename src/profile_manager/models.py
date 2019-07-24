@@ -106,7 +106,7 @@ class Profile(models.Model):
         default=False, help_text="Check this if you don't want your preferred first name used in any public areas.")
     dark_theme = models.BooleanField(default=False)
     silent_mode = models.BooleanField(default=False, help_text="Don't play the gong sounds.")
-    hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=255,
+    hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=1023,
                                      null=True, blank=True)  # list of quest IDs
     is_TA = models.BooleanField(default=False, help_text="TAs can create new quests for teacher approval.")
 
