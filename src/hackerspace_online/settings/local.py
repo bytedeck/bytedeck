@@ -23,7 +23,7 @@ SECRET_KEY = 'notverysecretkey...gimmebetteroneinproduction'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-INTERNAL_IPS = ['127.0.0.1', ]
+INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
 ALLOWED_HOSTS = []
 

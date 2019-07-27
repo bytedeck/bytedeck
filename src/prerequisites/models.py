@@ -63,47 +63,47 @@ class IsAPrereqMixin:
         return ("name__icontains",)
 
 
-class PrereqQuerySet(models.query.QuerySet):
-    """
-    For models that have prerequisites
-    NOT CURRENTLY USED
-    """
+# class PrereqQuerySet(models.query.QuerySet):
+#     """
+#     For models that have prerequisites
+#     NOT CURRENTLY USED
+#     """
 
-    def __init__(self, no_prereqs_means=False):
-        """
-        :param no_prereqs_means: If an instance of this model has no prereqs, what should happen?
-            True -> Make the object available
-            False -> The object is unavailable (and would have to be made available through some other mechanism)  I use
-            this for badges, which must be granted manually if they have no prerequisites.
-        """
-        self.no_prereqs_means = no_prereqs_means
-        super(PrereqQuerySet, self).__init__()
+#     def __init__(self, no_prereqs_means=False):
+#         """
+#         :param no_prereqs_means: If an instance of this model has no prereqs, what should happen?
+#             True -> Make the object available
+#             False -> The object is unavailable (and would have to be made available through some other mechanism)  I use
+#             this for badges, which must be granted manually if they have no prerequisites.
+#         """
+#         self.no_prereqs_means = no_prereqs_means
+#         super(PrereqQuerySet, self).__init__()
 
-    def get_conditions_met(self, user):
-        """
-        :param user:
-        :param initial_query_set: The queryset to filter.  I think this is a very inefficient method, so until I figure
-        out how to speed it up, make sure the provided query_set is already filtered down as small as possible.
-        :return: A queryset containing all objects (of the model implementing this mixin) for which the user has met
-        the prerequisites
-        """
+#     def get_conditions_met(self, user):
+#         """
+#         :param user:
+#         :param initial_query_set: The queryset to filter.  I think this is a very inefficient method, so until I figure
+#         out how to speed it up, make sure the provided query_set is already filtered down as small as possible.
+#         :return: A queryset containing all objects (of the model implementing this mixin) for which the user has met
+#         the prerequisites
+#         """
 
-        # Initialize member variable in case the constructor wasn't called,
-        # which might happen if the class implementing this mixin doesn't call the constructor?
-        # If you're reading this and understand how python inheritance works with constructors, please let me know =)
-        # I could look it up myself, but I'm on the subway with no internet access while on vacation in London,
-        # and by the time I do get internet access, I'll probably be on to something else and forget about it.
-        # TODO: is this necessary?
-        if self.no_prereqs_means is None:
-            self.no_prereqs_means = True
+#         # Initialize member variable in case the constructor wasn't called,
+#         # which might happen if the class implementing this mixin doesn't call the constructor?
+#         # If you're reading this and understand how python inheritance works with constructors, please let me know =)
+#         # I could look it up myself, but I'm on the subway with no internet access while on vacation in London,
+#         # and by the time I do get internet access, I'll probably be on to something else and forget about it.
+#         # TODO: is this necessary?
+#         if self.no_prereqs_means is None:
+#             self.no_prereqs_means = True
 
-        # TODO: Make this more efficient, too slow!
-        # build a list of object pks to use in the filter.
-        pk_met_list =  [
-            obj.pk for obj in self
-            if Prereq.objects.all_conditions_met(obj, user)
-            ]
-        return self.filter(pk__in=pk_met_list)
+#         # TODO: Make this more efficient, too slow!
+#         # build a list of object pks to use in the filter.
+#         pk_met_list =  [
+#             obj.pk for obj in self
+#             if Prereq.objects.all_conditions_met(obj, user)
+#             ]
+#         return self.filter(pk__in=pk_met_list)
 
 
 class PrereqQuerySet(models.query.QuerySet):

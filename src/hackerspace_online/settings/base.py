@@ -90,6 +90,8 @@ INSTALLED_APPS = (
     # https://django-import-export.readthedocs.io
     'import_export',
 
+    'django_celery_beat',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
