@@ -5,6 +5,8 @@ production_*.py
 # python manage.py collectstatic
 static_in_venv/
 
+#celery
+celerybeat.pid
 
 
 # Linux:
@@ -46,6 +48,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+venv/
 build/
 develop-eggs/
 dist/

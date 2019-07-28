@@ -8,3 +8,4 @@ pipdeptree==0.13.1
 sqlparse==0.2.3
 freezegun==0.3.11
 mock==2.0.0
+pylint==2.3.1

@@ -3,6 +3,7 @@ version: '2' # supported by default isntall on Ubuntu 18.04
 services:
   db:
     image: postgres:9.5-alpine # Production server is using 9.5.17
+    env_file: .env
     expose:
       - "5432"
     ports:
@@ -16,8 +17,7 @@ services:
   web:
     #restart: unless-stopped
     build: . # current directory
-    env_file: 
-      .env
+    env_file: .env
     command: bash -c "python /app/src/manage.py migrate && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
@@ -30,14 +30,23 @@ services:
   celery:
     build: .
     env_file: .env
-    # run both workers and beat (with "-B" development environment only per celery docs)
-    # https://django-celery-beat.readthedocs.io/en/latest/
     command: bash -c "cd src &&
-                      celery -A hackerspace_online worker -l info -c 3 -Q default --beat --scheduler django --loglevel=info"
+                      celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
     depends_on:
       - redis
+  celery-beat:
+    build: .
+    env_file: .env
+    command: bash -c "cd src &&
+                      celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    volumes:
+      - .:/app
+    depends_on:
+      - db 
+      - redis
+      - web # needs the django-celery-beat migrations into db
 
 volumes:
   postgres_data:
