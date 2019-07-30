@@ -98,7 +98,10 @@ class Profile(models.Model):
     xp_cached = models.IntegerField(default=0)
 
     # Student options
-    get_announcements_by_email = models.BooleanField(default=False)
+    get_announcements_by_email = models.BooleanField(default=False,
+        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published.")
+    get_notifications_by_email = models.BooleanField(default=False,
+        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day.")
     visible_to_other_students = models.BooleanField(
         default=False, help_text="Your marks will be visible to other students through the student list.")
     preferred_internal_only = models.BooleanField(
