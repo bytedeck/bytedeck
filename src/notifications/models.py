@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
@@ -133,16 +134,19 @@ class Notification(models.Model):
 
         action = strip_tags(action)
 
+        # absolute url needed for when notfication sare sent via email
+        current_site = Site.objects.get_current()
         context = {
             "sender": self.sender_object,
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
-            "verify_read": reverse('notifications:read', kwargs={"id": self.id}),
+            "verify_read": "https://{}{}".format(current_site, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
 
         # print(self.target_object)
+
         url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
         if self.target_object:
             if self.action_object:

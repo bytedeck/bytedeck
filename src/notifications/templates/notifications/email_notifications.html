@@ -1,0 +1,21 @@
+{% load staticfiles %}
+{% load utility_tags %}
+<!DOCTYPE html>
+<html>
+<body>
+<p>Hello {{user}},</p>
+
+<p>You have unread notifications:</p>
+
+<ul>
+{% for notice in notifications %}
+<li>{{notice|safe}}</li>
+{% endfor %}
+</ul>
+
+<p>Have a day!</p>
+<p>Love, Hackerspace AI</p>
+
+<p><img alt="[Logo]" src="{% site_logo_url %}"></p>
+<p>If you no longer want to receive these emails, edit your profile settings <a href="{{ profile_edit_url }}">here</a></p>
+</body>
