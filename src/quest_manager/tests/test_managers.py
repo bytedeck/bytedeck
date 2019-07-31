@@ -1,9 +1,9 @@
-import djconfig
+# import djconfig
 from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
-from model_mommy.recipe import Recipe
+# from model_mommy.recipe import Recipe
 from freezegun import freeze_time
 from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester

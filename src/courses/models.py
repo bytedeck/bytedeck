@@ -134,7 +134,7 @@ class SemesterManager(models.Manager):
 
 
 def default_end_date():
-        return date.today() + timedelta(days=135)
+    return date.today() + timedelta(days=135)
 
 
 class Semester(models.Model):
@@ -358,7 +358,7 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        djconfig.reload_maybe() #prevent celery tasks from breaking when run manually
+        djconfig.reload_maybe()  # prevent celery tasks from breaking when run manually
         return self.all_for_user(user).get_semester(config.hs_active_semester)
 
     def all_users_for_active_semester(self, students_only=False):

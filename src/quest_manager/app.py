@@ -7,5 +7,4 @@ class QuestConfig(AppConfig):
 
     def ready(self):
         # noinspection PyUnresolvedReferences
-        import quest_manager.signals
-
+        import quest_manager.signals # noqa

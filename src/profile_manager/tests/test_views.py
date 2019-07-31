@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
 
-from badges.models import BadgeAssertion
+# from badges.models import BadgeAssertion
 from courses.models import Semester
 
 
@@ -70,7 +70,7 @@ class ProfileViewTests(TestCase):
         self.assertTrue(success)
 
         s_pk = self.test_student1.pk
-        s2_pk = self.test_student2.pk
+        # s2_pk = self.test_student2.pk
 
         self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
         self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)

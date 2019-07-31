@@ -79,14 +79,16 @@ def comment_create(request):
             # quest = Quest.objects.get(id = quest_id)
             content_type = ContentType.objects.get_for_id(target_content_type_id)
             target = content_type.get_object_for_this_type(id=target_object_id)
-        except:
+        except: # noqa
+            # TODO deal with this
             target = None
 
         parent_comment = None
         if parent_id is not None:
             try:
                 parent_comment = Comment.objects.get(id=parent_id)
-            except:
+            except: # noqa
+                # TODO deal with this
                 parent_comment = None
 
             if parent_comment is not None:
@@ -118,7 +120,7 @@ def comment_create(request):
                     verb='replied to',
                     icon=icon,
                 )
-                # messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe')
+                # messages.success(request, "Thanks for your reply! <a class='alert-link' href='http://google.com'>Google!</a>", extra_tags='safe') # noqa
                 messages.success(request, success_message)
                 return HttpResponseRedirect(success_url)
             else:

@@ -9,6 +9,9 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from notifications.models import deleted_object_receiver
+from django.db.models.signals import pre_delete
+
 
 class AnnouncementQuerySet(models.query.QuerySet):
     def sticky(self):
@@ -48,8 +51,10 @@ class AnnouncementManager(models.Manager):
 class Announcement(models.Model):
     title = models.CharField(max_length=80)
     datetime_released = models.DateTimeField(default=timezone.now)
-    auto_publish = models.BooleanField(default=False,
-                                help_text="When set to true, the announcement will publish itself on the date and time indicated.")
+    auto_publish = models.BooleanField(
+        default=False,
+        help_text="When set to true, the announcement will publish itself on the date and time indicated."
+        )
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
@@ -62,7 +67,6 @@ class Announcement(models.Model):
                                 help_text="note that announcements previously saved as drafts will only send out a  \
                                 notification if they are published using the Publish button on the Announcements main \
                                 page")
-
 
     objects = AnnouncementManager()
 
@@ -94,8 +98,5 @@ class Announcement(models.Model):
                   html_message=html_email_message,
                   fail_silently=False)
 
-
-from notifications.models import deleted_object_receiver
-from django.db.models.signals import pre_delete
 
 pre_delete.connect(deleted_object_receiver, sender=Announcement)

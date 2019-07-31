@@ -59,4 +59,3 @@ def tidy_html(markup):
     prettified = prettified.replace('{{', '{').replace('}}', '}')
 
     return prettified
-

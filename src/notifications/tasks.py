@@ -8,21 +8,22 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import mail
-from django.core.mail import send_mail, EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives
 
 from django.template.loader import get_template
-from django.utils import timezone
 
+
+from .models import Notification
 
 User = get_user_model()
 
-from .models import Notification
 
 email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
     minute='0',
     hour='5',
     timezone=timezone.get_current_timezone()
 )
+
 
 def get_notification_emails():
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
@@ -46,7 +47,7 @@ def get_notification_emails():
 
             html_content = html_template.render(
                 {
-                    'user': user, 
+                    'user': user,
                     'notifications': unread_notifications,
                     'profile_edit_url': profile_edit_url,
                 }
@@ -62,9 +63,10 @@ def get_notification_emails():
 @shared_task
 def email_notifications_to_users():
     notification_emails = get_notification_emails()
-    connection = mail.get_connection() 
+    connection = mail.get_connection()
     connection.send_messages(notification_emails)
     print("Sending {} notification emails.".format(len(notification_emails)))
+
 
 PeriodicTask.objects.get_or_create(
     crontab=email_notifications_schedule,
@@ -73,12 +75,11 @@ PeriodicTask.objects.get_or_create(
     queue='default'
 )
 
-
-    # send_mail(
-    #     'Test from Django',
-    #     'Testing DJango celery beat.',
-    #     'timberline.hackerspace@gmail.com',
-    #     ['tylere.couture@sd72.bc.ca'],
-    #     fail_silently=False,
-    # )
-    # print("for reals this time")
+# send_mail(
+#     'Test from Django',
+#     'Testing DJango celery beat.',
+#     'timberline.hackerspace@gmail.com',
+#     ['tylere.couture@sd72.bc.ca'],
+#     fail_silently=False,
+# )
+# print("for reals this time")

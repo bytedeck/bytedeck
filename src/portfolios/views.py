@@ -1,11 +1,9 @@
 import os
 from comments.models import Document
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.messages.views import SuccessMessageMixin
-from django.core.exceptions import ObjectDoesNotExist
-from django.urls import reverse_lazy, reverse
+from django.urls import reverse
 from django.http import Http404
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.models import User
@@ -242,5 +240,3 @@ def art_add(request, doc_id):
         return redirect('portfolios:detail', pk=portfolio.pk)
     else:
         raise Http404("I don't think you're supposed to be here....")
-
-

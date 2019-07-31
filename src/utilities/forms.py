@@ -1,20 +1,13 @@
 from django import forms
-from django.apps import apps
 from django.core.exceptions import ValidationError
-from django.template.defaultfilters import filesizeformat
-
 
 from utilities.models import VideoResource
+
 
 class VideoForm(forms.ModelForm):
     class Meta:
         model = VideoResource
         fields = ["title", "video_file"]
-
-
-
-# http://koensblog.eu/blog/7/multiple-file-upload-django/
-from django.utils.translation import ugettext_lazy as _
 
 
 class MultiFileInput(forms.FileInput):

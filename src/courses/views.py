@@ -33,7 +33,6 @@ def mark_calculations(request, user_id=None):
     num_courses = courses.count()
     if courses:
         xp_per_course = user.profile.xp_cached / num_courses
-        #mark = user.profile.mark()
     else:
         xp_per_course = None
 
@@ -43,7 +42,6 @@ def mark_calculations(request, user_id=None):
         'courses': courses,
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
-        #'mark': mark,
     }
     return render(request, template_name, context)
 
@@ -58,7 +56,6 @@ class CourseStudentList(ListView):
 
 @staff_member_required
 def add_course_student(request, user_id):
-    initial = {}
     if int(user_id) > 0:
         user = get_object_or_404(User, pk=user_id)
     else:
@@ -91,7 +88,6 @@ class CourseStudentCreate(SuccessMessageMixin, CreateView):
         kwargs = super(CreateView, self).get_form_kwargs()
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
-
 
         # def get_initial(self):
         #     data = { 'user': self.request.user }
@@ -136,7 +132,6 @@ def ajax_progress_chart(request, user_id=0):
 
         # generate a list of dates, from first date of semester to today
         datelist = []
-        weekend_adjusted = 0
         for i in range(1, sem.days_so_far()+1):
             # need to ignore weekends and non-class days
             next_day_of_class = sem.get_datetime_by_days_since_start(i, add_holidays=True)

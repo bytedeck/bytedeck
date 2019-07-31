@@ -91,7 +91,7 @@ class QuestViewTests(TestCase):
         self.assertTrue(success)
 
         s_pk = self.test_student1.pk
-        s2_pk = self.test_student2.pk
+        # s2_pk = self.test_student2.pk
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
@@ -155,7 +155,6 @@ class SubmissionViewTests(TestCase):
         self.assertEquals(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
         self.assertEquals(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
 
-
         # Students shouldn't have access to these
         self.assertEquals(self.client.get(reverse('quests:flagged')).status_code, 302)
 
@@ -188,7 +187,7 @@ class SubmissionViewTests(TestCase):
         self.assertTrue(success)
 
         s1_pk = self.sub1.pk
-        s2_pk = self.sub2.pk
+        # s2_pk = self.sub2.pk
 
         self.assertEquals(self.client.get(reverse('quests:flagged')).status_code, 200)
 
@@ -239,5 +238,5 @@ class SubmissionViewTests(TestCase):
         self.quest1.save()
         self.assertFalse(self.quest1.visible_to_students)
 
-        #TODO: should redirect, not 404?
+        # TODO: should redirect, not 404?
         self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)

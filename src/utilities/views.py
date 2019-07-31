@@ -16,4 +16,3 @@ def videos(request):
                }
 
     return render(request, 'utilities/videos.html', context)
-

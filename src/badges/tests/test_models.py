@@ -50,12 +50,14 @@ class BadgeAssertionTestModel(TestCase):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
 
         User = get_user_model()
-        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester) # needed because BadgeAssertions use a default that might not exist yet
+
+        # needed because BadgeAssertions use a default that might not exist yet
+        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
+
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)
         self.assertion = mommy.make(BadgeAssertion, semester=self.sem)
         self.badge = Recipe(Badge, xp=20).make()
-        
 
         self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
 
@@ -74,7 +76,7 @@ class BadgeAssertionTestModel(TestCase):
                 self.badge
             )
             # Why doesn't below work?
-            #badge_assertion = self.badge_assertion_recipe.make()
+            # badge_assertion = self.badge_assertion_recipe.make()
         count = badge_assertion.count()
         # print(num, count)
         self.assertEquals(num, count)
@@ -92,7 +94,7 @@ class BadgeAssertionTestModel(TestCase):
                 issued_by=self.teacher
             )
             # Why doesn't below work?
-            #badge_assertion = self.badge_assertion_recipe.make()
+            # badge_assertion = self.badge_assertion_recipe.make()
         count = badge_assertion.count_bootstrap_badge()
         # print(num, count)
         self.assertEquals(num, count)
@@ -136,6 +138,3 @@ class BadgeAssertionTestModel(TestCase):
     def test_badge_assertion_manager_check_for_new_assertions(self):
         BadgeAssertion.objects.check_for_new_assertions(self.student)
         # TODO need to test this properly
-
-
-

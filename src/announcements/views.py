@@ -119,8 +119,6 @@ def list(request, ann_id=None, template='announcements/list.html'):
     return render(request, template, context)
 
 
-
-
 @staff_member_required
 def copy(request, ann_id):
     new_ann = get_object_or_404(Announcement, pk=ann_id)
@@ -223,7 +221,7 @@ class Update(SuccessMessageMixin, UpdateView):
         context['submit_btn_value'] = "Update"
         return context
 
-        return super(Update, self).form_valid(form)
+        # return super(Update, self).form_valid(form)
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:

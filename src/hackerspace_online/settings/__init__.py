@@ -1,4 +1,4 @@
-from .base import *
+from .base import * # noqa
 
 try:
     # this file will only exists on the production server
