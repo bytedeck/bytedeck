@@ -137,7 +137,7 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications(request, new_announcement)
+            send_notifications(request.user, new_announcement)
         return redirect(new_announcement)
 
     context = {
@@ -150,21 +150,21 @@ def copy(request, ann_id):
 
 
 @staff_member_required
-def publish(request, ann_id):
+def publish(request, ann_id, user=None):
     announcement = get_object_or_404(Announcement, pk=ann_id)
     announcement.draft = False
     announcement.save()
-    send_notifications(request, announcement)
+    send_notifications(request.user, announcement)
     return redirect(announcement)
 
 
-def send_notifications(request, announcement):
+def send_notifications(user, announcement):
     affected_users = CourseStudent.objects.all_users_for_active_semester()
     notify.send(
-        request.user,
+        user,
         # action=new_announcement,
         target=announcement,
-        recipient=request.user,
+        recipient=user,
         affected_users=affected_users,
         icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
         verb='posted')
@@ -181,7 +181,7 @@ class Create(SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            send_notifications(self.request, new_announcement)
+            send_notifications(self.request.user, new_announcement)
 
         # new_announcement.send_by_mail()
 
