@@ -6,14 +6,14 @@ services:
     env_file: .env
     # expose:
     #   - "5432"
-    ports:
-      - 5432:5432
+    # ports:
+    #   - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data/
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6
-    ports:
-    - 6379:6379
+    # ports:
+    # - 6379:6379
   web:
     #restart: unless-stopped
     build: . # current directory

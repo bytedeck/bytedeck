@@ -18,9 +18,11 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from .forms import AnnouncementForm
 from .models import Announcement
+from .tasks import send_announcement_emails
 
 
 # function based views..
+
 
 @login_required
 def comment(request, ann_id):
@@ -155,6 +157,8 @@ def publish(request, ann_id, user=None):
     announcement.draft = False
     announcement.save()
     send_notifications(request.user, announcement)
+    url = request.build_absolute_uri(announcement.get_absolute_url())
+    send_announcement_emails.apply_async(args=[announcement.content, url], queue='default')
     return redirect(announcement)
 
 
