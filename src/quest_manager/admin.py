@@ -16,12 +16,12 @@ from .models import Quest, Category, QuestSubmission, CommonData
 def publish_selected_quests(modeladmin, request, queryset):
     num_updates = queryset.update(visible_to_students=True, editor=None)
 
-    msg_str = str(num_updates) + " quest(s) updated. Editors have been removed and the quest is now visible to students."
+    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(str(num_updates)) # noqa
     messages.success(request, msg_str)
 
 
 def archive_selected_quests(modeladmin, request, queryset):
-    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None);
+    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None)
 
     msg_str = str(num_updates) + " quest(s) archived. These quests will now only be visible through this admin menu."
     messages.success(request, msg_str)

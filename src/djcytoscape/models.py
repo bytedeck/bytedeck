@@ -11,7 +11,6 @@ from django.urls import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from quest_manager.models import Quest
 
 
 class CytoStyleClass(models.Model):
@@ -275,7 +274,7 @@ class CytoElement(models.Model):
 
 
 class TempCampaignNode(object):
-    def __init__(self, id_, prereq_node_id = None):
+    def __init__(self, id_, prereq_node_id=None):
         self.id = id_
         self.prereq_node_ids = []
         self.reliant_node_ids = []
@@ -406,7 +405,8 @@ class TempCampaign(object):
         # reliant_on_all_ids = []
         # for reliant_id in set(self.reliant_node_ids):  # set( myList ) contains only unique values
         #     count = self.reliant_node_ids.count(reliant_id)
-        #     if count == num_children:  # if all children point to the reliant node, consider it reliant on the campaign
+        #     if count == num_children:  # if all children point to the reliant node, consider it reliant
+        #                                # on the campaign
         #         reliant_on_all_ids.append(reliant_id)
         # return reliant_on_all_ids
 
@@ -445,6 +445,7 @@ class TempCampaign(object):
     def is_non_sequential(self):
         # If there is at least one common prereq node
         return self.get_common_prereq_node_ids() is True
+
 
 class CytoScapeManager(models.Manager):
     def generate_random_tree_scape(self, name, size=100, container_element_id="cy"):
@@ -520,10 +521,9 @@ class CytoScapeManager(models.Manager):
         """Return the map that this object initiates, else return None"""
         ct = ContentType.objects.get_for_model(initial_object)
         try:
-            return self.get_queryset().get(initial_object_id=initial_object.id, initial_content_type = ct)
+            return self.get_queryset().get(initial_object_id=initial_object.id, initial_content_type=ct)
         except ObjectDoesNotExist:
             return None
-
 
 
 class CytoScape(models.Model):
@@ -625,7 +625,7 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
-        l = 44  # l = max label length in characters
+        max_len = 44  # max label length in characters
         post = ""
         pre = ""
         if type(obj) is Badge:
@@ -634,8 +634,8 @@ class CytoScape(models.Model):
             pre = "Rank: "
         title = pre + str(obj)
         # shorten the end
-        if len(title) > l:
-            title = title[:(l - 3)] + "..."  # + title[-int(l/2-2):]
+        if len(title) > max_len:
+            title = title[:(max_len - 3)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
             post = " (" + str(obj.xp) + ")"
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
@@ -893,7 +893,7 @@ class CytoScape(models.Model):
         :return: True if node.label begins with the tilde '~' or contains an astrix '*'
         """
         if self.autobreak:
-            return node.label[0] is "~" or "*" in node.label
+            return node.label[0] == "~" or "*" in node.label
         else:
             return False
 

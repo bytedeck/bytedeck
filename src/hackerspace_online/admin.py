@@ -8,6 +8,7 @@ from django_summernote.admin import SummernoteModelAdmin
 class FlatPageAdmin2(FlatPageAdmin, SummernoteModelAdmin):
     list_display = ('url', 'title', 'registration_required',)
 
+
 # Re-register FlatPageAdmin
 admin.site.unregister(FlatPage)
 admin.site.register(FlatPage, FlatPageAdmin2)

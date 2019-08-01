@@ -18,9 +18,11 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from .forms import AnnouncementForm
 from .models import Announcement
+from .tasks import send_announcement_emails
 
 
 # function based views..
+
 
 @login_required
 def comment(request, ann_id):
@@ -119,8 +121,6 @@ def list(request, ann_id=None, template='announcements/list.html'):
     return render(request, template, context)
 
 
-
-
 @staff_member_required
 def copy(request, ann_id):
     new_ann = get_object_or_404(Announcement, pk=ann_id)
@@ -139,7 +139,7 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications(request, new_announcement)
+            send_notifications(request.user, new_announcement)
         return redirect(new_announcement)
 
     context = {
@@ -152,21 +152,23 @@ def copy(request, ann_id):
 
 
 @staff_member_required
-def publish(request, ann_id):
+def publish(request, ann_id, user=None):
     announcement = get_object_or_404(Announcement, pk=ann_id)
     announcement.draft = False
     announcement.save()
-    send_notifications(request, announcement)
+    send_notifications(request.user, announcement)
+    url = request.build_absolute_uri(announcement.get_absolute_url())
+    send_announcement_emails.apply_async(args=[announcement.content, url], queue='default')
     return redirect(announcement)
 
 
-def send_notifications(request, announcement):
+def send_notifications(user, announcement):
     affected_users = CourseStudent.objects.all_users_for_active_semester()
     notify.send(
-        request.user,
+        user,
         # action=new_announcement,
         target=announcement,
-        recipient=request.user,
+        recipient=user,
         affected_users=affected_users,
         icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
         verb='posted')
@@ -183,7 +185,7 @@ class Create(SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            send_notifications(self.request, new_announcement)
+            send_notifications(self.request.user, new_announcement)
 
         # new_announcement.send_by_mail()
 
@@ -223,7 +225,7 @@ class Update(SuccessMessageMixin, UpdateView):
         context['submit_btn_value'] = "Update"
         return context
 
-        return super(Update, self).form_valid(form)
+        # return super(Update, self).form_valid(form)
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:

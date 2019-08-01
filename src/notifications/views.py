@@ -56,7 +56,8 @@ def read(request, id):
                 return HttpResponseRedirect(reverse('notifications:list'))
         else:
             raise Http404
-    except:
+    except: # noqa
+        # TODO deal with this bare exception
         raise HttpResponseRedirect(reverse('notifications:list'))
 
 

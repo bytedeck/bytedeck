@@ -12,7 +12,7 @@ from django.utils.functional import cached_property
 from djconfig import config
 
 from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent, Block
+from courses.models import Rank, CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from utilities.models import RestrictedFileField
@@ -98,7 +98,14 @@ class Profile(models.Model):
     xp_cached = models.IntegerField(default=0)
 
     # Student options
-    get_announcements_by_email = models.BooleanField(default=False)
+    get_announcements_by_email = models.BooleanField(
+        default=False,
+        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published." # noqa
+    )
+    get_notifications_by_email = models.BooleanField(
+        default=False,
+        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day." # noqa
+    )
     visible_to_other_students = models.BooleanField(
         default=False, help_text="Your marks will be visible to other students through the student list.")
     preferred_internal_only = models.BooleanField(
@@ -325,7 +332,8 @@ class Profile(models.Model):
         # TODO: Fix this laziness
         try:
             return self.xp_cached - self.rank().xp
-        except:
+        except: # noqa
+            # TODO
             return 0
 
     #################################
@@ -374,6 +382,7 @@ def create_profile(sender, **kwargs):
             icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
             verb='.  New user registered: ')
 
+
 post_save.connect(create_profile, sender=User)
 
 
@@ -406,23 +415,23 @@ def smart_list(value, delimiter=",", func=None):
         return []
 
     if isinstance(value, list):
-        l = value
+        ls = value
     elif isinstance(value, tuple):
-        l = list(value)
+        ls = list(value)
     elif isinstance(value, str):
         # TODO: regex this.
         value = value.lstrip('[').rstrip(']').strip(' ')
         if len(value) == 0:
             return []
         else:
-            l = value.split(delimiter)
+            ls = value.split(delimiter)
     elif isinstance(value, int):
-        l = [value]
+        ls = [value]
     else:
         raise ValueError("Unparseable smart_list value: %s" % value)
 
     try:
         func = func or (lambda x: x)
-        return [func(e) for e in l]
+        return [func(e) for e in ls]
     except Exception as ex:
         raise ValueError("Unable to parse value '%s': %s" % (value, ex))

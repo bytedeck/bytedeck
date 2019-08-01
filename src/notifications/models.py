@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
@@ -133,16 +134,17 @@ class Notification(models.Model):
 
         action = strip_tags(action)
 
+        # absolute url needed for when notfication sare sent via email
+        current_site = Site.objects.get_current()
         context = {
             "sender": self.sender_object,
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
-            "verify_read": reverse('notifications:read', kwargs={"id": self.id}),
+            "verify_read": "https://{}{}".format(current_site, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
 
-        # print(self.target_object)
         url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
         if self.target_object:
             if self.action_object:
@@ -153,19 +155,12 @@ class Notification(models.Model):
             url = url_common_part + "</a>"
         return url
 
-        # if self.target_object:
-        #     if self.action_object and target_url:
-        #         return '%(sender)s %(verb)s <a href="%(verify_read)s?next=%(target_url)s">%(target)s</a> with "%(action)s"' % context
-        #     if self.action_object and not target_url:
-        #         return "%(sender)s %(verb)s %(target)s with %(action)s" % context
-        #     return "%(sender)s %(verb)s %(target)s" % context
-        # return "%(sender)s %(verb)s" % context
-
     def get_url(self):
         # print("***** NOTIFICATION.get_url **********")
         try:
             target_url = self.target_object.get_absolute_url()
-        except:
+        except:  # noqa 
+            # TODO make this except explicit, don't remember what it's doing
             target_url = reverse('notifications:list')
 
         context = {
@@ -264,7 +259,8 @@ def new_notification(sender, **kwargs):
                     if obj is not None:
                         setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
                         setattr(new_note, "%s_object_id" % option, obj.id)
-                except:
+                except: # noqa 
+                    # TODO make this except explicit, don't remember what it's doing
                     pass
             new_note.save()
 

@@ -96,6 +96,3 @@ class NotificationTestModel(TestCase):
     # def test_badge_assertion_manager_check_for_new_assertions(self):
     #     BadgeAssertion.objects.check_for_new_assertions(self.student)
     #     # TODO need to test this properly
-
-
-

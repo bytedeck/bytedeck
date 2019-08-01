@@ -8,4 +8,4 @@ services:
 before_script: pip install docker-compose
 
 script: 
- - docker-compose run web sh -c "python src/manage.py test src/"
+ - docker-compose -f docker-compose.yml run web sh -c "python src/manage.py test src && flake8 src"

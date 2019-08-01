@@ -9,6 +9,7 @@ Django==2.0.13
 django-allauth==0.32.0
 django-appconf==1.0.2
 django-bootstrap-datepicker-plus==3.0.5
+django-celery-beat==1.5.0
 django-crispy-forms==1.7.2
 django-datetime-widget==0.9.3
 django-djconfig==0.5.3

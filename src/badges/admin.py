@@ -2,7 +2,7 @@ from django.contrib import admin
 
 # Register your models here.
 from import_export import resources
-from import_export.admin import ImportExportModelAdmin, ImportExportActionModelAdmin
+from import_export.admin import ImportExportActionModelAdmin
 
 from prerequisites.admin import PrereqInline
 
@@ -29,8 +29,6 @@ class BadgeAdmin(ImportExportActionModelAdmin):
     inlines = [
         PrereqInline,
     ]
-
-
 
 
 admin.site.register(Badge, BadgeAdmin)

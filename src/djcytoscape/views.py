@@ -9,7 +9,6 @@ from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView
 from django.urls import reverse_lazy
 from djcytoscape.forms import GenerateQuestMapForm
-from quest_manager.models import Quest
 
 from .models import CytoScape
 
@@ -132,4 +131,3 @@ def regenerate_all(request):
         scape.regenerate()
     messages.success(request, "All quest maps have been regenerated.")
     return redirect('djcytoscape:primary')
-

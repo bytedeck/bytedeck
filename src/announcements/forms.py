@@ -21,5 +21,3 @@ class AnnouncementForm(forms.ModelForm):
             'datetime_released': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
             'datetime_expires': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
         }
-
-

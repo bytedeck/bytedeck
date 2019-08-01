@@ -1,0 +1,25 @@
+{% load staticfiles %}
+{% load utility_tags %}
+<!DOCTYPE html>
+<html>
+<body>
+<p>Hello,</p>
+
+<p>A new announcement was just published!  To view it in all its proper glory with images and videos and stuff, 
+<a target="_blank" href="{{url}}">view it online here.</a> 
+I take no responsibility for how the announcement looks in this email!</p>
+
+<hr>
+
+<div>
+{{content|safe}}
+</div>
+
+<hr>
+
+<p>Have a day!</p>
+<p>Love, Hackerspace AI</p>
+
+<p><img alt="[Logo]" src="{% site_logo_url %}"></p>
+<p>If you no longer want to receive these emails, edit your profile settings on the website.</p>
+</body>

@@ -8,6 +8,9 @@ from django.db import models
 from django.urls import reverse
 from django.utils.html import urlize, escape
 
+from notifications.models import deleted_object_receiver
+from django.db.models.signals import pre_delete
+
 
 # from quest_manager.models import Quest
 
@@ -189,7 +192,7 @@ class Comment(models.Model):
             return None
 
 
-##### Document Handler ############################################
+# Document Handler ############################################
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     comment = models.ForeignKey(Comment, on_delete=models.SET_NULL, null=True)
@@ -200,9 +203,5 @@ class Document(models.Model):
         filename = os.path.basename(self.docfile.name)
         return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
 
-
-
-from notifications.models import deleted_object_receiver
-from django.db.models.signals import pre_delete
 
 pre_delete.connect(deleted_object_receiver, sender=Comment)

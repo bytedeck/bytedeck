@@ -105,7 +105,7 @@ def detail(request, badge_id):
     return render(request, 'badges/detail.html', context)
 
 
-########### Badge Assertion Views #########################
+# ########## Badge Assertion Views #########################
 
 
 @staff_member_required

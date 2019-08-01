@@ -7,6 +7,10 @@ from django.templatetags.static import static
 from django.urls import reverse
 from djconfig import config
 
+from django.dispatch import receiver
+from django.db.models.signals import post_save
+from notifications.signals import notify
+
 from prerequisites.models import Prereq, IsAPrereqMixin
 
 
@@ -64,7 +68,6 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_met_list)
 
     def all_manually_granted(self):
-        #return None
         # build a list of pk's for badges that have no prerequisites.
         pk_manual_list = [
             obj.pk for obj in self.get_queryset()
@@ -282,11 +285,6 @@ class BadgeAssertion(models.Model):
     def get_duplicate_assertions(self):
         """A qs of all assertions of this badge for this user"""
         return BadgeAssertion.objects.all_for_user_badge(self.user, self.badge, False)
-
-
-from django.dispatch import receiver
-from django.db.models.signals import post_save
-from notifications.signals import notify
 
 
 # only receive signals from BadgeAssertion model

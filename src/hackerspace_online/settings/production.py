@@ -3,7 +3,7 @@
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
 
-#root of project: ...../src
+# root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Quick-start development settings - unsuitable for production
@@ -21,12 +21,10 @@ ALLOWED_HOSTS = []
 
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_HOST_USER = 'admin@email.com'
-EMAIL_HOST_PASSWORD =""
+EMAIL_HOST_PASSWORD = ""
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-
-
-
+DEFAULT_FROM_EMAIL = "Timberline Hackerspace"
 
 
 # Database

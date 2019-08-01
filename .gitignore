@@ -1,10 +1,14 @@
 #these files have might have production keys and passwords etc.
 production_*.py
 
+sentmail/
+
 #to fill this directory if needed run:
 # python manage.py collectstatic
 static_in_venv/
 
+#celery
+celerybeat.pid
 
 
 # Linux:
@@ -46,6 +50,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+venv/
 build/
 develop-eggs/
 dist/

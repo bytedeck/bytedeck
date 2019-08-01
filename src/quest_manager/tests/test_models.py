@@ -54,7 +54,7 @@ class QuestTestModel(TestCase):
         self.assertIsNone(matches_found)
 
     def test_quest_html_formatting_math(self):
-        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""
+        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>""" # noqa
         self.quest.instructions = test_markup
         # print("Test MARKUP:", test_markup)
         # Auto formatting on save
