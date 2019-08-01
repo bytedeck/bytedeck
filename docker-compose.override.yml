@@ -1,4 +1,4 @@
-# Expose ports in development
+# Expose ports in development, this will run automatically with `docker-compose up`
 # https://runnable.com/docker/advanced-docker-compose-configuration
 version: '2'
 
@@ -6,8 +6,8 @@ services:
 
   db:
     ports:
-      - "5432:5432"
+      - 5432:5432
 
   redis:
     ports:
-    - 6379:6379
+      - 6379:6379
