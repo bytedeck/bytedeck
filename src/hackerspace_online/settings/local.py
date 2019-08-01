@@ -27,12 +27,14 @@ INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
 ALLOWED_HOSTS = []
 
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
-EMAIL_HOST_PASSWORD = ''
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = "Timberline Hackerspace"
+EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+EMAIL_FILE_PATH = 'sentmail/' # change this to a proper location
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
+# EMAIL_HOST_PASSWORD = ''
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# DEFAULT_FROM_EMAIL = "Timberline Hackerspace"
 
 # Database
 # https://docs.djangoproject.com/en/1.8/ref/settings/#databases

@@ -17,7 +17,7 @@ def add(x, y):
 @shared_task
 def send_announcement_emails(content, url):
     users_to_email = User.objects.filter(
-        is_active=True, 
+        is_active=True,
         profile__get_announcements_by_email=True
     ).exclude(email='').values_list('email', flat=True)
 
