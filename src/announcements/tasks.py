@@ -52,10 +52,17 @@ def send_announcement_emails(content, url):
 
 @shared_task
 def publish_announcement(user_id, announcement_id, absolute_url):
+    """ Publish the announcement, including:
+            - edit model instance
+            - push notifications 
+            - send announcement emails
+    """
+    # update model instance
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     announcement.draft = False
     announcement.save()
-    send_notifications(user_id, announcement_id)
 
+    # push notifications
+    send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
     # Send the announcements by email to those who have ask for them, using celery
     send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')

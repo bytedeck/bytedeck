@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
 
-from unittest.mock import patch
+# from unittest.mock import patch
 
 from announcements.models import Announcement
 
@@ -161,7 +161,6 @@ class AnnouncementViewTests(TestCase):
         self.assertContains(self.client.get(reverse('announcements:list')), publish_link)
 
         # publish the announcement
-        
         self.assertRedirects(
             response=self.client.post(reverse('announcements:publish', args=[draft_announcement.pk])),
             expected_url=reverse('announcements:list', args=[draft_announcement.pk]),
