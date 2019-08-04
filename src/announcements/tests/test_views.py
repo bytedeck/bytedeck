@@ -4,6 +4,8 @@ from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
 
+from mock import patch
+
 from announcements.models import Announcement
 
 User = get_user_model()
@@ -146,27 +148,28 @@ class AnnouncementViewTests(TestCase):
         # Student can now see it
         self.assertContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
 
-    def test_publish_announcement(self):
-        draft_announcement = mommy.make(Announcement)
 
-        # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+    # def test_publish_announcement(self):
+    #     draft_announcement = mommy.make(Announcement)
 
-        # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML
-        publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
-        self.assertContains(self.client.get(reverse('announcements:list')), publish_link)
+    #     # log in a teacher
+    #     success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+    #     self.assertTrue(success)
 
-        # publish the announcement
-        self.assertRedirects(
-            response=self.client.post(reverse('announcements:publish', args=[draft_announcement.pk])),
-            expected_url=reverse('announcements:list', args=[draft_announcement.pk]),
-        )
+    #     # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML
+    #     publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
+    #     self.assertContains(self.client.get(reverse('announcements:list')), publish_link)
 
-        # get updated instance
-        draft_announcement = Announcement.objects.get(pk=draft_announcement.pk)
+    #     # publish the announcement
+    #     self.assertRedirects(
+    #         response=self.client.post(reverse('announcements:publish', args=[draft_announcement.pk])),
+    #         expected_url=reverse('announcements:list', args=[draft_announcement.pk]),
+    #     )
 
-        self.assertFalse(draft_announcement.draft)
+    #     # get updated instance
+    #     draft_announcement = Announcement.objects.get(pk=draft_announcement.pk)
 
-        # publish link for this announcement should no longer appear in the list:
-        self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
+    #     self.assertFalse(draft_announcement.draft)
+
+    #     # publish link for this announcement should no longer appear in the list:
+    #     self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
