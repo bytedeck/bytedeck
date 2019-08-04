@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
 
-from mock import patch
+from unittest.mock import patch
 
 from announcements.models import Announcement
 
@@ -148,28 +148,29 @@ class AnnouncementViewTests(TestCase):
         # Student can now see it
         self.assertContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
 
+    # @patch('announcements.views.publish_announcement.apply_async')
+    def test_publish_announcement(self):
+        draft_announcement = mommy.make(Announcement)
 
-    # def test_publish_announcement(self):
-    #     draft_announcement = mommy.make(Announcement)
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
 
-    #     # log in a teacher
-    #     success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-    #     self.assertTrue(success)
+        # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML?
+        publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
+        self.assertContains(self.client.get(reverse('announcements:list')), publish_link)
 
-    #     # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML
-    #     publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
-    #     self.assertContains(self.client.get(reverse('announcements:list')), publish_link)
+        # publish the announcement
+        
+        self.assertRedirects(
+            response=self.client.post(reverse('announcements:publish', args=[draft_announcement.pk])),
+            expected_url=reverse('announcements:list', args=[draft_announcement.pk]),
+        )
 
-    #     # publish the announcement
-    #     self.assertRedirects(
-    #         response=self.client.post(reverse('announcements:publish', args=[draft_announcement.pk])),
-    #         expected_url=reverse('announcements:list', args=[draft_announcement.pk]),
-    #     )
+        # Should probably mock the task in above code, but don't know how...
+        # Fake mock...?
+        draft_announcement.draft = False
+        draft_announcement.save()
 
-    #     # get updated instance
-    #     draft_announcement = Announcement.objects.get(pk=draft_announcement.pk)
-
-    #     self.assertFalse(draft_announcement.draft)
-
-    #     # publish link for this announcement should no longer appear in the list:
-    #     self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
+        # publish link for this announcement should no longer appear in the list:
+        self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)

@@ -28,6 +28,7 @@ class AnnouncementTasksTests(TestCase):
         self.assertTrue(task_result.successful())
 
     def test_publish_announcement(self):
+        self.assertTrue(self.announcement.draft)
         task_result = tasks.publish_announcement.apply(
             kwargs={
                 'user_id': self.test_teacher.id,
@@ -36,6 +37,11 @@ class AnnouncementTasksTests(TestCase):
             }
         )
         self.assertTrue(task_result.successful())
+
+        # Make sure the announcement is no longer a draft
+        # get updated instance of announcement
+        no_longer_draft_announcement = Announcement.objects.get(pk=self.announcement.pk)
+        self.assertFalse(no_longer_draft_announcement.draft)
 
     def test_send_notifications(self):
         # run method as synchronous task
