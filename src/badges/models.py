@@ -116,6 +116,22 @@ class Badge(models.Model, IsAPrereqMixin):
         else:
             return static('img/default_icon.png')
 
+    # @cached_property
+    def fraction_of_active_users_granted_this(self):
+        num_assertions = BadgeAssertion.objects.filter(badge=self).count()
+        return num_assertions/User.objects.filter(is_active=True).count()
+
+    def get_rarity(self):
+        fraction = self.fraction_of_active_users_granted_this()
+        if fraction < 0.05:
+            return 4
+        if fraction < 0.10:
+            return 3
+        if fraction < 0.20:
+            return 2
+        if fraction < 0.40:
+            return 1
+
     # # to help with the prerequisite choices!
     # @staticmethod
     # def autocomplete_search_fields():

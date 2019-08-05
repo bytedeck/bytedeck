@@ -7,6 +7,8 @@ from model_mommy.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries
 
+User = get_user_model()
+
 
 class BadgeTypeTestModel(TestCase):
     def setUp(self):
@@ -46,8 +48,6 @@ class BadgeAssertionTestModel(TestCase):
 
     def setUp(self):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
-        User = get_user_model()
 
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
@@ -138,3 +138,20 @@ class BadgeAssertionTestModel(TestCase):
     def test_badge_assertion_manager_check_for_new_assertions(self):
         BadgeAssertion.objects.check_for_new_assertions(self.student)
         # TODO need to test this properly
+
+    def test_fraction_of_active_users_granted_this(self):
+        num_students_with_badge = 3
+
+        students_with_badge = mommy.make(User, _quantity=num_students_with_badge)
+        self.assertEqual(len(students_with_badge), num_students_with_badge)
+
+        total_students = User.objects.filter(is_active=True).count()
+
+        badge = mommy.make(Badge)
+
+        for student in students_with_badge:
+            mommy.make(BadgeAssertion, user=student, badge=badge)
+
+        fraction = badge.fraction_of_active_users_granted_this()
+
+        self.assertEqual(fraction, num_students_with_badge/total_students)
