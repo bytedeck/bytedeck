@@ -5,7 +5,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-
+import djconfig
 from courses.models import CourseStudent
 from notifications.signals import notify
 
@@ -16,16 +16,19 @@ User = get_user_model()
 
 @shared_task
 def send_notifications(user_id, announcement_id):
+    djconfig.reload_maybe()  # needed for automated user: hs_hackerspace_ai
     announcement = get_object_or_404(Announcement, pk=announcement_id)
+    sending_user = User.objects.get(id=user_id)
     affected_users = CourseStudent.objects.all_users_for_active_semester()
     notify.send(
-        user_id,
+        sending_user,
         # action=new_announcement,
         target=announcement,
-        recipient=user_id,
+        recipient=sending_user,
         affected_users=affected_users,
         icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
-        verb='posted')
+        verb='posted'
+    )
 
 
 @shared_task
