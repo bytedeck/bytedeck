@@ -46,8 +46,8 @@ class ProfileViewTests(TestCase):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
-        s_pk = self.test_student1.pk
-        s2_pk = self.test_student2.pk
+        s_pk = self.test_student1.profile.pk
+        s2_pk = self.test_student2.profile.pk
 
         # self.assertEquals(self.client.get(reverse('profiles:profile_detail')).status_code, 200)
         self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
@@ -69,7 +69,7 @@ class ProfileViewTests(TestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        s_pk = self.test_student1.pk
+        s_pk = self.test_student1.profile.pk
         # s2_pk = self.test_student2.pk
 
         self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
