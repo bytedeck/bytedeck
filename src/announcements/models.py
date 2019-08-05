@@ -50,7 +50,11 @@ class AnnouncementManager(models.Manager):
 
 class Announcement(models.Model):
     title = models.CharField(max_length=80)
-    datetime_released = models.DateTimeField(default=timezone.now)
+    datetime_released = models.DateTimeField(
+        default=timezone.now,
+        help_text="The time the announcement was published.  If auto_publish is True, then the announcement will automatically \
+        be published at this time."
+    )
     auto_publish = models.BooleanField(
         default=False,
         help_text="When set to true, the announcement will publish itself on the date and time indicated."
