@@ -54,7 +54,7 @@ def send_announcement_emails(content, url):
 def publish_announcement(user_id, announcement_id, absolute_url):
     """ Publish the announcement, including:
             - edit model instance
-            - push notifications 
+            - push notifications
             - send announcement emails
     """
     # update model instance
@@ -64,5 +64,6 @@ def publish_announcement(user_id, announcement_id, absolute_url):
 
     # push notifications
     send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
+
     # Send the announcements by email to those who have ask for them, using celery
     send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
