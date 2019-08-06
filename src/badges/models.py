@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
@@ -127,13 +129,13 @@ class Badge(models.Model, IsAPrereqMixin):
     def get_rarity_icon(self):
         fraction = self.fraction_of_active_users_granted_this()
         if fraction < 0.05:
-            return '<i class="fa fa-certificate rarity-legendary"></i>'
+            return '<i class="fa fa-certificate rarity-legendary" title="Legendary"></i>'
         elif fraction < 0.15:
-            return '<i class="fa fa-certificate rarity-epic"></i>'
+            return '<i class="fa fa-certificate rarity-epic" title="Epic"></i>'
         elif fraction < 0.45:
-            return '<i class="fa fa-certificate rarity-rare"></i>'
+            return '<i class="fa fa-certificate rarity-rare" title="Rare"></i>'
         else:
-            return '<i class="fa fa-certificate rarity-common"></i>'
+            return '<i class="fa fa-certificate rarity-common" title="Common"></i>'
 
     # # to help with the prerequisite choices!
     # @staticmethod
@@ -188,9 +190,23 @@ class BadgeAssertionManager(models.Manager):
         This only works in a postgresql database
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
-        if settings.DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql_psycopg2':
+
+        db_engine = settings.DATABASES['default']['ENGINE']
+        if db_engine == 'django.db.backends.postgresql_psycopg2' or db_engine == 'django.db.backends.postgresql':
             return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
+        else:
+            print("Database is {}".format(db_engine))
+            print("Multiple badge assertions for a use will be duplicated instead of combined.")
+            print("Only django.db.backends.postgresql_psycopg2' supports distinct() method.")
         return self.get_queryset(False).get_user(user)
+
+    def badge_assertions_dict_items(self, user):
+        earned_assertions = self.all_for_user_distinct(user)
+        assertion_dict = defaultdict(list)
+        for assertion in earned_assertions:
+            assertion_dict[assertion.badge.badge_type].append(assertion)
+
+        return assertion_dict.items()
 
     def num_assertions(self, user, badge, active_semester_only=False):
         qs = self.all_for_user_badge(user, badge, active_semester_only)

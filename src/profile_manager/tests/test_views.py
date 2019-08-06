@@ -1,5 +1,4 @@
 # Create your tests here.
-# Create your tests here.
 import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
