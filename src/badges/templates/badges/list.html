@@ -32,6 +32,7 @@
                     {% endif %}
                     <p>{{badge.short_description}}</p>
                     <p>XP: {{badge.xp}}</p>
+                    <p>Rarity: {{badge.get_rarity_icon}} <small>{{badge.percent_of_active_users_granted_this}}% have this badge</small></p>
                     <!-- <p>Series: {{badge.series}}</p> -->
                     <p>Requirements:<ul><small>
                     {% for p in badge.prereqs %}

@@ -121,16 +121,19 @@ class Badge(models.Model, IsAPrereqMixin):
         num_assertions = BadgeAssertion.objects.filter(badge=self).count()
         return num_assertions/User.objects.filter(is_active=True).count()
 
-    def get_rarity(self):
+    def percent_of_active_users_granted_this(self):
+        return self.fraction_of_active_users_granted_this() * 100
+
+    def get_rarity_icon(self):
         fraction = self.fraction_of_active_users_granted_this()
         if fraction < 0.05:
-            return 4
-        if fraction < 0.10:
-            return 3
-        if fraction < 0.20:
-            return 2
-        if fraction < 0.40:
-            return 1
+            return '<i class="fa fa-certificate rarity-legendary"></i>'
+        elif fraction < 0.15:
+            return '<i class="fa fa-certificate rarity-epic"></i>'
+        elif fraction < 0.45:
+            return '<i class="fa fa-certificate rarity-rare"></i>'
+        else:
+            return '<i class="fa fa-certificate rarity-common"></i>'
 
     # # to help with the prerequisite choices!
     # @staticmethod

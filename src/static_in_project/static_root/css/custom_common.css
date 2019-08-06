@@ -5,6 +5,20 @@ h5 {
 }
 
 
+/********** RARITIES ***************/
+
+.rarity-legendary {
+    color: gold;
+}
+.rarity-epic {
+    color: purple;
+}
+.rarity-rare {
+    color: blue;
+}
+.rarity-common {
+    color: gray;
+}
 
 /********** CUSTOM APPLIED STYLES ***********/
 
