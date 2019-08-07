@@ -25,8 +25,8 @@
               <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
                 <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
                     data-trigger="focus" data-placement="auto left" data-html="true"
-                    title="<h3 class='panel-title'>{{badge.name}}</h3>"
-                    data-content='{% include 'badges/snippets/badge_popover.html'%}'>
+                    title="{% include 'badges/snippets/badge_popover_title.html' %}"
+                    data-content="{% include 'badges/snippets/badge_popover_content.html'%}">
                     <div class="thumbnail thumbnail-badge">
                         {% if not badge.active %}
                             <i class="fa fa-2x fa-eye-slash pull-right text-danger" style="position:absolute;"></i>

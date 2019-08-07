@@ -110,7 +110,7 @@ class Badge(models.Model, IsAPrereqMixin):
         return Prereq.objects.all_parent(self)
 
     def get_absolute_url(self):
-        return reverse('badges:list')
+        return reverse('badges:badge_detail', kwargs={'badge_id': self.id})
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
@@ -129,13 +129,13 @@ class Badge(models.Model, IsAPrereqMixin):
     def get_rarity_icon(self):
         fraction = self.fraction_of_active_users_granted_this()
         if fraction < 0.05:
-            return '<i class="fa fa-certificate rarity-legendary" title="Legendary"></i>'
+            return "<i class='fa fa-certificate rarity-legendary' title='Legendary'></i>"
         elif fraction < 0.15:
-            return '<i class="fa fa-certificate rarity-epic" title="Epic"></i>'
+            return "<i class='fa fa-certificate rarity-epic' title='Epic'></i>"
         elif fraction < 0.45:
-            return '<i class="fa fa-certificate rarity-rare" title="Rare"></i>'
+            return "<i class='fa fa-certificate rarity-rare' title='Rare'></i>"
         else:
-            return '<i class="fa fa-certificate rarity-common" title="Common"></i>'
+            return "<i class='fa fa-certificate rarity-common' title='Common'></i>"
 
     # # to help with the prerequisite choices!
     # @staticmethod
