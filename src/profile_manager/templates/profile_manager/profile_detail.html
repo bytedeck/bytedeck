@@ -239,7 +239,7 @@
         </h3>
       </div>
       <div class="list-group">
-      {% for badge_type, assertions in badge_assertions_dict_items %}
+        {% for badge_type, assertions in badge_assertions_dict_items %}
         <div class="list-group-item list-group-item-info">
             <i class="pull-right fa fa-fw {{badge_type.fa_icon}}"></i>
             {{badge_type.name}}s
@@ -247,29 +247,23 @@
         </div>
         <div class="list-group-item">
           {% for assertion in assertions %}
-            {% with assertions_of_this_badge=assertion.get_duplicate_assertions %}
-            <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-            data-trigger="hover focus" data-placement="auto left" data-html="true"
-            {% with badge=assertion.badge %}
-            title="{% include 'badges/snippets/badge_popover_title.html' %}"
-            data-content="{% include 'badges/snippets/badge_popover_content.html' %}">
-            {% endwith %}
-              <div class="icon-badge-container">
-                <img class="icon-xl img-rounded
-                  {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
-                  src="{{assertion.badge.get_icon_url}}">
-                {% if assertions_of_this_badge|length > 1 %}
-                  <span class="badge badge-icon-lg progress-bar-info">{{assertions_of_this_badge|length}}</span>
-                {% endif %}
-              </div>
-
-            </a>
+            {% with assertions_of_this_badge=assertion.get_duplicate_assertions badge=assertion.badge %}
+            <div class="hidden-xs"> {# only use popover on wider screens #}
+              <a {% include 'badges/snippets/badge_popover.html' %} >
+                {% include 'profile_manager/snippets/profile_badge.html' %}
+              </a>
+            </div>
+            <div class="visible-xs-inline-block"> {# direct link on mobile #}
+              <a href="{{badge.get_absolute_url}}">
+                {% include 'profile_manager/snippets/profile_badge.html' %}
+              </a>
+            </div>
             {% endwith %}
           {% empty %}
             None.
           {% endfor %} {# for assertion in assertions #}
         </div>
-      {% empty %}
+        {% empty %}
           <div class="list-group-item">
             None.
           </div>
