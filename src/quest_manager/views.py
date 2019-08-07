@@ -882,12 +882,32 @@ def skipped(request, quest_id):
 
 
 @login_required
-def ajax_save_draft(request, submission_id):
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
-    # save the draft via ajax.
-    return sub   
+def ajax_save_draft(request):
+    if request.is_ajax() and request.method == "POST":
 
-    
+        submission_comment = request.POST.get('comment')
+        response_data = {}
+
+        print("REceived ajax data comment: ", submission_comment)
+
+        # post = Post(text=post_text, author=request.user)
+        # post.save()
+
+        response_data['result'] = 'Create post successful!'
+        # response_data['postpk'] = post.pk
+        # response_data['text'] = post.text
+        # response_data['created'] = post.created.strftime('%B %d, %Y %I:%M %p')
+        # response_data['author'] = post.author.username
+
+        return HttpResponse(
+            json.dumps(response_data),
+            content_type="application/json"
+        )
+
+    else:
+        raise Http404
+
+
 @login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)

@@ -70,7 +70,7 @@
             {% include "quest_manager/buttons_approvals.html" %}
           {% endwith %}
         {% else %}
-          {% comment %} <input type='submit' name='save-draft' class='btn btn-default' value='Save Draft' /> {% endcomment %}
+          <a id='save-draft-btn' class='btn btn-default'>Save Draft</a>
           {% if submission.is_approved %}
             <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
           {% else %}
@@ -103,19 +103,59 @@
                 console.log(iframe_txt.html());
                 iframe_txt.append(msg);
             });
-{% comment %} 
+
             // Save drafts via Ajax
-            $('#post-form').on('submit', function(event){
-                event.preventDefault();
-                console.log("form submitted!")  // sanity check
-                create_post();
-            }); {% endcomment %}
+            $('#save-draft-btn').on('click', function(event){
+                event.preventDefault(); // prevent browser from reloading
+                console.log("Draft saved!")  // sanity check
+                save_draft();
+            });
         });
+
+
+        function save_draft() {
+            console.log("save_draft is working!") // sanity check
+
+            $summernote_editor = $('div.note-editable') // should probably use a more robust selector here?
+            comment = $summernote_editor.html()
+
+            console.log($summernote_editor)
+            console.log(comment)
+
+            $.ajax({
+                url : "{% url 'quests:ajax_save_draft' %}",
+                type : "POST", // http method
+                data : { 
+                  csrfmiddlewaretoken: "{{ csrf_token }}",
+                  comment: comment,
+                  submission_id: {{ submission.id }},
+                  comment_id: '{{ comment.id }}'-am
+                }, // data sent with the post request
+
+
+                // handle a successful response
+                success : function(json) {
+                    $('div.note-editable').val(''); // remove the value from the input
+                    console.log(json); // log the returned json to the console
+                    console.log("success"); // another sanity check
+                },
+
+                // handle a non-successful response
+                error : function(xhr,errmsg,err) {
+                    $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
+                        " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
+                    console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                }
+            });
+
+    };
 
     </script>
 
+    {% if request.user.is_staff %} {# styling for the badge awarding widget #}
     <script>
         $.fn.select2.defaults.set( "theme", "bootstrap" );
     </script>
+    {% endif %}
 
 {% endblock %}
