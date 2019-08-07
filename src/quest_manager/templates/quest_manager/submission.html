@@ -70,10 +70,11 @@
             {% include "quest_manager/buttons_approvals.html" %}
           {% endwith %}
         {% else %}
+          {% comment %} <input type='submit' name='save-draft' class='btn btn-default' value='Save Draft' /> {% endcomment %}
           {% if submission.is_approved %}
             <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
           {% else %}
-            <input id ='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Completion' />
+            <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Completion' />
             <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
           {% endif %}
         {% endif %}
@@ -102,7 +103,15 @@
                 console.log(iframe_txt.html());
                 iframe_txt.append(msg);
             });
+{% comment %} 
+            // Save drafts via Ajax
+            $('#post-form').on('submit', function(event){
+                event.preventDefault();
+                console.log("form submitted!")  // sanity check
+                create_post();
+            }); {% endcomment %}
         });
+
     </script>
 
     <script>

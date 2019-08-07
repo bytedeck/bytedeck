@@ -882,6 +882,13 @@ def skipped(request, quest_id):
 
 
 @login_required
+def ajax_save_draft(request, submission_id):
+    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    # save the draft via ajax.
+    return sub   
+
+    
+@login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"
