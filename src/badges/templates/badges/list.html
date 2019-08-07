@@ -22,32 +22,24 @@
     <div class="row">
       {% for badge in badge_type.badge_set.all %}
           {% if request.user.is_staff or badge.active %}
-              <div class="col-xs-4 col-sm-3 col-md-2 col-badge">
-                <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-                    data-trigger="focus" data-placement="auto left" data-container="body" data-html="true"
-                    title="{% include 'badges/snippets/badge_popover_title.html' %}"
-                    data-content="{% include 'badges/snippets/badge_popover_content.html'%}">
-                    <div class="thumbnail thumbnail-badge">
-                        {% if not badge.active %}
-                            <i class="fa fa-2x fa-eye-slash pull-right text-danger" style="position:absolute;"></i>
-                        {% endif %}
-                        <img class="hackerbadge img-rounded
-                            {% if not badge in earned_badges %} hackerbadge-unearned {% endif %}"
-                            src="{{badge.get_icon_url}}" alt="badge icon">
-                        <div class="caption caption-badge text-center">
-                            {{badge.name}}
-                        </div>
-                    </div>
-                </a>
-              </div>
+          <div class="col-sm-3 col-md-2 col-badge hidden-xs"> {# only use popover on wider screens #}
+            <a {% include 'badges/snippets/badge_popover.html' %} >
+              {% include 'badges/snippets/badge_icon.html' %}
+            </a>
+          </div>
+          <div class="col-xs-4 col-badge visible-xs-inline-block"> {# direct link on mobile #}
+            <a href="{{badge.get_absolute_url}}">
+              {% include 'badges/snippets/badge_icon.html' %}
+            </a>
+          </div>
           {% endif %}
       {% empty %}
       <div class='col-sm-12'>None.</div>
       {% endfor %}
 
-    </div>
+    </div> {# row #}
 
-  </div>
+  </div> {# panel body #}
 
 </div> <!--panel -->
 {% endfor %}
