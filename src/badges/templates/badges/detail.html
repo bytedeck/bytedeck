@@ -21,15 +21,15 @@
       <p>XP: {{badge.xp}}</p>
       <p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p>
       <p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this}}% have earned this badge</p>
+      
       <p>Requirements:</p>
-
-      <ul><small>
+      <ul>
       {% for p in badge.prereqs %}
         <li><a href="{{ p.get_prereq.get_absolute_url }}">{{ p }}</a></li>
       {% empty %}
         <li>None (granted manually)</li>
       {% endfor %}
-      </small></ul>
+      </ul>
 
       {% if assertions_of_this_badge %} {# If a student is looking at this, it will show which badges they have earned #}
       <p>Earned: </p>
