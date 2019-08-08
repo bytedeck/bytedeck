@@ -107,12 +107,14 @@
                 iframe_txt.append(msg);
             });
 
-            // Save drafts via Ajax
+            // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading
                 console.log("Draft saved!")  // sanity check
                 save_draft();
             });
+
+            setInterval(save_draft, 60000); // autosave every 60 seconds
         });
 
         function save_draft() {
