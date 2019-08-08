@@ -70,7 +70,11 @@
             {% include "quest_manager/buttons_approvals.html" %}
           {% endwith %}
         {% else %}
-          <a id='save-draft-btn' class='btn btn-default'>Save Draft</a>
+          <a id='save-draft-btn' class='btn btn-default'>
+            <span id="draft-text">Save Draft</span>
+            <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
+            <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
+          </a>
           {% if submission.is_approved %}
             <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
           {% else %}
@@ -94,7 +98,6 @@
                 }, 1000);
             {% endif %}
 
-
             // Copied from quest_approvals.html
             $('[id^=btn_quick_text]').on('click', function () {
                 var msg = ' Please read the submission instructions more carefully. Thanks! ';
@@ -112,43 +115,63 @@
             });
         });
 
-
         function save_draft() {
-            console.log("save_draft is working!") // sanity check
+            $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
+            draftComment = $summernoteEditor.html()
 
-            $summernote_editor = $('div.note-editable') // should probably use a more robust selector here?
-            comment = $summernote_editor.html()
+            $draftSaveBtn = $('#save-draft-btn')
+            old_text = $draftSaveBtn.html()
 
-            console.log($summernote_editor)
-            console.log(comment)
+            // fix the width of the elemtn so it doesn't shrink when text changes to icon
+            btnWidth = $draftSaveBtn.css('width')
+            $draftSaveBtn.css('width', btnWidth)
 
-            $.ajax({
-                url : "{% url 'quests:ajax_save_draft' %}",
-                type : "POST", // http method
-                data : { 
-                  csrfmiddlewaretoken: "{{ csrf_token }}",
-                  comment: comment,
-                  submission_id: {{ submission.id }},
-                  comment_id: '{{ comment.id }}'-am
-                }, // data sent with the post request
+            $draftText = $('#draft-text')
+            $draftSpin = $('#draft-spin')
+            $draftCheck = $('#draft-check')
 
+            if ($draftText.is(':visible')) {
 
-                // handle a successful response
-                success : function(json) {
-                    $('div.note-editable').val(''); // remove the value from the input
-                    console.log(json); // log the returned json to the console
-                    console.log("success"); // another sanity check
-                },
+                $draftText.hide(0) // no delay
+                $draftSpin.show()
 
-                // handle a non-successful response
-                error : function(xhr,errmsg,err) {
-                    $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
-                        " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
-                    console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                }
+                $.ajax({
+                    url : "{% url 'quests:ajax_save_draft' %}",
+                    type : "POST", // http method
+                    data : { 
+                      csrfmiddlewaretoken: "{{ csrf_token }}",
+                      comment: draftComment,
+                      submission_id: {{ submission.id }}
+                    }, // data sent with the post request
+
+                    // handle a successful response
+                    success : function(json) {
+                      hide_check_show_text();
+                    },
+
+                    // handle a non-successful response
+                    error : function(xhr,errmsg,err) {
+                        $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
+                            " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
+                        console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                        alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                    }
+                });
+            }
+
+        };
+
+        function hide_check_show_text() {
+          // after success, animate a check mark, then put text back
+          $('#draft-spin').fadeOut(400, function() {
+            $('#draft-check').fadeIn(400, function() {
+              window.setTimeout(
+                function(){$('#draft-check').hide(0, function() {$('#draft-text').show(0)});},
+                2000
+              )
             });
-
-    };
+          });
+        };
 
     </script>
 

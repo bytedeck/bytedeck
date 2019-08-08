@@ -717,7 +717,7 @@ class QuestSubmission(models.Model):
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
-    is_draft = models.BooleanField(default=True)
+    draft_text = models.TextField(null=True, blank=True)
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

@@ -883,21 +883,17 @@ def skipped(request, quest_id):
 
 @login_required
 def ajax_save_draft(request):
-    if request.is_ajax() and request.method == "POST":
+    if request.is_ajax() and request.POST:
 
         submission_comment = request.POST.get('comment')
+        submission_id = request.POST.get('submission_id')
+
+        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        sub.draft_text = submission_comment
+        sub.save()
+
         response_data = {}
-
-        print("REceived ajax data comment: ", submission_comment)
-
-        # post = Post(text=post_text, author=request.user)
-        # post.save()
-
-        response_data['result'] = 'Create post successful!'
-        # response_data['postpk'] = post.pk
-        # response_data['text'] = post.text
-        # response_data['created'] = post.created.strftime('%B %d, %Y %I:%M %p')
-        # response_data['author'] = post.author.username
+        response_data['result'] = 'Draft saved'
 
         return HttpResponse(
             json.dumps(response_data),
@@ -932,7 +928,9 @@ def submission(request, submission_id=None, quest_id=None):
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
-        main_comment_form = SubmissionForm(request.POST or None)
+        initial = {'comment_text': sub.draft_text}
+        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
