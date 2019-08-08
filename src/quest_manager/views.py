@@ -882,6 +882,29 @@ def skipped(request, quest_id):
 
 
 @login_required
+def ajax_save_draft(request):
+    if request.is_ajax() and request.POST:
+
+        submission_comment = request.POST.get('comment')
+        submission_id = request.POST.get('submission_id')
+
+        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        sub.draft_text = submission_comment
+        sub.save()
+
+        response_data = {}
+        response_data['result'] = 'Draft saved'
+
+        return HttpResponse(
+            json.dumps(response_data),
+            content_type="application/json"
+        )
+
+    else:
+        raise Http404
+
+
+@login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"
@@ -905,7 +928,9 @@ def submission(request, submission_id=None, quest_id=None):
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
-        main_comment_form = SubmissionForm(request.POST or None)
+        initial = {'comment_text': sub.draft_text}
+        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
