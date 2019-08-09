@@ -24,6 +24,8 @@ class BadgeRarityManager(models.Manager):
     def get_rarity(self, percentile):
         """Because this model is sorted by rarity, with the rarist on top,
         the first item in the returned list will be the rarest category of the item"""
+        if percentile > 100.0:
+            percentile = 100
         rarities = self.get_queryset().filter(percentile__gte=percentile)
         return rarities.first()
 
