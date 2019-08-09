@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User 
 from django.db import models
 from django.db.models import Max, Sum
 from django.shortcuts import get_object_or_404
@@ -19,6 +19,40 @@ from prerequisites.models import Prereq, IsAPrereqMixin
 # from courses.models import Semester
 
 # Create your models here.
+
+class BadgeRarity(models.Model):
+    """
+    A dynamic rarity system that determines the rarity of a badge based on how often it has been granted.
+        A default setup might look something like this:
+        Legendary, 1.0%, gold
+        Epic, 5.0%, purple
+        Rare, 15.0%, blue
+        Common, 100%, gray
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="The unique name or label for this rarity of badge, e.g. 'Legendary'",
+    )
+    percentile = models.FloatField(
+        unique=True,
+        help_text="A number from 0.1% (or less) to 100.0% indicating the rarity of the badge.  For example: \
+            10.0% would mean badges that <10.0% of users have earned will be assigned this rarity, unless \
+            it falls into the next more rare category (such as 5.0%).  A value of 100 will catch all badges."
+    )
+    color = models.CharField(
+        max_length=50,
+        default='gray',
+        help_text='An HTML color name "gray" or hex value in the format: "#7b7b7b;"',
+    )
+    fa_icon = models.CharField(
+        max_length=50,
+        default='fa-certificate',
+        help_text='A font-awesome icon to represent this rarity, should begin with "fa-".  See here for \
+            options: "https://faicons.com"'
+    )
+
 
 class BadgeType(models.Model):
     name = models.CharField(max_length=50, unique=True)
