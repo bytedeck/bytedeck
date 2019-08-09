@@ -6,7 +6,11 @@ from import_export.admin import ImportExportActionModelAdmin
 
 from prerequisites.admin import PrereqInline
 
-from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion
+from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion, BadgeRarity
+
+
+class BadgeRarityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'percentile', 'color', 'fa_icon')
 
 
 class BadgeAssertionAdmin(admin.ModelAdmin):
@@ -33,5 +37,6 @@ class BadgeAdmin(ImportExportActionModelAdmin):
 
 admin.site.register(Badge, BadgeAdmin)
 admin.site.register(BadgeSeries)
+admin.site.register(BadgeRarity, BadgeRarityAdmin)
 admin.site.register(BadgeType, BadgeTypeAdmin)
 admin.site.register(BadgeAssertion, BadgeAssertionAdmin)

@@ -20,6 +20,71 @@ from prerequisites.models import Prereq, IsAPrereqMixin
 
 # Create your models here.
 
+class BadgeRarityManager(models.Manager):
+    def get_rarity(self, percentile):
+        """Because this model is sorted by rarity, with the rarist on top,
+        the first item in the returned list will be the rarest category of the item"""
+        if percentile > 100.0:
+            percentile = 100
+        rarities = self.get_queryset().filter(percentile__gte=percentile)
+        return rarities.first()
+
+
+class BadgeRarity(models.Model):
+    """
+    A dynamic rarity system that determines the rarity of a badge based on how often it has been granted.
+        A default setup might look something like this:
+        Legendary, 1.0%, gold
+        Epic, 5.0%, purple
+        Rare, 15.0%, blue
+        Common, 100%, gray
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="The unique name or label for this rarity of badge, e.g. 'Legendary'",
+    )
+    percentile = models.FloatField(
+        unique=True,
+        help_text="A number from 0.1% (or less) to 100.0% indicating the rarity of the badge.  For example: \
+            10.0% would mean badges that <10.0% of users have earned will be assigned this rarity, unless \
+            it falls into the next more rare category (such as 5.0%).  A value of 100 will catch all badges."
+    )
+    color = models.CharField(
+        max_length=50,
+        default='gray',
+        help_text='An HTML color name "gray" or hex value in the format: "#7b7b7b;"',
+    )
+    fa_icon = models.CharField(
+        max_length=50,
+        default='fa-certificate',
+        help_text='A font-awesome icon to represent this rarity, should begin with "fa-".  See here for \
+            options: "https://faicons.com"'
+    )
+
+    objects = BadgeRarityManager()
+
+    class Meta:
+        ordering = ['percentile']
+        verbose_name = "Badge Rarity"
+        verbose_name_plural = "Badge Rarities"
+
+    def __str__(self):
+        return self.name
+
+    def get_icon_html(self):
+        icon = "<i class='fa {} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
+                    self.fa_icon,
+                    self.name,
+                    self.name,
+                    self.color,
+                )
+        print(icon)
+        aria_span = "<span class='sr-only'>{}</span>".format(self.name)
+        return icon + aria_span
+
+
 class BadgeType(models.Model):
     name = models.CharField(max_length=50, unique=True)
     sort_order = models.PositiveIntegerField(blank=True, null=True)
@@ -127,15 +192,12 @@ class Badge(models.Model, IsAPrereqMixin):
         return self.fraction_of_active_users_granted_this() * 100
 
     def get_rarity_icon(self):
-        fraction = self.fraction_of_active_users_granted_this()
-        if fraction < 0.05:
-            return "<i class='fa fa-certificate rarity-legendary' title='Legendary'></i>"
-        elif fraction < 0.15:
-            return "<i class='fa fa-certificate rarity-epic' title='Epic'></i>"
-        elif fraction < 0.45:
-            return "<i class='fa fa-certificate rarity-rare' title='Rare'></i>"
+        percentile = self.percent_of_active_users_granted_this()
+        badge_rarity = BadgeRarity.objects.get_rarity(percentile)
+        if badge_rarity:
+            return badge_rarity.get_icon_html()
         else:
-            return "<i class='fa fa-certificate rarity-common' title='Common'></i>"
+            return ""
 
     # # to help with the prerequisite choices!
     # @staticmethod

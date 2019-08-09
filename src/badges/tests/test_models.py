@@ -5,9 +5,29 @@ from django.utils import timezone
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
 
-from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries
+from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries, BadgeRarity
 
 User = get_user_model()
+
+
+class BadgeRarityTestModel(TestCase):
+    def setUp(self):
+        self.common = mommy.make(BadgeRarity)
+
+    def test_badge_rarity_creation(self):
+        self.assertIsInstance(self.common, BadgeRarity)
+        self.assertEqual(str(self.common), self.common.name)
+
+    def test_get_rarity(self):
+        self.common = mommy.make(BadgeRarity, percentile=100.0)
+        self.rare = mommy.make(BadgeRarity, percentile=50.0)
+        self.ultrarare = mommy.make(BadgeRarity, percentile=1.0)
+
+        self.assertEqual(BadgeRarity.objects.get_rarity(0.5), self.ultrarare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(49.0), self.rare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(50.0), self.rare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(100.0), self.common)
+        self.assertEqual(BadgeRarity.objects.get_rarity(110.0), self.common)
 
 
 class BadgeTypeTestModel(TestCase):
@@ -153,5 +173,7 @@ class BadgeAssertionTestModel(TestCase):
             mommy.make(BadgeAssertion, user=student, badge=badge)
 
         fraction = badge.fraction_of_active_users_granted_this()
-
         self.assertEqual(fraction, num_students_with_badge/total_students)
+
+        percentile = badge.percent_of_active_users_granted_this()
+        self.assertEqual(percentile, num_students_with_badge/total_students*100)
