@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from django.conf import settings
-from django.contrib.auth.models import User 
+from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Max, Sum
 from django.shortcuts import get_object_or_404
@@ -52,6 +52,14 @@ class BadgeRarity(models.Model):
         help_text='A font-awesome icon to represent this rarity, should begin with "fa-".  See here for \
             options: "https://faicons.com"'
     )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['percentile']
+        verbose_name = "Badge Rarity"
+        verbose_name_plural = "Badge Rarities"
 
 
 class BadgeType(models.Model):
