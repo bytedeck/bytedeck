@@ -20,6 +20,14 @@ from prerequisites.models import Prereq, IsAPrereqMixin
 
 # Create your models here.
 
+class BadgeRarityManager(models.Manager):
+    def get_rarity(self, percentile):
+        """Because this model is sorted by rarity, with the rarist on top,
+        the first item in the returned list will be the rarest category of the item"""
+        rarities = self.get_queryset().filter(percentile__gte=percentile)
+        return rarities.first()
+
+
 class BadgeRarity(models.Model):
     """
     A dynamic rarity system that determines the rarity of a badge based on how often it has been granted.
@@ -53,13 +61,26 @@ class BadgeRarity(models.Model):
             options: "https://faicons.com"'
     )
 
-    def __str__(self):
-        return self.name
+    objects = BadgeRarityManager()
 
     class Meta:
         ordering = ['percentile']
         verbose_name = "Badge Rarity"
         verbose_name_plural = "Badge Rarities"
+
+    def __str__(self):
+        return self.name
+
+    def get_icon_html(self):
+        icon = "<i class='fa {} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
+                    self.fa_icon,
+                    self.name,
+                    self.name,
+                    self.color,
+                )
+        print(icon)
+        aria_span = "<span class='sr-only'>{}</span>".format(self.name)
+        return icon + aria_span
 
 
 class BadgeType(models.Model):
@@ -169,15 +190,12 @@ class Badge(models.Model, IsAPrereqMixin):
         return self.fraction_of_active_users_granted_this() * 100
 
     def get_rarity_icon(self):
-        fraction = self.fraction_of_active_users_granted_this()
-        if fraction < 0.05:
-            return "<i class='fa fa-certificate rarity-legendary' title='Legendary'></i>"
-        elif fraction < 0.15:
-            return "<i class='fa fa-certificate rarity-epic' title='Epic'></i>"
-        elif fraction < 0.45:
-            return "<i class='fa fa-certificate rarity-rare' title='Rare'></i>"
+        percentile = self.percent_of_active_users_granted_this()
+        badge_rarity = BadgeRarity.objects.get_rarity(percentile)
+        if badge_rarity:
+            return badge_rarity.get_icon_html()
         else:
-            return "<i class='fa fa-certificate rarity-common' title='Common'></i>"
+            return ""
 
     # # to help with the prerequisite choices!
     # @staticmethod

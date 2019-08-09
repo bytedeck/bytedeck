@@ -4,22 +4,6 @@ h5 {
     font-weight: 700;
 }
 
-
-/********** RARITIES ***************/
-
-.rarity-legendary {
-    color: gold;
-}
-.rarity-epic {
-    color: purple;
-}
-.rarity-rare {
-    color: blue;
-}
-.rarity-common {
-    color: gray;
-}
-
 /********** CUSTOM APPLIED STYLES ***********/
 
 ul.left-aligned, ol.left-aligned {
