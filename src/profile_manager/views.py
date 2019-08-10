@@ -117,8 +117,8 @@ class ProfileUpdate(UpdateView):
     template_name = 'profile_manager/form.html'
 
     def get_context_data(self, **kwargs):
+        profile = self.get_object()
         # Call the base implementation first to get a context
-        profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super(ProfileUpdate, self).get_context_data(**kwargs)
         context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
         context['action_value'] = ""
@@ -128,7 +128,7 @@ class ProfileUpdate(UpdateView):
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
-        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
+        profile_user = self.get_object().user
         if profile_user == self.request.user or self.request.user.is_staff:
             return super(ProfileUpdate, self).dispatch(*args, **kwargs)
         else:
