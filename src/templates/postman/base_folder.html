@@ -24,7 +24,7 @@ in the INSTALLED_APPS setting.
 {% block pm_form_buttons %}<span id="pm_buttons" class="btn-group">
 {% block pm_delete_button %}<button type="submit" class="pm_btn pm_btn-delete btn btn-danger" onclick="this.form.action='{% url 'postman:delete' %}'">{% trans "Delete" %}</button>{% endblock %}
 {% block pm_archive_button %}<button type="submit" class="pm_btn pm_btn-archive btn btn-warning" onclick="this.form.action='{% url 'postman:archive' %}'">{% trans "Archive" %}</button>{% endblock %}
-{% block pm_undelete_button %}<button type="submit" class="pm_btn pm_btn-undelete btn-default" onclick="this.form.action='{% url 'postman:undelete' %}'">{% trans "Undelete" %}</button>{% endblock %}
+{% block pm_undelete_button %}<button type="submit" class="pm_btn pm_btn-undelete btn btn-default" onclick="this.form.action='{% url 'postman:undelete' %}'">{% trans "Undelete" %}</button>{% endblock %}
 {% block pm_read_button %}<button type="submit" class="pm_btn pm_btn-read btn btn-default" onclick="this.form.action='{% url 'postman:mark-read' %}'">{% trans "Mark as read" %}</button>{% endblock %}
 {% block pm_unread_button %}<button type="submit" class="pm_btn pm_btn-unread btn btn-default" onclick="this.form.action='{% url 'postman:mark-unread' %}'">{% trans "Mark as unread" %}</button>{% endblock %}
 </span>{% endblock %}
