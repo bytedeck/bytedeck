@@ -58,7 +58,9 @@
        class="list-group-item {% if '/messages/' in request.path_info %}active{% endif %}"
        href="{% url 'postman:inbox' %}">
       <i class="fa fa-comments-o fa-fw"></i>&nbsp; Messages
+      {% if postman_unread %}
       <span id="messages-badge" class="badge alert-danger list-group-item-badge ">{% postman_unread as unread_count %}{{unread_count}}</span>
+      {% endif %}
     </a>
 
     {% if config.hs_suggestions_on %}
