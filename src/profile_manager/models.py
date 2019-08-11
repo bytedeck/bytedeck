@@ -106,6 +106,10 @@ class Profile(models.Model):
         default=False,
         help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day." # noqa
     )
+    get_messages_by_email = models.BooleanField(
+        default=True,
+        help_text="If your teacher sends you a message, get an instance email." # noqa
+    )
     visible_to_other_students = models.BooleanField(
         default=False, help_text="Your marks will be visible to other students through the student list.")
     preferred_internal_only = models.BooleanField(

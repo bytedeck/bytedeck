@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block head_title%}{% endblock%}
+{% block extrahead %}{% endblock %} {# needed by django-postman #}
 {% block head %}{% endblock %}
 {% block head_css %}{% endblock %}
 
@@ -14,6 +15,7 @@
     <div class="col-xs-12 col-sm-9" id="main"> <!-- These settings need to compliment the sidebar settings -->
         {% block pre_heading %}{% endblock %}
         <h1>{% block heading %}{% endblock %}</h1>
+        {% block postman_menu %}{% endblock %}
         {% block content %}{% endblock %}
     </div>
     {% block extra_body %}{% endblock %}
