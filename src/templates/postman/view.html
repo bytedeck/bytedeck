@@ -10,7 +10,7 @@
   <span class="pm_sender">{{ message.obfuscated_sender|or_me:user }}</span> &raquo;
   <span class="pm_recipient">{{ message.obfuscated_recipient|or_me:user }}</span> |
   <span class="pm_date">{{ message.sent_at|date:"DATETIME_FORMAT"}}</span> |
-  <span class="pm_subject">{{ message.subject }}</span>
+  <span class="pm_subject">{{ message.subject|truncatechars:65 }}</span>
 {% if message.is_rejected %}  <div class="pm_status">{% trans "Rejected" %}{% if message.moderation_reason %}{% trans ":" %} {{ message.moderation_reason }}{% endif %}</div>{% endif %}
  </div>
  <div class="pm_body well">{{ message.body|linebreaksbr }}</div>

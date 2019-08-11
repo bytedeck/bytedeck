@@ -18,5 +18,10 @@ With subject: "a subject of great interest for you":
 With subject: "a great interest":
 "a great interest - Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed ..."
 
-{% endcomment %}{% load postman_tags %}{% with message.subject|truncatewords:5 as truncated_subject %}{{ truncated_subject }}
+{% endcomment %}
+{{ message.subject|truncatechars:40 }}
+
+{% comment %}{% load postman_tags %}{% with message.subject|truncatechars:40 as truncated_subject %}{{ truncated_subject }}
+{% comment %}
 {% with truncated_subject|wordcount as subject_wc %}{% with 12|sub:subject_wc as wc %}{% if message.body and wc > 0 %} - <span style="color: grey">{{ message.body|truncatewords:wc }}</span>{% endif %}{% endwith %}{% endwith %}{% endwith %}
+{% endcomment %}
