@@ -4,13 +4,18 @@
 {% block extrahead %}{{ block.super }}
 <link type="text/css" media="all" rel="stylesheet" href="{% static 'postman/css/postman.css' %}" />
 {% endblock %}
-{% block heading %}Messages <i class="fa fa-comments-o pull-right"></i>{% endblock %}
+{% block heading %}Messages <a href="{% url 'postman:write' %}" class="btn btn-success"><i class="fa fa-plus-circle"></i> New</a>
+<i class="fa fa-comments-o pull-right"></i>
+{% endblock %}
 {% block postman_menu %}
 <ul id="postman_menu" class="nav nav-tabs nav-justified">{% postman_unread as unread_count %}
-    <li><a href="{% url 'postman:inbox' %}">{% trans "Inbox" %}{% if unread_count %} <strong>({{ unread_count }})</strong>{% endif %}</a></li>
-    <li><a href="{% url 'postman:sent' %}">{% trans "Sent" %}</a></li>
-    <li><a href="{% url 'postman:write' %}">{% trans "Write" %}</a></li>
-    <li><a href="{% url 'postman:archives' %}">{% trans "Archives" %}</a></li>
-    <li><a href="{% url 'postman:trash' %}">{% trans "Trash" %}</a></li>
+    <li {% if 'inbox' in request.path %}class="active"{% endif %}>
+        <a href="{% url 'postman:inbox' %}">{% trans "Inbox" %}{% if unread_count %} 
+        <span class="badge alert-danger">{{ unread_count }}</span>{% endif %}</a>
+    </li>
+    <li {% if 'sent' in request.path %}class="active"{% endif %}><a href="{% url 'postman:sent' %}">{% trans "Sent" %}</a></li>
+    {# <li {% if 'write' in request.path %}class="active"{% endif %}><a href="{% url 'postman:write' %}">{% trans "Write" %}</a></li> #}
+    <li {% if 'archives' in request.path %}class="active"{% endif %}><a href="{% url 'postman:archives' %}">{% trans "Archives" %}</a></li>
+    <li {% if 'trash' in request.path %}class="active"{% endif %}><a href="{% url 'postman:trash' %}">{% trans "Trash" %}</a></li>
 </ul>
 {% endblock %}
