@@ -40,7 +40,7 @@ in the INSTALLED_APPS setting.
   </tr>
  </thead>
  <tbody>{% for message in pm_messages %}
-  <tr>
+  <tr {% if message.is_new %} class="warning"{% endif %}>
    <td><input type="checkbox" {% if by_conversation and message.thread_id %}name="tpks" value="{{ message.thread_id }}"{% else %}name="pks" value="{{ message.pk }}"{% endif %} /></td>
 {% block pm_sender_cell %}   <td>{{ message.obfuscated_sender|or_me:user }}{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
 {% block pm_recipient_cell %}   <td>{{ message.obfuscated_recipient|or_me:user }}{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
