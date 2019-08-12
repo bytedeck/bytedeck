@@ -20,7 +20,7 @@
     <div class="panel-body">
       <p>XP: {{badge.xp}}</p>
       <p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p>
-      <p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this}}% have earned this badge</p>
+      <p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</p>
       
       <p>Requirements:</p>
       <ul>

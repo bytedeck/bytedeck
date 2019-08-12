@@ -1,12 +1,12 @@
 {% if not badge.active %}
-    <p class="text-danger"><i class="fa fa-eye-slash"></i> INACTIVE</p>
+    <p class='text-danger'><i class='fa fa-eye-slash'></i> INACTIVE</p>
 {% endif %}
 
 <p>{{badge.short_description}}</p>
 
 <p>XP: {{badge.xp}}</p>
 
-<p>Rarity: {{badge.get_rarity_icon|safe}} <small>{{badge.percent_of_active_users_granted_this}}% have earned this badge</small></p>
+<p>Rarity: {{badge.get_rarity_icon|safe}} <small>{{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</small></p>
 
 <!-- <p>Series: {{badge.series}}</p> -->
 
@@ -14,7 +14,7 @@
 
 <ul><small>
 {% for p in badge.prereqs %}
-  <li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}<a/></li>
+  <li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>
 {% empty %}
   <li>None (granted manually)</li>
 {% endfor %}
@@ -26,8 +26,8 @@
 {% for assertion in assertions_of_this_badge %}
   <li>{{assertion.timestamp}}
     {% if request.user.is_staff %} {# staff can revoke badges #}
-    <a class="btn btn-danger btn-xs" href="{% url 'badges:revoke' assertion.id %}" role="button">
-      <i class="fa fa-trash-o"></i>
+    <a class='btn btn-danger btn-xs' href='{% url "badges:revoke" assertion.id %}' role='button'>
+      <i class='fa fa-trash-o'></i>
     </a>
     {% endif %}
   </li>
@@ -36,25 +36,25 @@
 {% endif %} {# if assertions #}
 
 {% if request.user.is_staff %} {# staff can manage badges from popup #}
-<div class="btn-group block" role="group">
-  <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}" role="button">
-    <i class="fa fa-edit"></i>
+<div class='btn-group block' role='group'>
+  <a class='btn btn-warning' title='Edit' href='{% url "badges:badge_update" badge.id %}' role='button'>
+    <i class='fa fa-edit'></i>
   </a>
-  <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}" role="button">
-    <i class="fa fa-copy"></i>
+  <a class='btn btn-primary' title='Copy' href='{% url "badges:badge_copy" badge.id %}' role='button'>
+    <i class='fa fa-copy'></i>
   </a>
-  <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}" role="button">
-    <i class="fa fa-trash-o"></i>
+  <a class='btn btn-danger' title='Delete' href='{% url "badges:badge_delete" badge.id %}' role='button'>
+    <i class='fa fa-trash-o'></i>
   </a>
 </div>
-<div class="btn-group block pull-right" role="group">
-  <a class="btn btn-success" title="Grant to a student"
-    href="{% url 'badges:grant' badge.id 0 %}" role="button">
-    <i class="fa fa-user"></i>
+<div class='btn-group block pull-right' role='group'>
+  <a class='btn btn-success' title='Grant to a student'
+    href='{% url "badges:grant" badge.id 0 %}' role='button'>
+    <i class='fa fa-user'></i>
   </a>
-  <a class="btn btn-success" title="Bulk grant to multiple student"
-    href="{% url 'badges:bulk_grant_badge' badge.id %}" role="button">
-    <i class="fa fa-users"></i>
+  <a class='btn btn-success' title='Bulk grant to multiple student'
+    href='{% url "badges:bulk_grant_badge" badge.id %}' role='button'>
+    <i class='fa fa-users'></i>
   </a>
 </div>
 {% endif %} {# if staff #}
