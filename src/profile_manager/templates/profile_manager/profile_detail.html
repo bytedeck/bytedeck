@@ -239,7 +239,7 @@
         </h3>
       </div>
       <div class="list-group">
-      {% for badge_type, assertions in badge_assertions_dict_items %}
+        {% for badge_type, assertions in badge_assertions_dict_items %}
         <div class="list-group-item list-group-item-info">
             <i class="pull-right fa fa-fw {{badge_type.fa_icon}}"></i>
             {{badge_type.name}}s
@@ -247,56 +247,23 @@
         </div>
         <div class="list-group-item">
           {% for assertion in assertions %}
-            {% with duplicates=assertion.get_duplicate_assertions %}
-            <a tabindex="0" class="badge-popover" role="button" data-toggle="popover"
-            data-trigger="hover focus" data-placement="auto left" data-html="true"
-            title="<h3 class='panel-title'>{{assertion.badge.name}}</h3>"
-            data-content='
-            <img class="icon-xl center-block img-rounded" src="{{assertion.badge.get_icon_url}}">
-            <p>{{assertion.badge.short_description}}</p>
-            <p>XP:
-            {% if assertion.game_lab_transfer %}
-              n/a (Badge Skipped)
-            {% else %}
-              {{assertion.badge.xp}}
-            {% endif %}</p>
-            <p>Requirements:<ul><small>
-            {% for p in assertion.badge.prereqs %}
-              <li>{{ p }}</li>
-            {% empty %}
-              <li>None (granted manually)</li>
-            {% endfor %}</ul></small></p>
-
-            <p>Granted on: <small><ul>
-            {% for ass in duplicates %}
-              <li>{{ass.timestamp}}
-              {% if request.user.is_staff %}
-              <a class="btn btn-danger btn-xs" href="{% url 'badges:revoke' ass.id %}" role="button">
-                <i class="fa fa-trash-o"></i>
+            {% with assertions_of_this_badge=assertion.get_duplicate_assertions badge=assertion.badge %}
+            <div class="hidden-xs"> {# only use popover on wider screens #}
+              <a {% include 'badges/snippets/badge_popover.html' %} >
+                {% include 'profile_manager/snippets/profile_badge.html' %}
               </a>
-              {% endif %}
-              </li>
-            {% endfor %}
-            </ul></small></p>
-
-            '>
-
-            <div class="icon-badge-container">
-              <img class="icon-xl img-rounded
-                {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
-                src="{{assertion.badge.get_icon_url}}">
-              {% if duplicates|length > 1 %}
-                <span class="badge badge-icon-lg progress-bar-info">{{duplicates|length}}</span>
-              {% endif %}
             </div>
-
-            </a>
+            <div class="visible-xs-inline-block"> {# direct link on mobile #}
+              <a href="{{badge.get_absolute_url}}">
+                {% include 'profile_manager/snippets/profile_badge.html' %}
+              </a>
+            </div>
             {% endwith %}
           {% empty %}
             None.
-          {% endfor %}
+          {% endfor %} {# for assertion in assertions #}
         </div>
-      {% empty %}
+        {% empty %}
           <div class="list-group-item">
             None.
           </div>
@@ -314,9 +281,7 @@
 {% block js %}
 <script>
 $(document).ready(function() {
-  $('[data-toggle="popover"]').popover(
-
-  )
+  $('[data-toggle="popover"]').popover()
 });
 </script>
 {% endblock %}

@@ -1,16 +1,12 @@
-from badges.models import Badge, BadgeAssertion
 from courses.models import Semester
 from django.conf import settings
 from django.urls import reverse
 from django.db import models
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 # Create your models here.
 from comments.models import Comment
-from djconfig import config
-from prerequisites.models import IsAPrereqMixin
 
 
 class SuggestionQuerySet(models.query.QuerySet):
@@ -165,5 +161,3 @@ class Vote(models.Model):
 
     def is_downvote(self):
         return self.vote < 0
-
-

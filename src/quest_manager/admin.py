@@ -16,12 +16,12 @@ from .models import Quest, Category, QuestSubmission, CommonData
 def publish_selected_quests(modeladmin, request, queryset):
     num_updates = queryset.update(visible_to_students=True, editor=None)
 
-    msg_str = str(num_updates) + " quest(s) updated. Editors have been removed and the quest is now visible to students."
+    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(str(num_updates)) # noqa
     messages.success(request, msg_str)
 
 
 def archive_selected_quests(modeladmin, request, queryset):
-    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None);
+    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None)
 
     msg_str = str(num_updates) + " quest(s) archived. These quests will now only be visible through this admin menu."
     messages.success(request, msg_str)
@@ -41,7 +41,7 @@ class CommonDataAdmin(SummernoteModelAdmin):
 class QuestSubmissionAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'quest', 'is_completed', 'is_approved', 'semester')
     list_filter = ['is_completed', 'is_approved', 'semester']
-    search_fields = ['user']
+    search_fields = ['user__username']
 
     # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
     def get_queryset(self, request):

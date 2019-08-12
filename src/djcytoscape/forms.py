@@ -1,7 +1,6 @@
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 from djcytoscape.models import CytoScape
-from quest_manager.models import Quest
 
 
 class GenerateQuestMapForm(forms.Form):

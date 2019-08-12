@@ -80,7 +80,8 @@ class CompletedTour(models.Model):
 
 class TourDataManager(models.Manager):
     def get_queryset(self):
-        return UserTourDataQuerySet(self.model, using=self._db)
+        pass
+        # return UserTourDataQuerySet(self.model, using=self._db)
 
 
 class TourData(models.Model):

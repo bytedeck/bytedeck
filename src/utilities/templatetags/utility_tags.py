@@ -1,7 +1,7 @@
 from django import template
 from django.contrib.staticfiles.templatetags.staticfiles import static
 from django.shortcuts import get_object_or_404
-from djconfig import config
+from djconfig import config, reload_maybe
 
 from utilities.models import ImageResource, MenuItem
 
@@ -26,6 +26,7 @@ def banner_url(context):
 
 @register.simple_tag
 def site_logo_url():
+    reload_maybe()  # used in celery tasks, so needs config loaded
     if config.hs_site_logo:
         site_logo = get_object_or_404(ImageResource, pk=config.hs_site_logo)
         return site_logo.image.url
@@ -39,4 +40,3 @@ def site_logo_url():
 def menu_list():
     links = MenuItem.objects.filter(visible=True)
     return {'links': links}
-

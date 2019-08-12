@@ -101,11 +101,12 @@ def detail(request, badge_id):
     context = {
         "heading": badge.name,
         "badge": badge,
+        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False)
     }
     return render(request, 'badges/detail.html', context)
 
 
-########### Badge Assertion Views #########################
+# ########## Badge Assertion Views #########################
 
 
 @staff_member_required

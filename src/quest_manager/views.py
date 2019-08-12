@@ -381,13 +381,12 @@ def detail(request, quest_id):
     return render(request, 'quest_manager/detail.html', context)
 
 
-
-
 #######################################
 #
 #  Quest APPROVAL VIEWS
 #
 # #################################
+
 
 @staff_member_required
 def approve(request, submission_id):
@@ -418,9 +417,13 @@ def approve(request, submission_id):
                 for badge in badges:
                     # badge = get_object_or_404(Badge, pk=badge_id)
                     new_assertion = BadgeAssertion.objects.create_assertion(submission.user, badge, request.user)
-                    messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
+                    messages.success(
+                        request,
+                        ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user))
+                    )
                     comment_text_addition += "<p></br><i class='fa fa-certificate text-warning'></i> The <b>" + \
-                                            badge.name + "</b> badge was granted for this quest <i class='fa fa-certificate text-warning'></i></p>"
+                                             badge.name + "</b> badge was granted for this quest " + \
+                                             "<i class='fa fa-certificate text-warning'></i></p>"
 
             # handle with quest comments
             blank_comment_text = ""
@@ -431,7 +434,7 @@ def approve(request, submission_id):
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "</span>"
                 blank_comment_text = "(approved without comment)"
-                submission.mark_approved()  ##############
+                submission.mark_approved()
             elif 'comment_button' in request.POST:
                 note_verb = "commented on"
                 icon = "<span class='fa-stack'>" + \
@@ -446,7 +449,7 @@ def approve(request, submission_id):
                        "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
                        "</span>"
                 blank_comment_text = "(returned without comment)"
-                submission.mark_returned()  ##############
+                submission.mark_returned()
             else:
                 raise Http404("unrecognized submit button")
 
@@ -489,7 +492,8 @@ def approve(request, submission_id):
 
             message_string = "<a href='" + origin_path + "'>Submission of " + \
                              submission.quest.name + "</a> " + note_verb + \
-                             " for <a href='" + submission.user.profile.get_absolute_url() + "'>" + submission.user.username + "</a>"
+                             " for <a href='" + submission.user.profile.get_absolute_url() + "'>" + \
+                             submission.user.username + "</a>"
             messages.success(request, message_string)
 
             return redirect("quests:approvals")
@@ -693,7 +697,7 @@ def complete(request, submission_id):
                     affected_users = [submission.quest.specific_teacher_to_notify, ]
                 else:
                     affected_users = None
-                submission.mark_completed()  ###################
+                submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
 
@@ -776,7 +780,6 @@ def start(request, quest_id):
     # #reply_comment_form = CommentForm(request.POST or None, label="")
     # # comments = Comment.objects.all_with_target_object(sub)
 
-
     # Migth need this for the tour to work!
     # context = {
     #     "heading": sub.quest.name,
@@ -786,6 +789,7 @@ def start(request, quest_id):
     #     # "reply_comment_form": reply_comment_form,
     # }
     # return render(request, 'quest_manager/submission.html', context)
+
 
 @login_required
 def hide(request, quest_id):
@@ -806,6 +810,7 @@ def unhide(request, quest_id):
 
     return redirect("quests:available_all")
 
+
 @login_required
 def skip(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
@@ -815,17 +820,17 @@ def skip(request, submission_id):
     if (request.user.profile.game_lab_transfer_process_on and submission.user == request.user) or request.user.is_staff:
 
         # add default comment to submission
-        origin_path = submission.get_absolute_url()
-        comment_text = "(Quest skipped - no XP granted)"
-        comment_new = Comment.objects.create_comment(
-            user=request.user,
-            path=origin_path,
-            text=comment_text,
-            target=submission,
-        )
+        # origin_path = submission.get_absolute_url()
+        # comment_text = "(Quest skipped - no XP granted)"
+        # comment_new = Comment.objects.create_comment(
+        #     user=request.user,
+        #     path=origin_path,
+        #     text=comment_text,
+        #     target=submission,
+        # )
 
         # approve quest automatically, and mark as transfer.
-        submission.mark_completed()  ###################
+        submission.mark_completed()
         submission.mark_approved(transfer=True)
 
         messages.success(request,
@@ -877,6 +882,29 @@ def skipped(request, quest_id):
 
 
 @login_required
+def ajax_save_draft(request):
+    if request.is_ajax() and request.POST:
+
+        submission_comment = request.POST.get('comment')
+        submission_id = request.POST.get('submission_id')
+
+        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        sub.draft_text = submission_comment
+        sub.save()
+
+        response_data = {}
+        response_data['result'] = 'Draft saved'
+
+        return HttpResponse(
+            json.dumps(response_data),
+            content_type="application/json"
+        )
+
+    else:
+        raise Http404
+
+
+@login_required
 def drop(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"
@@ -900,7 +928,9 @@ def submission(request, submission_id=None, quest_id=None):
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
-        main_comment_form = SubmissionForm(request.POST or None)
+        initial = {'comment_text': sub.draft_text}
+        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
     # comments = Comment.objects.all_with_target_object(sub)
@@ -976,4 +1006,3 @@ def unflag(request, submission_id):
                      (sub.get_absolute_url(), sub.quest_name(), sub.user))
 
     return redirect("quests:approvals")
-

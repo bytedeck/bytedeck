@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from comments.forms import CommentForm
 from comments.models import Comment
-from courses.models import CourseStudent
 from django.contrib.messages.views import SuccessMessageMixin
 from notifications.signals import notify
 
@@ -17,10 +16,12 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from .forms import AnnouncementForm
+from .tasks import publish_announcement, send_notifications
 from .models import Announcement
 
 
 # function based views..
+
 
 @login_required
 def comment(request, ann_id):
@@ -119,8 +120,6 @@ def list(request, ann_id=None, template='announcements/list.html'):
     return render(request, template, context)
 
 
-
-
 @staff_member_required
 def copy(request, ann_id):
     new_ann = get_object_or_404(Announcement, pk=ann_id)
@@ -139,7 +138,7 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications(request, new_announcement)
+            send_notifications.apply_async(args=[request.user, new_announcement.id], queue='default')
         return redirect(new_announcement)
 
     context = {
@@ -154,22 +153,9 @@ def copy(request, ann_id):
 @staff_member_required
 def publish(request, ann_id):
     announcement = get_object_or_404(Announcement, pk=ann_id)
-    announcement.draft = False
-    announcement.save()
-    send_notifications(request, announcement)
+    url = request.build_absolute_uri(announcement.get_absolute_url())
+    publish_announcement.apply_async(args=[request.user.id, ann_id, url], queue='default')
     return redirect(announcement)
-
-
-def send_notifications(request, announcement):
-    affected_users = CourseStudent.objects.all_users_for_active_semester()
-    notify.send(
-        request.user,
-        # action=new_announcement,
-        target=announcement,
-        recipient=request.user,
-        affected_users=affected_users,
-        icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
-        verb='posted')
 
 
 class Create(SuccessMessageMixin, CreateView):
@@ -183,7 +169,8 @@ class Create(SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            send_notifications(self.request, new_announcement)
+            # users_to_notify = CourseStudent.objects.all_users_for_active_semester()
+            send_notifications.apply_async(args=[self.request.user, new_announcement.id], queue='default')
 
         # new_announcement.send_by_mail()
 
@@ -223,7 +210,7 @@ class Update(SuccessMessageMixin, UpdateView):
         context['submit_btn_value'] = "Update"
         return context
 
-        return super(Update, self).form_valid(form)
+        # return super(Update, self).form_valid(form)
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:

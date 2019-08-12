@@ -3,7 +3,6 @@ import json
 from datetime import time
 
 from django.conf import settings
-from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
@@ -130,8 +129,8 @@ class XPItem(models.Model):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
         Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
         return self.active and \
-               QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
-               Prereq.objects.all_conditions_met(self, user)
+            QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
+            Prereq.objects.all_conditions_met(self, user)
 
     def is_repeatable(self):
         return self.max_repeats != 0
@@ -266,11 +265,12 @@ class Quest(XPItem, IsAPrereqMixin):
                                                              "having joined a course.  E.g. for quests you might "
                                                              "still want available to past students.")
     # categories = models.ManyToManyField(Category, blank=True)
-    specific_teacher_to_notify = models.ForeignKey(settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True},
-                                                blank=True, null=True,
-                                                help_text="Notifications related to this quest will be sent to this "
-                                                          "teacher even if they do not teach the student.",
-                                                on_delete = models.SET_NULL)
+    specific_teacher_to_notify = models.ForeignKey(
+        settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True}, blank=True, null=True,
+        help_text="Notifications related to this quest will be sent to this teacher "
+                  "even if they do not teach the student.",
+        on_delete=models.SET_NULL
+        )
     campaign = models.ForeignKey(Category, blank=True, null=True, on_delete=models.SET_NULL)
     common_data = models.ForeignKey(CommonData, blank=True, null=True, on_delete=models.SET_NULL)
     instructions = models.TextField(blank=True, verbose_name='Quest Details')
@@ -357,10 +357,6 @@ class Quest(XPItem, IsAPrereqMixin):
             return True
         else:
             return user == self.editor and not self.visible_to_students
-
-
-
-
 
 
 # class Feedback(models.Model):
@@ -597,8 +593,7 @@ class QuestSubmissionManager(models.Manager):
         :return: True if the quest should appear on the user's available quests tab
         See: QuestManager.get_available()
         """
-        return self.not_submitted_or_inprogress(user, quest) \
-               and True
+        return self.not_submitted_or_inprogress(user, quest)
 
     def not_submitted_or_inprogress(self, user, quest):
         """
@@ -722,6 +717,7 @@ class QuestSubmission(models.Model):
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
+    draft_text = models.TextField(null=True, blank=True)
 
     class Meta:
         ordering = ["time_approved", "time_completed"]

@@ -22,7 +22,7 @@ class PrerequisitesSignalsTest(TestCase):
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_badge_assertion(self, task):
-        sem = mommy.make(Semester) # not sure why model mommy doesn't create this automatically
+        sem = mommy.make(Semester)  # not sure why model mommy doesn't create this automatically
         badge_assertion = mommy.make(BadgeAssertion, user=self.student, game_lab_transfer=True, semester=sem)
         badge_assertion.game_lab_transfer = False
         badge_assertion.save()

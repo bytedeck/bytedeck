@@ -32,7 +32,7 @@ def config_view(request):
         form = HackerspaceConfigForm(data=request.POST)
 
         if form.is_valid():
-            active_sem_id = form.cleaned_data['hs_active_semester']
+            # active_sem_id = form.cleaned_data['hs_active_semester']
 
             # get semester before changed via save()
             past_sem = config.hs_active_semester
@@ -50,4 +50,4 @@ def config_view(request):
     else:
         form = HackerspaceConfigForm()
 
-    return render(request, 'configuration.html', {'form': form,})
+    return render(request, 'configuration.html', {'form': form, })

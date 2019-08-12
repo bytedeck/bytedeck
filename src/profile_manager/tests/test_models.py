@@ -20,11 +20,10 @@ class ProfileTestModel(TestCase):
         self.profile = self.user.profile
 
         self.active_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester)
-        
+
         # Why is this required?  Why can't I just mommy.make(Semester)?  For some reason when I
         # use mommy.make(Semester) it tried to duplicate the pk, using pk=1 again?!
         self.inactive_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester+1)
-
 
     def test_profile_creation(self):
         self.assertIsInstance(self.user.profile, Profile)
@@ -76,7 +75,10 @@ class ProfileTestModel(TestCase):
         self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration)])
         # add a second
         course_registration2 = mommy.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
-        self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration), repr(course_registration2)])
+        self.assertQuerysetEqual(
+            self.profile.current_courses(),
+            [repr(course_registration), repr(course_registration2)]
+            )
 
     def test_profile_has_current_course(self):
         self.assertFalse(self.profile.has_current_course)
@@ -100,7 +102,8 @@ class ProfileTestModel(TestCase):
         self.assertEqual(list(self.profile.teachers()), [])
         course_registration = mommy.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
         # Still no teachers since no teacher assign to this course's block yet
-        self.assertEqual(list(self.profile.teachers()), [None])  # why is this a list of None instead of just empty? SQLite thing?
+        # why is this a list of None instead of just empty? SQLite thing?
+        self.assertEqual(list(self.profile.teachers()), [None])
 
         self.assertTrue(self.profile.has_current_course)
         course_registration.block = mommy.make('courses.block', current_teacher=self.teacher)
@@ -137,7 +140,7 @@ class SmartListTests(SimpleTestCase):
         self.assertEqual(smart_list('1;2;3', delimiter=';'), ['1', '2', '3'])
 
     def test_smart_list_csv_to_int(self):
-            self.assertEqual(smart_list('1,2,3', func=lambda x: int(x)), [1, 2, 3])
+        self.assertEqual(smart_list('1,2,3', func=lambda x: int(x)), [1, 2, 3])
 
     def test_smart_list_tuple(self):
         self.assertEqual(smart_list((1, 2, 3)),  [1, 2, 3])

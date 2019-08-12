@@ -1,0 +1,21 @@
+{% extends "base_sidebar.html" %}{# not myself but a site-level one (TEMPLATE_DIRS setting) #}
+{% load i18n static %}{% load postman_tags %}
+{% block head_title %} {% trans "Messaging" %} | {% endblock %}
+{% block extrahead %}{{ block.super }}
+<link type="text/css" media="all" rel="stylesheet" href="{% static 'postman/css/postman.css' %}" />
+{% endblock %}
+{% block heading %}Messages <a href="{% url 'postman:write' %}" class="btn btn-success"><i class="fa fa-plus-circle"></i> New</a>
+<i class="fa fa-comments-o pull-right"></i>
+{% endblock %}
+{% block postman_menu %}
+<ul id="postman_menu" class="nav nav-tabs nav-justified">{% postman_unread as unread_count %}
+    <li {% if 'inbox' in request.path %}class="active"{% endif %}>
+        <a href="{% url 'postman:inbox' %}">{% trans "Inbox" %}{% if unread_count %} 
+        <span class="badge alert-danger">{{ unread_count }}</span>{% endif %}</a>
+    </li>
+    <li {% if 'sent' in request.path %}class="active"{% endif %}><a href="{% url 'postman:sent' %}">{% trans "Sent" %}</a></li>
+    {# <li {% if 'write' in request.path %}class="active"{% endif %}><a href="{% url 'postman:write' %}">{% trans "Write" %}</a></li> #}
+    <li {% if 'archives' in request.path %}class="active"{% endif %}><a href="{% url 'postman:archives' %}">{% trans "Archives" %}</a></li>
+    <li {% if 'trash' in request.path %}class="active"{% endif %}><a href="{% url 'postman:trash' %}">{% trans "Trash" %}</a></li>
+</ul>
+{% endblock %}

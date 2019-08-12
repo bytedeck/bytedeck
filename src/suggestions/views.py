@@ -71,6 +71,7 @@ def comment(request, id):
 def suggestion_list_beta(request, id=None, completed=False):
     return suggestion_list(request, id, completed, beta=True)
 
+
 @login_required
 def suggestion_list(request, id=None, completed=False):
     template_name = 'suggestions/suggestion_list.html'

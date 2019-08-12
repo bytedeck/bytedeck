@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -95,19 +93,20 @@ class ProfileDetail(DetailView):
         context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile.user)
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
         context['xp_per_course'] = profile.xp_per_course()
+        context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
 
-        earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile.user)
-        assertion_dict = defaultdict(list)
-        for assertion in earned_assertions:
-            assertion_dict[assertion.badge.badge_type].append(assertion)
-        #
-        # # for key, value in ...
-        # # for badge_type, assertions in assertion_dict.items():
-        # #     print(badge_type.name)
-        # #     for assertion in assertions:
-        # #         print(assertion)
+        # earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile.user)
+        # assertion_dict = defaultdict(list)
+        # for assertion in earned_assertions:
+        #     assertion_dict[assertion.badge.badge_type].append(assertion)
+        # #
+        # # # for key, value in ...
+        # # # for badge_type, assertions in assertion_dict.items():
+        # # #     print(badge_type.name)
+        # # #     for assertion in assertions:
+        # # #         print(assertion)
 
-        context['badge_assertions_dict_items'] = assertion_dict.items()
+        # context['badge_assertions_dict_items'] = assertion_dict.items()
 
         return context
 
@@ -118,8 +117,8 @@ class ProfileUpdate(UpdateView):
     template_name = 'profile_manager/form.html'
 
     def get_context_data(self, **kwargs):
+        profile = self.get_object()
         # Call the base implementation first to get a context
-        profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super(ProfileUpdate, self).get_context_data(**kwargs)
         context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
         context['action_value'] = ""
@@ -129,7 +128,7 @@ class ProfileUpdate(UpdateView):
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
-        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
+        profile_user = self.get_object().user
         if profile_user == self.request.user or self.request.user.is_staff:
             return super(ProfileUpdate, self).dispatch(*args, **kwargs)
         else:

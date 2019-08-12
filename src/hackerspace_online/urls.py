@@ -56,6 +56,8 @@ urlpatterns = [
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
+    # django-postman
+    url(r'^messages/', include('postman.urls', namespace='postman')),
 ]
 
 if settings.DEBUG:

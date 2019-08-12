@@ -1,6 +1,8 @@
 {% load staticfiles %}
 <!-- modified from http://www.bootply.com/render/96266 -->
 
+{% load postman_tags %}
+
 <!-- sidebar -->
 
 <div id="sidebar_menu">
@@ -52,6 +54,15 @@
       <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
     </a>
 
+    <a id="messages-menu"
+       class="list-group-item {% if '/messages/' in request.path_info %}active{% endif %}"
+       href="{% url 'postman:inbox' %}">
+      <i class="fa fa-comments-o fa-fw"></i>&nbsp; Messages
+      {% postman_unread as unread_count %}{% if unread_count %}
+      <span id="messages-badge" class="badge alert-danger list-group-item-badge ">{{unread_count}}</span>
+      {% endif %}
+    </a>
+
     {% if config.hs_suggestions_on %}
     <a id="suggestions-menu" class="list-group-item
         {% if '/suggestions/' in request.path_info %}active{% endif %}"
@@ -75,7 +86,7 @@
        href="{% url 'profiles:profile_detail' request.user.profile.id %}">
       <i class="fa fa-user fa-fw"></i>&nbsp; Profile
     </a>
-    <a id="aportfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
+    <a id="portfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
        href="{% url 'portfolios:detail' request.user.id %}">
       <i class="fa fa-picture-o fa-fw"></i>&nbsp; Portfolio
     </a>

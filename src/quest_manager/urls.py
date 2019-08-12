@@ -67,6 +67,7 @@ urlpatterns = [
     url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
     url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
     url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
+    url(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
     url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
     url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 

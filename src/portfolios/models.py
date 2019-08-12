@@ -1,7 +1,6 @@
 import uuid
 
 import embed_video
-import os
 from django.templatetags.static import static
 from django.urls import reverse
 from django.db import models
@@ -16,8 +15,8 @@ class Portfolio(models.Model):
     uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     description = models.TextField(null=True, blank=True, help_text='A description to display with your portfolio')
     listed_locally = models.BooleanField(default=False, help_text="Your portfolio will be listed on the Students page "
-                                                                 "and other Hackerspace students will be able "
-                                                                 "to see it.")
+                                                                  "and other Hackerspace students will be able "
+                                                                  "to see it.")
     listed_publicly = models.BooleanField(default=False, help_text="Your portfolio will be listed publicly, for example"
                                                                    " on Timberline's website.")
 
@@ -112,4 +111,3 @@ class Artwork(models.Model):
             date=date,
         )
         art.save()
-

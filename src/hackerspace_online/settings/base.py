@@ -90,6 +90,11 @@ INSTALLED_APPS = (
     # https://django-import-export.readthedocs.io
     'import_export',
 
+    'django_celery_beat',
+
+    # django-postman 
+    'postman',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -142,6 +147,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+
+                'postman.context_processors.inbox',
 
                 # "allauth" specific context processors
                 # 0.22.0 http://django-allauth.readthedocs.io/en/latest/release-notes.html#id17
@@ -415,3 +422,11 @@ CELERY_TASKS_BUNCH_SIZE = 10
 
 # allowed delay between conditions met updates for all users:
 CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+
+# Django Postman
+POSTMAN_DISALLOW_ANONYMOUS = True
+# POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
+POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
+POSTMAN_AUTO_MODERATE_AS = True # only student <> teacher interactions will be allowed, so no need to moderate student <> student
+POSTMAN_SHOW_USER_AS = lambda u: u.profile
+# POSTMAN_AUTOCOMPLETER_APP = ?

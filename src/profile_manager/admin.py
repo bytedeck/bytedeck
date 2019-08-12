@@ -13,7 +13,7 @@ def create_missing_profiles(modeladmin, request, queryset):
     new_profiles = []
     for user in users:
         if not hasattr(user, 'profile'):
-            #print(user.username + ": No profile ********************************")
+            # print(user.username + ": No profile ********************************")
             create_profile(None, **{'instance': user, 'created': True})
             new_profiles.append(user.username)
 
@@ -44,6 +44,7 @@ class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     #     if ordering:
     #         qs = qs.order_by(*ordering)
     #     return qs
+
 
 admin.site.register(Profile, ProfileAdmin)
 admin.site.register(Artwork)

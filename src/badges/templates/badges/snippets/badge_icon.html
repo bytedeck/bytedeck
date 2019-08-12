@@ -1,0 +1,11 @@
+<div class="thumbnail thumbnail-badge">
+                  {% if not badge.active %}
+                      <i class="fa fa-2x fa-eye-slash pull-right text-danger" style="position:absolute;"></i>
+                  {% endif %}
+                  <img class="hackerbadge img-rounded
+                      {% if not badge in earned_badges %} hackerbadge-unearned {% endif %}"
+                      src="{{badge.get_icon_url}}" alt="badge icon">
+                  <div class="caption caption-badge text-center">
+                      {{badge.name}}
+                  </div>
+              </div>
