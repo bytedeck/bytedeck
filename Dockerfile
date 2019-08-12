@@ -58,5 +58,5 @@ ENV SHELL /bin/bash
 
 #######################################################################
 
-RUN adduser --disabled-password appuser
-USER appuser
+# RUN adduser --disabled-password appuser
+# USER appuser
