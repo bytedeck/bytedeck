@@ -1,92 +1,126 @@
+
 # Hackerspace Changelog
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.19] 2019-08-11 - The big summer update
+
+* Direct Messaging
+* Options to receive notifications and announcements by email
+* Badge rarities
+* Save draft submissions (60s autosave)
+* Badges specific pages
+* [teachers] Auto-publish announements
+* [dev] Add celery-beat for periodic tasks
+* [dev] TravisCI and flake8 linting
+
 ### [0.18] 2019-07-23 - Docker
+
 * Increase hidden quest limit
 * [dev] Refactor to docker use in development
 
 ### [0.17.2] 2019-07-02
+
 * [bugfix] Fixed celery caching errors
 
-### [0.17.1] 2019-06-26
+#### [0.17.1] 2019-06-26
+
 * [bugfix] Fixed locked tasks
 
 ### [0.17.0] 2019-06-26 - Redis Caching
+
 * Add redis db and caching to improve performance
 
-### [0.16.6a] 2019-05-17 - Upwork optimizations
+#### [0.16.6a] 2019-05-17 - Upwork optimizations
+
 * Upwork optimization 1
 
-### [0.16.5] 2019-05-09
+#### [0.16.5] 2019-05-09
+
 * [bugfix] drag-and-drop images duplicate comments
 
-### [0.16.4] 2019-05-02
+#### [0.16.4] 2019-05-02
+
 * [bugfix] html auto-formatting
 
-### [0.16.3] 2019-04-23
+#### [0.16.3] 2019-04-23
+
 * styling tweaks in dark theme
 * security updates
 * [teachers] auto-format html when saved
 * [bugfix] clean comments (orphaned li, scripts removed)
 * [bugfix] remove old grade field in courses
 
-### [0.16.2] 2019-04-08
+#### [0.16.2] 2019-04-08
+
 * [bugfix] copying quests error fixed
 
-### [0.16.1] 2019-03-27
+#### [0.16.1] 2019-03-27
+
 * [bugfix] import quests error fixed
 
 ### [0.16.0] 2019-03-27
+
 * [teachers] basic import/export of quests from admin menu
 
-### [0.15.1] 2019-02-19
+#### [0.15.1] 2019-02-19
+
 * [bugfix] new datetime widgets to replace broken ones
 
 ### [0.15.0] 2019-02-19
+
 * Formatted descriptions for portfolios
 * Security updates
 * [teachers] Fix announcement buttons
 * [bugfix] Date and Time widgets on quest creation
 
-### [0.14.1] 2019-02-14
+#### [0.14.1] 2019-02-14
+
 * [bugfix] Deleted quest causing havoc.
 * [code] Basic tests added to several apps
 
 ### [0.14.0] 2019-02-09
+
 * Silent mode allows user to turn off gong sounds
 * [bugfix] View student numbers in admin
 
-### [0.13.4] 2019-01-24
+#### [0.13.4] 2019-01-24
+
 * Security updates
 * Various styling tweaks and fixes
 
-### [0.13.3] 2019-01-11
+#### [0.13.3] 2019-01-11
+
 * [bugfix] fix summernote widgets
 
 ### [0.13.0]
+
 * [teachers] grant multiple awards at once in full-reply
 * [teachers] display XP value of awards when selecting them
 
-### [0.12.1]
+#### [0.12.1]
+
 * [code] Django 2.0.x (2.1 still has conflicts with some dependencies)
 * [code] Resolve security vulnerabilities in dependencies
 * [code] First migrations commit
 
 ### [0.12.0] 2018-12-18
+
 * File resource for uploading local videos and zip files.
 * [bugfix] quick reply parsing
 * [code] Start a better defined branching and release model for code base
 * [code] Resolve warnings for django2
 
 ### [0.11.0] 2018-05-15 - Math!
+
 * Many mobile tweaks
 * Added LaTeX math support
 * Quest submenu in top navbar
 * [teacher only] Customizable menu links
 
-### [0.10.2] 2018-06-02 - The mobile device update
+#### [0.10.2] 2018-06-02 - The mobile device update
+
 * force responsive images in submissions (so large images no longer extend past the content area)
 * create mobile menu for notifications
 * turn off suggestions
@@ -95,20 +129,24 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] only offer to add valid media to portfolios
 * [bugfix] create portfolio when adding if it doesn't exist (instead of error)
 
-### [0.10.1] 2018-03-06
+#### [0.10.1] 2018-03-06
+
 * new button to access in-progress quests directly (much faster)
 * students can view unavailable quests as a preview
 * [teacher only] indicator when specific teachers are notified by particular quests
 * [bugfix] skipped quests bugging out
 
 ### [0.10.0] 2018-02-23 - The Studio Tyee update
+
 * [teacher only] Site name and banner as a configurable setting (support for Studio Tyee)
 
-### [0.9.1] 2018-02-03
+#### [0.9.1] 2018-02-03
+
 * [teacher only] export data as json (for use with browser extension to upload marks to CIMS)
 * [bugifx] comment ban was banning wrong person
 
 ### [0.9.0] 2018-01-07
+
 * User custom stylesheets!
 * New styling options in text editor (summernote plugins)
 * [teacher only] Export of student data for report cards
@@ -118,6 +156,7 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Sort marks properly
 
 ### [0.8.0] 2017-10-21
+
 * Students can create and edit quests by turning on the TA flag in their profile
 * codemirror formatting when using codeview
 * New histogram chart on student XP page
@@ -134,18 +173,20 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Add manual course XP adjustment to grade calcs
 * Other minor tweaks
  
-
 ### [0.7.0] 2017-05-28
+
 * Updated Django to 1.11 LTS (support to 2020)
 * Fixed bugs preventing initial migrations when setting up the django app
 
 ### [0.6.0]
+
 * Bulk badge granting
 * TOC generator for FAQ
 * List all dates that badges were granted in profile (as opposed to only the latest one)
 * XP Chart formatting tweaks
 
 ### [0.5.0] 2017-02-01
+
 * This changelog!
 * Archive quests
 * XP is now cached so it doesn't recalculate unless a new quest is approve/returned or badge awarded.
