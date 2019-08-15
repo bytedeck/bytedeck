@@ -20,16 +20,16 @@ from quest_manager.models import QuestSubmission
 
 
 class MarkRange(models.Model):
-    name = models.CharField(max_length=50)
-    minimum_mark = models.IntegerField(default=0, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
+    name = models.CharField(max_length=50, default="Chillax Line")
+    minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
     active = models.BooleanField(default=True)
     color = models.CharField(
-        max_length=20, 
-        default='blue', 
+        max_length=20,
+        default='blue',
         help_text="An HTML color name or hax color value to represent this range"
     )
     days = models.CharField(
-        validators=[validate_comma_separated_integer_list], 
+        validators=[validate_comma_separated_integer_list],
         max_length=13,
         help_text='Comma seperated list of weekdays that this range is active, with Sun=1 eg: "2,4,6" for M, W, F.',
         default="1,2,3,4,5,6,7"
