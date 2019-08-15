@@ -19,6 +19,17 @@ from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 
 
+class MarkRangeManager(models.Manager):
+    def get_range(self, mark, course):
+        """ return the MarkRange encompassed by this mark """
+        self.get_queryset().filter(active=True)
+        qs1 = course.markranges.filter(active=True)  # ranges for this course
+        qs2 = self.get_queryset().filter(active=True, courses=None)  # ranges for all courses
+        ranges = qs1 | qs2
+        ranges.filter(minimum_mark__lte=mark)
+        return ranges.last  # return the highest range that qualifies
+
+
 class MarkRange(models.Model):
     name = models.CharField(max_length=50, default="Chillax Line")
     minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
@@ -39,6 +50,11 @@ class MarkRange(models.Model):
         blank=True,
         help_text="Which courses this field is relevant to; If left blank it will apply to all courses."
     )
+
+    objects = MarkRangeManager()
+
+    class Meta:
+        ordering = ['minimum_mark']
 
     def __str__(self):
         return self.name + " (" + str(self.minimum_mark) + "%)"
