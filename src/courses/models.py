@@ -2,6 +2,7 @@ from datetime import timedelta, date, datetime
 
 import numpy
 from django.conf import settings
+from django.core.validators import validate_comma_separated_integer_list
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
@@ -18,7 +19,24 @@ from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 
 
-# Create your models here.
+class MarkRange(models.Model):
+    name = models.CharField(max_length=50)
+    minimum_mark = models.IntegerField(default=0, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
+    active = models.BooleanField(default=True)
+    color = models.CharField(default='blue', help_text="An HTML color name or hax color value to represent this range")
+    days = models.CharField(
+        validators=[validate_comma_separated_integer_list], max_length=13,
+        help_text='Comma seperated list of weekdays that this range is active, with Sun=1 eg: "2,4,6" for M, W, F.',
+        default="1,2,3,4,5,6,7"
+    )
+    courses = models.ManyToManyField(
+        "courses.course",
+        blank=True,
+        null=True,
+        help_text="Which courses this field is relevant to; blank means all courses."
+    )
+
+
 class RankQuerySet(models.query.QuerySet):
     def get_ranks_lte(self, xp):
         return self.filter(xp__lte=xp)
