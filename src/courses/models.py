@@ -37,8 +37,11 @@ class MarkRange(models.Model):
     courses = models.ManyToManyField(
         "courses.course",
         blank=True,
-        help_text="Which courses this field is relevant to; blank means all courses."
+        help_text="Which courses this field is relevant to; If left blank it will apply to all courses."
     )
+
+    def __str__(self):
+        return self.name + " (" + str(self.minimum_mark) + "%)"
 
 
 class RankQuerySet(models.query.QuerySet):
