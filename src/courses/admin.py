@@ -29,6 +29,10 @@ class SemesterAdmin(admin.ModelAdmin):
     ]
 
 
+class MarkRangeAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'minimum_mark', 'active', 'color', 'days')
+
+
 class RankAdmin(admin.ModelAdmin):
     list_display = ('name', 'xp')
 
@@ -47,5 +51,5 @@ admin.site.register(Block)
 admin.site.register(Course)
 admin.site.register(DateType)
 admin.site.register(Grade)
-admin.site.register(MarkRange)
+admin.site.register(MarkRange, MarkRangeAdmin)
 admin.site.register(Rank, RankAdmin)

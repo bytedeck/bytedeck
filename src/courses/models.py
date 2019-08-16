@@ -20,14 +20,17 @@ from quest_manager.models import QuestSubmission
 
 
 class MarkRangeManager(models.Manager):
-    def get_range(self, mark, course):
+    def get_range(self, mark, course=None):
         """ return the MarkRange encompassed by this mark """
         self.get_queryset().filter(active=True)
-        qs1 = course.markranges.filter(active=True)  # ranges for this course
-        qs2 = self.get_queryset().filter(active=True, courses=None)  # ranges for all courses
-        ranges = qs1 | qs2
-        ranges.filter(minimum_mark__lte=mark)
-        return ranges.last  # return the highest range that qualifies
+        ranges_qs = self.get_queryset().filter(active=True, courses=None)  # ranges for all courses
+        if course:
+            qs2 = course.markrange_set.filter(active=True)  # ranges for this course
+            ranges_qs = ranges_qs | qs2
+
+        ranges_qs = ranges_qs.filter(minimum_mark__lte=mark)  # filter out ranges that are too high
+
+        return ranges_qs.last()  # return the highest range that qualifies
 
 
 class MarkRange(models.Model):
@@ -37,7 +40,7 @@ class MarkRange(models.Model):
     color = models.CharField(
         max_length=20,
         default='blue',
-        help_text="An HTML color name or hax color value to represent this range"
+        help_text="An HTML color name or hex color value (e.g. #0000FF) to represent this range"
     )
     days = models.CharField(
         validators=[validate_comma_separated_integer_list],
