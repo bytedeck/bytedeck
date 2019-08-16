@@ -20,17 +20,24 @@ from quest_manager.models import QuestSubmission
 
 
 class MarkRangeManager(models.Manager):
-    def get_range(self, mark, course=None):
-        """ return the MarkRange encompassed by this mark """
+    def get_range(self, mark, courses=None):
+        """ return the MarkRange encompassed by this mark adn the list of courses """
         self.get_queryset().filter(active=True)
         ranges_qs = self.get_queryset().filter(active=True, courses=None)  # ranges for all courses
-        if course:
-            qs2 = course.markrange_set.filter(active=True)  # ranges for this course
-            ranges_qs = ranges_qs | qs2
+
+        if courses:
+            for course in courses:
+                courses_qs = course.markrange_set.filter(active=True)  # ranges for this course
+                ranges_qs = ranges_qs | courses_qs
 
         ranges_qs = ranges_qs.filter(minimum_mark__lte=mark)  # filter out ranges that are too high
 
         return ranges_qs.last()  # return the highest range that qualifies
+
+    def get_range_for_user(self, user):
+        mark = user.profile.mark()
+        courses = user.profile.current_courses()
+        return self.get_range(mark, courses)
 
 
 class MarkRange(models.Model):
