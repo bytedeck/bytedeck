@@ -14,6 +14,7 @@ import djconfig
 from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
+from colorful.fields import RGBColorField
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -23,11 +24,12 @@ class MarkRangeManager(models.Manager):
     def get_range(self, mark, courses=None):
         """ return the MarkRange encompassed by this mark adn the list of courses """
         self.get_queryset().filter(active=True)
-        ranges_qs = self.get_queryset().filter(active=True, courses=None)  # ranges for all courses
-
+        day = timezone.localtime(timezone.now()).isoweekday()
+        # ranges for all courses
+        ranges_qs = self.get_queryset().filter(active=True, courses=None, days__contains=str(day))
         if courses:
             for course in courses:
-                courses_qs = course.markrange_set.filter(active=True)  # ranges for this course
+                courses_qs = course.markrange_set.filter(active=True, days__contains=str(day))  # ranges for this course
                 ranges_qs = ranges_qs | courses_qs
 
         ranges_qs = ranges_qs.filter(minimum_mark__lte=mark)  # filter out ranges that are too high
@@ -49,15 +51,13 @@ class MarkRange(models.Model):
     name = models.CharField(max_length=50, default="Chillax Line")
     minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
     active = models.BooleanField(default=True)
-    color = models.CharField(
-        max_length=20,
-        default='blue',
-        help_text="An HTML color name or hex color value (e.g. #0000FF) to represent this range"
-    )
+    color_light = RGBColorField(default='#BEFFFA', help_text='Color to be used in the light theme')
+    color_dark = RGBColorField(default='#337AB7', help_text='Color to be used in the dark theme')
     days = models.CharField(
         validators=[validate_comma_separated_integer_list],
         max_length=13,
-        help_text='Comma seperated list of weekdays that this range is active, with Sun=1 eg: "2,4,6" for M, W, F.',
+        help_text='Comma seperated list of weekdays that this range is active, where Monday=1 and Sunday=7. \
+                   E.g.: "1,3,5" for M, W, F.',
         default="1,2,3,4,5,6,7"
     )
     courses = models.ManyToManyField(
@@ -284,14 +284,14 @@ class Semester(models.Model):
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
-    def chillax_line_started(self):
-        # return timezone.now().date() > self.get_interim1_date()
-        return config.hs_chillax_line_active
+    # def chillax_line_started(self):
+    #     # return timezone.now().date() > self.get_interim1_date()
+    #     return config.hs_chillax_line_active
 
-    def chillax_line(self):
-        cline = config.hs_chillax_line
-        fraction = self.fraction_complete()
-        return round(1000 * cline * fraction)
+    # def chillax_line(self):
+    #     cline = config.hs_chillax_line
+    #     fraction = self.fraction_complete()
+    #     return round(1000 * cline * fraction)
 
     def get_student_mark_list(self, students_only=False):
         students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)

@@ -30,7 +30,7 @@ class SemesterAdmin(admin.ModelAdmin):
 
 
 class MarkRangeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'minimum_mark', 'active', 'color', 'days')
+    list_display = ('id', 'name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days')
 
 
 class RankAdmin(admin.ModelAdmin):
