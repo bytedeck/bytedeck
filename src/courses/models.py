@@ -36,8 +36,13 @@ class MarkRangeManager(models.Manager):
 
     def get_range_for_user(self, user):
         mark = user.profile.mark()
-        courses = user.profile.current_courses()
-        return self.get_range(mark, courses)
+        student_course_ids = user.profile.current_courses().values_list('course', flat=True)
+        if student_course_ids:
+            courses = Course.objects.filter(id__in=student_course_ids)
+            print(courses)
+            return self.get_range(mark, courses)
+        else:
+            return None
 
 
 class MarkRange(models.Model):

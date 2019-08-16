@@ -5,9 +5,11 @@ register = template.Library()
 
 
 @register.simple_tag(takes_context=True)
-def mark_color(context):
-    mark_range = MarkRange.objects.get_range_for_user(context.user)
+def color_style_from_mark(context):
+    """ This should go in the style tag: style="{}"
+    """
+    mark_range = MarkRange.objects.get_range_for_user(context.request.user)
     if mark_range:
-        return mark_range.color
+        return "background-image: None; background-color: {}".format(mark_range.color)
     else:
-        return None
+        return ""
