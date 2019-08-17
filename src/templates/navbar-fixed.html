@@ -4,7 +4,7 @@
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top"
-style='{% color_style_from_mark user.profile.dark_theme %}'>
+{% if not user.is_anonymous %}style='{% color_style_from_mark user.profile.dark_theme %}'>{% endif %}
     <div class="container-fluid">
         <div class="navbar-header">
             <button type="button" class="navbar-toggle collapsed"
