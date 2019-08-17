@@ -32,14 +32,6 @@ class UserCustomTitleWidget(ModelSelect2MultipleWidget):
         return str(obj.profile)
 
 
-def message_exchange_filter(sender, recipient, recipients_list):
-    print("FILTERING!!!")
-    if not sender.is_staff and not recipient.is_staff:
-        return 'Students may only message teachers. Sorry!'
-
-    return None  # comms ok between these two people
-
-
 class CustomPostmanUserField(BasicCommaSeparatedUserField):
     """
     Postname field that works with ModelSelect2MultipleWidget
@@ -55,51 +47,29 @@ class CustomPostmanUserField(BasicCommaSeparatedUserField):
         """Convert user.id list into comma seperated string"""
         user_ids_comma_seperated_str = ",".join(map(str, value))
 
-        return super(BasicCommaSeparatedUserField, self).clean(user_ids_comma_seperated_str)
+        return super().clean(user_ids_comma_seperated_str)
 
 
 class HackerspaceWriteForm(WriteForm):
 
-    # @staticmethod
-    # def exchange_filter(sender, recipient, recipients_list):
-    #     """At least one of the users has to be a staff member
+    @staticmethod
+    def message_exchange_filter(sender, recipient, recipients_list):
+        print("FILTERING!!!")
+        if not sender.is_staff and not recipient.is_staff:
+            return 'Students may only message teachers. Sorry!'
 
-    #        this method is messed up.  sender and recipient are both supposed to be Users
-    #        according to docs, but recipients is a str value of the user.id
-    #     """
-
-    #     print("EXCHANGE FILTER")
-    #     print("SENDER TYPE: ", type(sender))
-    #     print("Sender ID:", sender.id)
-    #     print("RCPT TYPE: ", type(recipient))
-    #     print(recipient)
-
-    #     # sending_user = get_user_name(sender)
-    #     # recipient_user = get_user_name(recipient)
-
-    #     # print(sending_user, type(sending_user))
-    #     sending_user = User.objects.get(pk=sender.id)
-    #     recipient_user = User.objects.get(pk=recipient)
-
-    #     # sender and recipient are SimpleLazyObjects
-    #     sending_user = User.objects.get(username=sender)
-    #     if not sending_user.is_staff and not recipient_user.is_staff:
-    #         return 'Students may only message teachers. Sorry!'
-    #     return None  # comms ok between these two people
+        return None  # comms ok between these two people
 
     recipients = CustomPostmanUserField()
+    exchange_filter = message_exchange_filter
 
     def __init__(self, *args, **kwargs):
-        super(WriteForm, self).__init__(*args, **kwargs)
         sender = kwargs.get('sender', None)
+        super().__init__(*args, **kwargs)
 
-        print("FORM INIT")
-        print("SNEDER")
-        print(sender)
-
+        print("SENDER: ", sender)
         print("KWARGS:", kwargs)
-        for arg in kwargs:
-            print(arg)
 
-        # if not sender.is_staff:
-        #     self.fields['recipients'].queryset = User.objects.filter(is_staff=True)
+        if sender and not sender.is_staff:
+            # only allow students to send to staff
+            self.fields['recipients'].queryset = User.objects.filter(is_staff=True)
