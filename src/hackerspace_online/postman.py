@@ -67,7 +67,6 @@ class HackerspaceWriteForm(WriteForm):
         sender = kwargs.get('sender', None)
         super().__init__(*args, **kwargs)
 
-        print("SENDER: ", sender)
         print("KWARGS:", kwargs)
 
         if sender and not sender.is_staff:
