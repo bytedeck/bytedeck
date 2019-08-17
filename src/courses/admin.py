@@ -2,7 +2,7 @@ from django.contrib import admin
 # from django.contrib.contenttypes.admin  import GenericTabularInline
 
 # Register your models here.
-from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade
+from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade, MarkRange
 
 
 # def convert_selected_grade_to_fk(modeladmin, request, queryset):
@@ -29,6 +29,10 @@ class SemesterAdmin(admin.ModelAdmin):
     ]
 
 
+class MarkRangeAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days')
+
+
 class RankAdmin(admin.ModelAdmin):
     list_display = ('name', 'xp')
 
@@ -47,4 +51,5 @@ admin.site.register(Block)
 admin.site.register(Course)
 admin.site.register(DateType)
 admin.site.register(Grade)
+admin.site.register(MarkRange, MarkRangeAdmin)
 admin.site.register(Rank, RankAdmin)

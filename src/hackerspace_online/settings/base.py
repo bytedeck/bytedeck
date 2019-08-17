@@ -95,6 +95,9 @@ INSTALLED_APPS = (
     # django-postman 
     'postman',
 
+    # https://github.com/charettes/django-colorful
+    'colorful',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -430,3 +433,6 @@ POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
 POSTMAN_AUTO_MODERATE_AS = True # only student <> teacher interactions will be allowed, so no need to moderate student <> student
 POSTMAN_SHOW_USER_AS = lambda u: u.profile
 # POSTMAN_AUTOCOMPLETER_APP = ?
+
+# https://github.com/charettes/django-colorful
+GRAPPELLI_CLEAN_INPUT_TYPES= False

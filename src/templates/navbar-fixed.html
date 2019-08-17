@@ -1,8 +1,10 @@
 {% load staticfiles %}
 {% load utility_tags %}
+{% load courses_tags %}
 
 <!-- Fixed navbar -->
-<nav class="navbar navbar-default navbar-fixed-top {% if request.user.profile.chillax %} chillax {% endif %}">
+<nav class="navbar navbar-default navbar-fixed-top"
+style='{% color_style_from_mark user.profile.dark_theme %}'>
     <div class="container-fluid">
         <div class="navbar-header">
             <button type="button" class="navbar-toggle collapsed"

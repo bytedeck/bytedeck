@@ -95,6 +95,12 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
 
 }
 
+/* PREVENT OVERWRITING OF NAVBAR COLOR IN CUSTOM STYLES */
+.navbar-fixed-top > div, .navbar-fixed-top #navbar {
+    background-color:transparent !important; 
+    background-image:none !important;
+}
+
 /*.navbar-nav > li > a.navbar-avatar {*/
     /*padding-top: 0px;*/
     /*padding-bottom: 0px;*/
