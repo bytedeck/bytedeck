@@ -12,12 +12,6 @@ from django_select2.forms import ModelSelect2MultipleWidget
 User = get_user_model()
 
 
-#################################
-#
-# FORMS
-#
-#################################
-
 class UserCustomTitleWidget(ModelSelect2MultipleWidget):
     model = User
 
@@ -65,9 +59,9 @@ class HackerspaceWriteForm(WriteForm):
 
     def __init__(self, *args, **kwargs):
         sender = kwargs.get('sender', None)
-        super().__init__(*args, **kwargs)
-
         print("KWARGS:", kwargs)
+
+        super().__init__(*args, **kwargs)
 
         if sender and not sender.is_staff:
             # only allow students to send to staff
