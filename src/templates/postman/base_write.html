@@ -6,7 +6,8 @@
 {# should not be necessary since AS v1.3 with AJAX_SELECT_BOOTSTRAP set #}
 {#<script type="text/javascript" src="{% static 'admin/js/jquery.min.js' %}"></script>#}
 {% endif %}
-{{ form.media }}{# for ajax_selects (v1.3.6 at least) #}
+{{ form.media.css }}{# django-select-2! #}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
 {% endblock %}
 {% block content %}
 <div id="postman">
@@ -19,4 +20,9 @@
 <button type="submit" class="pm_btn pm_btn-send btn btn-primary">{% trans "Send" %}</button>
 </form>
 </div>
+{{ form.media.js }}
+
+    <script>
+        $.fn.select2.defaults.set( "theme", "bootstrap" );
+    </script>
 {% endblock %}

@@ -430,9 +430,9 @@ CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' up
 POSTMAN_DISALLOW_ANONYMOUS = True
 # POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
 POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
-POSTMAN_AUTO_MODERATE_AS = True # only student <> teacher interactions will be allowed, so no need to moderate student <> student
-POSTMAN_SHOW_USER_AS = lambda u: u.profile
-# POSTMAN_AUTOCOMPLETER_APP = ?
+POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
+POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
+# POSTMAN_SHOW_USER_AS = lambda u: u.id
 
 # https://github.com/charettes/django-colorful
 GRAPPELLI_CLEAN_INPUT_TYPES= False
