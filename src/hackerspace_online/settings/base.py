@@ -433,7 +433,6 @@ POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
 POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
 POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
 # POSTMAN_SHOW_USER_AS = lambda u: u.id
-# POSTMAN_AUTOCOMPLETER_APP = ?
 
 # https://github.com/charettes/django-colorful
 GRAPPELLI_CLEAN_INPUT_TYPES= False

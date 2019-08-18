@@ -34,7 +34,6 @@ class CustomPostmanUserField(BasicCommaSeparatedUserField):
     postman needs a comma seperated string of user.id
     This assumes:
         POSTMAN_NAME_USER_AS = 'id'
-        POSTMAN_SHOW_USER_AS = lambda u: u.id
     """
 
     widget = UserCustomTitleWidget
@@ -42,7 +41,6 @@ class CustomPostmanUserField(BasicCommaSeparatedUserField):
     def clean(self, value):
         """Convert user.id list into comma seperated string"""
         user_ids_comma_seperated_str = ",".join(map(str, value))
-
         return super().clean(user_ids_comma_seperated_str)
 
 
@@ -60,7 +58,7 @@ class HackerspaceWriteForm(WriteForm):
 
     def __init__(self, *args, **kwargs):
         sender = kwargs.get('sender', None)
-        print("KWARGS:", kwargs)
+        # print("KWARGS:", kwargs)
 
         super().__init__(*args, **kwargs)
 
