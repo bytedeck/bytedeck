@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from postman.forms import WriteForm
 from postman.fields import BasicCommaSeparatedUserField
 from django_select2.forms import ModelSelect2MultipleWidget
+
+from djconfig import config
 # from django_summernote.widgets import SummernoteInplaceWidget
 
 
@@ -48,8 +50,7 @@ class HackerspaceWriteForm(WriteForm):
 
     @staticmethod
     def message_exchange_filter(sender, recipient, recipients_list):
-        print("FILTERING!!!")
-        if not sender.is_staff and not recipient.is_staff:
+        if config.hs_message_teachers_only and not sender.is_staff and not recipient.is_staff:
             return 'Students may only message teachers. Sorry!'
 
         return None  # comms ok between these two people
@@ -63,6 +64,6 @@ class HackerspaceWriteForm(WriteForm):
 
         super().__init__(*args, **kwargs)
 
-        if sender and not sender.is_staff:
+        if config.hs_message_teachers_only and sender and not sender.is_staff:
             # only allow students to send to staff
             self.fields['recipients'].queryset = User.objects.filter(is_staff=True)

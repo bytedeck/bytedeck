@@ -72,8 +72,6 @@ class HackerspaceConfigForm(ConfigForm):
                                                  initial=True, required=False)
     hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
                                                   initial=True, required=False)
-    # hs_dark_theme = forms.BooleanField(label="Dark Theme (Experimental)",
-    #                                    initial=False, required=False)
 
     def clean_hs_active_semester(self):
         return self.cleaned_data['hs_active_semester'].pk
