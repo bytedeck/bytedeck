@@ -6,8 +6,11 @@ from django.contrib.auth import get_user_model
 from postman.forms import WriteForm
 from postman.fields import BasicCommaSeparatedUserField
 from django_select2.forms import ModelSelect2MultipleWidget
+from django_summernote.widgets import SummernoteInplaceWidget
 
 from djconfig import config
+
+from comments.models import clean_html
 # from django_summernote.widgets import SummernoteInplaceWidget
 
 
@@ -65,3 +68,9 @@ class HackerspaceWriteForm(WriteForm):
         if config.hs_message_teachers_only and sender and not sender.is_staff:
             # only allow students to send to staff
             self.fields['recipients'].queryset = User.objects.filter(is_staff=True)
+
+        self.fields['body'].widget = SummernoteInplaceWidget()
+
+    def clean_body(self):
+        text = self.cleaned_data['body']
+        return clean_html(text)

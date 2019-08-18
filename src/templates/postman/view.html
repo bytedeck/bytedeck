@@ -13,7 +13,7 @@
   <span class="pm_subject">{{ message.subject|truncatechars:65 }}</span>
 {% if message.is_rejected %}  <div class="pm_status">{% trans "Rejected" %}{% if message.moderation_reason %}{% trans ":" %} {{ message.moderation_reason }}{% endif %}</div>{% endif %}
  </div>
- <div class="pm_body well">{{ message.body|linebreaksbr }}</div>
+ <div class="pm_body well">{{ message.body|safe }}</div>
 </div>
 {% if forloop.last %}
 <form action="" method="post">{% csrf_token %}
