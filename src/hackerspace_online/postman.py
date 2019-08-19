@@ -2,8 +2,9 @@
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db import transaction
 
-from postman.forms import WriteForm, AnonymousWriteForm
+from postman.forms import WriteForm, BaseWriteForm, AnonymousWriteForm
 from postman.views import WriteView
 from postman.fields import BasicCommaSeparatedUserField
 from django_select2.forms import ModelSelect2MultipleWidget
@@ -80,18 +81,60 @@ class HackerspaceWriteForm(WriteForm):
             self.fields['recipients'].widget.queryset = User.objects.filter(is_staff=True)
 
         self.fields['body'].widget = SummernoteInplaceWidget()
+        self.messages = []  # need this to hack the WriteForm save method, see below
 
     def clean_body(self):
         text = self.cleaned_data['body']
         return clean_html(text)
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        files = self.cleaned_data.get('files')
-        print("INSTANCE")
-        print(self.instance)
-        print(self.cleaned_data)
-        print(files)
+    def save(self, recipient=None, parent=None, auto_moderators=[]):
+        """
+        Need to override WriteForm's save method so that it returns the messages.  
+        Otherwise I can't get the message objects so that I can create attachments to the message
+
+        This should match the original as close as possible, except return a list of message objects
+        https://bitbucket.org/psam/django-postman/src/default/postman/forms.py
+        """
+
+        recipients = self.cleaned_data.get('recipients', [])
+        if parent and not parent.thread_id:  # at the very first reply, make it a conversation
+            parent.thread = parent
+            parent.save()
+            # but delay the setting of parent.replied_at to the moderation step
+        if parent:
+            self.instance.parent = parent
+            self.instance.thread_id = parent.thread_id
+        initial_moderation = self.instance.get_moderation()
+        initial_dates = self.instance.get_dates()
+        initial_status = self.instance.moderation_status
+        if recipient:
+            if isinstance(recipient, get_user_model()) and recipient in recipients:
+                recipients.remove(recipient)
+            recipients.insert(0, recipient)
+        is_successful = True
+        for r in recipients:
+            if isinstance(r, get_user_model()):
+                self.instance.recipient = r
+            else:
+                self.instance.recipient = None
+                self.instance.email = r
+            self.instance.pk = None  # force_insert=True is not accessible from here
+            self.instance.auto_moderate(auto_moderators)
+            self.instance.clean_moderation(initial_status)
+            self.instance.clean_for_visitor()
+            m = super(BaseWriteForm, self).save()
+            self.messages.append(m)  # CHANGE ############################
+            if self.instance.is_rejected():
+                is_successful = False
+            self.instance.update_parent(initial_status)
+            self.instance.notify_users(initial_status, self.site)
+            # some resets for next reuse
+            if not isinstance(r, get_user_model()):
+                self.instance.email = ''
+            self.instance.set_moderation(*initial_moderation)
+            self.instance.set_dates(*initial_dates)
+        print("MESSAGES", self.messages)
+        return is_successful
 
 
 class HackerspaceWriteView(WriteView):
@@ -112,6 +155,8 @@ class HackerspaceWriteView(WriteView):
         print(request.FILES.getlist('files'))
 
         if form.is_valid():
+            form.save()
+            print("MESSAGES FROM POST:", form.messages)
             return self.form_valid(form)
         else:
             return self.form_invalid(form)
