@@ -12,9 +12,7 @@ class RestrictedFileFormField(forms.FileField):
         super(RestrictedFileFormField, self).__init__(**kwargs)
 
     def clean(self, data, initial=None):
-        print("DATA", data)
         file = super(RestrictedFileFormField, self).clean(data, initial)
-        print("FILE", file)
         try:
             content_type = file.content_type
             if self.content_types == "All" or content_type in self.content_types:

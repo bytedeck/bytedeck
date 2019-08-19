@@ -2,7 +2,6 @@
 
 from django import forms
 from django.contrib.auth import get_user_model
-from django.db import transaction
 
 from postman.forms import WriteForm, BaseWriteForm, AnonymousWriteForm
 from postman.views import WriteView
@@ -133,7 +132,6 @@ class HackerspaceWriteForm(WriteForm):
                 self.instance.email = ''
             self.instance.set_moderation(*initial_moderation)
             self.instance.set_dates(*initial_dates)
-        print("MESSAGES", self.messages)
         return is_successful
 
 
@@ -146,20 +144,41 @@ class HackerspaceWriteView(WriteView):
     """
     form_classes = (HackerspaceWriteForm, AnonymousWriteForm)
 
-    def post(self, request, *args, **kwargs):
-        # https://docs.djangoproject.com/en/2.2/topics/http/file-uploads/
-        form_class = self.get_form_class()
-        form = self.get_form(form_class)
+    # def post(self, request, *args, **kwargs):
+    #     # https://docs.djangoproject.com/en/2.2/topics/http/file-uploads/
+    #     form_class = self.get_form_class()
+    #     form = self.get_form(form_class)
 
-        # we'll need these later after the message is saved
-        print(request.FILES.getlist('files'))
+    #     # we'll need these later after the message is saved
 
-        if form.is_valid():
-            form.save()
-            print("MESSAGES FROM POST:", form.messages)
-            return self.form_valid(form)
-        else:
-            return self.form_invalid(form)
+    #     if form.is_valid():
+    #         form.save()
+    #         files = request.FILES.getlist('files')
+    #         for f in files:
+    #             for message in form.messages:
+    #                 Attachment(
+    #                     content_object=message,
+    #                     creator=request.user,
+    #                     attachment_file=f,
+    #                 ).save()
+    #         return self.form_valid(form)
+
+    #     else:
+    #         return self.form_invalid(form)
+
+    def form_valid(self, form):
+        """ Save the attachments """
+        response = super().form_valid(form)
+        files = self.request.FILES.getlist('files')
+        for f in files:
+            for message in form.messages:
+                Attachment(
+                    content_object=message,
+                    creator=self.request.user,
+                    attachment_file=f,
+                ).save()
+
+        return response
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
