@@ -98,6 +98,9 @@ INSTALLED_APPS = (
     # https://github.com/charettes/django-colorful
     'colorful',
 
+    # django-attachments
+    'attachments',
+
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 

@@ -1,14 +1,18 @@
-# import re
+# Project customizations for django-postman
 
-# from djconfig import config
+from django import forms
 from django.contrib.auth import get_user_model
 
-from postman.forms import WriteForm
+from postman.forms import WriteForm, AnonymousWriteForm
+from postman.views import WriteView
 from postman.fields import BasicCommaSeparatedUserField
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
+from attachments.models import Attachment
 
 from djconfig import config
+
+from utilities.fields import RestrictedFileFormField
 
 from comments.models import clean_html
 # from django_summernote.widgets import SummernoteInplaceWidget
@@ -58,19 +62,62 @@ class HackerspaceWriteForm(WriteForm):
 
     recipients = CustomPostmanUserField()
     exchange_filter = message_exchange_filter
+    files = RestrictedFileFormField(
+        required=False,
+        max_upload_size=16777216,
+        widget=forms.ClearableFileInput(attrs={'multiple': True}),
+        label="Attach files",
+        help_text="Hold Ctrl to select multiple files, 16MB limit per file"
+    )
 
     def __init__(self, *args, **kwargs):
         sender = kwargs.get('sender', None)
-        # print("KWARGS:", kwargs)
 
         super().__init__(*args, **kwargs)
 
         if config.hs_message_teachers_only and sender and not sender.is_staff:
             # only allow students to send to staff
-            self.fields['recipients'].queryset = User.objects.filter(is_staff=True)
+            self.fields['recipients'].widget.queryset = User.objects.filter(is_staff=True)
 
         self.fields['body'].widget = SummernoteInplaceWidget()
 
     def clean_body(self):
         text = self.cleaned_data['body']
         return clean_html(text)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        files = self.cleaned_data.get('files')
+        print("INSTANCE")
+        print(self.instance)
+        print(self.cleaned_data)
+        print(files)
+
+
+class HackerspaceWriteView(WriteView):
+    """
+    WriteView modifictions:
+    - django-select2 for recipient selection
+    - django-summernote for body
+    - handles file uploads via django-attachments
+    """
+    form_classes = (HackerspaceWriteForm, AnonymousWriteForm)
+
+    def post(self, request, *args, **kwargs):
+        # https://docs.djangoproject.com/en/2.2/topics/http/file-uploads/
+        form_class = self.get_form_class()
+        form = self.get_form(form_class)
+
+        # we'll need these later after the message is saved
+        print(request.FILES.getlist('files'))
+
+        if form.is_valid():
+            return self.form_valid(form)
+        else:
+            return self.form_invalid(form)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        if 'sender' not in kwargs:
+            kwargs['sender'] = self.request.user  # need for select2 queryset filter
+        return kwargs
