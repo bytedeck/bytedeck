@@ -12,7 +12,7 @@
 {% block content %}
 <div id="postman">
 <h3>{% block pm_write_title %}{% endblock %}</h3>
-<form action="{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" method="post">{% csrf_token %}
+<form action="{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" enctype="multipart/form-data" method="post">{% csrf_token %}
 <table>
 {% block pm_write_recipient %}{% endblock %}
 {{ form | crispy }}
