@@ -1,6 +1,7 @@
 {% load staticfiles %}
 {% load utility_tags %}
 {% load courses_tags %}
+{% load postman_tags %}
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top"
@@ -21,18 +22,18 @@
             </a>
 
             {% if request.user.is_authenticated %}
-            <!-- mobile main menu button (has to be after brand to stay to its right-->
+            <!-- mobile main menu button (has to be after brand to stay to its right)-->
             <button type="button" class="navbar-toggle collapsed mobile-main-menu pull-left btn-mobile-navbar btn-mobile-navbar-left"
                     data-toggle="collapse" data-target="#mobile-main-menu-dropdown"
                     aria-expanded="false" aria-controls="mobile-main-menu-dropdown">
-                <span class="sr-only">Toggle main menu</span><!--
+                <span class="sr-only">Toggle main menu</span><!-- These prevent unwanted whitespace
                 --><i class="fa fa-fw fa-shield"></i>
             </button>
 
             <!-- mobile notifications button -->
             <button type="button" class="navbar-toggle notification-toggle collapsed btn-mobile-navbar"
                     data-toggle="collapse" data-target="#mobile-notification-dropdown"
-                    aria-expanded="false" aria-controls="mobile-notification-dropdown"><!--
+                    aria-expanded="false" aria-controls="mobile-notification-dropdown"><!-- These prevent unwanted whitespace
                 --><span class="sr-only">Toggle notifications</span><!--
                 --><i class="fa fa-bell"></i><!--
                 --><span class="badge alert-danger notification-badge"></span><!--
@@ -101,20 +102,28 @@
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
                     <span class="visible-xs-inline">Announcements</span></a>
                 </li>
-                    {% if request.user.is_staff %}
-                    <li>
-                        <a title="Students" href="{% url 'profiles:profile_list_current' %}">
-                            <i class="fa fa-users fa-fw"></i>
-                        <span class="visible-xs-inline">Students</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
-                            <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
-                        <span class="visible-xs-inline">Approvals</span>
-                        </a>
-                    </li>
-                    {% endif %}
+                <li>
+                    <a title="Messages" href="{% url 'postman:inbox' %}"><i class="fa fa-comments-o fa-fw"></i>
+                    <span class="visible-xs-inline">Messages</span>
+                        {% postman_unread as unread_count %}{% if unread_count %}
+                        <span id="messages-badge-mobile" class="badge alert-danger list-group-item-badge ">{{unread_count}}</span>
+                        {% endif %}
+                    </a>
+                </li>
+                {% if request.user.is_staff %}
+                <li class="visible-xs-block">
+                    <a title="Students" href="{% url 'profiles:profile_list_current' %}">
+                        <i class="fa fa-users fa-fw"></i>
+                    <span class="visible-xs-inline">Students</span>
+                    </a>
+                </li>
+                <li class="visible-xs-block">
+                    <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
+                        <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
+                    <span class="visible-xs-inline">Approvals</span>
+                    </a>
+                </li>
+                {% endif %}
                 {% else %}
                 <li>
                     <a title="Public Portfolios" href="{% url 'portfolios:public_list' %}">
