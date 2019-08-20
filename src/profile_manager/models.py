@@ -355,7 +355,7 @@ class Profile(models.Model):
             return True
         else:
             if last_sub.time_completed:
-                return last_sub.time_completed < timezone.now()-timezone.timedelta(days=5)
+                return last_sub.time_completed < timezone.now() - timezone.timedelta(days=5)
             else:
                 return True
 

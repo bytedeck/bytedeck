@@ -68,7 +68,7 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
             self.apply_async(
                 kwargs={'quest_id': quest.id, 'start_from_user_id': user_id},
                 queue='default', countdown=20
-                )
+            )
 
 
 @shared_task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_all', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa

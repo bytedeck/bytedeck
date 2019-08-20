@@ -7,16 +7,11 @@ exclude =
 #max-complexity = 12
 max-line-length = 120
 
-#Example for ignoring specifics:
-# F812: list comprehension redefines ...
-# H101: Use TODO(NAME)
-# H202: assertRaises Exception too broad
-# H233: Python 3.x incompatible use of print operator
-# H301: one import per line
-# H306: imports not in alphabetical order (time, os)
-# H401: docstring should not start with a space
-# H403: multi line docstrings should end on a new line
-# H404: multi line docstring should start without a leading new line
-# H405: multi line docstring summary not separated with an empty line
-# H501: Do not use self.__dict__ for string formatting
-# ignore = F812,H101,H202,H233,H301,H306,H401,H403,H404,H405,H501
+# Example for ignoring specifics:
+# E126: continuation line over-indented for hanging indent
+# W504 line break after binary operator
+# W503 line break before binary operator
+# E126 continuation line over-indented for hanging indent
+ignore = W291, E216, W504, W503, E126
+
+

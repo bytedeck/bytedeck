@@ -378,7 +378,7 @@ class Prereq(models.Model, IsAPrereqMixin):
         registered_list = [
             ct.pk for ct in ContentType.objects.all()
             if cls.model_is_registered(ct)
-            ]
+        ]
         return ContentType.objects.filter(pk__in=registered_list)
 
     @staticmethod

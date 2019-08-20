@@ -23,7 +23,7 @@ def create_missing_profiles(modeladmin, request, queryset):
 
 
 class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'user_id', 'user', 'first_name', 'last_name',  'student_number', 'grad_year', 'is_TA',)
+    list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'student_number', 'grad_year', 'is_TA',)
 
     actions = [create_missing_profiles]
 

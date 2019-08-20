@@ -132,7 +132,7 @@ def ajax_progress_chart(request, user_id=0):
 
         # generate a list of dates, from first date of semester to today
         datelist = []
-        for i in range(1, sem.days_so_far()+1):
+        for i in range(1, sem.days_so_far() + 1):
             # need to ignore weekends and non-class days
             next_day_of_class = sem.get_datetime_by_days_since_start(i, add_holidays=True)
             datelist.append(next_day_of_class)

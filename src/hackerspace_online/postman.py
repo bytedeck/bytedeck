@@ -88,7 +88,7 @@ class HackerspaceWriteForm(WriteForm):
 
     def save(self, recipient=None, parent=None, auto_moderators=[]):
         """
-        Need to override WriteForm's save method so that it returns the messages.  
+        Need to override WriteForm's save method so that it returns the messages. 
         Otherwise I can't get the message objects so that I can create attachments to the message
 
         This should match the original as close as possible, except return a list of message objects

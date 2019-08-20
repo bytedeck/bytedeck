@@ -173,7 +173,7 @@ class BadgeAssertionTestModel(TestCase):
             mommy.make(BadgeAssertion, user=student, badge=badge)
 
         fraction = badge.fraction_of_active_users_granted_this()
-        self.assertEqual(fraction, num_students_with_badge/total_students)
+        self.assertEqual(fraction, num_students_with_badge / total_students)
 
         percentile = badge.percent_of_active_users_granted_this()
-        self.assertEqual(percentile, num_students_with_badge/total_students*100)
+        self.assertEqual(percentile, num_students_with_badge / total_students * 100)
