@@ -56,8 +56,24 @@ urlpatterns = [
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
-    # django-postman
+]
+
+# from hackerspace_online.postman import HackerspaceWriteForm  # noqa: E402
+# from postman.views import WriteView  # noqa: E402
+# from postman.forms import AnonymousWriteForm  # noqa: E402
+from django.urls import re_path  # noqa: E402
+from hackerspace_online.postman import HackerspaceWriteView  # noqa: E402
+
+# django-postman
+urlpatterns += [
+    re_path(r'^messages/write/(?:(?P<recipients>[^/#]+)/)?$', HackerspaceWriteView.as_view(), name='write'),
     url(r'^messages/', include('postman.urls', namespace='postman')),
+    # url(r'^reply/(?P<message_id>[\d]+)/$',
+    #     ReplyView.as_view(form_class=MyCustomFullReplyForm),
+    #     name='reply'),
+    # url(r'^view/(?P<message_id>[\d]+)/$',
+    #     MessageView.as_view(form_class=MyCustomQuickReplyForm),
+    #     name='view'),
 ]
 
 if settings.DEBUG:

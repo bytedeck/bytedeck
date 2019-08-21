@@ -1,12 +1,16 @@
 from django.utils.safestring import mark_safe
 
+from django.contrib.auth import get_user_model
 from django.db import models
+
 from url_or_relative_url_field.fields import URLOrRelativeURLField
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 # https://github.com/mixkorshun/django-safe-filefield/blob/master/safe_filefield/models.py
 from utilities.fields import RestrictedFileFormField
+
+User = get_user_model()
 
 
 class RestrictedFileField(models.FileField):

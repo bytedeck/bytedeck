@@ -50,54 +50,7 @@ class CommentManager(models.Manager):
         if not user:
             raise ValueError("Must include a user  when adding a comment")
 
-        # format unformatted links
-        # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
-
-        soup = BeautifulSoup(text, "html.parser")
-        text_nodes = soup.find_all(text=True)
-        # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
-        # text_nodes2 = [escape(x) for x in soup.strings]
-        for textNode in text_nodes:
-            escaped_text = escape(textNode)
-            if convert_newlines:
-                escaped_text = '<br>'.join(escaped_text.splitlines())
-
-            if textNode.parent and getattr(textNode.parent, 'name') == 'a':
-                continue  # skip already formatted links
-            urlized_text = urlize(escaped_text, trim_url_limit=50)
-            textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
-
-        # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
-        soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
-
-        # All links in comments: force open in new tab
-        links = soup.find_all('a')
-        for link in links:
-            link['target'] = '_blank'
-
-        # Add missing ul tags (raw <li> elements can break the page!)
-        # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
-        ulgroup = 0
-        uls = []
-        for li in soup.findAll('li'):
-            previous_element = li.findPrevious()
-            # if <li> already wrapped in <ul>, do nothing
-            if previous_element and previous_element.name == 'ul':
-                continue
-            # if <li> is the first element of a <li> group, wrap it in a new <ul>
-            if not previous_element or previous_element.name != 'li':
-                ulgroup += 1
-                ul = soup.new_tag("ul")
-                li.wrap(ul)
-                uls.append(ul)
-            # append rest of <li> group to previously created <ul>
-            elif ulgroup > 0:
-                uls[ulgroup - 1].append(li)
-
-        # Remove script tags
-        [s.extract() for s in soup('script')]
-
-        text = str(soup)
+        text = clean_html(text, convert_newlines)
 
         comment = self.model(
             user=user,
@@ -120,6 +73,63 @@ class CommentManager(models.Manager):
         comment.save(using=self._db)
 
         return comment
+
+
+def clean_html(text, convert_newlines=True):
+    """ Several steps to clean HTML input by user:
+    1. formats unformatted links
+    2. sets all links to target="_blank"
+    3. fixes broken lists (missing closing ul tags etc)
+    4. removes script tags
+    """
+    # format unformatted links
+    # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
+
+    soup = BeautifulSoup(text, "html.parser")
+    text_nodes = soup.find_all(text=True)
+    # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
+    # text_nodes2 = [escape(x) for x in soup.strings]
+    for textNode in text_nodes:
+        escaped_text = escape(textNode)
+        if convert_newlines:
+            escaped_text = '<br>'.join(escaped_text.splitlines())
+
+        if textNode.parent and getattr(textNode.parent, 'name') == 'a':
+            continue  # skip already formatted links
+        urlized_text = urlize(escaped_text, trim_url_limit=50)
+        textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
+
+    # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
+    soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
+
+    # All links in comments: force open in new tab
+    links = soup.find_all('a')
+    for link in links:
+        link['target'] = '_blank'
+
+    # Add missing ul tags (raw <li> elements can break the page!)
+    # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
+    ulgroup = 0
+    uls = []
+    for li in soup.findAll('li'):
+        previous_element = li.findPrevious()
+        # if <li> already wrapped in <ul>, do nothing
+        if previous_element and previous_element.name == 'ul':
+            continue
+        # if <li> is the first element of a <li> group, wrap it in a new <ul>
+        if not previous_element or previous_element.name != 'li':
+            ulgroup += 1
+            ul = soup.new_tag("ul")
+            li.wrap(ul)
+            uls.append(ul)
+        # append rest of <li> group to previously created <ul>
+        elif ulgroup > 0:
+            uls[ulgroup - 1].append(li)
+
+    # Remove script tags
+    [s.extract() for s in soup('script')]
+
+    return str(soup)
 
 
 class Comment(models.Model):

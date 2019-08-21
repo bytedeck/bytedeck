@@ -23,7 +23,7 @@ class ProfileTestModel(TestCase):
 
         # Why is this required?  Why can't I just mommy.make(Semester)?  For some reason when I
         # use mommy.make(Semester) it tried to duplicate the pk, using pk=1 again?!
-        self.inactive_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester+1)
+        self.inactive_sem = mommy.make(Semester, pk=(djconfig.config.hs_active_semester + 1))
 
     def test_profile_creation(self):
         self.assertIsInstance(self.user.profile, Profile)
@@ -78,7 +78,7 @@ class ProfileTestModel(TestCase):
         self.assertQuerysetEqual(
             self.profile.current_courses(),
             [repr(course_registration), repr(course_registration2)]
-            )
+        )
 
     def test_profile_has_current_course(self):
         self.assertFalse(self.profile.has_current_course)
@@ -143,10 +143,10 @@ class SmartListTests(SimpleTestCase):
         self.assertEqual(smart_list('1,2,3', func=lambda x: int(x)), [1, 2, 3])
 
     def test_smart_list_tuple(self):
-        self.assertEqual(smart_list((1, 2, 3)),  [1, 2, 3])
+        self.assertEqual(smart_list((1, 2, 3)), [1, 2, 3])
 
     def test_smart_list_list(self):
-        self.assertEqual(smart_list([1, 2, 3]),  [1, 2, 3])
+        self.assertEqual(smart_list([1, 2, 3]), [1, 2, 3])
 
     def test_smart_list_int(self):
-        self.assertEqual(smart_list(1),  [1])
+        self.assertEqual(smart_list(1), [1])

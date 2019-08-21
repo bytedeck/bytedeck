@@ -16,7 +16,7 @@ from quest_manager.models import Quest
 def update_conditions_met_for_user(sender, instance, *args, **kwargs):
     list_of_models = ('BadgeAssertion', 'QuestSubmission', 'CourseStudent')
     if sender.__name__ in list_of_models:
-        update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default', countdown=10)
+        update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
 
 
 # Don't need post_delete, it doesn't affect on reesult and will be updated on next all conditions update

@@ -11,11 +11,11 @@ figure {
     background-color: #272b30;
 }
 
-.navbar-fixed-top.chillax {
+/* .navbar-fixed-top.chillax {
   background-color: #337AB7;
   background-image: none;
   text-shadow: none;
-}
+} */
 
 .jumbotron {
   background-color: black;
@@ -302,6 +302,5 @@ a.list-group-item-muted {
 }
 
 .note-color-palette div .note-color-btn {
-    border-color: #272b30; !important;
+    border-color: #272b30 !important;
 }
-

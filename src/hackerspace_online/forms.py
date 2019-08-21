@@ -62,13 +62,16 @@ class HackerspaceConfigForm(ConfigForm):
 
     hs_active_semester = forms.ModelChoiceField(label="Active Semester",
                                                 queryset=Semester.objects.all(), initial=1, required=True)
-    hs_chillax_line = forms.FloatField(label="Chillax Line %", initial=72.5,
-                                       required=True)
-    hs_chillax_line_active = forms.BooleanField(label="Activate Chillax Line", initial=False, required=False)
+    # hs_chillax_line = forms.FloatField(label="Chillax Line %", initial=72.5,
+    #                                    required=True)
+    hs_chillax_line_active = forms.BooleanField(
+        label="Activate Header Colors by Mark", initial=False, required=False,
+        help_text="Set up at least one Mark Range in admin for this to do anything."
+    )
     hs_approve_oldest_first = forms.BooleanField(label="Sort quests awaiting approval with oldest on top",
                                                  initial=True, required=False)
-    # hs_dark_theme = forms.BooleanField(label="Dark Theme (Experimental)",
-    #                                    initial=False, required=False)
+    hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
+                                                  initial=True, required=False)
 
     def clean_hs_active_semester(self):
         return self.cleaned_data['hs_active_semester'].pk

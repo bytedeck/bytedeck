@@ -29,6 +29,8 @@ ALLOWED_HOSTS = []
 
 EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
 EMAIL_FILE_PATH = 'sentmail/' # change this to a proper location
+
+POSTMAN_MAILER_APP = 'django.core.mail'
 # EMAIL_HOST = 'smtp.gmail.com'
 # EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
 # EMAIL_HOST_PASSWORD = ''

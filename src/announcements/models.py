@@ -58,7 +58,7 @@ class Announcement(models.Model):
     auto_publish = models.BooleanField(
         default=False,
         help_text="When set to true, the announcement will publish itself on the date and time indicated."
-        )
+    )
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)

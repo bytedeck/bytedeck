@@ -75,11 +75,11 @@ class BadgeRarity(models.Model):
 
     def get_icon_html(self):
         icon = "<i class='fa {} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
-                    self.fa_icon,
-                    self.name,
-                    self.name,
-                    self.color,
-                )
+            self.fa_icon,
+            self.name,
+            self.name,
+            self.color,
+        )
         print(icon)
         aria_span = "<span class='sr-only'>{}</span>".format(self.name)
         return icon + aria_span
@@ -131,7 +131,7 @@ class BadgeManager(models.Manager):
             obj.pk for obj in self.get_queryset().get_active()
             if Prereq.objects.all_conditions_met(obj, user, False)
             # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
-            ]
+        ]
         return self.filter(pk__in=pk_met_list)
 
     def all_manually_granted(self):
@@ -139,7 +139,7 @@ class BadgeManager(models.Manager):
         pk_manual_list = [
             obj.pk for obj in self.get_queryset()
             if Prereq.objects.all_parent(obj).count() == 0
-            ]
+        ]
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
@@ -186,7 +186,7 @@ class Badge(models.Model, IsAPrereqMixin):
     # @cached_property
     def fraction_of_active_users_granted_this(self):
         num_assertions = BadgeAssertion.objects.filter(badge=self).count()
-        return num_assertions/User.objects.filter(is_active=True).count()
+        return num_assertions / User.objects.filter(is_active=True).count()
 
     def percent_of_active_users_granted_this(self):
         return self.fraction_of_active_users_granted_this() * 100
@@ -317,7 +317,7 @@ class BadgeAssertionManager(models.Manager):
                 'badge_type': t,
                 'list': qs.get_type(t)
             } for t in types
-            ]
+        ]
         return by_type
 
     def calculate_xp(self, user):
