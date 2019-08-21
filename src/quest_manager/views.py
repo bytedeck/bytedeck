@@ -16,6 +16,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from notifications.signals import notify
 from prerequisites.models import Prereq
+from prerequisites.tasks import update_quest_conditions_for_user
 from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
 from .models import Quest, QuestSubmission
 
@@ -643,6 +644,12 @@ def approvals(request, quest_id=None):
 #########################################
 @login_required
 def complete(request, submission_id):
+    """
+    When a student has completed a quest, or is commenting on an already completed quest, this view is called
+    - The submission is marked as completed (by the student)
+    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are 
+         recalculated directly/synchromously, so that their available quest list is up to date
+    """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
 
@@ -700,6 +707,8 @@ def complete(request, submission_id):
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
+                    # Immediate/synchronous recalculation of available quests:
+                    update_quest_conditions_for_user.apply(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
