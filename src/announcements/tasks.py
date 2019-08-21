@@ -14,7 +14,7 @@ from .models import Announcement
 User = get_user_model()
 
 
-@shared_task
+@shared_task(name='announcements.tasks.send_notifications')
 def send_notifications(user_id, announcement_id):
     djconfig.reload_maybe()  # needed for automated user: hs_hackerspace_ai
     announcement = get_object_or_404(Announcement, pk=announcement_id)
@@ -31,7 +31,7 @@ def send_notifications(user_id, announcement_id):
     )
 
 
-@shared_task
+@shared_task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, url):
     users_to_email = User.objects.filter(
         is_active=True,
@@ -53,7 +53,7 @@ def send_announcement_emails(content, url):
     print("Sending {} announcement emails.".format(len(users_to_email)))
 
 
-@shared_task
+@shared_task(name='announcements.tasks.publish_announcement')
 def publish_announcement(user_id, announcement_id, absolute_url):
     """ Publish the announcement, including:
             - edit model instance
