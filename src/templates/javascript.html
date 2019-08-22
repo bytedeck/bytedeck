@@ -143,11 +143,18 @@
             if(count!=0) {
               // $("#notification_badge").html(count);
               $menu.append("<li class='dropdown-header'>New Notifications</li>");
+              $notification_items = $("<li>");
+              $menu_links = $("<ul class='list-unstyled col-sm-10'>");
+              $remove_links = $("<ul class='list-unstyled col-sm-2'>") ;             
               $(data.notifications).each(function(){
-                var link = this;
-                $menu.append("<li>"+link + "</li>");
+                $menu_links.append("<li>"+ this.link + "</li>");
+                remove_link = "<li><a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-eye fa-fw'></i></a></li>";
+                $remove_links.append(remove_link);
               })
               // console.log(data.notifications);
+              $notification_items.append($menu_links)
+              $notification_items.append($remove_links)
+              $menu.append($notification_items)
               $menu.append("<li role='separator' class='divider'></li>");
             }
             var overflow = "";
