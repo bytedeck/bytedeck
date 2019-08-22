@@ -73,7 +73,12 @@ def ajax(request):
         notifications = notifications[:limit]
         notes = []
         for note in notifications:
-            notes.append(str(note.get_link()))
+            notes.append(
+                { 
+                    'link': str(note.get_link()),
+                    'id': str(note.id),
+                }
+            )
 
         data = {
             "notifications": notes,

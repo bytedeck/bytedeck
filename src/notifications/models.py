@@ -209,8 +209,6 @@ class Notification(models.Model):
         else:
             url = url_common_part + "</a>"
 
-        url += '<a style="display:inline" class="notification-mark-read" href="#" data-id="' + str(self.id) + '"><i class="fa fa-eye fa-fw"></i></a>'
-
         return url
 
 
