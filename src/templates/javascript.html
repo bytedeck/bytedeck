@@ -77,6 +77,27 @@
       });
     }
 
+    function ajaxMarkNotificationRead(notification_id, $item) {
+      $.ajax({
+        type: "POST",
+        url: "{% url 'notifications:ajax_mark_read' %}",
+        data: {
+          id: notification_id,
+          csrfmiddlewaretoken: "{{ csrf_token }}",
+        },
+        success: function(data){
+          // get the notification item by its id and remove it from DOM
+          $item.parent().hide('slow')
+          // subtract one from unread #s
+          $unread = $(".notification-badge")
+          unread_num = parseInt($unread.html())
+          unread_num -= 1
+          $unread.html(unread_num)
+
+        }
+      });
+    }
+
     $(document).ready(function() {
       // Ensure external links and media open in new tabs by adding target="_blank".
       // _blank added for comments automatically in python when they are created, so this probabyl only still necessary
@@ -139,6 +160,8 @@
               var url_mark = "{% url 'notifications:read_all' %}";
               $menu.append("<li><a href='" + url_mark + "'>Mark all read</a></li>");
             }
+
+            add_mark_read_handlers()
           },
           error: function(rs, e) {
             console.log(rs);
@@ -148,6 +171,15 @@
       });
 
     }); //(document).ready(function(){
+
+    function add_mark_read_handlers() {
+      $(".notification-mark-read").click(function(e){
+        $this = $(this)
+        e.stopPropagation(); // don't close the menu
+        notificationID = $this.data('id')
+        ajaxMarkNotificationRead(notificationID, $this)
+      });
+    }
 
     $(window).on('load', function() {
     		$("div.pack").pack();  // need images loaded before packing

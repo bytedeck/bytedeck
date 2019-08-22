@@ -155,6 +155,11 @@ class Notification(models.Model):
             url = url_common_part + "</a>"
         return url
 
+    def mark_read(self):
+        self.unread = False
+        self.time_read = timezone.now()
+        self.save()
+
     def get_url(self):
         # print("***** NOTIFICATION.get_url **********")
         try:
@@ -195,7 +200,7 @@ class Notification(models.Model):
             "icon": self.font_icon
         }
 
-        url_common_part = "<a href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
+        url_common_part = "<a style='display:inline' href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
         if self.target_object:
             if self.action_object:
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
@@ -203,6 +208,8 @@ class Notification(models.Model):
                 url = url_common_part + " <em>%(target)s</em></a>" % context
         else:
             url = url_common_part + "</a>"
+
+        url += '<a style="display:inline" class="notification-mark-read" href="#" data-id="' + str(self.id) + '"><i class="fa fa-eye fa-fw"></i></a>'
 
         return url
 
