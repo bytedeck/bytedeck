@@ -200,7 +200,7 @@ class Notification(models.Model):
             "icon": self.font_icon
         }
 
-        url_common_part = "<a style='display:inline' href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
+        url_common_part = "<a href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
         if self.target_object:
             if self.action_object:
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context

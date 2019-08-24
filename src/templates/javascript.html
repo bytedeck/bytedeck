@@ -62,10 +62,13 @@
           var count = data.count;
           if(count!=0) {
             $(".notification-badge").html(count);
+
+            // count notifications related to announcements
+            // and use for announcements badge
             var announcements_count = 0;
             $(data.notifications).each(function(){
-              var link = this;
-              if (this.indexOf("announcements")>0) {
+              // if 'announcements' found in the link, then it's prolly an announcement..
+              if (this.link.indexOf("announcements")>0) {
                 announcements_count++;
               }
             })
@@ -135,28 +138,40 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            $menu = $(".notification-dropdown");
+            $menu = $("#notification-dropdown");
             $menu.html("");
 
             var count = data.count;
             // console.log(count);
+
+
+           /* // Menu code will look like this
+           <li id="notifications-menu" class="dropdown hidden-xs open">
+              <a title="Notifications" href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="true">
+                  <i class="fa fa-bell"></i><!--
+                --><span id="notification_badge" class="badge alert-danger notification-badge"></span>
+              </a>
+              <ul class="dropdown-menu notification-dropdown" id="notification-dropdown">
+                 // INSERT NOTIFICATION ITEMS HERE (as <li>)
+                <li><a href="/notifications/"> View All Notifications</a></li>
+              </ul>
+            </li> 
+            */
+
             if(count!=0) {
-              // $("#notification_badge").html(count);
               $menu.append("<li class='dropdown-header'>New Notifications</li>");
-              $notification_items = $("<li>");
-              $menu_links = $("<ul class='list-unstyled col-sm-10'>");
-              $remove_links = $("<ul class='list-unstyled col-sm-2'>") ;             
+
+              // Add a menu item and remove button for each notification
               $(data.notifications).each(function(){
-                $menu_links.append("<li>"+ this.link + "</li>");
-                remove_link = "<li><a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-eye fa-fw'></i></a></li>";
-                $remove_links.append(remove_link);
+                remove_link = "<a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-eye fa-fw'></i></a>";
+                $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
+                $menu.append($menu_item);
               })
-              // console.log(data.notifications);
-              $notification_items.append($menu_links)
-              $notification_items.append($remove_links)
-              $menu.append($notification_items)
+
               $menu.append("<li role='separator' class='divider'></li>");
             }
+
+            // a additional items at the end of the menu
             var overflow = "";
             if(count > data.limit) {
               overflow = "<i class='fa fa-fw fa-2x fa-stack-overflow text-danger'></i>";
