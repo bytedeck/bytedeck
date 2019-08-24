@@ -2,7 +2,7 @@ import json
 
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
 
@@ -73,7 +73,12 @@ def ajax(request):
         notifications = notifications[:limit]
         notes = []
         for note in notifications:
-            notes.append(str(note.get_link()))
+            notes.append(
+                { 
+                    'link': str(note.get_link()),
+                    'id': str(note.id),
+                }
+            )
 
         data = {
             "notifications": notes,
@@ -83,6 +88,18 @@ def ajax(request):
         json_data = json.dumps(data)
 
         return HttpResponse(json_data, content_type='application/json')
+    else:
+        raise Http404
+
+
+@login_required
+def ajax_mark_read(request):
+    if request.is_ajax() and request.method == "POST":
+
+        id = request.POST.get('id', None)
+        n = Notification.objects.get(id=id)
+        n.mark_read()
+        return JsonResponse(data={})
     else:
         raise Http404
 

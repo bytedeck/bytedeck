@@ -193,6 +193,18 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     margin-left: -15px;
 }
 
+/* .dropdown.open > ul.notification-dropdown
+{
+    display: table-caption;
+} */
+
+.notification-dropdown > li.dropdown-horizontal-group
+{
+    display: inline-flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
 .navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
     padding-top: 14px;
     padding-bottom: 13px;
