@@ -138,7 +138,7 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            $menu = $("#notification-dropdown");
+            $menu = $(".notification-dropdown"); // captures both the main and mobile menus
             $menu.html("");
 
             var count = data.count;
@@ -163,7 +163,7 @@
 
               // Add a menu item and remove button for each notification
               $(data.notifications).each(function(){
-                remove_link = "<a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-eye fa-fw'></i></a>";
+                remove_link = "<a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-times fa-fw text-muted'></i></a>";
                 $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
                 $menu.append($menu_item);
               })
