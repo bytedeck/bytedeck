@@ -42,14 +42,14 @@ class HackerspaceConfigForm(ConfigForm):
         help_text="Quickly insert this text into your replies with a button.")
 
     hs_blank_approval_text = forms.CharField(
-        label="Blank Approval Text", 
+        label="Approved Without Comment Text", 
         initial="(Approved - Your submission meets the criteria for this quest)",
         required=False,
         max_length=255, 
         help_text="This text will be inserted when you approve a quest without commenting.")
 
     hs_blank_return_text = forms.CharField(
-        label="Blank Return Text", 
+        label="Returned Without Comment Text", 
         initial="(Returned without comment)",
         required=False,
         max_length=255, 
