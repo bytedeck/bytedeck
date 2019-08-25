@@ -163,10 +163,17 @@
 
               // Add a menu item and remove button for each notification
               $(data.notifications).each(function(){
-                remove_link = "<a class='notification-mark-read' href='#' data-id='" + this.id + "'><i class='fa fa-times fa-fw text-muted'></i></a>";
-                $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
+                if (this.removable) {
+                  remove_link = "<a class='notification-mark-read' title='Remove' href='#' data-id='" + 
+                                this.id + 
+                                "'><i class='fa fa-times fa-fw text-muted'></i></a>";
+                  $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
+                }
+                else
+                  $menu_item = $("<li>"+ this.link +"</li>");
+
                 $menu.append($menu_item);
-              })
+              });
 
               $menu.append("<li role='separator' class='divider'></li>");
             }

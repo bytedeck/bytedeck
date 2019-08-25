@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
+from django.contrib.contenttypes.models import ContentType
 
 from .models import Notification
 
@@ -77,6 +78,7 @@ def ajax(request):
                 { 
                     'link': str(note.get_link()),
                     'id': str(note.id),
+                    'removable': note.target_content_type != ContentType.objects.get(app_label="announcements", model='announcement'),
                 }
             )
 
