@@ -74,11 +74,15 @@ def ajax(request):
         notifications = notifications[:limit]
         notes = []
         for note in notifications:
+            removable = note.target_content_type != ContentType.objects.get(
+                app_label="announcements", 
+                model='announcement'
+            )
             notes.append(
                 { 
                     'link': str(note.get_link()),
                     'id': str(note.id),
-                    'removable': note.target_content_type != ContentType.objects.get(app_label="announcements", model='announcement'),
+                    'removable': removable,
                 }
             )
 
