@@ -100,11 +100,12 @@
 
             // Copied from quest_approvals.html
             $('[id^=btn_quick_text]').on('click', function () {
-                var msg = ' Please read the submission instructions more carefully. Thanks! ';
-
-                var iframe_txt = $("#id_comment_text_iframe").contents().find('div.note-editable');
-                console.log(iframe_txt.html());
-                iframe_txt.append(msg);
+                var msg = '<p>Please read the submission instructions more carefully. Thanks!<br></p>';
+                var text_area = $('div.note-editable');
+                if (text_area.html() == "<p><br></p>") // default empty summernote text area
+                  text_area.html(msg)
+                else
+                  text_area.append(msg);
             });
 
             // Save drafts via Ajax when button pressed
