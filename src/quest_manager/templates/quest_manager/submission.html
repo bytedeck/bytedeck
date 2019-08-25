@@ -100,7 +100,7 @@
 
             // Copied from quest_approvals.html
             $('[id^=btn_quick_text]').on('click', function () {
-                var msg = '<p>Please read the submission instructions more carefully. Thanks!<br></p>';
+                var msg = '<p>{{ quick_reply_text }}<br></p>';
                 var text_area = $('div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)

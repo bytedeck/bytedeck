@@ -34,6 +34,27 @@ class HackerspaceConfigForm(ConfigForm):
                                                        "Utilies > Image Resources model.  "
                                                        "This becomes the default icon for quests and badges.")
 
+    hs_submission_quick_text = forms.CharField(
+        label="Submission Quick Text", 
+        initial="Please read the submission instructions more carefully. Thanks! ",
+        required=True,
+        max_length=255, 
+        help_text="Quickly insert this text into your replies with a button.")
+
+    hs_blank_approval_text = forms.CharField(
+        label="Approved Without Comment Text", 
+        initial="(Approved - Your submission meets the criteria for this quest)",
+        required=False,
+        max_length=255, 
+        help_text="This text will be inserted when you approve a quest without commenting.")
+
+    hs_blank_return_text = forms.CharField(
+        label="Returned Without Comment Text", 
+        initial="(Returned without comment)",
+        required=False,
+        max_length=255, 
+        help_text="This text will be inserted when you return a quest without commenting.")
+
     hs_closed = forms.BooleanField(label="Closed for Maintenance", initial=False,
                                    required=False)
     # hs_tour_on = forms.BooleanField(label="Activate Pop-up Welcome Tour",
