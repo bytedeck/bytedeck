@@ -1008,6 +1008,19 @@ def flag(request, submission_id):
 
 
 @staff_member_required
+def ajax_flag(request):
+    if request.is_ajax() and request.method == "POST":
+
+        submission_id = request.POST.get('submission_id', None)
+        sub = QuestSubmission.objects.get(id=submission_id)
+        sub.flagged_by = request.user
+        sub.save()
+        return JsonResponse(data={})
+    else:
+        raise Http404
+
+
+@staff_member_required
 def unflag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
