@@ -30,9 +30,11 @@
     <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
         title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
         <i class="fa fa-fw fa-share"></i></a>
-    <a href="{% url 'quests:flag' s.id %}" class="btn btn-default" role="button"
-        target="_blank" title="FLAG this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest.">
-        <i class="fa fa-fw fa-flag-o"></i></a>
+    <a href="#" class="btn btn-default btn-flag-submission" role="button"
+        title="FLAG this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest."
+        data-sub-id="{{s.id}}">
+        <i class="fa fa-fw fa-flag-o" ></i>
+    </a>
     {% endif %}
   </div>
 </div>
