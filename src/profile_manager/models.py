@@ -84,7 +84,7 @@ class Profile(models.Model):
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
                                       verbose_name='Preferred first name',
                                       help_text='If you would prefer your teacher to call you by a name other than \
-                                      the first name you entered above, put it here.')
+                                      the name on your school records, please put it here.')
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
                                                  validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
@@ -114,7 +114,7 @@ class Profile(models.Model):
         default=False, help_text="Your marks will be visible to other students through the student list.")
     preferred_internal_only = models.BooleanField(
         verbose_name='Use preferred first name internally only',
-        default=False, help_text="Check this if you don't want your preferred first name used in any public areas.")
+        default=False, help_text="Check this if you want your preferred name used ONLY in the classroom, but NOT in other places such as on your report card.")  # noqa
     dark_theme = models.BooleanField(default=False)
     silent_mode = models.BooleanField(default=False, help_text="Don't play the gong sounds.")
     hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=1023,

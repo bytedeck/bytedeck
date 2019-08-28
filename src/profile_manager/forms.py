@@ -10,8 +10,8 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ['student_number', 'first_name', 'preferred_name', 'preferred_internal_only',
-                  'last_name', 'alias', 'avatar', 'grad_year', 'email',
+        fields = ['preferred_name', 'preferred_internal_only',
+                  'alias', 'avatar', 'grad_year', 'email',
                   'get_notifications_by_email', 'get_announcements_by_email', 'get_messages_by_email',
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
