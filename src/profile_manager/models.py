@@ -375,6 +375,11 @@ def create_profile(sender, **kwargs):
         if pattern.match(current_user.get_username()):
             new_profile.student_number = int(current_user.get_username())
 
+        # set first and last name on the profile.  This should be removed and just use the first and last name 
+        # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
+        new_profile.first_name = current_user.first_name
+        new_profile.last_name = current_user.last_name
+
         new_profile.save()
 
         staff_list = User.objects.filter(is_staff=True)
