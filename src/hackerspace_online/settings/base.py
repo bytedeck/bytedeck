@@ -223,15 +223,15 @@ CRISPY_TEMPLATE_PACK = 'bootstrap3'
 SITE_ID = 3
 
 # AllAuth Configuration
-SOCIALACCOUNT_PROVIDERS = \
-    {'facebook':
-         {'SCOPE': ['email', 'public_profile'],
-          'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
-          'METHOD': 'oauth2',
-          # 'LOCALE_FUNC': 'path.to.callable',
-          'VERIFIED_EMAIL': False,
-          'VERSION': 'v2.3'}
-     }
+# SOCIALACCOUNT_PROVIDERS = \
+#     {'facebook':
+#          {'SCOPE': ['email', 'public_profile'],
+#           'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
+#           'METHOD': 'oauth2',
+#           # 'LOCALE_FUNC': 'path.to.callable',
+#           'VERIFIED_EMAIL': False,
+#           'VERSION': 'v2.3'}
+#      }
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
@@ -258,6 +258,7 @@ ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
 # The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
+ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
 # ACCOUNT_LOGOUT_ON_GET #(=False)
 # Determines whether or not the user is automatically logged out by a mere GET request. See documentation for the LogoutView for details.
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
