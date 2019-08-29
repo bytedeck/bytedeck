@@ -84,7 +84,7 @@ class Profile(models.Model):
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
                                       verbose_name='Preferred first name',
                                       help_text='If you would prefer your teacher to call you by a name other than \
-                                      the first name you entered above, put it here.')
+                                      the name on your school records, please put it here.')
     student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
                                                  validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
@@ -114,7 +114,7 @@ class Profile(models.Model):
         default=False, help_text="Your marks will be visible to other students through the student list.")
     preferred_internal_only = models.BooleanField(
         verbose_name='Use preferred first name internally only',
-        default=False, help_text="Check this if you don't want your preferred first name used in any public areas.")
+        default=False, help_text="Check this if you want your preferred name used ONLY in the classroom, but NOT in other places such as on your report card.")  # noqa
     dark_theme = models.BooleanField(default=False)
     silent_mode = models.BooleanField(default=False, help_text="Don't play the gong sounds.")
     hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=1023,
@@ -374,6 +374,11 @@ def create_profile(sender, **kwargs):
         pattern = re.compile(Profile.student_number_regex_string)
         if pattern.match(current_user.get_username()):
             new_profile.student_number = int(current_user.get_username())
+
+        # set first and last name on the profile.  This should be removed and just use the first and last name 
+        # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
+        new_profile.first_name = current_user.first_name
+        new_profile.last_name = current_user.last_name
 
         new_profile.save()
 

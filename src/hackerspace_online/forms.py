@@ -1,11 +1,35 @@
-from badges.models import Badge
-from courses.models import Semester
+
 
 from django import forms
 from django.contrib.auth.models import User
 from djconfig.forms import ConfigForm
 
+from allauth.account.forms import SignupForm
+
 from utilities.models import ImageResource
+from badges.models import Badge
+from courses.models import Semester
+
+
+class CustomSignupForm(SignupForm):
+    first_name = forms.CharField(
+        max_length=30, 
+        label='First name',
+        help_text="Please use the name that matches your school records.  You can put a different name in your profile.")  # noqa
+    last_name = forms.CharField(
+        max_length=30, 
+        label='Last name',
+        help_text='Please use the name that matches your school records.')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].help_text = 'Your student number, if you are a student.'
+
+    def signup(self, request, user):
+        user.first_name = self.cleaned_data['first_name']
+        user.last_name = self.cleaned_data['last_name']
+        user.save()
+        return user
 
 
 class HackerspaceConfigForm(ConfigForm):
@@ -33,6 +57,27 @@ class HackerspaceConfigForm(ConfigForm):
                                              help_text="Selected from images uploaded via Admin through the "
                                                        "Utilies > Image Resources model.  "
                                                        "This becomes the default icon for quests and badges.")
+
+    hs_submission_quick_text = forms.CharField(
+        label="Submission Quick Text", 
+        initial="Please read the submission instructions more carefully. Thanks! ",
+        required=True,
+        max_length=255, 
+        help_text="Quickly insert this text into your replies with a button.")
+
+    hs_blank_approval_text = forms.CharField(
+        label="Approved Without Comment Text", 
+        initial="(Approved - Your submission meets the criteria for this quest)",
+        required=False,
+        max_length=255, 
+        help_text="This text will be inserted when you approve a quest without commenting.")
+
+    hs_blank_return_text = forms.CharField(
+        label="Returned Without Comment Text", 
+        initial="(Returned without comment)",
+        required=False,
+        max_length=255, 
+        help_text="This text will be inserted when you return a quest without commenting.")
 
     hs_closed = forms.BooleanField(label="Closed for Maintenance", initial=False,
                                    required=False)

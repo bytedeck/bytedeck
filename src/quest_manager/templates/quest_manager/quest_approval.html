@@ -57,7 +57,7 @@
 <script>
 $( document ).ready(function() {
     $('[id^=btn_quick_text]').on('click', function () {
-        var msg = ' Please read the submission instructions more carefully. Thanks! ';
+        var msg = ' {{ quick_reply_text }} ';
         var textarea = $($(this).data('target')).find('textarea');
         textarea.val(textarea.val() + msg);
     });
@@ -65,5 +65,7 @@ $( document ).ready(function() {
 </script>
 
 {% include "quest_manager/ajax_content_loading.html" %}
+
+{% include "quest_manager/snippets/flag_submissions_scripts.html" %}
 
 {% endblock %}

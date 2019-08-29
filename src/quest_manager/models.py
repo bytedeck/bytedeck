@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
+from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +17,7 @@ from djconfig import config
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, PrereqAllConditionsMet
+from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
@@ -312,8 +314,12 @@ class Quest(XPItem, IsAPrereqMixin):
             return self.icon.url
         if self.campaign and self.campaign.icon and hasattr(self.campaign.icon, 'url'):
             return self.campaign.icon.url
-        else:
-            return static('img/default_icon.png')
+
+        if config.hs_default_icon:
+            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
+            return icon.image.url
+
+        return static('img/default_icon.png')            
 
     def prereqs(self):
         return Prereq.objects.all_parent(self)

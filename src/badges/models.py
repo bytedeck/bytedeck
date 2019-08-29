@@ -14,6 +14,7 @@ from django.db.models.signals import post_save
 from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin
+from utilities.models import ImageResource
 
 
 # from courses.models import Semester
@@ -180,8 +181,11 @@ class Badge(models.Model, IsAPrereqMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
-        else:
-            return static('img/default_icon.png')
+
+        if config.hs_default_icon:
+            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
+            return icon.image.url
+        return static('img/default_icon.png')
 
     # @cached_property
     def fraction_of_active_users_granted_this(self):

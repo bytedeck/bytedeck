@@ -62,10 +62,13 @@
           var count = data.count;
           if(count!=0) {
             $(".notification-badge").html(count);
+
+            // count notifications related to announcements
+            // and use for announcements badge
             var announcements_count = 0;
             $(data.notifications).each(function(){
-              var link = this;
-              if (this.indexOf("announcements")>0) {
+              // if 'announcements' found in the link, then it's prolly an announcement..
+              if (this.link.indexOf("announcements")>0) {
                 announcements_count++;
               }
             })
@@ -73,6 +76,27 @@
               $("#announcements-badge").html(announcements_count);
             }
           }
+        }
+      });
+    }
+
+    function ajaxMarkNotificationRead(notification_id, $item) {
+      $.ajax({
+        type: "POST",
+        url: "{% url 'notifications:ajax_mark_read' %}",
+        data: {
+          id: notification_id,
+          csrfmiddlewaretoken: "{{ csrf_token }}",
+        },
+        success: function(data){
+          // get the notification item by its id and remove it from DOM
+          $item.parent().hide('slow')
+          // subtract one from unread #s
+          $unread = $(".notification-badge")
+          unread_num = parseInt($unread.html())
+          unread_num -= 1
+          $unread.html(unread_num)
+
         }
       });
     }
@@ -114,21 +138,47 @@
             csrfmiddlewaretoken: "{{ csrf_token }}",
           },
           success: function(data){
-            $menu = $(".notification-dropdown");
+            $menu = $(".notification-dropdown"); // captures both the main and mobile menus
             $menu.html("");
 
             var count = data.count;
             // console.log(count);
+
+
+           /* // Menu code will look like this
+           <li id="notifications-menu" class="dropdown hidden-xs open">
+              <a title="Notifications" href="#" class="dropdown-toggle notification-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="true">
+                  <i class="fa fa-bell"></i><!--
+                --><span id="notification_badge" class="badge alert-danger notification-badge"></span>
+              </a>
+              <ul class="dropdown-menu notification-dropdown" id="notification-dropdown">
+                 // INSERT NOTIFICATION ITEMS HERE (as <li>)
+                <li><a href="/notifications/"> View All Notifications</a></li>
+              </ul>
+            </li> 
+            */
+
             if(count!=0) {
-              // $("#notification_badge").html(count);
               $menu.append("<li class='dropdown-header'>New Notifications</li>");
+
+              // Add a menu item and remove button for each notification
               $(data.notifications).each(function(){
-                var link = this;
-                $menu.append("<li>"+link + "</li>");
-              })
-              // console.log(data.notifications);
+                if (this.removable) {
+                  remove_link = "<a class='notification-mark-read' title='Remove' href='#' data-id='" + 
+                                this.id + 
+                                "'><i class='fa fa-times fa-fw text-muted'></i></a>";
+                  $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
+                }
+                else
+                  $menu_item = $("<li>"+ this.link +"</li>");
+
+                $menu.append($menu_item);
+              });
+
               $menu.append("<li role='separator' class='divider'></li>");
             }
+
+            // a additional items at the end of the menu
             var overflow = "";
             if(count > data.limit) {
               overflow = "<i class='fa fa-fw fa-2x fa-stack-overflow text-danger'></i>";
@@ -139,6 +189,8 @@
               var url_mark = "{% url 'notifications:read_all' %}";
               $menu.append("<li><a href='" + url_mark + "'>Mark all read</a></li>");
             }
+
+            add_mark_read_handlers()
           },
           error: function(rs, e) {
             console.log(rs);
@@ -148,6 +200,15 @@
       });
 
     }); //(document).ready(function(){
+
+    function add_mark_read_handlers() {
+      $(".notification-mark-read").click(function(e){
+        $this = $(this)
+        e.stopPropagation(); // don't close the menu
+        notificationID = $this.data('id')
+        ajaxMarkNotificationRead(notificationID, $this)
+      });
+    }
 
     $(window).on('load', function() {
     		$("div.pack").pack();  // need images loaded before packing

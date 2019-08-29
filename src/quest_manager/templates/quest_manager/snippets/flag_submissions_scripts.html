@@ -1,0 +1,57 @@
+<script>
+
+    $(document).ready(function() {
+        // Flag submissions via Ajax when button clicked:
+        $('.btn-flag-submission').on('click', function(event){
+            event.preventDefault(); // prevent browser from reloading
+            flag_submission(this);
+        });
+
+    });
+
+    function flag_submission(btn) {
+        $btn = $(btn);
+        
+        $iconOriginal = $btn.find('i')
+        $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>')
+        $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>')
+
+        if($btn.find($iconSpin).length == 0 && $btn.find($iconSuccess).length == 0) {
+
+            $iconOriginal.hide(0)
+            $btn.append($iconSpin)
+            $btn.append($iconSuccess)
+
+            sub_id = $btn.data('sub-id')
+
+            $.ajax({
+                url : "{% url 'quests:ajax_flag' %}",
+                type : "POST", // http method
+                data : { 
+                    csrfmiddlewaretoken: "{{ csrf_token }}",
+                    submission_id: sub_id
+                }, // data sent with the post request
+
+                // handle a successful response
+                success : function(json) {
+                    // fade out spinner and fade in check, then replace check with original icon after a couple seconds
+                    $iconSpin.fadeOut(400, function() {
+                    $iconSuccess.fadeIn(400, function() {
+                        window.setTimeout(
+                        function(){ $iconSuccess.remove(); $iconOriginal.show(0); $iconSpin.remove()},
+                        2000
+                        )
+                    });
+                    });
+                },
+
+                // handle a non-successful response
+                error : function(xhr,errmsg,err) {
+                    console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                    alert("ERROR!\n\nSorry, something went wrong and the quest wasn't flagged.  \n\nSee the browser console for error details.");
+                }
+            });
+        }
+    }
+
+</script>

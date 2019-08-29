@@ -1,3 +1,3 @@
-{% load i18n %}{% autoescape off %}{% blocktrans with object.subject as subject and site.name as sitename %}
-Message "{{ subject|truncatechars:30 }}" from {{ object.sender.profile }} at {{ sitename }}
-{% endblocktrans %}{% endautoescape %}
+{% load i18n %}{% autoescape off %}
+Message "{{ object.subject|truncatechars:30 }}" from {{ object.sender.profile }} at {{ site.name }}
+{% endautoescape %}

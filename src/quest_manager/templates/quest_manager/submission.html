@@ -100,11 +100,12 @@
 
             // Copied from quest_approvals.html
             $('[id^=btn_quick_text]').on('click', function () {
-                var msg = ' Please read the submission instructions more carefully. Thanks! ';
-
-                var iframe_txt = $("#id_comment_text_iframe").contents().find('div.note-editable');
-                console.log(iframe_txt.html());
-                iframe_txt.append(msg);
+                var msg = '<p>{{ quick_reply_text }}<br></p>';
+                var text_area = $('div.note-editable');
+                if (text_area.html() == "<p><br></p>") // default empty summernote text area
+                  text_area.html(msg)
+                else
+                  text_area.append(msg);
             });
 
             // Save drafts via Ajax when button pressed
@@ -115,6 +116,8 @@
             });
 
             setInterval(save_draft, 60000); // autosave every 60 seconds
+
+
         });
 
         function save_draft() {
@@ -161,7 +164,7 @@
                 });
             }
 
-        };
+        }  
 
         function hide_check_show_text() {
           // after success, animate a check mark, then put text back
@@ -173,9 +176,11 @@
               )
             });
           });
-        };
+        }
 
     </script>
+
+    {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
 
     {% if request.user.is_staff %} {# styling for the badge awarding widget #}
     <script>

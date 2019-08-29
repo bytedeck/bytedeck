@@ -3,7 +3,8 @@
 {% load crispy_forms_tags %}
 {% block content %}
 <div id="postman">
-  <h3>{% if pm_messages|length > 1 %}{% trans "Conversation" %}{% else %}{% trans "Message" %}{% endif %}</h3>
+  {% comment %} <h3>{% if pm_messages|length > 1 %}{% trans "Conversation" %}{% else %}{% trans "Message" %}{% endif %}:</h3> {% endcomment %}
+  <h3>{{pm_messages.0.subject}}</h3>
   <ul class="list-group">
   {% for message in pm_messages %}
     {% include 'postman/message.html' %}

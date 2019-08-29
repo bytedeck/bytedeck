@@ -155,6 +155,11 @@ class Notification(models.Model):
             url = url_common_part + "</a>"
         return url
 
+    def mark_read(self):
+        self.unread = False
+        self.time_read = timezone.now()
+        self.save()
+
     def get_url(self):
         # print("***** NOTIFICATION.get_url **********")
         try:

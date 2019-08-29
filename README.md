@@ -42,12 +42,12 @@ Add yourself to the docker group:
 
 #### Clone the repository
 
-0. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
+1. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
 1. Move into the parent directory of the project: `cd ~/Developer`
-2. Go to your forked repository in github
-3. Click "Clone or download" and copy the url, then paste it into the command:
-4. `git clone yoururlhere`
-3. This will download the project into ~/Developer/hackerspace/
+1. Go to your forked repository in github
+1. Click "Clone or download" and copy the url, then paste it into the command:
+1. `git clone yoururlhere`
+1. This will download the project into ~/Developer/hackerspace/
 
 #### Initial setup
 All the steps required to initially set up the project have been placed into the `steup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
@@ -62,8 +62,8 @@ If everything has worked so far, you should now be able to run your own version 
 
 1. make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
 1. Then run it: `docker-compose up`
-3. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery
-4. If everything works, then you should see something like this at the end:
+1. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery
+1. If everything works, then you should see something like this at the end:
 ```
 web_1     | System check identified no issues (0 silenced).
 web_1     | July 21, 2019 - 00:00:45
@@ -71,10 +71,9 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
-5. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
-6. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
-7. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
-
+1. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+1. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
+1. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
 
 ## Setting up a VS Code development environment
 
@@ -97,7 +96,6 @@ web_1     | Quit the server with CONTROL-C.
 1. VS Code will now spin up the projects conatainers, and your code will open with the django server running.
 1. You can now edit code with live results
 
-
 ## Contributing
 
 1. Move into your cloned directory. `cd ~/Developer/hackerspace`
@@ -107,6 +105,6 @@ web_1     | Quit the server with CONTROL-C.
 5. Create a new branch: `git checkout -b yourbranchname`
 6. Make your changes and them commit: `git commit -am "yourchangeshere"`
 7. Push your branch to your fork of the project: `git push origin yourbranchname`
-8. Go to your fork of the repository. 
+8. Go to your fork of the repository.
 9. Select your recently pushed branch and create a pull request.
 10. Complete pull request.

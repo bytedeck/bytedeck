@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.21] 2019-08-29 - Final tweaks before new school year
+
+* Remove individual notifications from dropdown
+* Require first and last name for new accounts
+* DM headings and emails improved
+* [teachers] New config fields for custom text
+* [teachers] Reorganize submission buttons
+* [teachers] Flag subissions via ajax (no page redirect)
+* [bugfix] Broken macro text button on full reply
+
 ### [0.20] 2019-08-21 - Custom chillax lines
 
 * DM formatting and attachments

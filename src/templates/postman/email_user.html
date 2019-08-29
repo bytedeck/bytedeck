@@ -3,9 +3,9 @@
 <!DOCTYPE html>
 <html>
 <body>
-<p>Hello {{user}},</p>
+<p>Hello {{object.recipient.profile.get_preferred_name}},</p>
 
-<p>You received a <a href="https://{{ site.name }}/{{ object.get_absolute_url }}">new message</a> from {{ sender }}.</p>
+<p>You received a <a href="https://{{ site.name }}/{{ object.get_absolute_url }}">new message</a> from {{ object.sender.profile }}.</p>
 
 
 <p>Have a day!</p>

@@ -1,37 +1,40 @@
 <div>
+  <div class="btn-group" role="group">
     {% if not s.is_approved %}
-        <input type='submit' name='approve_button' class='btn btn-success' value='Approve' />
-
+    <button type='submit' name='approve_button' class='btn btn-success' 
+        title='APPROVE the quest and grant its XP'>
+        <i class="fa fa-fw fa-check"></i></button>
     {% endif %}
-    <input type='submit' name='comment_button' class='btn btn-primary' value='Comment' />
-    <input type='submit' name='return_button' class='btn btn-danger' value='Return' />
+    <button type='submit' name='comment_button' class='btn btn-primary' 
+        title='COMMENT without approving or returning the quest'>
+        <i class="fa fa-fw fa-comment"></i> </button>
+    <button type='submit' name='return_button' class='btn btn-danger' 
+        title='RETURN this quest to the student without accepting it'>
+        <i class="fa fa-fw fa-times"></i></button>
     <a class="btn btn-warning" data-target="#quick_reply{{s.id}}" id= "btn_quick_text{{s.id}}" role="button"
-       title='Add: "Please read the submission instructions more carefully. Thanks!"'>Please read...</a>
+       title='ADD TEXT: "{{ quick_reply_text }}"'>
+       <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i></a>
+  </div>
+  <div class="btn-group" role="group">
 
-
-    <div class="dropdown pull-right">
-        <button class="btn btn-default dropdown-toggle" type="button" id="dropdownMenu{{ s.id }}"
-                data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
-            More...
-            <span class="caret"></span>
-        </button>
-        <ul class="dropdown-menu" aria-labelledby="dropdownMenu{{ s.id }}">
-            <li><a href="{% url 'quests:skip' s.id %}"
-                   title="Do not grant XP for this quest (or badges resulting) but mark as complete.">Skip</a></li>
-            <li><a href="{% url 'quests:flag' s.id %}"
-                   title="Flag this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest.">Flag</a></li>
-            <li><a title="View the full quest details and the full comment form."
-                   href="{% url 'quests:submission' s.id %}">Full Reply</a></li>
-            {% if s.quest %}
-            <li><a title="Quick link to edit in case an error or typo in the quest is found."
-                target="_blank"
-                href="{% url 'quests:quest_update' s.quest.id %}">Edit Quest</a></li>
-            <li><a title="View past submissions of this quest from other students."
-                target="_blank"
-                href="{% url 'quests:approved_for_quest' s.quest.id %}">Past Submissions</a></li>
-            {% endif %}
-        </ul>
-    </div>
-
-
+    <a title="View the FULL DETAILS of this quest and the full comment form"  class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:submission' s.id %}">
+        <i class="fa fa-fw fa-file-text-o"></i></a>
+    {% if s.quest %}
+    <a title="Quick link to EDIT this quest in case an error or typo" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:quest_update' s.quest.id %}">
+        <i class="fa fa-fw fa-pencil"></i></a>
+    <a title="View past submissions of this quest from other students" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:approved_for_quest' s.quest.id %}">
+        <i class="fa fa-fw fa-folder-o"></i></a>
+    <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
+        title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
+        <i class="fa fa-fw fa-share"></i></a>
+    <a href="#" class="btn btn-default btn-flag-submission" role="button"
+        title="FLAG this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest."
+        data-sub-id="{{s.id}}">
+        <i class="fa fa-fw fa-flag-o" ></i>
+    </a>
+    {% endif %}
+  </div>
 </div>
