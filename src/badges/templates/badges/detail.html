@@ -10,7 +10,7 @@
       <img class="media-object icon-lg img-rounded" src="{{ badge.get_icon_url }}" alt="icon" />
     </div>
     <div class="media-body">
-      {{ badge.short_description }}
+      {{ badge.short_description|safe }}
     </div>
   </div>
   <p></p>
