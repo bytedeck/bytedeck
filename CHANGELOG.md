@@ -4,6 +4,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.21.1] 2019-08-30
+
+* [bugfix] Badge descriptions
+* [bugfix] DM email link
+
 ### [0.21] 2019-08-29 - Final tweaks before new school year
 
 * Remove individual notifications from dropdown
