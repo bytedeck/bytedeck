@@ -87,7 +87,7 @@ web_1     | Quit the server with CONTROL-C.
    1. Optional: Django Template (bibhasdn)
    1. Optional: ESLint: (Dirk Baeumer)
    1. Optional: GitLens (Eric Amodio)
-   1. Optional: Docker (Microsfot) 
+   1. Optional: Docker (Microsoft) 
    1. Optional: Git Graph (mhutchie)
    1. Optional: YAML (Red Hat)
 1. Restart VS Code so the extension work
