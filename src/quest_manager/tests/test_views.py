@@ -243,8 +243,7 @@ class SubmissionViewTests(TestCase):
 
     def test_ajax_save_draft(self):
         # loging required for this view
-        # success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        # self.assertTrue(success)
+        self.client.force_login(self.test_student1)
         quest = mommy.make(Quest, name="TestSaveDrafts")
         sub = mommy.make(QuestSubmission, quest=quest)
         draft_comment = "Test draft comment"
@@ -254,12 +253,13 @@ class SubmissionViewTests(TestCase):
             'submission_id': sub.id,
         }
 
-        self.client.post(
+        response = self.client.post(
             reverse('quests:ajax_save_draft'), 
             data=ajax_data,
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], "Draft saved")
 
-        # This doesn't work, no idea why.  It's not saving the model during the test.
-        # print(sub.draft_text) # None.  Why is this None?
-        # self.assertEqual(draft_comment, sub.draft_text) # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+        sub.refresh_from_db()
+        self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
