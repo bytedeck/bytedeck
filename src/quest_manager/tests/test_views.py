@@ -240,3 +240,26 @@ class SubmissionViewTests(TestCase):
 
         # TODO: should redirect, not 404?
         self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
+
+    def test_ajax_save_draft(self):
+        # loging required for this view
+        self.client.force_login(self.test_student1)
+        quest = mommy.make(Quest, name="TestSaveDrafts")
+        sub = mommy.make(QuestSubmission, quest=quest)
+        draft_comment = "Test draft comment"
+        # Send some draft data via the ajax view, which should save it.
+        ajax_data = {
+            'comment': draft_comment,
+            'submission_id': sub.id,
+        }
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'), 
+            data=ajax_data,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], "Draft saved")
+
+        sub.refresh_from_db()
+        self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
