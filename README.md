@@ -23,7 +23,7 @@ By the end, you should be able to run docker's test image:
 
 `$ sudo docker run hello-world`
 
-#### Instal docker-compose
+#### Install docker-compose
 `sudo apt install docker-compose`
 
 Add yourself to the docker group:
