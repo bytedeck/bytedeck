@@ -94,6 +94,16 @@ class SubmissionTestModel(TestCase):
         self.assertIsNone(sub.quest)
         self.assertIsNotNone(str(sub))
 
+    def test_submission_mark_completed(self):
+        draft_text = "Draft words"
+        sub = mommy.make(QuestSubmission, draft_text=draft_text)
+        self.assertFalse(sub.is_completed)
+        self.assertEqual(sub.draft_text, draft_text)
+        sub.mark_completed()
+        self.assertTrue(sub.is_completed)
+        self.assertIsNotNone(sub.first_time_completed)
+        self.assertIsNone(sub.draft_text)
+
 #
 #     def test_badge_assertion_count(self):
 #         num = randint(1, 9)

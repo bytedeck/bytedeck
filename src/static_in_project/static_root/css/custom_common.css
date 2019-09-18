@@ -267,7 +267,7 @@ blockquote {
     margin: 5px;
 }
 
-iframe {
+iframe, .embed-responsive video {
     border-radius: 8px;
 }
 

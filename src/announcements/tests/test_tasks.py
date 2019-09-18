@@ -31,7 +31,9 @@ class AnnouncementTasksTests(TestCase):
         )
 
     def test_send_announcement_emails(self):
-        task_result = tasks.send_announcement_emails.apply(kwargs={"content": "", "url": "https://example.com"})
+        task_result = tasks.send_announcement_emails.apply(
+            kwargs={"content": "", "url": "https://example.com/announcement/url/here/"}
+        )
         self.assertTrue(task_result.successful())
 
     def test_publish_announcement(self):

@@ -759,6 +759,7 @@ class QuestSubmission(models.Model):
         # when calculating repeatable quests
         if self.first_time_completed is None:
             self.first_time_completed = self.time_completed
+        self.draft_text = None  # clear draft stuff
         self.save()
 
     def mark_approved(self, transfer=False):
