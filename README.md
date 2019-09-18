@@ -50,7 +50,7 @@ Add yourself to the docker group:
 1. This will download the project into ~/Developer/hackerspace/
 
 #### Initial setup
-All the steps required to initially set up the project have been placed into the `steup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
+All the steps required to initially set up the project have been placed into the `setup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
 
 1. Open a terminal
 2. Move into the project directory: `cd ~/Developer/hackerspace`
