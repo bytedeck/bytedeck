@@ -62,7 +62,7 @@ If everything has worked so far, you should now be able to run your own version 
 
 1. make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
 1. Then run it: `docker-compose up`
-1. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery
+1. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery)
 1. If everything works, then you should see something like this at the end:
 ```
 web_1     | System check identified no issues (0 silenced).
