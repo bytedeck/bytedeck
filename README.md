@@ -65,9 +65,14 @@ All the steps required to initially set up the project have been placed into the
 If everything has worked so far, you should now be able to run your own version of the Hackerspace website:
 
 1. make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
-1. Then run it: `docker-compose up`
-1. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery)
-1. If everything works, then you should see something like this at the end:
+2. Then run it: `docker-compose up`
+3. Keep an eye out for errors as it runs each of the 4 containers (web, redis, db, and celery)
+4. Once you see this `celery-beat_1  | [2019-09-19 16:11:00,636: INFO/MainProcess] Writing entries...`, press Ctrl+C.
+5. Run `docker-compose up db redis`, and once you get `db_1           | LOG:  autovacuum launcher started`, open a new terminal window
+6. Connect to your server again in the new window
+7. Make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
+8. Run `docker-compose up`
+4. If everything works, then you should see something like this at the end:
 ```
 web_1     | System check identified no issues (0 silenced).
 web_1     | July 21, 2019 - 00:00:45
@@ -75,30 +80,30 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
-1. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
-1. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
-1. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
+5. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+6. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
+7. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
 
 ## Setting up a VS Code development environment
 
 (UNTESTED)
 
 1. Install Visual Studio Code: https://code.visualstudio.com/docs/setup/setup-overview
-1. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
-1. Install the following extensions:
+2. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
+3. Install the following extensions:
    1. Required: Python (Microsoft)
-   1. Required: Remote - Containers (Microsoft) 
-   1. Optional: Django Template (bibhasdn)
-   1. Optional: ESLint: (Dirk Baeumer)
-   1. Optional: GitLens (Eric Amodio)
-   1. Optional: Docker (Microsoft) 
-   1. Optional: Git Graph (mhutchie)
-   1. Optional: YAML (Red Hat)
-1. Restart VS Code so the extension work
-1. Open the project in VS Code (File > Open Folder)
-1. You should see a pop up askign if you want to open the project in a container, of not, open the command palette with Ctrl + Shift + P and type: "Remote-Containers" and select: "Reopen Folder in Container"
-1. VS Code will now spin up the projects conatainers, and your code will open with the django server running.
-1. You can now edit code with live results
+   2. Required: Remote - Containers (Microsoft) 
+   3. Optional: Django Template (bibhasdn)
+   4. Optional: ESLint: (Dirk Baeumer)
+   5. Optional: GitLens (Eric Amodio)
+   6. Optional: Docker (Microsoft) 
+   7. Optional: Git Graph (mhutchie)
+   8. Optional: YAML (Red Hat)
+4. Restart VS Code so the extension work
+5. Open the project in VS Code (File > Open Folder)
+6. You should see a pop up askign if you want to open the project in a container, of not, open the command palette with Ctrl + Shift + P and type: "Remote-Containers" and select: "Reopen Folder in Container"
+7. VS Code will now spin up the projects conatainers, and your code will open with the django server running.
+8. You can now edit code with live results
 
 ## Contributing
 
