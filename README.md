@@ -54,8 +54,11 @@ All the steps required to initially set up the project have been placed into the
 
 1. Open a terminal
 2. Move into the project directory: `cd ~/Developer/hackerspace`
-3. Run the setup script to buidl the docker image, and setup your django web app container: `bash setup.sh`
-4. Keep an eye out for errors as it goes through each step.
+3. Run `export DOCKER_HOST=127.0.0.1:8000`
+4. Restart the server with `sudo reboot`
+5. Reconnect to the server
+6. Run the setup script to bulid the docker image, and setup your django web app container: `bash setup.sh`
+7. Keep an eye out for errors as it goes through each step.
 
 ### Running the server
 If everything has worked so far, you should now be able to run your own version of the Hackerspace website:
