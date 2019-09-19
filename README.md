@@ -43,11 +43,10 @@ Add yourself to the docker group:
 #### Clone the repository
 
 1. Open the directory where you want to put the code.  I like to create a new direcotry for my code projects called Developer: `mkdir ~/Developer`
-1. Move into the parent directory of the project: `cd ~/Developer`
-1. Go to your forked repository in github
-1. Click "Clone or download" and copy the url, then paste it into the command:
-1. `git clone yoururlhere`
-1. This will download the project into ~/Developer/hackerspace/
+2. Move into the parent directory of the project: `cd ~/Developer`
+3. Go to your forked repository in github
+4. Click "Clone or download" and copy the url, then paste it into the command: `git clone yoururlhere`
+5. This will download the project into ~/Developer/hackerspace/
 
 #### Initial setup
 All the steps required to initially set up the project have been placed into the `setup.sh` script.  Take a look. If you've used Django before you should recognize some of the steps.
@@ -72,7 +71,7 @@ If everything has worked so far, you should now be able to run your own version 
 6. Connect to your server again in the new window
 7. Make sure you are in the project's root directory: `cd ~/Developer/hackerspace`
 8. Run `docker-compose up`
-4. If everything works, then you should see something like this at the end:
+9. If everything works, then you should see something like this at the end:
 ```
 web_1     | System check identified no issues (0 silenced).
 web_1     | July 21, 2019 - 00:00:45
