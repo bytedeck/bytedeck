@@ -79,6 +79,7 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
+INSERT DISALLOWED HOSTS ERROR INSTRUCTIONS
 10. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
 11. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
 12. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
