@@ -82,6 +82,7 @@ web_1     | Quit the server with CONTROL-C.
 INSERT DISALLOWED HOSTS ERROR INSTRUCTIONS
 
 10. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
+   10a. If you see a message about Disallowed hosts, add your server IP as a string to the `ALLOWED_HOSTS` list in `/src/hackerspace_online/settings/local.py`
 11. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
 12. Stop the project with `Ctrl + C` on the command line, then wait for each of the containers to stop.
 
