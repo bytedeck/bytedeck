@@ -79,8 +79,6 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
-INSERT DISALLOWED HOSTS ERROR INSTRUCTIONS
-
 10. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) to see if it worked!
 
  10a. If you see a message about Disallowed hosts, add your server IP as a string to the `ALLOWED_HOSTS` list in  `/src/hackerspace_online/settings/local.py`
