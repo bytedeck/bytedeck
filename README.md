@@ -83,6 +83,7 @@ web_1     | Quit the server with CONTROL-C.
 11. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
 
 11a. If you didn't create a sueruser, or `setup.sh` never prompted you to, make sure you are in the project's root directory: `cd ~/Developer/hackerspace`, then run `docker-compose run web python src/manage.py createsuperuser`
+
 12. If you would like to stop the project, use `Ctrl + C` in the command line, then wait for each of the containers to stop.
 
 ## Setting up a VS Code development environment
