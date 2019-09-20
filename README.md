@@ -79,7 +79,10 @@ web_1     | Django version 2.0.13, using settings 'hackerspace_online.settings'
 web_1     | Starting development server at http://0.0.0.0:8000/
 web_1     | Quit the server with CONTROL-C.
 ```
-10. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) or if running on a remote server, `serverpublicip:8000` to see if it worked! If you see a message about Disallowed hosts, add your server IP as a string to the `ALLOWED_HOSTS` list in  `/src/hackerspace_online/settings/local.py`
+10. In your browser go to [127.0.0.1:8000](http://127.0.0.1:8000) or if running on a remote server, `serverpublicip:8000` to see if it worked! You can now close your terminals! 
+
+10a. If you see a message about Disallowed hosts, reconnect to your server, make sure you are in the project's root directory: `cd ~/Developer/hackerspace`, and add your server IP as a string to the `ALLOWED_HOSTS` list in  `/src/hackerspace_online/settings/local.py`
+
 11. Log in as the superuser you created to see what a teacher/admin sees, or create a new student account.
 
 11a. If you didn't create a sueruser, or `setup.sh` never prompted you to, make sure you are in the project's root directory: `cd ~/Developer/hackerspace`, then run `docker-compose run web python src/manage.py createsuperuser`
