@@ -28,7 +28,7 @@ django-url-or-relative-url-field==0.1.1
 et-xmlfile==1.0.1
 idna==2.5
 jdcal==1.4
-numpy==1.13.0
+numpy==1.18.0
 oauthlib==2.0.2
 odfpy==1.4.0
 olefile==0.44
