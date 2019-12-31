@@ -43,7 +43,7 @@ class AnnouncementViewTests(TestCase):
         )
 
     def assert200(self, url_name, args=None):
-        self.assertEquals(
+        self.assertEqual(
             self.client.get(reverse(url_name, args=args)).status_code,
             200
         )
@@ -75,15 +75,15 @@ class AnnouncementViewTests(TestCase):
         #     print(field, getattr(self.test_announcement, field.name))
 
         # students should have access to these:
-        self.assertEquals(self.client.get(reverse('announcements:list')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('announcements:list2')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list2')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
 
         # Announcement from setup() should appear in the list
         self.assertContains(self.client.get(reverse('announcements:list')), self.test_announcement.title)
 
         comment_response_get = self.client.get(reverse('announcements:comment', args=[self.ann_pk]))
-        self.assertEquals(comment_response_get.status_code, 404)  # Comments via POST only
+        self.assertEqual(comment_response_get.status_code, 404)  # Comments via POST only
 
         # Posting a comment redirects to the announcement commented on
         self.assertRedirects(
@@ -103,15 +103,15 @@ class AnnouncementViewTests(TestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        self.assertEquals(self.client.get(reverse('announcements:list')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('announcements:list2')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list2')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
 
         # Announcement from setup() should appear in the list
         self.assertContains(self.client.get(reverse('announcements:list')), self.test_announcement.title)
 
         comment_response_get = self.client.get(reverse('announcements:comment', args=[self.ann_pk]))
-        self.assertEquals(comment_response_get.status_code, 404)  # Comments via POST only
+        self.assertEqual(comment_response_get.status_code, 404)  # Comments via POST only
 
         # Posting a comment redirects to the announcement commented on
         self.assertRedirects(
