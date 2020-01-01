@@ -1,6 +1,5 @@
 from django import template
 from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
 from courses.models import MarkRange
 
 User = get_user_model()

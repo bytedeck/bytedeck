@@ -59,10 +59,8 @@ class QuestViewTests(TestCase):
         # anyone can view drafts if they figure out the url, but it will be blank for them
         self.assertEqual(self.client.get(reverse('quests:drafts')).status_code, 200)
 
-        self.assertEqual(self.client.get(reverse('quests:quest_detail',
-                                                  args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quest_detail',
-                                                  args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 302)
