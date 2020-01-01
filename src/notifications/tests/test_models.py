@@ -27,7 +27,7 @@ class NotificationTestModel(TestCase):
         # print(str(self.notification))
     #
     # def test_badge_assertion_url(self):
-    #     self.assertEquals(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
+    #     self.assertEqual(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
     #
     # def test_badge_assertion_count(self):
     #     num = randint(1, 9)
@@ -40,12 +40,12 @@ class NotificationTestModel(TestCase):
     #         #badge_assertion = self.badge_assertion_recipe.make()
     #     count = badge_assertion.count()
     #     # print(num, count)
-    #     self.assertEquals(num, count)
+    #     self.assertEqual(num, count)
     #
     # def test_badge_assertion_count_bootstrap_badge(self):
     #     """Returns empty string if count < 2, else returns proper count"""
     #     badge_assertion = mommy.make(BadgeAssertion)
-    #     self.assertEquals(badge_assertion.count_bootstrap_badge(), "")
+    #     self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
     #
     #     num = randint(1, 9)
     #     for _ in range(num):
@@ -57,7 +57,7 @@ class NotificationTestModel(TestCase):
     #         #badge_assertion = self.badge_assertion_recipe.make()
     #     count = badge_assertion.count_bootstrap_badge()
     #     # print(num, count)
-    #     self.assertEquals(num, count)
+    #     self.assertEqual(num, count)
     #
     # def test_badge_assertion_get_duplicate_assertions(self):
     #     num = randint(1, 9)

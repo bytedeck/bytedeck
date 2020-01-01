@@ -61,7 +61,7 @@ class BadgeTestModel(TestCase):
         pass
 
     def test_badge_url(self):
-        self.assertEquals(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
+        self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
 
 class BadgeAssertionTestModel(TestCase):
@@ -84,7 +84,7 @@ class BadgeAssertionTestModel(TestCase):
         self.assertEqual(str(self.assertion), self.assertion.badge.name)
 
     def test_badge_assertion_url(self):
-        self.assertEquals(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
+        self.assertEqual(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
 
     def test_badge_assertion_count(self):
         num = 5
@@ -99,12 +99,12 @@ class BadgeAssertionTestModel(TestCase):
         # badge_assertion = self.badge_assertion_recipe.make()
         count = badge_assertion.count()
         # print(num, count)
-        self.assertEquals(num, count)
+        self.assertEqual(num, count)
 
     def test_badge_assertion_count_bootstrap_badge(self):
         """Returns empty string if count < 2, else returns proper count"""
         badge_assertion = mommy.make(BadgeAssertion, semester=self.sem)
-        self.assertEquals(badge_assertion.count_bootstrap_badge(), "")
+        self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
 
         num = 4
         for _ in range(num):
@@ -117,7 +117,7 @@ class BadgeAssertionTestModel(TestCase):
             # badge_assertion = self.badge_assertion_recipe.make()
         count = badge_assertion.count_bootstrap_badge()
         # print(num, count)
-        self.assertEquals(num, count)
+        self.assertEqual(num, count)
 
     def test_badge_assertion_get_duplicate_assertions(self):
         num = 5

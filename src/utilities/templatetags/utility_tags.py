@@ -1,6 +1,6 @@
 from django import template
 from django.contrib.sites.models import Site
-from django.contrib.staticfiles.templatetags.staticfiles import static
+from django.templatetags.static import static
 from django.shortcuts import get_object_or_404
 from djconfig import config, reload_maybe
 
