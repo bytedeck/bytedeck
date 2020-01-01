@@ -30,7 +30,7 @@ django-jchart==0.4.2
 django-postman==3.6.2
 django-redis==4.10.0
 django-select2==6.3.1
-django-summernote==0.8.8.6
+django-summernote==0.8.11.6
 django-timezone-field==4.0
 django-url-or-relative-url-field==0.1.1
 entrypoints==0.3
