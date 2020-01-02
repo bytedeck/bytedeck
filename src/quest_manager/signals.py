@@ -8,6 +8,7 @@ from quest_manager.models import Quest
 
 
 class UglySoup(BeautifulSoup):
+    # continuous whitespace starting from a new line
     r = re.compile(r'^(\s*)', re.MULTILINE)
 
     def insert_before(self, successor):
@@ -17,6 +18,9 @@ class UglySoup(BeautifulSoup):
         pass
 
     def improved_prettify(self, encoding=None, formatter="minimal", indent_width=4):
+        """ Prettify that also indents """
+        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline. 
+        # replace whitespace from standard prettify with proper indents
         return self.r.sub(r'\1' * indent_width, self.prettify(encoding, formatter))
 
 
@@ -29,7 +33,7 @@ def tidy_html(markup):
 
     # https://stackoverflow.com/questions/17583415/customize-beautifulsoups-prettify-by-tag
 
-    # Double curly brackets to avoid problems with .format()
+    # Double the curly brackets to avoid problems with .format()
     stripped_markup = markup.replace('{', '{{').replace('}', '}}')
 
     stripped_markup_soup = UglySoup(stripped_markup, "html.parser")
@@ -37,7 +41,8 @@ def tidy_html(markup):
     # We don't want line breaks/indentation for inline tags, especially span!
     inline_tags = ['span', 'a', 'b', 'i', 'u', 'em', 'strong',
                    'sup', 'sub', 'strike',
-                   'code', 'var', 'mark', 'small', 'ins', 'del']
+                   'code', 'kbd', 'var', 'mark', 'small', 'ins', 'del',
+                   'abbr', 'samp']
 
     # find all the inline tags, save them into the list at i,
     # and replace them with: the string "{unformatted_tag_list[{i}]"
