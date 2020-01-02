@@ -7,6 +7,8 @@ This file chronologically records all notable changes to this website, including
 ### [0.22.0] ?
 
 * [bigfix] Upgrade to Summernote 8.11 fixes list numbering bug
+* [bugfix] Sender link in messages fixed
+* [bugfix] Missing XP in mark calculations page
 * [dev] Upgrade to Django 2.2 LTS (good till April 2022)
 
 ### [0.21.2] 2019-09-16
