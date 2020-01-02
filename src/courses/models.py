@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.shortcuts import get_object_or_404
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from djconfig import config
@@ -15,6 +17,8 @@ from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
 from colorful.fields import RGBColorField
+
+from utilities.models import ImageResource
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -115,7 +119,13 @@ class Rank(models.Model, IsAPrereqMixin):
         return reverse('courses:ranks')
 
     def get_icon_url(self):
-        return self.icon.url
+        if self.icon and hasattr(self.icon, 'url'):
+            return self.icon.url
+
+        if config.hs_default_icon:
+            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
+            return icon.image.url
+        return static('img/default_icon.png')
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
