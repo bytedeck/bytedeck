@@ -42,8 +42,8 @@ in the INSTALLED_APPS setting.
  <tbody>{% for message in pm_messages %}
   <tr {% if message.is_new %} class="warning"{% endif %}>
    <td><input type="checkbox" {% if by_conversation and message.thread_id %}name="tpks" value="{{ message.thread_id }}"{% else %}name="pks" value="{{ message.pk }}"{% endif %} /></td>
-{% block pm_sender_cell %}   <td><a href="{% url 'profiles:profile_detail' message.sender.pk %}">{{ message.sender.profile.preferred_full_name }}</a>{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
-{% block pm_recipient_cell %}   <td><a href="{% url 'profiles:profile_detail' message.recipient.pk %}">{{ message.recipient.profile.preferred_full_name }}</a>{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
+{% block pm_sender_cell %}   <td><a href="{% url 'profiles:profile_detail' message.sender.profile.pk %}">{{ message.sender.profile.preferred_full_name }}</a>{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
+{% block pm_recipient_cell %}   <td><a href="{% url 'profiles:profile_detail' message.recipient.profile.pk %}">{{ message.recipient.profile.preferred_full_name }}</a>{% if message.count %} ({{ message.count }}){% endif %}</td>{% endblock %}
    <td>{% if message.is_new %}<strong>{% endif %}{% if message.is_replied %}<em>{% endif %}
 {% block pm_subject %}
     <a href="{% if by_conversation and message.thread_id %}{% url 'postman:view_conversation' message.thread_id %}{% else %}{% url 'postman:view' message.pk %}{% endif %}?next={{ current_url|urlencode }}">
