@@ -37,6 +37,15 @@ def prettify_code_selected_quests(modeladmin, request, queryset):
     messages.success(request, msg_str)
 
 
+def fix_whitespace_bug(modeladmin, request, queryset):
+    for quest in queryset:
+        quest.instructions = tidy_html(quest.instructions, fix_runaway_newlines=True)
+
+    Quest.objects.bulk_update(queryset, ['instructions'])
+    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    messages.success(request, msg_str)
+
+
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'quest')
 
@@ -150,7 +159,7 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
         PrereqInline,
     ]
 
-    actions = [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests]
+    actions = [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]
 
     change_list_filter_template = "admin/filter_listing.html"
 

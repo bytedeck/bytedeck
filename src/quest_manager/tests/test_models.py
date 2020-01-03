@@ -1,7 +1,5 @@
 import re
 
-from bs4 import BeautifulSoup
-
 import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
