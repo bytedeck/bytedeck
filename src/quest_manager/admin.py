@@ -153,7 +153,7 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
                     'common_data', 'campaign', 'editor')
     list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor']
-    search_fields = ['name']
+    search_fields = ['name', 'instructions', 'submission_details', 'short_description']
     inlines = [
         # TaggedItemInline
         PrereqInline,
