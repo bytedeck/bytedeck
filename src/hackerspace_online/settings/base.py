@@ -337,7 +337,7 @@ SUMMERNOTE_CONFIG = {
     # You can disable attachment feature.
     # Currently only works for images anyway.  Turn on when it works with other files
     # Images can still be embedded with the image tool
-    'disable_attachment': True,
+    'disable_attachment': False,
 
     # Set `True` to return attachment paths in absolute URIs.
     'attachment_absolute_uri': False,
