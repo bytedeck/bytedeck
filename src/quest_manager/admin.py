@@ -11,6 +11,7 @@ from import_export.fields import Field
 from prerequisites.admin import PrereqInline
 from prerequisites.models import Prereq
 from .models import Quest, Category, QuestSubmission, CommonData
+from .signals import tidy_html
 
 
 def publish_selected_quests(modeladmin, request, queryset):
@@ -24,6 +25,24 @@ def archive_selected_quests(modeladmin, request, queryset):
     num_updates = queryset.update(archived=True, visible_to_students=False, editor=None)
 
     msg_str = str(num_updates) + " quest(s) archived. These quests will now only be visible through this admin menu."
+    messages.success(request, msg_str)
+
+
+def prettify_code_selected_quests(modeladmin, request, queryset):
+    for quest in queryset:
+        quest.instructions = tidy_html(quest.instructions)
+
+    Quest.objects.bulk_update(queryset, ['instructions'])
+    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    messages.success(request, msg_str)
+
+
+def fix_whitespace_bug(modeladmin, request, queryset):
+    for quest in queryset:
+        quest.instructions = tidy_html(quest.instructions, fix_runaway_newlines=True)
+
+    Quest.objects.bulk_update(queryset, ['instructions'])
+    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
     messages.success(request, msg_str)
 
 
@@ -140,7 +159,7 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
         PrereqInline,
     ]
 
-    actions = [publish_selected_quests, archive_selected_quests]
+    actions = [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]
 
     change_list_filter_template = "admin/filter_listing.html"
 

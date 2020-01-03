@@ -8,7 +8,9 @@ from quest_manager.models import Quest
 
 
 class UglySoup(BeautifulSoup):
-    r = re.compile(r'^(\s*)', re.MULTILINE)
+    # continuous spaces starting from a new line, ending before (look ahead) to a non-whitespace character
+    r = re.compile(r'^( +(?=\S))', re.MULTILINE)
+    r2 = re.compile(r'(\r\n|\r|\n){20,}')  # match \r\n or \n newlines, 20 or more in a row
 
     def insert_before(self, successor):
         pass
@@ -16,8 +18,17 @@ class UglySoup(BeautifulSoup):
     def insert_after(self, successor):
         pass
 
-    def improved_prettify(self, encoding=None, formatter="minimal", indent_width=4):
-        return self.r.sub(r'\1' * indent_width, self.prettify(encoding, formatter))
+    def improved_prettify(self, fix_runaway_newlines=False, encoding=None, formatter="minimal", indent_width=4):
+        """ Prettify that also indents """
+        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline. 
+        # replace whitespace from standard prettify with proper indents
+        bs_prettified = self.prettify(encoding, formatter)
+        result = self.r.sub(r'\1' * indent_width, bs_prettified)
+        # print("ugly:", result)
+        if fix_runaway_newlines:
+            result = self.r2.sub('\n\n', result)
+        # print("delined:", result)
+        return result
 
 
 @receiver(pre_save, sender=Quest)
@@ -25,11 +36,11 @@ def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
 
 
-def tidy_html(markup):
+def tidy_html(markup, fix_runaway_newlines=False):
 
     # https://stackoverflow.com/questions/17583415/customize-beautifulsoups-prettify-by-tag
 
-    # Double curly brackets to avoid problems with .format()
+    # Double the curly brackets to avoid problems with .format()
     stripped_markup = markup.replace('{', '{{').replace('}', '}}')
 
     stripped_markup_soup = UglySoup(stripped_markup, "html.parser")
@@ -37,7 +48,8 @@ def tidy_html(markup):
     # We don't want line breaks/indentation for inline tags, especially span!
     inline_tags = ['span', 'a', 'b', 'i', 'u', 'em', 'strong',
                    'sup', 'sub', 'strike',
-                   'code', 'var', 'mark', 'small', 'ins', 'del']
+                   'code', 'kbd', 'var', 'mark', 'small', 'ins', 'del',
+                   'abbr', 'samp']
 
     # find all the inline tags, save them into the list at i,
     # and replace them with: the string "{unformatted_tag_list[{i}]"
@@ -51,7 +63,7 @@ def tidy_html(markup):
     markup = str(stripped_markup_soup)
     new_soup = UglySoup(markup, "html.parser")
 
-    prettified = new_soup.improved_prettify()
+    prettified = new_soup.improved_prettify(fix_runaway_newlines=fix_runaway_newlines)
 
     # replace the tags we swapped out earlier
     prettified = prettified.format(unformatted_tag_list=unformatted_tag_list)
