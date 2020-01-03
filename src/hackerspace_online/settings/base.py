@@ -272,6 +272,7 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 #
 #################################
 
+SUMMERNOTE_THEME = 'bs3'
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode, default
     'iframe': True,
@@ -310,6 +311,13 @@ SUMMERNOTE_CONFIG = {
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
         # },
+        'codemirror': {
+            'mode': 'htmlmixed',
+            'lineNumbers': 'true',
+            'lineWrapping': 'true',
+            # You have to include theme file in 'css' or 'css_for_inplace' before using it.
+            'theme': 'monokai',
+        },
 
     },
 
@@ -330,6 +338,9 @@ SUMMERNOTE_CONFIG = {
     # Currently only works for images anyway.  Turn on when it works with other files
     # Images can still be embedded with the image tool
     'disable_attachment': True,
+
+    # Set `True` to return attachment paths in absolute URIs.
+    'attachment_absolute_uri': False,
 
     # You can also add custom css/js for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
@@ -400,14 +411,6 @@ SUMMERNOTE_CONFIG = {
             ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
             ['custom', ['tableHeaders', 'tableStyles']]
         ],
-    },
-
-    'codemirror': {
-        'mode': 'htmlmixed',
-        'lineNumbers': 'true',
-        'lineWrapping': 'true',
-        # You have to include theme file in 'css' or 'css_for_inplace' before using it.
-        'theme': 'monokai',
     },
 
     # Lazy initialize
