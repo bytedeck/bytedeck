@@ -8,8 +8,8 @@ from quest_manager.models import Quest
 
 
 class UglySoup(BeautifulSoup):
-    # continuous whitespace starting from a new line
-    r = re.compile(r'^(\s*)', re.MULTILINE)
+    # continuous spaces starting from a new line, ending before (look ahead) to a non-whitespace character
+    r = re.compile(r'^( +(?=\S))', re.MULTILINE)
 
     def insert_before(self, successor):
         pass
@@ -21,7 +21,8 @@ class UglySoup(BeautifulSoup):
         """ Prettify that also indents """
         # \1 is first capturing group, i.e. all continuous whitespace starting from a newline. 
         # replace whitespace from standard prettify with proper indents
-        return self.r.sub(r'\1' * indent_width, self.prettify(encoding, formatter))
+        bs_prettified = self.prettify(encoding, formatter)
+        return self.r.sub(r'\1' * indent_width, bs_prettified)
 
 
 @receiver(pre_save, sender=Quest)
