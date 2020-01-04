@@ -107,3 +107,16 @@ class SemesterTestModel(TestCase):
             self.assertTrue(self.semester.is_open())
 
         # Timezone problems?    
+
+
+class CourseTestModel(TestCase):
+
+    def setUp(self):
+        self.course = mommy.make(Course)
+
+    def test_semester_creation(self):
+        self.assertIsInstance(self.course, Course)
+        self.assertEqual(str(self.course), self.course.title)
+
+    # def test condition_met_as_prerequisite(self):
+    #     pass
