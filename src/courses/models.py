@@ -345,7 +345,7 @@ class ExcludedDate(models.Model):
         return self.date.strftime("%d-%b-%Y")
 
 
-class Course(models.Model):
+class Course(models.Model, ):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -355,6 +355,23 @@ class Course(models.Model):
 
     class Meta:
         ordering = ["title"]
+
+    # # required for prereq mixin (grapelli lookup) since no name field already.
+    # @property
+    # def name(self):
+    #     return self.title
+
+    def condition_met_as_prerequisite(self, user, num_required):
+        # num_required is not used for this one
+        coursestudents = CourseStudent.objects.current_courses(user)
+        if coursestudents.filter(course__pk=self.pk):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def autocomplete_search_fields():  # for grapelli prereq selection
+        return ("title__icontains",)
 
 
 class CourseStudentQuerySet(models.query.QuerySet):

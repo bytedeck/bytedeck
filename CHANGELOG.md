@@ -6,9 +6,10 @@ This file chronologically records all notable changes to this website, including
 
 ### [0.22.0] ?
 
+* [teachers] Courses can now be used as a prerequisite
 * [bigfix] Upgrade to Summernote 8.11 fixes list numbering bug
 * [bugfix] Sender link in messages fixed #237
-* [bugfix] #258, #260, #89
+* [bugfix] Many other minor bug fixes
 * [dev] Upgrade to Django 2.2 LTS (good till April 2022)
 
 ### [0.21.2] 2019-09-16
