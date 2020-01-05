@@ -36,6 +36,16 @@ def site_logo_url():
 
 
 @register.simple_tag
+def favicon_url():
+    reload_maybe()  # used in celery tasks, so needs config loaded
+    if config.hs_favicon:
+        # favicon = get_object_or_404(ImageResource, pk=config.hs_favicon)
+        return config.hs_favicon.image.url
+    else:
+        return static('icon/favicon.ico')
+
+
+@register.simple_tag
 def site_logo_url_full():
     return "https://{}{}".format(Site.objects.get_current().domain, site_logo_url())
 
