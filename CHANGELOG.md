@@ -7,6 +7,7 @@ This file chronologically records all notable changes to this website, including
 ### [0.22.0] ?
 
 * [teachers] Courses can now be used as a prerequisite
+* [teachers] Custom favicon
 * [bigfix] Upgrade to Summernote 8.11 fixes list numbering bug
 * [bugfix] Sender link in messages fixed #237
 * [bugfix] Many other minor bug fixes
