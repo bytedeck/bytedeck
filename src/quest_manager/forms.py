@@ -69,11 +69,11 @@ class QuestForm(forms.ModelForm):
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
 
-    files = RestrictedFileFormField(required=False,
-                                    max_upload_size=16777216,
-                                    widget=forms.ClearableFileInput(attrs={'multiple': True}),
-                                    label="Attach files",
-                                    help_text="Hold Ctrl to select multiple files, 16MB limit per file")
+    attachments = RestrictedFileFormField(required=False,
+                                          max_upload_size=16777216,
+                                          widget=forms.ClearableFileInput(attrs={'multiple': True}),
+                                          label="Attach files",
+                                          help_text="Hold Ctrl to select multiple files, 16MB limit per file")
 
 
 class BadgeLabel:

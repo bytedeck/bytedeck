@@ -1,6 +1,6 @@
 from django import template
 from django.contrib.sites.models import Site
-from django.contrib.staticfiles.templatetags.staticfiles import static
+from django.templatetags.static import static
 from django.shortcuts import get_object_or_404
 from djconfig import config, reload_maybe
 
@@ -33,6 +33,16 @@ def site_logo_url():
         return site_logo.image.url
     else:
         return static('img/default_icon.png')
+
+
+@register.simple_tag
+def favicon_url():
+    reload_maybe()  # used in celery tasks, so needs config loaded
+    if config.hs_favicon:
+        # favicon = get_object_or_404(ImageResource, pk=config.hs_favicon)
+        return config.hs_favicon.image.url
+    else:
+        return static('icon/favicon.ico')
 
 
 @register.simple_tag

@@ -470,9 +470,7 @@ def approve(request, submission_id):
 
             # handle files
             if request.FILES:
-                file_list = request.FILES.getlist('files')
-                for afile in file_list:
-                    # print(afile)
+                for afile in request.FILES.getlist('attachments'):
                     newdoc = Document(docfile=afile, comment=comment_new)
                     newdoc.save()
 
@@ -687,8 +685,7 @@ def complete(request, submission_id):
             )
 
             if request.FILES:
-                file_list = request.FILES.getlist('files')
-                for afile in file_list:
+                for afile in request.FILES.getlist('attachments'):
                     newdoc = Document(docfile=afile, comment=comment_new)
                     newdoc.save()
 

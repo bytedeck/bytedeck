@@ -50,40 +50,38 @@ class QuestViewTests(TestCase):
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
 
-        self.assertEquals(self.client.get(reverse('quests:quests')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:available')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:available2')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:inprogress')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:completed')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:past')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available2')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)
         # anyone can view drafts if they figure out the url, but it will be blank for them
-        self.assertEquals(self.client.get(reverse('quests:drafts')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:drafts')).status_code, 200)
 
-        self.assertEquals(self.client.get(reverse('quests:quest_detail',
-                                                  args=[q_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:quest_detail',
-                                                  args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
-        self.assertEquals(self.client.get(reverse('quests:submitted')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:submitted_all')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:returned')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:approved')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:skipped')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:quest_create')).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
 
-        self.assertEquals(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -96,24 +94,24 @@ class QuestViewTests(TestCase):
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
 
-        self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-        self.assertEquals(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
     #
     # def test_profile_recalculate_xp_status_codes(self):
     #     """Need to test this view with students in an active course"""
     #     sem = mommy.make(Semester)
     #     # since there's only one semester, it should be by default the active_semester (pk=1)
-    #     self.assertEquals(sem.pk, djconfig.config.hs_active_semester)
-    #     self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+    #     self.assertEqual(sem.pk, djconfig.config.hs_active_semester)
+    #     self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
 
 class SubmissionViewTests(TestCase):
@@ -151,34 +149,37 @@ class SubmissionViewTests(TestCase):
         s2_pk = self.sub2.pk
 
         # Student's own submission
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
 
         # Students shouldn't have access to these
-        self.assertEquals(self.client.get(reverse('quests:flagged')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 302)
 
         # Student's own submission
-        self.assertEquals(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
         # Not this student's submission
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s2_pk])).status_code, 404)
 
         # Non existent submissions
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[0])).status_code, 404)
 
         # These Needs to be completed via POST
-        self.assertEquals(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
     def test_all_submission_page_status_codes_for_teachers(self):
 
@@ -189,18 +190,18 @@ class SubmissionViewTests(TestCase):
         s1_pk = self.sub1.pk
         # s2_pk = self.sub2.pk
 
-        self.assertEquals(self.client.get(reverse('quests:flagged')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 200)
 
         # View it
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
         # Flag it
-        # self.assertEquals(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
+        # self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
         self.assertRedirects(
             response=self.client.get(reverse('quests:flag', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
         # TODO Why does this fail? Why is self.sub1.flagged_by == None
-        # self.assertEquals(self.sub1.flagged_by, self.test_teacher)
+        # self.assertEqual(self.sub1.flagged_by, self.test_teacher)
 
         # Unflag it
         self.assertRedirects(
@@ -209,22 +210,30 @@ class SubmissionViewTests(TestCase):
         )
         self.assertIsNone(self.sub1.flagged_by)
 
-        # self.assertEquals(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        # self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
 
         # Non existent submissions
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
 
         # These Needs to be completed via POST
-        # self.assertEquals(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
-        self.assertEquals(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
+        # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
     def test_student_quest_completion(self):
-        # TODO self.assertEquals(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+
+        # self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+
+        # self.assertRedirects(
+        #     response=self.client.post(reverse('quests:complete', args=[self.sub1.id])),
+        #     expected_url=reverse('quests:quests'),
+        # )
+
+        # TODO self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         pass
 
     def test_submission_when_quest_not_visible(self):
@@ -239,7 +248,7 @@ class SubmissionViewTests(TestCase):
         self.assertFalse(self.quest1.visible_to_students)
 
         # TODO: should redirect, not 404?
-        self.assertEquals(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
 
     def test_ajax_save_draft(self):
         # loging required for this view

@@ -1,10 +1,13 @@
 # import djconfig
+from datetime import timedelta, date
+from freezegun import freeze_time
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
 # from model_mommy.recipe import Recipe
 
-from courses.models import MarkRange, Course
+from courses.models import MarkRange, Course, Semester
 
 User = get_user_model()
 
@@ -62,3 +65,58 @@ class MarkRangeTestManager(TestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
+
+
+class SemesterTestModel(TestCase):
+
+    def setUp(self):
+        self.semester_start = date(2020, 9, 8)
+        self.semester_end = date(2021, 1, 22)
+        self.today_fake = date(2020, 10, 20)  # some date in the semester
+        self.semester = mommy.make(Semester,
+                                   number=Semester.SEMESTER_CHOICES[1][1],
+                                   first_day=self.semester_start,
+                                   last_day=self.semester_end
+                                   )
+
+    def test_semester_creation(self):
+        self.assertIsInstance(self.semester, Semester)
+        self.assertEqual(str(self.semester), self.semester.first_day.strftime("%b-%Y"))
+
+    def test_is_open(self):
+        # before semester starts: False
+        before_start = self.semester_start - timedelta(days=1)
+        with freeze_time(before_start, tz_offset=0):
+            self.assertFalse(self.semester.is_open())
+
+        # after semester ends: False
+        after_end = self.semester_end + timedelta(days=1)
+        with freeze_time(after_end, tz_offset=0):
+            self.assertFalse(self.semester.is_open())
+
+        # during semester: True
+        during = self.semester_start + timedelta(days=1)
+        with freeze_time(during, tz_offset=0):
+            self.assertTrue(self.semester.is_open())
+
+        # first day: True
+        with freeze_time(self.semester_start, tz_offset=0):
+            self.assertTrue(self.semester.is_open())
+        # last day: True
+        with freeze_time(self.semester_end, tz_offset=0):
+            self.assertTrue(self.semester.is_open())
+
+        # Timezone problems?    
+
+
+class CourseTestModel(TestCase):
+
+    def setUp(self):
+        self.course = mommy.make(Course)
+
+    def test_semester_creation(self):
+        self.assertIsInstance(self.course, Course)
+        self.assertEqual(str(self.course), self.course.title)
+
+    # def test condition_met_as_prerequisite(self):
+    #     pass

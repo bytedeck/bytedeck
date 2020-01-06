@@ -24,7 +24,7 @@ class ScapeUpdate(UpdateView):
 
 class ScapeDelete(DeleteView):
     model = CytoScape
-    success_url = reverse_lazy('djcytoscape:index')
+    success_url = reverse_lazy('djcytoscape:list')
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):

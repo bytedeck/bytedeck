@@ -23,7 +23,7 @@ class IsAPrereqMixin:
         :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
 
         """
-        return False
+        raise NotImplementedError
 
     def is_used_prereq(self):
         """
@@ -55,8 +55,9 @@ class IsAPrereqMixin:
                     reliant_objects.append(parent_obj)
         return reliant_objects
 
-    # to help with the prerequisite choices!
-    # TODO: Why? link to grapelli docs and let implementing class choose field instead of static?
+    # to help with the prerequisite choices: 
+    # https://django-grappelli.readthedocs.io/en/latest/customization.html#autocomplete-lookups
+    # override this static method in the class to choose different search fields
     @staticmethod
     def autocomplete_search_fields():
         return ("name__icontains",)
@@ -398,8 +399,10 @@ class Prereq(models.Model, IsAPrereqMixin):
 
 
 class PrereqAllConditionsMet(models.Model):
+    """ I think these are a list of prereq objects used for caching?
+    """
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    ids = models.TextField()
+    ids = models.TextField()  # ids of what?!?  Prerequisites?
     model_name = models.CharField(max_length=256)
 
     def add_id(self, new_id):

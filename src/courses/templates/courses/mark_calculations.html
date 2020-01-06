@@ -48,7 +48,7 @@
             ">
                 <strong>{{ xp_per_course|floatformat }}</strong> XP</a> per course.
             {% else %}
-              So far, you have earned <strong>{{ obj.user.profile.xp }}</strong> XP in your course.
+              So far, you have earned <strong>{{ user.profile.xp_cached }}</strong> XP in your course.
             {% endif %}
           </li>
           <li>We are currently
@@ -131,7 +131,8 @@
         </div> <!-- tab-content -->
       </div>  <!-- tab container -->
 
-      <h3>Chillax Line</h3>
+      {% comment %} Need to update this to use new Mark Ranges {% endcomment %}
+      {% comment %} <h3>Chillax Line</h3>
       <p>{% if obj.semester.chillax_line_started %}
         You are free to chillax if your XP {% if num_courses > 1 %}in all courses{% endif %} is at or above:
           {% if num_courses > 1 %}
@@ -145,7 +146,7 @@
       {% else %}
         The Chillax Line has not started yet.  It will begin the day after 1st Interim marks are taken.
       {% endif %}
-      </p>
+      </p> {% endcomment %}
       <h3>Report Cards</h3>
       <p>
         This table shows you the dates that marks will be taken for various report cards:

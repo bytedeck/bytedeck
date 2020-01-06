@@ -58,6 +58,10 @@ class HackerspaceConfigForm(ConfigForm):
                                                        "Utilies > Image Resources model.  "
                                                        "This becomes the default icon for quests and badges.")
 
+    hs_favicon = forms.ModelChoiceField(label="Favicon", required=False, queryset=ImageResource.objects.all(),
+                                        help_text="Selected from images uploaded via Admin through the "
+                                                  "Utilies > Image Resources model.")
+
     hs_submission_quick_text = forms.CharField(
         label="Submission Quick Text", 
         initial="Please read the submission instructions more carefully. Thanks! ",

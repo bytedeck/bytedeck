@@ -1,11 +1,10 @@
 -r requirements-production.txt
-coverage==4.5.2
-django-debug-toolbar==1.11
-django-debug-toolbar-template-timings==0.9
-ipdb==0.12
-model-mommy==1.6.0
-pipdeptree==0.13.1
-sqlparse==0.2.3
-freezegun==0.3.11
-mock==2.0.0
-flake8>=3.7,<4.0
+coverage>=5.0.1
+django-debug-toolbar>=2.1
+django-debug-toolbar-template-timings>=0.9
+ipdb>=0.12
+model-mommy>=2.0,<3.0
+pipdeptree>=0.13.2
+freezegun>=0.3.12
+mock>=2.0,<3.0
+flake8>=3.7

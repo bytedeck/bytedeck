@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.22.0] ?
+
+* [teachers] Courses can now be used as a prerequisite
+* [teachers] Custom favicon
+* [teachers] No longer receive notification for quest submissions of non-students (since these now show up in your approvals list anyway)
+* [bugfix] Upgrade to Summernote 8.11 fixes list numbering bug (for new lists, old lists will require redoing)
+* [bugfix] Sender link in messages fixed #237
+* [bugfix] Many other minor bug fixes
+* [dev] Upgrade to Django 2.2 LTS (good till April 2022)
+
 ### [0.21.2] 2019-09-16
 
 * Display names instead of student numbers in Messages

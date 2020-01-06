@@ -40,7 +40,7 @@ class QuestTestModel(TestCase):
         pass
 
     def test_quest_url(self):
-        self.assertEquals(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
+        self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
 
     def test_quest_html_formatting(self):
         test_markup = "<p>this <span>span</span> tag should not break</p>"
@@ -56,16 +56,30 @@ class QuestTestModel(TestCase):
     def test_quest_html_formatting_math(self):
         test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>""" # noqa
         self.quest.instructions = test_markup
-        # print("Test MARKUP:", test_markup)
         # Auto formatting on save
         self.quest.save()
         formatted_markup = self.quest.instructions
-        # print("Formatted MARKUP:", formatted_markup)
 
         self.assertIn(test_markup, formatted_markup)
 
         matches_found = re.search('({{)|(}})', formatted_markup)
         self.assertIsNone(matches_found)
+
+    def test_quest_html_formatting_tabs(self):
+        markup = [  # test, expected out come
+            ("<p>some text</p>", "<p>\n    some text\n</p>"),
+            ("<p>some text\n\n</p>", "<p>\n    some text\n</p>"),
+            ("<p>some \ntext</p>", "<p>\n    some \ntext\n</p>"),
+            ("<p>some \n text</p>", "<p>\n    some \n    text\n</p>"),
+            ("<ol><li>test</li></ol>", "<ol>\n    <li>\n        test\n    </li>\n</ol>"),
+            (" <p>", "<p>\n</p>")
+        ]
+        for pair in markup:
+            self.quest.instructions = pair[0]
+            # Auto formatting on save
+            self.quest.save()
+            formatted_markup = self.quest.instructions
+            self.assertEqual(formatted_markup, pair[1])
 
 
 class SubmissionTestModel(TestCase):
@@ -86,7 +100,7 @@ class SubmissionTestModel(TestCase):
         self.assertEqual(str("Test"), self.submission.quest.name)
 
     def test_submission_url(self):
-        self.assertEquals(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
+        self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
     def test_submission_without_quest(self):
         # creating a submission without a quest, null=True so no Quest created.
@@ -116,12 +130,12 @@ class SubmissionTestModel(TestCase):
 #             #badge_assertion = self.badge_assertion_recipe.make()
 #         count = badge_assertion.count()
 #         # print(num, count)
-#         self.assertEquals(num, count)
+#         self.assertEqual(num, count)
 #
 #     def test_badge_assertion_count_bootstrap_badge(self):
 #         """Returns empty string if count < 2, else returns proper count"""
 #         badge_assertion = mommy.make(BadgeAssertion)
-#         self.assertEquals(badge_assertion.count_bootstrap_badge(), "")
+#         self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
 #
 #         num = randint(1, 9)
 #         for _ in range(num):
@@ -133,7 +147,7 @@ class SubmissionTestModel(TestCase):
 #             #badge_assertion = self.badge_assertion_recipe.make()
 #         count = badge_assertion.count_bootstrap_badge()
 #         # print(num, count)
-#         self.assertEquals(num, count)
+#         self.assertEqual(num, count)
 #
 #     def test_badge_assertion_get_duplicate_assertions(self):
 #         num = randint(1, 9)

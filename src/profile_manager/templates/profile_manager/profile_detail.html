@@ -162,7 +162,7 @@
          <div class="list-group-item list-group-item-info">Completed</div>
          {% if completed_submissions %}
            {% for s in completed_submissions %}
-             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed clearfix
                  {% if s.is_awaiting_approval %}list-group-item-warning
                  {% elif s.game_lab_transfer %}list-group-item-muted
                  {% endif %}">

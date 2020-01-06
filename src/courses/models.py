@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.shortcuts import get_object_or_404
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from djconfig import config
@@ -15,6 +17,8 @@ from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
 from colorful.fields import RGBColorField
+
+from utilities.models import ImageResource
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -115,7 +119,13 @@ class Rank(models.Model, IsAPrereqMixin):
         return reverse('courses:ranks')
 
     def get_icon_url(self):
-        return self.icon.url
+        if self.icon and hasattr(self.icon, 'url'):
+            return self.icon.url
+
+        if config.hs_default_icon:
+            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
+            return icon.image.url
+        return static('img/default_icon.png')
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -214,13 +224,16 @@ class Semester(models.Model):
         return self.first_day.strftime("%b-%Y")
 
     def active_by_date(self):
-        return (self.last_day + timedelta(days=5)) > timezone.now().date() > (self.first_day - timedelta(days=20))
+        # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
+        return (self.last_day + timedelta(days=5)) > date.today() > (self.first_day - timedelta(days=20))
 
     def is_open(self):
         """
         :return: True if the current date falls within the semeseter's first and last day (inclusive)
         """
-        return self.first_day <= timezone.now().date() <= self.last_day
+        # don't use timezone.now().date() because it uses UTC, and might not be the same as
+        # the current local date.  Use current local date with date.today()
+        return self.first_day <= date.today() <= self.last_day
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
@@ -332,7 +345,7 @@ class ExcludedDate(models.Model):
         return self.date.strftime("%d-%b-%Y")
 
 
-class Course(models.Model):
+class Course(models.Model, ):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -342,6 +355,23 @@ class Course(models.Model):
 
     class Meta:
         ordering = ["title"]
+
+    # # required for prereq mixin (grapelli lookup) since no name field already.
+    # @property
+    # def name(self):
+    #     return self.title
+
+    def condition_met_as_prerequisite(self, user, num_required):
+        # num_required is not used for this one
+        coursestudents = CourseStudent.objects.current_courses(user)
+        if coursestudents.filter(course__pk=self.pk):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def autocomplete_search_fields():  # for grapelli prereq selection
+        return ("title__icontains",)
 
 
 class CourseStudentQuerySet(models.query.QuerySet):

@@ -48,20 +48,20 @@ class ProfileViewTests(TestCase):
         s_pk = self.test_student1.profile.pk
         s2_pk = self.test_student2.profile.pk
 
-        # self.assertEquals(self.client.get(reverse('profiles:profile_detail')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        # self.assertEqual(self.client.get(reverse('profiles:profile_detail')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
 
         # students shouldn't have access to these and should be redirected to login
-        self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s2_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-        self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s2_pk])).status_code, 404)
 
     def test_all_profile_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -71,18 +71,18 @@ class ProfileViewTests(TestCase):
         s_pk = self.test_student1.profile.pk
         # s2_pk = self.test_student2.pk
 
-        self.assertEquals(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEquals(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
     def test_profile_recalculate_xp_status_codes(self):
         """Need to test this view with students in an active course"""
         # why testing this here?
-        self.assertEquals(self.active_sem.pk, djconfig.config.hs_active_semester)
+        self.assertEqual(self.active_sem.pk, djconfig.config.hs_active_semester)
 
-        self.assertEquals(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)

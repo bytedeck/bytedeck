@@ -311,6 +311,9 @@ class BadgeAssertionManager(models.Manager):
             # if the badge doesn't already exist
             if not self.all_for_user_badge(user, badge, False):
                 self.create_assertion(user, badge, None, transfer)
+                # if a new badge has been granted, then check again recursively.
+                # maybe this should be celeried?
+                self.check_for_new_assertions(user, transfer)
 
     def get_by_type_for_user(self, user):
         self.check_for_new_assertions(user)
