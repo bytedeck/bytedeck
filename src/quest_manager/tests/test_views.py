@@ -162,18 +162,21 @@ class SubmissionViewTests(TestCase):
         self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
         # Not this student's submission
         self.assertEqual(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s2_pk])).status_code, 404)
 
         # Non existent submissions
         self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[0])).status_code, 404)
 
         # These Needs to be completed via POST
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
@@ -222,6 +225,14 @@ class SubmissionViewTests(TestCase):
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
     def test_student_quest_completion(self):
+
+        # self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+
+        # self.assertRedirects(
+        #     response=self.client.post(reverse('quests:complete', args=[self.sub1.id])),
+        #     expected_url=reverse('quests:quests'),
+        # )
+
         # TODO self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         pass
 

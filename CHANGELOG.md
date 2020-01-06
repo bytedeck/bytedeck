@@ -8,7 +8,8 @@ This file chronologically records all notable changes to this website, including
 
 * [teachers] Courses can now be used as a prerequisite
 * [teachers] Custom favicon
-* [bigfix] Upgrade to Summernote 8.11 fixes list numbering bug
+* [teachers] No longer receive notification for quest submissions of non-students (since these now show up in your approvals list anyway)
+* [bugfix] Upgrade to Summernote 8.11 fixes list numbering bug (for new lists, old lists will require redoing)
 * [bugfix] Sender link in messages fixed #237
 * [bugfix] Many other minor bug fixes
 * [dev] Upgrade to Django 2.2 LTS (good till April 2022)
