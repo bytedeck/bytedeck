@@ -4,7 +4,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [0.22.0] ?
+### [0.?]
+
+* [bugfix] Runaway whitespace in quests
+
+### [0.22.0] 2020-01-06
 
 * [teachers] Courses can now be used as a prerequisite
 * [teachers] Custom favicon
