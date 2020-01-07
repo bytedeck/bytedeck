@@ -10,7 +10,8 @@ from quest_manager.models import Quest
 class UglySoup(BeautifulSoup):
     # continuous spaces starting from a new line, ending before (look ahead) to a non-whitespace character
     r = re.compile(r'^( +(?=\S))', re.MULTILINE)
-    r2 = re.compile(r'(\r\n|\r|\n){20,}')  # match \r\n or \n newlines, 20 or more in a row
+    # match \r\n or \n newlines (preceded by any amount of horizontal whitespace), 20 or more in a row
+    r2 = re.compile(r'(\h*(\r\n|\r|\n)){20,}') 
 
     def insert_before(self, successor):
         pass
