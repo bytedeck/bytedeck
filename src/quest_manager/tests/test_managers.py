@@ -138,6 +138,7 @@ class QuestManagerTest(TestCase):
         _, _, active_semester = self.make_test_quests_and_submissions_stack()
         with patch('quest_manager.models.config') as cfg:
             cfg.hs_active_semester = active_semester
+            print("*****************")
             qs = Quest.objects.order_by('id').not_completed(self.student).values_list('name', flat=True)
         result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
         self.assertListEqual(list(qs), result)   

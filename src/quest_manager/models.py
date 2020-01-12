@@ -609,6 +609,7 @@ class QuestSubmissionManager(models.Manager):
                                exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False
                                )
+        print("ALL COMPLETED BASE QS: :", qs)
         if user is None:
             qs = qs.completed()
         else:
