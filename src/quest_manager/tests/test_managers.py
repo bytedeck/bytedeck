@@ -136,6 +136,27 @@ class QuestManagerTest(TestCase):
                 list_not_started = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
         self.assertListEqual(list_not_started, [quest_cooldown_complete, quest_not_started])
 
+    def test_quest_qs_not_submitted_or_inprogress(self):
+        quest_not_started = mommy.make(Quest, name='Quest-not-started')
+
+        quest_in_progress = mommy.make(Quest, name='Quest-in_progress')
+        sub = mommy.make(QuestSubmission, user=self.student, quest=quest_in_progress)
+
+        quest_submitted = mommy.make(Quest, name='Quest-submitted')
+        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_submitted)
+        sub_complete.mark_completed()
+
+        quest_cooldown_complete = mommy.make(Quest, name='Quest-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_cooldown_complete)
+        sub_cooldown_complete.mark_completed()
+
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = sub.semester
+            # jump ahead an hour so repeat cooldown is over
+            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+                not_started = Quest.objects.all().not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list(not_started), [quest_cooldown_complete, quest_not_started])
+
     def test_quest_qs_not_in_progress(self):
         """
         QuestQuerySet.not_in progress should return quests that the user has NOT started
