@@ -139,6 +139,9 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
+    def debug(self):
+        self.debug_object_list = list(self)
+
     def datetime_available(self):
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
 
@@ -207,40 +210,17 @@ class QuestQuerySet(models.query.QuerySet):
 
     def not_completed(self, user):
         """ 
-        Exclude all quests where the user has a submission in progress 
-        Submissions in progress will have .is_completed=False
+        Exclude all quests where the user has a completed submission (whether approved or not)
         """
         completed_subs = QuestSubmission.objects.all_completed(user=user)
         return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
 
-    # def not_in_progress(self, user):
-    #     """ 
-    #     Exclude all quests that the user has completed, unless the repeat cooldown has passed. 
-    #     Completed submissions will have .is_completed=True
-    #     """
-    #     in_progress = QuestSubmission.objects.all_not_completed(user=user)
-    #     return self.exclude(pk__in=in_progress.values_list('quest__id', flat=True))
-
-
-    # def not_submitted_or_inprogress(self, user):
-    #     return self.exclude(questsubmission__pk__in=)
-
-    #     """
-    #     :return: True if the quest has not been started, or if it has been completed already
-    #     it is a repeatable quest past the repeat time
-    #     """
-        # num_subs = self.num_submissions(user, quest)
-        # if num_subs == 0:
-        #     return True
-        # # check if the quest is already in progress
-        # try:
-        #     self.all_not_completed(user=user).get(quest=quest)
-        #     # if no exception is thrown it means that an inprogress submission was found
-        #     return False
-        # except MultipleObjectsReturned:
-        #     return False  # multiple found
-        # except ObjectDoesNotExist:
-        #     pass  # nothing found, continue
+    def not_in_progress(self, user):
+        """ 
+        Exclude all quests where the user has a submission in progress,
+        """
+        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
+        return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
 
         # # Handle repeatable quests with past submissions
 
@@ -609,7 +589,6 @@ class QuestSubmissionManager(models.Manager):
                                exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False
                                )
-        print("ALL COMPLETED BASE QS: :", qs)
         if user is None:
             qs = qs.completed()
         else:

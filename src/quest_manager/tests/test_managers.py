@@ -127,23 +127,41 @@ class QuestManagerTest(TestCase):
 
     def test_quest_qs_not_submitted_or_inprogress(self):
         quest_1hr_cooldown, quest_not_started, _ = self.make_test_quests_and_submissions_stack()
-        
+
         # jump ahead an hour so repeat cooldown is over
         with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
             not_started = Quest.objects.all().not_submitted_or_inprogress(self.student)
         self.assertListEqual(list(not_started), [quest_1hr_cooldown, quest_not_started])
 
     def test_quest_qs_not_completed(self):
-        """Should return all the quests that do NOT have a completed submission (this semester)"""
+        """Should return all the quests that do NOT have a completed submission"""
         _, _, active_semester = self.make_test_quests_and_submissions_stack()
         with patch('quest_manager.models.config') as cfg:
             cfg.hs_active_semester = active_semester
-            print("*****************")
-            qs = Quest.objects.order_by('id').not_completed(self.student).values_list('name', flat=True)
+            qs = Quest.objects.order_by('id').not_completed(self.student)
         result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
-        self.assertListEqual(list(qs), result)   
+        self.assertListEqual(list(qs.values_list('name', flat=True)), result)   
+
+    def test_quest_qs_not_in_progress(self):
+        """Should return all the quests that do NOT have an inprogress submission"""
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_in_progress(self.student)
+        result = ['Quest-completed-sem2', 'Quest-not-started', 'Quest-completed', 'Quest-1hr-cooldown']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), result)   
 
     def make_test_quests_and_submissions_stack(self):
+        """  Creates 6 quests with related submissions
+        Quest                   sub     .completed   .semester
+        Quest-inprogress-sem2   Y       False        2
+        Quest-completed-sem2    Y       True         2
+        Quest-not-started       N       NA           NA          
+        Quest-inprogress        Y       False        1
+        Quest-completed         Y       True         1
+        Quest-1hr-cooldown      Y       True         1
+        """
+
         quest_inprog_sem2 = mommy.make(Quest, name='Quest-inprogress-sem2')
         sub_inprog_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
         sem2 = sub_inprog_sem2.semester
