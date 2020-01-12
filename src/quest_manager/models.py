@@ -198,24 +198,30 @@ class QuestQuerySet(models.query.QuerySet):
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
+    def not_submitted_or_inprogress(self, user):
+        sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
+        return self.filter(pk__in=sub_pk_list)
+
     def not_in_progress(self, user):
-    #     # Quests that haven't been completed, and quests that aren't in progress.
+        # check if the quest is already in progress
+        # try:
+        #     self.all_not_completed(user=user).get(quest=quest)
+        #     # if no exception is thrown it means that an inprogress submission was found
+        #     return False
+        # except MultipleObjectsReturned:
+        #     return False  # multiple found
+        # except ObjectDoesNotExist:
+        #     pass  # nothing found, continue
+        print(self.get_list_not_submitted_or_inprogress(user))
+        return self.exclude(questsubmission__pk__in=self.get_list_not_submitted_or_inprogress(user))
 
-    #     self.filter(quest__submission__name)
+    # def not_submitted_or_inprogress(self, user):
+    #     return self.exclude(questsubmission__pk__in=)
 
-
-        # annotate number of submissions?
-        # remove quests with no submissions via qs
-
-        pass
-
-        # from QuestSubmission manager method:
-
-        # def not_submitted_or_inprogress(self, user, quest):
-        # """
-        # :return: True if the quest has not been started, or if it has been completed already
-        # it is a repeatable quest past the repeat time
-        # """
+    #     """
+    #     :return: True if the quest has not been started, or if it has been completed already
+    #     it is a repeatable quest past the repeat time
+    #     """
         # num_subs = self.num_submissions(user, quest)
         # if num_subs == 0:
         #     return True
