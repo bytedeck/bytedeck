@@ -111,13 +111,30 @@ class QuestManagerTest(TestCase):
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
 
     def test_quest_qs_get_list_not_submitted_or_inprogress(self):
+        """
+        QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that 
+        have not been started (in progress or submitted for completion), 
+        or if it has been completed already, that it is a repeatable quest past the repeat time
+        """        
         quest_not_started = mommy.make(Quest, name='Quest-not-started')
-        quest_start_me = mommy.make(Quest, name='Quest-started')
-        sub = mommy.make(QuestSubmission, user=self.student, quest=quest_start_me)
+
+        quest_in_progress = mommy.make(Quest, name='Quest-in_progress')
+        sub = mommy.make(QuestSubmission, user=self.student, quest=quest_in_progress)
+
+        quest_submitted = mommy.make(Quest, name='Quest-submitted')
+        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_submitted)
+        sub_complete.mark_completed()
+
+        quest_cooldown_complete = mommy.make(Quest, name='Quest-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_cooldown_complete)
+        sub_cooldown_complete.mark_completed()
+
         with patch('quest_manager.models.config') as cfg:
             cfg.hs_active_semester = sub.semester
-            list_not_submitted_or_inprogress = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
-        self.assertListEqual(list_not_submitted_or_inprogress, [quest_not_started])
+            # jump ahead an hour so repeat cooldown is over
+            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+                list_not_started = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list_not_started, [quest_cooldown_complete, quest_not_started])
 
     def test_quest_qs_not_in_progress(self):
         """
