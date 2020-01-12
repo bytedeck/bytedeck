@@ -9,6 +9,7 @@ from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
 from django.utils.timezone import localtime
 from mock import patch
+import djconfig
 
 
 User = get_user_model()
@@ -18,6 +19,7 @@ User = get_user_model()
 class QuestManagerTest(TestCase):
 
     def setUp(self):
+        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
         self.student = mommy.make(User, username='student', is_staff=False)
 
@@ -116,60 +118,49 @@ class QuestManagerTest(TestCase):
         have not been started (in progress or submitted for completion), 
         or if it has been completed already, that it is a repeatable quest past the repeat time
         """        
-        quest_not_started = mommy.make(Quest, name='Quest-not-started')
+        quest_1hr_cooldown, quest_not_started, _ = self.make_test_quests_and_submissions_stack()
 
-        quest_in_progress = mommy.make(Quest, name='Quest-in_progress')
-        sub = mommy.make(QuestSubmission, user=self.student, quest=quest_in_progress)
-
-        quest_submitted = mommy.make(Quest, name='Quest-submitted')
-        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_submitted)
-        sub_complete.mark_completed()
-
-        quest_cooldown_complete = mommy.make(Quest, name='Quest-cooldown', max_repeats=1, hours_between_repeats=1)
-        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_cooldown_complete)
-        sub_cooldown_complete.mark_completed()
-
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = sub.semester
-            # jump ahead an hour so repeat cooldown is over
-            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-                list_not_started = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
-        self.assertListEqual(list_not_started, [quest_cooldown_complete, quest_not_started])
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            list_not_started = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list_not_started, [quest_1hr_cooldown, quest_not_started])
 
     def test_quest_qs_not_submitted_or_inprogress(self):
-        quest_not_started = mommy.make(Quest, name='Quest-not-started')
+        quest_1hr_cooldown, quest_not_started, _ = self.make_test_quests_and_submissions_stack()
+        
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            not_started = Quest.objects.all().not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list(not_started), [quest_1hr_cooldown, quest_not_started])
 
-        quest_in_progress = mommy.make(Quest, name='Quest-in_progress')
-        sub = mommy.make(QuestSubmission, user=self.student, quest=quest_in_progress)
-
-        quest_submitted = mommy.make(Quest, name='Quest-submitted')
-        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_submitted)
-        sub_complete.mark_completed()
-
-        quest_cooldown_complete = mommy.make(Quest, name='Quest-cooldown', max_repeats=1, hours_between_repeats=1)
-        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_cooldown_complete)
-        sub_cooldown_complete.mark_completed()
-
+    def test_quest_qs_not_completed(self):
+        """Should return all the quests that do NOT have a completed submission (this semester)"""
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
         with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = sub.semester
-            # jump ahead an hour so repeat cooldown is over
-            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-                not_started = Quest.objects.all().not_submitted_or_inprogress(self.student)
-        self.assertListEqual(list(not_started), [quest_cooldown_complete, quest_not_started])
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_completed(self.student).values_list('name', flat=True)
+        result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
+        self.assertListEqual(list(qs), result)   
 
-    def test_quest_qs_not_in_progress(self):
-        """
-        QuestQuerySet.not_in progress should return quests that the user has NOT started
-        (i.e. NOT quest in progress)
-        """
-        # mommy.make(Quest, name='Quest-not-started')
-        # quest_start_me = mommy.make(Quest, name='Quest-started')
-        # sub = mommy.make(QuestSubmission, user=self.student, quest=quest_start_me)
-        # with patch('quest_manager.models.config') as cfg:
-        #     cfg.hs_active_semester = sub.semester
-        #     qs = Quest.objects.all().not_in_progress(self.student)
-        # self.assertEqual(qs.count(), 1)
-        pass
+    def make_test_quests_and_submissions_stack(self):
+        quest_inprog_sem2 = mommy.make(Quest, name='Quest-inprogress-sem2')
+        sub_inprog_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
+        sem2 = sub_inprog_sem2.semester
+        quest_complete_sem2 = mommy.make(Quest, name='Quest-completed-sem2')
+        sub_complete_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
+        sub_complete_sem2.mark_completed()
+
+        quest_not_started = mommy.make(Quest, name='Quest-not-started')
+        quest_inprogress = mommy.make(Quest, name='Quest-inprogress')
+        first_sub = mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress)
+        active_semester = first_sub.semester
+        quest_completed = mommy.make(Quest, name='Quest-completed')
+        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
+        sub_complete.mark_completed()
+        quest_1hr_cooldown = mommy.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown, semester=active_semester)  # noqa
+        sub_cooldown_complete.mark_completed()
+        return quest_1hr_cooldown, quest_not_started, active_semester
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)

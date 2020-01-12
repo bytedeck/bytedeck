@@ -205,18 +205,22 @@ class QuestQuerySet(models.query.QuerySet):
         # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
         return self.filter(pk__in=pk_list)
 
-    def not_in_progress(self, user):
-        # check if the quest is already in progress
-        # try:
-        #     self.all_not_completed(user=user).get(quest=quest)
-        #     # if no exception is thrown it means that an inprogress submission was found
-        #     return False
-        # except MultipleObjectsReturned:
-        #     return False  # multiple found
-        # except ObjectDoesNotExist:
-        #     pass  # nothing found, continue
-        print(self.get_list_not_submitted_or_inprogress(user))
-        return self.exclude(questsubmission__pk__in=self.get_list_not_submitted_or_inprogress(user))
+    def not_completed(self, user):
+        """ 
+        Exclude all quests where the user has a submission in progress 
+        Submissions in progress will have .is_completed=False
+        """
+        completed_subs = QuestSubmission.objects.all_completed(user=user)
+        return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
+
+    # def not_in_progress(self, user):
+    #     """ 
+    #     Exclude all quests that the user has completed, unless the repeat cooldown has passed. 
+    #     Completed submissions will have .is_completed=True
+    #     """
+    #     in_progress = QuestSubmission.objects.all_not_completed(user=user)
+    #     return self.exclude(pk__in=in_progress.values_list('quest__id', flat=True))
+
 
     # def not_submitted_or_inprogress(self, user):
     #     return self.exclude(questsubmission__pk__in=)
