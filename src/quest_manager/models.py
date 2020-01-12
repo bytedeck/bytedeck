@@ -198,6 +198,50 @@ class QuestQuerySet(models.query.QuerySet):
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
+    def not_in_progress(self, user):
+    #     # Quests that haven't been completed, and quests that aren't in progress.
+
+    #     self.filter(quest__submission__name)
+
+
+        # annotate number of submissions?
+        # remove quests with no submissions via qs
+
+        pass
+
+        # from QuestSubmission manager method:
+
+        # def not_submitted_or_inprogress(self, user, quest):
+        # """
+        # :return: True if the quest has not been started, or if it has been completed already
+        # it is a repeatable quest past the repeat time
+        # """
+        # num_subs = self.num_submissions(user, quest)
+        # if num_subs == 0:
+        #     return True
+        # # check if the quest is already in progress
+        # try:
+        #     self.all_not_completed(user=user).get(quest=quest)
+        #     # if no exception is thrown it means that an inprogress submission was found
+        #     return False
+        # except MultipleObjectsReturned:
+        #     return False  # multiple found
+        # except ObjectDoesNotExist:
+        #     pass  # nothing found, continue
+
+        # # Handle repeatable quests with past submissions
+
+        # latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
+        # latest_dt = latest_sub.first_time_completed
+
+        # # to handle cases before first_time_completed existed as a property
+        # if not latest_dt:
+        #     # then latest_sub could be wrong.  Need to get latest completed date
+        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
+        #     latest_dt = latest_sub.time_completed
+
+        # return quest.is_repeat_available(latest_dt, num_subs)
+
     def editable(self, user):
         if user.is_staff:
             return self

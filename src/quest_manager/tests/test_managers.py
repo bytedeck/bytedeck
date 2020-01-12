@@ -17,6 +17,10 @@ User = get_user_model()
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(TestCase):
 
+    def setUp(self):
+        self.teacher = mommy.make(User, username='teacher', is_staff=True)
+        self.student = mommy.make(User, username='student', is_staff=False)
+
     def test_quest_qs_datetime_available(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
         cur_datetime = localtime()
@@ -105,6 +109,16 @@ class QuestManagerTest(TestCase):
         self.assertEqual(Quest.objects.all().editable(teacher).count(), 2)
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
+
+    def test_quest_qs_not_in_progress(self):
+        """
+        QuestQuerySet.not_in progress should return quests that the user has NOT started
+        (i.e. NOT quest in progress)
+        """
+        mommy.make(Quest, name='Quest-not-started')
+        quest_start_me = mommy.make(Quest, name='Quest-started')
+        mommy.make(QuestSubmission, user=self.student, quest=quest_start_me)
+        # QuestSubmission.objects.create_submission(user=self.student, quest=quest_start_me)
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
