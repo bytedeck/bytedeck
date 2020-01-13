@@ -272,10 +272,16 @@ class QuestManager(models.Manager):
         4. Quests that are not currently submitted for approval or already in progress
         5. Quests who's maximum repeats have been completed
         6. Quests who's repeat time has not passed since last completion
+        7. Check for blocking quests, if present, remove all others
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
         qs = qs.get_conditions_met(user)  # 3
         available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
+
+        blocking_quests = available_quests.filter(blocking=True) 
+        if blocking_quests:  # 7
+            available_quests = blocking_quests
+
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
             # available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
@@ -344,6 +350,10 @@ class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
                                            "when importing from that other system, it will update this quest. "
                                            "Otherwise do not edit this or it will break existing links!")
 
+    blocking = models.BooleanField(default=False,
+                                   help_text="When this quest becomes available, it will block all other "
+                                             "non-blocking quests until this it is completed")
+
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
@@ -402,56 +412,11 @@ class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
-    # def is_on_user_available_tab(self, user):
-    #     """
-    #     :param user:
-    #     :return: True if this quest should appear on the user's available quests list.
-    #     """
-    #     not_submitted_already = 1
-
     def is_editable(self, user):
         if user.is_staff:
             return True
         else:
             return user == self.editor and not self.visible_to_students
-
-
-# class Feedback(models.Model):
-#     user = models.ForeignKey(User, related_name='feedback_user')
-#     quest = models.ForeignKey(Quest, related_name='feedback_quest')
-#     time_to_complete = models.DurationField(blank=True, null=True)
-#     time_to_complete_approved = models.NullBooleanField(blank = True, null=True)
-#     feedback = models.TextField(blank=True,
-#         help_text = 'Did you have a suggestion that could improve this quest')
-#     feedback_approved = models.NullBooleanField(blank = True, null=True)
-#     datetime_submitted = models.DateTimeField(auto_now_add=True, auto_now=False)
-#
-#     class Meta:
-#         unique_together = ('user','quest',)
-#
-#     def __str__(self):
-#         return str(self.id)
-
-
-TAG_CHOICES = (
-    ("python", "python"),
-    ("django", "django"),
-)
-
-
-# Demo of ContentType foreign key.  Model not actually in use
-class TaggedItem(models.Model):
-    tag = models.SlugField(choices=TAG_CHOICES)
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-
-    def get_absolute_url(self):
-        return reverse('profile_detail', kwargs={'pk': self.pk})
-
-    content_object = GenericForeignKey()
-
-    def __str__(self):
-        return self.tag
 
 
 # QuestSubmission ###############################################
