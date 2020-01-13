@@ -232,7 +232,7 @@ class QuestManagerTest(TestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionTest(TestCase):
+class QuestSubmissionQuerysetTest(TestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
@@ -281,6 +281,14 @@ class QuestSubmissionTest(TestCase):
         mommy.make(QuestSubmission, quest__visible_to_students=False)
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
+
+
+@freeze_time('2018-10-12 00:54:00', tz_offset=0)
+class QuestSubmissionManagerTest(TestCase):
+
+    def setUp(self):
+        self.teacher = mommy.make(User, username='teacher', is_staff=True)
+        self.student = mommy.make(User, username='student', is_staff=False)
 
     def test_quest_submission_manager_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""

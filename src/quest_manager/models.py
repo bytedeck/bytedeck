@@ -429,13 +429,13 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
         return self.filter(user=user)
 
-    # def block_if_needed(self):
-    #     """ If there are blocking quests, only return them.  Otherwise, return full qs """
-    #     blocking_quests = self.filter(blocking=True) 
-    #     if blocking_quests:
-    #         return blocking_quests
-    #     else:
-    #         return self
+    def block_if_needed(self):
+        """ If there are blocking quests, only return them.  Otherwise, return full qs """
+        subs_with_blocking_quests = self.filter(quest__blocking=True) 
+        if subs_with_blocking_quests:
+            return subs_with_blocking_quests
+        else:
+            return self
 
     def get_quest(self, quest):
         return self.filter(quest=quest)
