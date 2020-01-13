@@ -3,8 +3,7 @@ import json
 from datetime import time, date
 
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
@@ -287,7 +286,7 @@ class QuestManager(models.Manager):
         qs = qs.get_conditions_met(user)  # 3
         available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
 
-        # queryset operation?
+        available_quests = available_quests.block_if_needed()  # 7
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
@@ -430,6 +429,14 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
         return self.filter(user=user)
 
+    # def block_if_needed(self):
+    #     """ If there are blocking quests, only return them.  Otherwise, return full qs """
+    #     blocking_quests = self.filter(blocking=True) 
+    #     if blocking_quests:
+    #         return blocking_quests
+    #     else:
+    #         return self
+
     def get_quest(self, quest):
         return self.filter(quest=quest)
 
@@ -557,7 +564,7 @@ class QuestSubmissionManager(models.Manager):
         return qs.get_user(user).approved().completed()
 
     # i.e In Progress
-    def all_not_completed(self, user=None, active_semester_only=True):
+    def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
         # only returned quests will have a time completed, placing them on top
