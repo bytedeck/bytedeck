@@ -9,6 +9,7 @@ from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
 from django.utils.timezone import localtime
 from mock import patch
+import djconfig
 
 
 User = get_user_model()
@@ -16,6 +17,33 @@ User = get_user_model()
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(TestCase):
+
+    def setUp(self):
+        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
+        self.teacher = mommy.make(User, username='teacher', is_staff=True)
+        self.student = mommy.make(User, username='student', is_staff=False)
+
+    def test_quest_qs_exclude_hidden(self):
+        """QuestQuerySet.datetime_available should return all quests that are not 
+        on a user profile's hidden quest list."""
+
+        mommy.make(Quest, name='Quest-not-hidden')
+        mommy.make(Quest, name='Quest-also-not-hidden')
+        quest1_to_hide = mommy.make(Quest, name='Quest1-hidden')
+        quest2_to_hide = mommy.make(Quest, name='Quest2-hidden')
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden'] 
+        # Nothing hidden yet
+        self.assertListEqual(list(qs), expected_result)     
+
+        self.student.profile.hide_quest(quest1_to_hide.id)
+        self.student.profile.hide_quest(quest2_to_hide.id)
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
+        # a couple hidden
+        self.assertListEqual(list(qs), expected_result)  
 
     def test_quest_qs_datetime_available(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
@@ -105,6 +133,91 @@ class QuestManagerTest(TestCase):
         self.assertEqual(Quest.objects.all().editable(teacher).count(), 2)
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
+
+    def test_quest_qs_get_list_not_submitted_or_inprogress(self):
+        """
+        QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that 
+        have not been started (in progress or submitted for completion), 
+        or if it has been completed already, that it is a repeatable quest past the repeat time
+        """        
+        quest_1hr_cooldown, quest_not_started, _ = self.make_test_quests_and_submissions_stack()
+
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            list_not_started = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list_not_started, [quest_1hr_cooldown, quest_not_started])
+
+    def test_quest_qs_not_submitted_or_inprogress(self):
+        quest_1hr_cooldown, quest_not_started, _ = self.make_test_quests_and_submissions_stack()
+
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            not_started = Quest.objects.all().not_submitted_or_inprogress(self.student)
+        self.assertListEqual(list(not_started), [quest_1hr_cooldown, quest_not_started])
+
+    def test_quest_qs_not_completed(self):
+        """Should return all the quests that do NOT have a completed submission"""
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_completed(self.student)
+        expected_result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result)   
+
+    def test_quest_qs_not_in_progress(self):
+        """Should return all the quests that do NOT have an inprogress submission"""
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_in_progress(self.student)
+        expected_result = ['Quest-completed-sem2', 'Quest-not-started', 'Quest-completed', 'Quest-1hr-cooldown']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result)
+
+    def test_quest_manager_get_available(self):
+        """ DESCRIPTION FROM METHOD:
+        Quests that should appear in the user's Available quests tab.   Should exclude:
+        1. Quests whose available date & time has not past, or quest that have expired
+        2. Quests that are not visible to students or archived
+        3. Quests who's prerequisites have not been met
+        4. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
+        5. Quests who's maximum repeats have been completed
+        6. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        """
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.get_available(self.student)
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started'])  
+
+    def make_test_quests_and_submissions_stack(self):
+        """  Creates 6 quests with related submissions
+        Quest                   sub     .completed   .semester
+        Quest-inprogress-sem2   Y       False        2
+        Quest-completed-sem2    Y       True         2
+        Quest-not-started       N       NA           NA          
+        Quest-inprogress        Y       False        1
+        Quest-completed         Y       True         1
+        Quest-1hr-cooldown      Y       True         1
+        """
+
+        quest_inprog_sem2 = mommy.make(Quest, name='Quest-inprogress-sem2')
+        sub_inprog_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
+        sem2 = sub_inprog_sem2.semester
+        quest_complete_sem2 = mommy.make(Quest, name='Quest-completed-sem2')
+        sub_complete_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
+        sub_complete_sem2.mark_completed()
+
+        quest_not_started = mommy.make(Quest, name='Quest-not-started')
+        quest_inprogress = mommy.make(Quest, name='Quest-inprogress')
+        first_sub = mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress)
+        active_semester = first_sub.semester
+        quest_completed = mommy.make(Quest, name='Quest-completed')
+        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
+        sub_complete.mark_completed()
+        quest_1hr_cooldown = mommy.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown, semester=active_semester)  # noqa
+        sub_cooldown_complete.mark_completed()
+        return quest_1hr_cooldown, quest_not_started, active_semester
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)

@@ -139,6 +139,12 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
+    def debug(self):
+        self.debug_object_list = list(self)
+
+    def exclude_hidden(self, user):
+        return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
+
     def datetime_available(self):
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
 
@@ -198,6 +204,40 @@ class QuestQuerySet(models.query.QuerySet):
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
+    def not_submitted_or_inprogress(self, user):
+        quest_list = self.get_list_not_submitted_or_inprogress(user)
+        pk_list = [quest.id for quest in quest_list]
+
+        # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
+        return self.filter(pk__in=pk_list)
+
+    def not_completed(self, user):
+        """ 
+        Exclude all quests where the user has a completed submission (whether approved or not)
+        """
+        completed_subs = QuestSubmission.objects.all_completed(user=user)
+        return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
+
+    def not_in_progress(self, user):
+        """ 
+        Exclude all quests where the user has a submission in progress,
+        """
+        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
+        return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
+
+        # # Handle repeatable quests with past submissions
+
+        # latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
+        # latest_dt = latest_sub.first_time_completed
+
+        # # to handle cases before first_time_completed existed as a property
+        # if not latest_dt:
+        #     # then latest_sub could be wrong.  Need to get latest completed date
+        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
+        #     latest_dt = latest_sub.time_completed
+
+        # return quest.is_repeat_available(latest_dt, num_subs)
+
     def editable(self, user):
         if user.is_staff:
             return self
@@ -235,13 +275,27 @@ class QuestManager(models.Manager):
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
         qs = qs.get_conditions_met(user)  # 3
-        # quest_list = list(qs)
-        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        # available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
-        available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
+        available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
         if remove_hidden:
-            available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
+            available_quests = available_quests.exclude_hidden(user)
+            # available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
+
+    # def get_available_as_list(self, user, remove_hidden=True):
+    #     """ Quests that should appear in the user's Available quests tab.   Should exclude:
+    #     1. Quests whose available date & time has not past, or quest that have expired
+    #     2. Quests that are not visible to students or archived
+    #     3. Quests who's prerequisites have not been met
+    #     4. Quests that are not currently submitted for approval or already in progress
+    #     5. Quests who's maximum repeats have been completed
+    #     6. Quests who's repeat time has not passed since last completion
+    #     """
+    #     qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
+    #     qs = qs.get_conditions_met(user)  # 3
+    #     available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
+    #     if remove_hidden:
+    #         available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
+    #     return available_quests
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
@@ -604,7 +658,7 @@ class QuestSubmissionManager(models.Manager):
     def not_submitted_or_inprogress(self, user, quest):
         """
         :return: True if the quest has not been started, or if it has been completed already
-        it is a repeatable quest past the repeat time
+        or if it is a repeatable quest past the repeat time
         """
         num_subs = self.num_submissions(user, quest)
         if num_subs == 0:
