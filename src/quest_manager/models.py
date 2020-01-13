@@ -143,7 +143,16 @@ class QuestQuerySet(models.query.QuerySet):
         self.debug_object_list = list(self)
 
     def exclude_hidden(self, user):
+        """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
         return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
+
+    def block_if_needed(self):
+        """ If there are blocking quests, only return them.  Otherwise, return full qs """
+        blocking_quests = self.filter(blocking=True) 
+        if blocking_quests:
+            return blocking_quests
+        else:
+            return self
 
     def datetime_available(self):
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
@@ -278,13 +287,8 @@ class QuestManager(models.Manager):
         qs = qs.get_conditions_met(user)  # 3
         available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
 
-        blocking_quests = available_quests.filter(blocking=True) 
-        if blocking_quests:  # 7
-            available_quests = blocking_quests
-
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
-            # available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
         return available_quests
 
     # def get_available_as_list(self, user, remove_hidden=True):

@@ -43,7 +43,18 @@ class QuestManagerTest(TestCase):
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
         expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
         # a couple hidden
-        self.assertListEqual(list(qs), expected_result)  
+        self.assertListEqual(list(qs), expected_result) 
+
+    def test_quest_qs_block_if_needed(self):
+        """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
+        otherwise, return full qs """
+        mommy.make(Quest, name='Quest-blocking', blocking=True)
+        mommy.make(Quest, name='Quest-also-blocking', blocking=True)
+        mommy.make(Quest, name='Quest-not-blocked')
+
+        qs = Quest.objects.order_by('id').block_if_needed()
+        expected_result = ['Quest-blocking', 'Quest-also-blocking'] 
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result) 
 
     def test_quest_qs_datetime_available(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
