@@ -285,8 +285,25 @@ class QuestManager(models.Manager):
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
         qs = qs.get_conditions_met(user)  # 3
+<<<<<<< HEAD
         available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
+=======
 
+        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
+        # Can I not do this via queryset operation?
+        available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
+
+        print(available_quests)
+
+        blocking_quests = [q for q in available_quests if q.blocking]
+
+        print(blocking_quests)
+        if blocking_quests:  # 7
+            qs = blocking_quests
+
+>>>>>>> blocking in prog.  Need to check In progress and submitt quests too!
+
+        # queryset operation?
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
