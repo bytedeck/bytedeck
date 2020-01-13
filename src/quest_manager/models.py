@@ -16,7 +16,7 @@ from djconfig import config
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
-from prerequisites.models import Prereq, IsAPrereqMixin, PrereqAllConditionsMet
+from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
@@ -309,7 +309,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(XPItem, IsAPrereqMixin):
+class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -374,9 +374,6 @@ class Quest(XPItem, IsAPrereqMixin):
             return icon.image.url
 
         return static('img/default_icon.png')            
-
-    def prereqs(self):
-        return Prereq.objects.all_parent(self)
 
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats

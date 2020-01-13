@@ -13,7 +13,7 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save
 from notifications.signals import notify
 
-from prerequisites.models import Prereq, IsAPrereqMixin
+from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from utilities.models import ImageResource
 
 
@@ -144,7 +144,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(models.Model, IsAPrereqMixin):
+class Badge(models.Model, IsAPrereqMixin, HasPrereqsMixin):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -171,9 +171,6 @@ class Badge(models.Model, IsAPrereqMixin):
 
     def __str__(self):
         return self.name
-
-    def prereqs(self):
-        return Prereq.objects.all_parent(self)
 
     def get_absolute_url(self):
         return reverse('badges:badge_detail', kwargs={'badge_id': self.id})
@@ -202,11 +199,6 @@ class Badge(models.Model, IsAPrereqMixin):
             return badge_rarity.get_icon_html()
         else:
             return ""
-
-    # # to help with the prerequisite choices!
-    # @staticmethod
-    # def autocomplete_search_fields():
-    #     return ("name__icontains",)
 
     # all models that want to act as a possible prerequisite need to have this method
     # Create a default in the PrereqModel(models.Model) class that uses a default:
