@@ -23,6 +23,28 @@ class QuestManagerTest(TestCase):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
         self.student = mommy.make(User, username='student', is_staff=False)
 
+    def test_quest_qs_exclude_hidden(self):
+        """QuestQuerySet.datetime_available should return all quests that are not 
+        on a user profile's hidden quest list."""
+
+        mommy.make(Quest, name='Quest-not-hidden')
+        mommy.make(Quest, name='Quest-also-not-hidden')
+        quest1_to_hide = mommy.make(Quest, name='Quest1-hidden')
+        quest2_to_hide = mommy.make(Quest, name='Quest2-hidden')
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden'] 
+        # Nothing hidden yet
+        self.assertListEqual(list(qs), expected_result)     
+
+        self.student.profile.hide_quest(quest1_to_hide.id)
+        self.student.profile.hide_quest(quest2_to_hide.id)
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
+        # a couple hidden
+        self.assertListEqual(list(qs), expected_result)  
+
     def test_quest_qs_datetime_available(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
         cur_datetime = localtime()
@@ -139,8 +161,8 @@ class QuestManagerTest(TestCase):
         with patch('quest_manager.models.config') as cfg:
             cfg.hs_active_semester = active_semester
             qs = Quest.objects.order_by('id').not_completed(self.student)
-        result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
-        self.assertListEqual(list(qs.values_list('name', flat=True)), result)   
+        expected_result = ['Quest-inprogress-sem2', 'Quest-not-started', 'Quest-inprogress']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result)   
 
     def test_quest_qs_not_in_progress(self):
         """Should return all the quests that do NOT have an inprogress submission"""
@@ -148,8 +170,24 @@ class QuestManagerTest(TestCase):
         with patch('quest_manager.models.config') as cfg:
             cfg.hs_active_semester = active_semester
             qs = Quest.objects.order_by('id').not_in_progress(self.student)
-        result = ['Quest-completed-sem2', 'Quest-not-started', 'Quest-completed', 'Quest-1hr-cooldown']
-        self.assertListEqual(list(qs.values_list('name', flat=True)), result)   
+        expected_result = ['Quest-completed-sem2', 'Quest-not-started', 'Quest-completed', 'Quest-1hr-cooldown']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result)
+
+    def test_quest_manager_get_available(self):
+        """ DESCRIPTION FROM METHOD:
+        Quests that should appear in the user's Available quests tab.   Should exclude:
+        1. Quests whose available date & time has not past, or quest that have expired
+        2. Quests that are not visible to students or archived
+        3. Quests who's prerequisites have not been met
+        4. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
+        5. Quests who's maximum repeats have been completed
+        6. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        """
+        _, _, active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.get_available(self.student)
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started'])  
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
