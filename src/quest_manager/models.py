@@ -567,8 +567,13 @@ class QuestSubmissionManager(models.Manager):
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
+
         # only returned quests will have a time completed, placing them on top
-        return self.get_queryset(active_semester_only).get_user(user).not_completed()
+        qs = self.get_queryset(active_semester_only).get_user(user).not_completed()
+        if blocking:
+            return qs.block_if_needed()
+        else:
+            return qs
 
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_archived_quests=False,

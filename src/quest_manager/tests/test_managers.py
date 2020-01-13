@@ -246,6 +246,21 @@ class QuestSubmissionQuerysetTest(TestCase):
         qs = QuestSubmission.objects.all().get_user(self.student).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
+    def test_quest_submission_qs_block_if_needed(self):
+        """QuestSubmissionQuerySet.block_if_needed: 
+        if there are blocking quests, only return them.  Otherwise, return full qs """
+        first = mommy.make(QuestSubmission)
+
+        # No blocking quests yet, so should be all
+        qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
+        self.assertListEqual(list(qs), [first.id])
+
+        blocking_q = mommy.make(Quest, blocking=True)
+        blocked_sub = mommy.make(QuestSubmission, quest=blocking_q)
+        # Now block, only it should appear
+        qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
+        self.assertListEqual(list(qs), [blocked_sub.id])
+
     def test_quest_submission_qs_get_quest(self):
         """QuestSubmissionQuerySet.get_quest should return all quest submissions for given quest"""
         quest = mommy.make(Quest, name='Sub')
