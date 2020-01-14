@@ -208,21 +208,24 @@ class QuestManagerTest(TestCase):
         7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
         """
         active_semester = self.make_test_quests_and_submissions_stack()
-        qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
 
-        # Start the blocking quest.
-        blocking_quest = Quest.objects.get(name='Quest-blocking')
-        blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, user=self.student, semester=active_semester)
+            # Start the blocking quest.
+            blocking_quest = Quest.objects.get(name='Quest-blocking')
+            blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, 
+                                      user=self.student, semester=active_semester)
 
-        # Should have no available quests while the blocking quest is in progress
-        qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
+            # Should have no available quests while the blocking quest is in progress
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
 
-        # complete the blocking quest to make others available
-        blocking_sub.mark_completed()
-        qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
+            # complete the blocking quest to make others available
+            blocking_sub.mark_completed()
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
@@ -244,11 +247,11 @@ class QuestManagerTest(TestCase):
         sub_complete_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
         sub_complete_sem2.mark_completed()
 
-        quest_not_started = mommy.make(Quest, name='Quest-not-started')
-        quest_blocking = mommy.make(Quest, name='Quest-blocking', blocking=True)
+        mommy.make(Quest, name='Quest-not-started')
+        mommy.make(Quest, name='Quest-blocking', blocking=True)
 
         quest_inprogress = mommy.make(Quest, name='Quest-inprogress')
-        first_sub = mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress, semester=active_semester)
+        mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress, semester=active_semester)
         # active_semester = first_sub.semester
         quest_completed = mommy.make(Quest, name='Quest-completed')
         sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
