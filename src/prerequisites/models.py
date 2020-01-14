@@ -6,11 +6,20 @@ from django.db import models
 from django.db.models.base import ObjectDoesNotExist
 
 
+class HasPrereqsMixin:
+    """ 
+    For models that have prerequisites that determine their objects' availablity.
+    """
+    def prereqs(self):
+        return Prereq.objects.all_parent(self)
+
+
 class IsAPrereqMixin:
     """
     For models that act as a prerequisite.
     Classes using this mixin need to implement
     the method: condition_met_as_prerequisite(user, num_required)
+    and have a field "name", or override the autocomplete_search_fields() class method 
     """
 
     # TODO: Can I force implementing models to define this method?

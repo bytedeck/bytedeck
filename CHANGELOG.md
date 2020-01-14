@@ -6,6 +6,7 @@ This file chronologically records all notable changes to this website, including
 
 ### [0.?]
 
+* [teachers] Blocking quests
 * [bugfix] Runaway whitespace in quests
 
 ### [0.22.0] 2020-01-06

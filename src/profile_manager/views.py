@@ -88,7 +88,7 @@ class ProfileDetail(DetailView):
 
         context['courses'] = CourseStudent.objects.all_for_user_active(profile.user, True)
         context['courses_old'] = CourseStudent.objects.all_for_user_active(profile.user, False)
-        context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile.user)
+        context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile.user, blocking=True)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile.user)
         context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile.user)
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
