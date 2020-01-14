@@ -145,10 +145,16 @@ class QuestQuerySet(models.query.QuerySet):
         """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
         return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
 
-    def block_if_needed(self):
-        """ If there are blocking quests, only return them.  Otherwise, return full qs """
+    def block_if_needed(self, user=None):
+        """ If there are blocking quests or blocking subs in progress, only return blocking quests.  
+        Otherwise, return full qs """
         blocking_quests = self.filter(blocking=True) 
-        if blocking_quests:
+        if user:
+            blocking_subs_in_progress = QuestSubmission.objects.all_not_completed(user=user, blocking=False).filter(quest__blocking=True)  # noqa
+        else:
+            blocking_subs_in_progress = False
+
+        if blocking_quests or blocking_subs_in_progress:
             return blocking_quests
         else:
             return self
@@ -272,7 +278,7 @@ class QuestManager(models.Manager):
     def get_active(self):
         return self.get_queryset().datetime_available().not_expired().visible()
 
-    def get_available(self, user, remove_hidden=True):
+    def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
         2. Quests that are not visible to students or archived
@@ -280,32 +286,16 @@ class QuestManager(models.Manager):
         4. Quests that are not currently submitted for approval or already in progress
         5. Quests who's maximum repeats have been completed
         6. Quests who's repeat time has not passed since last completion
-        7. Check for blocking quests, if present, remove all others
+        7. Check for blocking quests (available and in-progress), if present, remove all others
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
         qs = qs.get_conditions_met(user)  # 3
         available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
 
-        available_quests = available_quests.block_if_needed()  # 7
+        available_quests = available_quests.block_if_needed(user=user)  # 7
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
-
-    # def get_available_as_list(self, user, remove_hidden=True):
-    #     """ Quests that should appear in the user's Available quests tab.   Should exclude:
-    #     1. Quests whose available date & time has not past, or quest that have expired
-    #     2. Quests that are not visible to students or archived
-    #     3. Quests who's prerequisites have not been met
-    #     4. Quests that are not currently submitted for approval or already in progress
-    #     5. Quests who's maximum repeats have been completed
-    #     6. Quests who's repeat time has not passed since last completion
-    #     """
-    #     qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
-    #     qs = qs.get_conditions_met(user)  # 3
-    #     available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
-    #     if remove_hidden:
-    #         available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
-    #     return available_quests
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
