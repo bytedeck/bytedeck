@@ -3,8 +3,7 @@ import json
 from datetime import time, date
 
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
@@ -16,7 +15,7 @@ from djconfig import config
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
-from prerequisites.models import Prereq, IsAPrereqMixin, PrereqAllConditionsMet
+from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
@@ -139,6 +138,27 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
+    def debug(self):
+        self.debug_object_list = list(self)
+
+    def exclude_hidden(self, user):
+        """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
+        return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
+
+    def block_if_needed(self, user=None):
+        """ If there are blocking quests or blocking subs in progress, only return blocking quests.  
+        Otherwise, return full qs """
+        blocking_quests = self.filter(blocking=True) 
+        if user:
+            blocking_subs_in_progress = QuestSubmission.objects.all_not_completed(user=user, blocking=False).filter(quest__blocking=True)  # noqa
+        else:
+            blocking_subs_in_progress = False
+
+        if blocking_quests or blocking_subs_in_progress:
+            return blocking_quests
+        else:
+            return self
+
     def datetime_available(self):
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
 
@@ -198,6 +218,40 @@ class QuestQuerySet(models.query.QuerySet):
         # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
         return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
 
+    def not_submitted_or_inprogress(self, user):
+        quest_list = self.get_list_not_submitted_or_inprogress(user)
+        pk_list = [quest.id for quest in quest_list]
+
+        # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
+        return self.filter(pk__in=pk_list)
+
+    def not_completed(self, user):
+        """ 
+        Exclude all quests where the user has a completed submission (whether approved or not)
+        """
+        completed_subs = QuestSubmission.objects.all_completed(user=user)
+        return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
+
+    def not_in_progress(self, user):
+        """ 
+        Exclude all quests where the user has a submission in progress,
+        """
+        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
+        return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
+
+        # # Handle repeatable quests with past submissions
+
+        # latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
+        # latest_dt = latest_sub.first_time_completed
+
+        # # to handle cases before first_time_completed existed as a property
+        # if not latest_dt:
+        #     # then latest_sub could be wrong.  Need to get latest completed date
+        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
+        #     latest_dt = latest_sub.time_completed
+
+        # return quest.is_repeat_available(latest_dt, num_subs)
+
     def editable(self, user):
         if user.is_staff:
             return self
@@ -224,7 +278,7 @@ class QuestManager(models.Manager):
     def get_active(self):
         return self.get_queryset().datetime_available().not_expired().visible()
 
-    def get_available(self, user, remove_hidden=True):
+    def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
         2. Quests that are not visible to students or archived
@@ -232,15 +286,15 @@ class QuestManager(models.Manager):
         4. Quests that are not currently submitted for approval or already in progress
         5. Quests who's maximum repeats have been completed
         6. Quests who's repeat time has not passed since last completion
+        7. Check for blocking quests (available and in-progress), if present, remove all others
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
         qs = qs.get_conditions_met(user)  # 3
-        # quest_list = list(qs)
-        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        # available_quests = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
-        available_quests = qs.get_list_not_submitted_or_inprogress(user)  # 4,5 & 6
+        available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
+
+        available_quests = available_quests.block_if_needed(user=user)  # 7
         if remove_hidden:
-            available_quests = [q for q in available_quests if not user.profile.is_quest_hidden(q)]
+            available_quests = available_quests.exclude_hidden(user)
         return available_quests
 
     def get_available_without_course(self, user):
@@ -255,7 +309,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(XPItem, IsAPrereqMixin):
+class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -290,6 +344,10 @@ class Quest(XPItem, IsAPrereqMixin):
                                            "when importing from that other system, it will update this quest. "
                                            "Otherwise do not edit this or it will break existing links!")
 
+    blocking = models.BooleanField(default=False,
+                                   help_text="When this quest becomes available, it will block all other "
+                                             "non-blocking quests until this it is completed")
+
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
@@ -321,9 +379,6 @@ class Quest(XPItem, IsAPrereqMixin):
 
         return static('img/default_icon.png')            
 
-    def prereqs(self):
-        return Prereq.objects.all_parent(self)
-
     def is_repeat_available(self, time_of_last, ordinal_of_last):
         # if haven't maxed out repeats
         if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
@@ -351,13 +406,6 @@ class Quest(XPItem, IsAPrereqMixin):
         # print("num_approved: " + str(num_approved) + "/" + str(num_required))
         return num_approved >= num_required
 
-    # def is_on_user_available_tab(self, user):
-    #     """
-    #     :param user:
-    #     :return: True if this quest should appear on the user's available quests list.
-    #     """
-    #     not_submitted_already = 1
-
     def is_editable(self, user):
         if user.is_staff:
             return True
@@ -365,49 +413,19 @@ class Quest(XPItem, IsAPrereqMixin):
             return user == self.editor and not self.visible_to_students
 
 
-# class Feedback(models.Model):
-#     user = models.ForeignKey(User, related_name='feedback_user')
-#     quest = models.ForeignKey(Quest, related_name='feedback_quest')
-#     time_to_complete = models.DurationField(blank=True, null=True)
-#     time_to_complete_approved = models.NullBooleanField(blank = True, null=True)
-#     feedback = models.TextField(blank=True,
-#         help_text = 'Did you have a suggestion that could improve this quest')
-#     feedback_approved = models.NullBooleanField(blank = True, null=True)
-#     datetime_submitted = models.DateTimeField(auto_now_add=True, auto_now=False)
-#
-#     class Meta:
-#         unique_together = ('user','quest',)
-#
-#     def __str__(self):
-#         return str(self.id)
-
-
-TAG_CHOICES = (
-    ("python", "python"),
-    ("django", "django"),
-)
-
-
-# Demo of ContentType foreign key.  Model not actually in use
-class TaggedItem(models.Model):
-    tag = models.SlugField(choices=TAG_CHOICES)
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-
-    def get_absolute_url(self):
-        return reverse('profile_detail', kwargs={'pk': self.pk})
-
-    content_object = GenericForeignKey()
-
-    def __str__(self):
-        return self.tag
-
-
 # QuestSubmission ###############################################
 
 class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
         return self.filter(user=user)
+
+    def block_if_needed(self):
+        """ If there are blocking quests, only return them.  Otherwise, return full qs """
+        subs_with_blocking_quests = self.filter(quest__blocking=True) 
+        if subs_with_blocking_quests:
+            return subs_with_blocking_quests
+        else:
+            return self
 
     def get_quest(self, quest):
         return self.filter(quest=quest)
@@ -536,11 +554,16 @@ class QuestSubmissionManager(models.Manager):
         return qs.get_user(user).approved().completed()
 
     # i.e In Progress
-    def all_not_completed(self, user=None, active_semester_only=True):
+    def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
+
         # only returned quests will have a time completed, placing them on top
-        return self.get_queryset(active_semester_only).get_user(user).not_completed()
+        qs = self.get_queryset(active_semester_only).get_user(user).not_completed()
+        if blocking:
+            return qs.block_if_needed()
+        else:
+            return qs
 
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_archived_quests=False,
@@ -604,7 +627,7 @@ class QuestSubmissionManager(models.Manager):
     def not_submitted_or_inprogress(self, user, quest):
         """
         :return: True if the quest has not been started, or if it has been completed already
-        it is a repeatable quest past the repeat time
+        or if it is a repeatable quest past the repeat time
         """
         num_subs = self.num_submissions(user, quest)
         if num_subs == 0:

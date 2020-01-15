@@ -177,7 +177,7 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
     # get_available is not a queryset, cant use .count()
 
     if in_progress_tab_active:
-        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
+        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
     elif completed_tab_active:

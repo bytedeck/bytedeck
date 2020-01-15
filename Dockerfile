@@ -26,6 +26,10 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # Prevent docker from buffering console output
 ENV PYTHONUNBUFFERED 1
 
+ENV POSTGRES_HOST "db"
+
+ENV REDIS_HOST "redis"
+
 # Set working directory for subsequent RUN ADD COPY CMD instructions
 RUN mkdir /app
 WORKDIR /app

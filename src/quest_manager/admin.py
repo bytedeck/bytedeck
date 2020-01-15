@@ -5,7 +5,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django_summernote.admin import SummernoteModelAdmin
 # Register your models here.
 from import_export import resources
-from import_export.admin import ImportExportActionModelAdmin
+from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
 from import_export.fields import Field
 
 from prerequisites.admin import PrereqInline
@@ -159,7 +159,7 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
         PrereqInline,
     ]
 
-    actions = [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]
+    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]  # noqa
 
     change_list_filter_template = "admin/filter_listing.html"
 

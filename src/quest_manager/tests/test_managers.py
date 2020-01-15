@@ -9,6 +9,7 @@ from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
 from django.utils.timezone import localtime
 from mock import patch
+import djconfig
 
 
 User = get_user_model()
@@ -16,6 +17,46 @@ User = get_user_model()
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(TestCase):
+
+    def setUp(self):
+        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
+        self.teacher = mommy.make(User, username='teacher', is_staff=True)
+        self.student = mommy.make(User, username='student', is_staff=False)
+
+    def test_quest_qs_exclude_hidden(self):
+        """QuestQuerySet.datetime_available should return all quests that are not 
+        on a user profile's hidden quest list."""
+
+        mommy.make(Quest, name='Quest-not-hidden')
+        mommy.make(Quest, name='Quest-also-not-hidden')
+        quest1_to_hide = mommy.make(Quest, name='Quest1-hidden')
+        quest2_to_hide = mommy.make(Quest, name='Quest2-hidden')
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden'] 
+        # Nothing hidden yet
+        self.assertListEqual(list(qs), expected_result)     
+
+        self.student.profile.hide_quest(quest1_to_hide.id)
+        self.student.profile.hide_quest(quest2_to_hide.id)
+
+        qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
+        # a couple hidden
+        self.assertListEqual(list(qs), expected_result) 
+
+    def test_quest_qs_block_if_needed(self):
+        """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
+        otherwise, return full qs """
+        mommy.make(Quest, name='Quest-blocking', blocking=True)
+        mommy.make(Quest, name='Quest-also-blocking', blocking=True)
+        mommy.make(Quest, name='Quest-not-blocked')
+
+        qs = Quest.objects.order_by('id').block_if_needed()
+        expected_result = ['Quest-blocking', 'Quest-also-blocking'] 
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result) 
+
+        # Test the user specific part via QuestManager.get_available test"
 
     def test_quest_qs_datetime_available(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
@@ -106,9 +147,123 @@ class QuestManagerTest(TestCase):
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
 
+    # def test_quest_qs_get_list_not_submitted_or_inprogress(self):
+    #     """
+    #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that 
+    #     have not been started (in progress or submitted for completion), 
+    #     or if it has been completed already, that it is a repeatable quest past the repeat time
+    #     """        
+    #     self.make_test_quests_and_submissions_stack()
+
+    #     # jump ahead an hour so repeat cooldown is over
+    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+    #         qs = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
+    #     self.assertListEqual(
+    #         list(qs.values_list('name', flat=True)), 
+    #         ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
+    #     )
+
+    def test_quest_qs_not_submitted_or_inprogress(self):
+        self.make_test_quests_and_submissions_stack()
+
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
+        self.assertListEqual(
+            list(qs.values_list('name', flat=True)), 
+            ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
+        )
+
+    def test_quest_qs_not_completed(self):
+        """Should return all the quests that do NOT have a completed submission (during active semester)"""
+        active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_completed(self.student)
+        self.assertListEqual(
+            list(qs.values_list('name', flat=True)), 
+            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
+        )
+
+    def test_quest_qs_not_in_progress(self):
+        """Should return all the quests that do NOT have an inprogress submission (during active semester)"""
+        active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.order_by('id').not_in_progress(self.student)
+        self.assertListEqual(
+            list(qs.values_list('name', flat=True)),
+            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed', 'Quest-1hr-cooldown']  # noqa
+        )
+
+    def test_quest_manager_get_available(self):
+        """ DESCRIPTION FROM METHOD:
+        Quests that should appear in the user's Available quests tab.   Should exclude:
+        1. Quests whose available date & time has not past, or quest that have expired
+        2. Quests that are not visible to students or archived
+        3. Quests who's prerequisites have not been met
+        4. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
+        5. Quests who's maximum repeats have been completed
+        6. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
+        """
+        active_semester = self.make_test_quests_and_submissions_stack()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = active_semester
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
+
+            # Start the blocking quest.
+            blocking_quest = Quest.objects.get(name='Quest-blocking')
+            blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, 
+                                      user=self.student, semester=active_semester)
+
+            # Should have no available quests while the blocking quest is in progress
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
+
+            # complete the blocking quest to make others available
+            blocking_sub.mark_completed()
+            qs = Quest.objects.get_available(self.student)
+            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
+
+    def make_test_quests_and_submissions_stack(self):
+        """  Creates 6 quests with related submissions
+        Quest                   sub     .completed   .semester
+        Quest-inprogress-sem2   Y       False        2
+        Quest-completed-sem2    Y       True         2
+        Quest-not-started       N       NA           NA          
+        Quest-inprogress        Y       False        1
+        Quest-completed         Y       True         1
+        Quest-1hr-cooldown      Y       True         1
+        Quest-blocking          N       NA           NA
+        """
+        active_semester = mommy.make(Semester, active=True)
+
+        quest_inprog_sem2 = mommy.make(Quest, name='Quest-inprogress-sem2')
+        sub_inprog_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
+        sem2 = sub_inprog_sem2.semester
+        quest_complete_sem2 = mommy.make(Quest, name='Quest-completed-sem2')
+        sub_complete_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
+        sub_complete_sem2.mark_completed()
+
+        mommy.make(Quest, name='Quest-not-started')
+        mommy.make(Quest, name='Quest-blocking', blocking=True)
+
+        quest_inprogress = mommy.make(Quest, name='Quest-inprogress')
+        mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress, semester=active_semester)
+        # active_semester = first_sub.semester
+        quest_completed = mommy.make(Quest, name='Quest-completed')
+        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
+        sub_complete.mark_completed()
+        quest_1hr_cooldown = mommy.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown, semester=active_semester)  # noqa
+        sub_cooldown_complete.mark_completed()
+        return active_semester
+
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionTest(TestCase):
+class QuestSubmissionQuerysetTest(TestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
@@ -121,6 +276,21 @@ class QuestSubmissionTest(TestCase):
         mommy.make(QuestSubmission)
         qs = QuestSubmission.objects.all().get_user(self.student).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
+
+    def test_quest_submission_qs_block_if_needed(self):
+        """QuestSubmissionQuerySet.block_if_needed: 
+        if there are blocking quests, only return them.  Otherwise, return full qs """
+        first = mommy.make(QuestSubmission)
+
+        # No blocking quests yet, so should be all
+        qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
+        self.assertListEqual(list(qs), [first.id])
+
+        blocking_q = mommy.make(Quest, blocking=True)
+        blocked_sub = mommy.make(QuestSubmission, quest=blocking_q)
+        # Now block, only it should appear
+        qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
+        self.assertListEqual(list(qs), [blocked_sub.id])
 
     def test_quest_submission_qs_get_quest(self):
         """QuestSubmissionQuerySet.get_quest should return all quest submissions for given quest"""
@@ -157,6 +327,14 @@ class QuestSubmissionTest(TestCase):
         mommy.make(QuestSubmission, quest__visible_to_students=False)
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
+
+
+@freeze_time('2018-10-12 00:54:00', tz_offset=0)
+class QuestSubmissionManagerTest(TestCase):
+
+    def setUp(self):
+        self.teacher = mommy.make(User, username='teacher', is_staff=True)
+        self.student = mommy.make(User, username='student', is_staff=False)
 
     def test_quest_submission_manager_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""
