@@ -4,7 +4,7 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [0.?]
+### [0.23.0] 2020-01-15
 
 * [teachers] Blocking quests
 * [bugfix] Runaway whitespace in quests
