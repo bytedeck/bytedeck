@@ -4,8 +4,10 @@ from celery import shared_task
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.shortcuts import get_object_or_404
-import djconfig
+from djconfig import config, reload_maybe
+
 from courses.models import CourseStudent
 from notifications.signals import notify
 
@@ -16,7 +18,7 @@ User = get_user_model()
 
 @shared_task(name='announcements.tasks.send_notifications')
 def send_notifications(user_id, announcement_id):
-    djconfig.reload_maybe()  # needed for automated user: hs_hackerspace_ai
+    reload_maybe()  # needed for automated user: hs_hackerspace_ai
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
     affected_users = CourseStudent.objects.all_users_for_active_semester()
@@ -33,15 +35,22 @@ def send_notifications(user_id, announcement_id):
 
 @shared_task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, url):
+    reload_maybe()  # needed for automated user: hs_hackerspace_ai
     users_to_email = User.objects.filter(
         is_active=True,
         profile__get_announcements_by_email=True
     ).exclude(email='').values_list('email', flat=True)
 
-    subject = 'Hackerspace Announcement'
+    print(config)
+
+    subject = '{} Announcement'.format(config.hs_site_name_short)
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
-    html_content = html_template.render({'content': content, 'url': url})
+    html_content = html_template.render({
+        'content': content, 
+        'absolute_url': url,
+        'domain': Site.objects.get_current().domain
+    })
     email_msg = EmailMultiAlternatives(
         subject,
         body=text_content,
