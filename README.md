@@ -1,6 +1,7 @@
 LMS for Timberline Secondary School's Digital Hackerspace
 
 [![Build Status](https://travis-ci.org/timberline-secondary/hackerspace.svg?branch=develop)](https://travis-ci.org/timberline-secondary/hackerspace)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/timberline-secondary/hackerspace.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/timberline-secondary/hackerspace/alerts/)
 
 # Hackerspace development environment installation (instructions for students)
 
