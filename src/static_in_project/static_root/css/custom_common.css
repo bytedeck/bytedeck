@@ -24,16 +24,10 @@ ul.left-aligned, ol.left-aligned {
     scroll-margin-top: 60px;
 } 
 
-.anchor:target {
+.anchor:target, .active-anchor li.announcement-content {
+    animation-delay: 2s;
     animation: temporaryHighlight 2s;
 }
-
-@keyframes temporaryHighlight {
-    0% { background: gold }
-    50% { background: gold }
-    100% { background: inherit }
-}
-
 
 
 /********** Figures ****************/
