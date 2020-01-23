@@ -162,6 +162,10 @@ class Comment(models.Model):
             return None
 
     def get_absolute_url(self):
+        """ Find the aboslute url of the target object, then add the comment"""
+        # find absolute url of the target
+        self.target_object.get_absolute_url()
+        
         return reverse('comments:threads', kwargs={'id': self.id})
 
     def get_origin(self):

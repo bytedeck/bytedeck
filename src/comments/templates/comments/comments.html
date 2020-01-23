@@ -3,7 +3,7 @@
 
   {% for comment in target_comments %}
     {% if request.user.is_staff or not comment.flagged %}
-      <li class="list-group-item {% if comment.flagged %} list-group-item-danger{% endif %}"
+      <li class="list-group-item {% if comment.flagged %} list-group-item-danger{% endif %} anchor"
           id="comment-{{comment.id}}">
 
         <img class="icon-md img-rounded pull-left" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>
@@ -33,7 +33,9 @@
           {% else %}
           {{comment.user}}
           {% endif %}
-          <small>&ndash; {{comment.timestamp|timesince}} ago</small>
+          <small>&ndash; {{comment.timestamp|timesince}} ago 
+            <a href="{{comment.path}}" title="Link to this comment" class="text-muted"><i class="fa fa-link"></i></a>
+          </small>
           {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}
         </h3>
         <div class="comment-heading-divider"></div>
