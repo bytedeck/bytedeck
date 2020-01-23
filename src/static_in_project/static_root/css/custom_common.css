@@ -19,6 +19,16 @@ ul.left-aligned, ol.left-aligned {
     line-height: 1.2;
 }
 
+/* offset anchor links for fixed header */
+.anchor {
+    scroll-margin-top: 60px;
+} 
+
+.anchor:target, .active-anchor li.announcement-content {
+    animation-delay: 2s;
+    animation: temporaryHighlight 2s;
+}
+
 
 /********** Figures ****************/
 
@@ -271,13 +281,6 @@ iframe, .embed-responsive video {
     border-radius: 8px;
 }
 
-/*move anchor targets down so not covered by ifxed header*/
-:target:before {
-    content: "";
-    display: block;
-    height: 60px; /* fixed header height*/
-    margin: -60px 0 0; /* negative fixed header height */
-}
 
 /********* EMOJI ************************/
 img.emoji-img-inline {
