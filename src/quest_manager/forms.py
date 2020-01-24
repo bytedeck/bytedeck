@@ -15,7 +15,7 @@ class QuestForm(forms.ModelForm):
         fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
-                  'max_repeats', 'hours_between_repeats',
+                  'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
                   'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')

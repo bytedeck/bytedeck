@@ -62,7 +62,7 @@ class XPItem(models.Model):
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     repeat_per_semester = models.BooleanField(
         default=False, 
-        help_text='Use max_repeats as a semester limit, rather than as a global limit.'
+        help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=date.today)  # timezone aware!
@@ -656,7 +656,8 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
-        # this logic should probably be removed from this location?  When would I want to return None that isn't already handled?
+        # this logic should probably be removed from this location?  
+        # When would I want to return None that isn't already handled?
         if self.not_submitted_or_inprogress(user, quest):
             ordinal = self.num_submissions(user, quest) + 1
             new_submission = QuestSubmission(
