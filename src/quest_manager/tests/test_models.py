@@ -5,8 +5,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
+from mock import patch
 
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
+from courses.models import Semester
 
 
 class CategoryTestModel(TestCase):  # aka Campaigns
@@ -86,8 +88,8 @@ class SubmissionTestModel(TestCase):
 
     def setUp(self):
         djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
         User = get_user_model()
+        self.semester = mommy.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)
         self.submission = mommy.make(QuestSubmission, quest__name="Test")
@@ -117,6 +119,18 @@ class SubmissionTestModel(TestCase):
         self.assertTrue(sub.is_completed)
         self.assertIsNotNone(sub.first_time_completed)
         self.assertIsNone(sub.draft_text)
+
+    def test_submission_get_previous(self):
+        """ If this is a repeatable quest and has been completed already, return that previous submission """
+        repeat_quest = mommy.make(Quest, name="repeatable-quest", max_repeats=-1)
+        first_sub = mommy.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
+        self.assertIsNone(first_sub.get_previous())
+        first_sub.mark_approved()
+        with patch('quest_manager.models.config') as cfg:
+            cfg.hs_active_semester = first_sub.semester.id
+            second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
+            self.assertEqual(first_sub, second_sub.get_previous())
+
 
 #
 #     def test_badge_assertion_count(self):

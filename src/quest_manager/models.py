@@ -811,3 +811,10 @@ class QuestSubmission(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
+
+    def get_previous(self):
+        """ If this is a repeatable quest and has been completed already, return that previous submission """
+        if self.ordinal > 1:
+            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
+        else:
+            return None
