@@ -45,6 +45,7 @@
       <h3 class="panel-title">Past Submissions and Replies</h3>
     </div>
     <ul class="list-group">
+      {% include "quest_manager/snippets/previous_submission.html" %}
       {% with submission.get_comments as target_comments %}
         {% include "comments/comments.html" %}
       {% endwith %}
