@@ -60,6 +60,10 @@ class XPItem(models.Model):
                                              'To un-archive a quest, you will need to access it through Django Admin.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
+    repeat_per_semester = models.BooleanField(
+        default=False, 
+        help_text='Use max_repeats as a semester limit, rather than as a global limit.'
+    )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=date.today)  # timezone aware!
     time_available = models.TimeField(default=time().min)  # midnight local time
