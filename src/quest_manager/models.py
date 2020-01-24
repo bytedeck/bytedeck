@@ -60,6 +60,10 @@ class XPItem(models.Model):
                                              'To un-archive a quest, you will need to access it through Django Admin.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
+    repeat_per_semester = models.BooleanField(
+        default=False, 
+        help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
+    )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=date.today)  # timezone aware!
     time_available = models.TimeField(default=time().min)  # midnight local time
@@ -239,19 +243,6 @@ class QuestQuerySet(models.query.QuerySet):
         in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
         return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
 
-        # # Handle repeatable quests with past submissions
-
-        # latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
-        # latest_dt = latest_sub.first_time_completed
-
-        # # to handle cases before first_time_completed existed as a property
-        # if not latest_dt:
-        #     # then latest_sub could be wrong.  Need to get latest completed date
-        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
-        #     latest_dt = latest_sub.time_completed
-
-        # return quest.is_repeat_available(latest_dt, num_subs)
-
     def editable(self, user):
         if user.is_staff:
             return self
@@ -379,21 +370,39 @@ class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
 
         return static('img/default_icon.png')            
 
-    def is_repeat_available(self, time_of_last, ordinal_of_last):
+    def is_repeat_available(self, user):
+        "Assumes one submission has already been completed"
+        latest_sub = QuestSubmission.objects.all_for_user_quest(user, self, False).latest('first_time_completed')
+        time_of_last = latest_sub.first_time_completed
+
+        # happens if submission hasn't been completed yet. i.e. still in progress.
+        if not time_of_last:
+            return False
+
+        # # to handle cases before first_time_completed existed as a property
+        # if not latest_dt:
+        #     # then latest_sub could be wrong.  Need to get latest completed date
+        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
+        #     latest_dt = latest_sub.time_completed
+
         # if haven't maxed out repeats
-        if self.max_repeats == -1 or self.max_repeats >= ordinal_of_last:
 
-            # https://github.com/timberline-secondary/hackerspace/issues/135
-            # This might be a legacy issue? not sure how this could happen...
-            if not time_of_last:
-                return True
+        if self.repeat_per_semester:
+            # get all completed this semester
+            qs = QuestSubmission.objects.all_completed(user=user).filter(quest=self)
+            if qs.count() > self.max_repeats:
+                return False
+        elif latest_sub.ordinal > self.max_repeats and self.max_repeats != -1:
+            return False
 
-            time_since_last = timezone.now() - time_of_last
-            hours_since_last = time_since_last.total_seconds() // 3600
-            # and the proper amount of time has passed
-            if hours_since_last >= self.hours_between_repeats:
-                return True
-        return False
+        # Haven't maxed out yet, so check times
+        time_since_last = timezone.now() - time_of_last
+        hours_since_last = time_since_last.total_seconds() // 3600
+        # and the proper amount of time has passed
+        if hours_since_last >= self.hours_between_repeats:
+            return True
+        else:
+            return False
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
@@ -644,18 +653,11 @@ class QuestSubmissionManager(models.Manager):
 
         # Handle repeatable quests with past submissions
 
-        latest_sub = self.all_for_user_quest(user, quest, False).latest('first_time_completed')
-        latest_dt = latest_sub.first_time_completed
-
-        # to handle cases before first_time_completed existed as a property
-        if not latest_dt:
-            # then latest_sub could be wrong.  Need to get latest completed date
-            latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
-            latest_dt = latest_sub.time_completed
-
-        return quest.is_repeat_available(latest_dt, num_subs)
+        return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
+        # this logic should probably be removed from this location?  
+        # When would I want to return None that isn't already handled?
         if self.not_submitted_or_inprogress(user, quest):
             ordinal = self.num_submissions(user, quest) + 1
             new_submission = QuestSubmission(
@@ -811,3 +813,10 @@ class QuestSubmission(models.Model):
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
+
+    def get_previous(self):
+        """ If this is a repeatable quest and has been completed already, return that previous submission """
+        if self.ordinal > 1:
+            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
+        else:
+            return None

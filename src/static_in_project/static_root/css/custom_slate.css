@@ -304,3 +304,11 @@ a.list-group-item-muted {
 .note-color-palette div .note-color-btn {
     border-color: #272b30 !important;
 }
+
+/* COMMENT and annoucnement higlights */ 
+
+@keyframes temporaryHighlight {
+  0% { background:  black}
+  50% { background:  black}
+  100% { background: inherit }
+}

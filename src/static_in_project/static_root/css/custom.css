@@ -171,3 +171,11 @@ a.list-group-item-muted {
     border-color: #DDD !important;
     color: #555;
 }
+
+/* COMMENT and annoucnement higlights */ 
+
+@keyframes temporaryHighlight {
+    0% { background:  gold}
+    50% { background: gold }
+    100% { background: inherit }
+}

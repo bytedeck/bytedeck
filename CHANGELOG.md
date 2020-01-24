@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.24.0] ?
+
+* Direct links to comments and announcements
+* [teachers] Repeat quests by semester
+* [bugfix] Announcement email links
+* [bugifx] Attachment margins
+
+
 ### [0.23.0] 2020-01-15
 
 * [teachers] Blocking quests
