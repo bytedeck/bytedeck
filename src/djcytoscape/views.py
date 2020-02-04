@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
@@ -32,7 +33,7 @@ class ScapeDelete(DeleteView):
         return super(ScapeDelete, self).dispatch(*args, **kwargs)
 
 
-class ScapeList(ListView):
+class ScapeList(LoginRequiredMixin, ListView):
     model = CytoScape
 
 
