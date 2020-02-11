@@ -8,7 +8,7 @@ This file chronologically records all notable changes to this website, including
 
 * [bugfix] Login required for maps
 * [bugifx] Proper redirects on login
-* [bugifx] License in footer
+* [bugifx] License in footer should be GPL 3
 
 ### [0.24.0] 2020-01-24
 
