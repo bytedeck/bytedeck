@@ -9,6 +9,9 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Login required for maps
 * [bugifx] Proper redirects on login
 * [bugifx] License in footer should be GPL 3
+* [bugfix] Edit button on flat pages visible for all users
+* [bugfix] Removes extra ordinal in last repeat of quest
+* [bugfix] Global chillax line setting in config 
 
 ### [0.24.0] 2020-01-24
 
