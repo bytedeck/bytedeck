@@ -55,15 +55,12 @@
 
 {%  endblock %}
 {% block js %}
-{#<script src="http://code.jquery.com/jquery-2.0.3.min.js"></script>#}
+<script>
+    window.jQuery || document.write('<script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="crossorigin="anonymous"><\/script>')
+</script>
 <script src="{% static 'djcytoscape/js/cytoscape.min.js' %}"></script>
-
-<script src="{% static 'djcytoscape/js/dagre.js' %}"></script>
+<script src="{% static 'djcytoscape/js/dagre.min.js' %}"></script>
 <script src="{% static 'djcytoscape/js/cytoscape-dagre.js' %}"></script>
-
-<script src="{% static 'djcytoscape/js/cola.v3.min.js' %}"></script>
-<script src="{% static 'djcytoscape/js/cytoscape-cola.js' %}"></script>
-
 
 <script>
     var cy = {{ cytoscape_json|safe }}
