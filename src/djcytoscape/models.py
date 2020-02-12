@@ -268,6 +268,8 @@ class CytoElement(models.Model):
             # json_str += "        edgeWeight: 1, \n"  # '" + str(self.edge_weight) + "',\n"
         if self.href:
             json_str += "        href: '" + self.href + "',\n"
+        if self.selector_id:
+            json_str += "        " + self.selector_id + ",\n"
         json_str += "      },\n "  # end data
         if self.classes:
             json_str += "     classes: '" + self.classes + "',\n"
@@ -281,7 +283,7 @@ class CytoElement(models.Model):
         unique id in the form of 'model-#' where the model = Quest (etc) and # = object id.
         Examples: Quest-21 or Badge-5
         """
-        return str(type(obj)) + "-" + str(obj.id)
+        return str(type(obj).__name__) + ": " + str(obj.id)
 
 
 class TempCampaignNode(object):
@@ -617,7 +619,7 @@ class CytoScape(models.Model):
         # json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
         for element in elements:
             if element.id_styles:
-                json_str += self.get_selector_styles_json(element.selector_id, element.id_styles)
+                json_str += self.get_selector_styles_json(str(element.id), element.id_styles)
         json_str += "  ], \n"  # end style: [
         json_str += self.style_set.get_init_options()
         json_str += "});"
