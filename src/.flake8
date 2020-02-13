@@ -5,7 +5,7 @@ exclude =
     manage.py,
     hackerspace_online/settings/*
 #max-complexity = 12
-max-line-length = 120
+max-line-length = 150
 
 # Example for ignoring specifics:
 # E126: continuation line over-indented for hanging indent

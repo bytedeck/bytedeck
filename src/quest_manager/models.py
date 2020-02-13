@@ -579,8 +579,8 @@ class QuestSubmissionManager(models.Manager):
                                exclude_quests_not_visible_to_students=False).get_user(user).completed()
         return qs.get_not_semester(config.hs_active_semester).order_by('is_approved', '-time_approved')
 
-    def all_completed(self, user=None):
-        qs = self.get_queryset(active_semester_only=True,
+    def all_completed(self, user=None, active_semester_only=True):
+        qs = self.get_queryset(active_semester_only=active_semester_only,
                                exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False
                                )

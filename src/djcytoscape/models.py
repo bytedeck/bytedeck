@@ -629,7 +629,7 @@ class CytoScape(models.Model):
     @staticmethod
     def get_selector_styles_json(selector, styles):
         json_str = "    { \n"
-        json_str += "      selector: '" + selector + "', \n"
+        json_str += "      selector: '#" + selector + "', \n"
         json_str += "      style: { \n"
         json_str += styles
         json_str += "      } \n"

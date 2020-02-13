@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.contenttypes.models import ContentType
@@ -13,6 +14,9 @@ from django.urls import reverse_lazy
 from djcytoscape.forms import GenerateQuestMapForm
 
 from .models import CytoScape
+from quest_manager.models import Quest, QuestSubmission
+
+User = get_user_model()
 
 
 class ScapeUpdate(UpdateView):
@@ -54,6 +58,21 @@ def quest_map(request, scape_id):
                                                           'cytoscape_json': scape.json(),
                                                           'fullscreen': True,
                                                           })
+
+
+@login_required
+def quest_map_personalized(request, scape_id, user_id):
+    user = get_object_or_404(User, id=user_id)
+    completed_qs = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
+    quest_ids = completed_qs.values_list('quest__id', flat=True)
+    # Evalute and remove doubels by converting to a set
+    quest_ids = set(quest_ids)
+    scape = get_object_or_404(CytoScape, id=scape_id)
+    return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
+                                                          'cytoscape_json': scape.json(),
+                                                          'completed_quests': quest_ids,
+                                                          'fullscreen': True,
+                                                          }) 
 
 
 @login_required
