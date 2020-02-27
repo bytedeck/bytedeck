@@ -1,5 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
@@ -31,10 +33,11 @@ class ScapeDelete(DeleteView):
         return super(ScapeDelete, self).dispatch(*args, **kwargs)
 
 
-class ScapeList(ListView):
+class ScapeList(LoginRequiredMixin, ListView):
     model = CytoScape
 
 
+@login_required
 def index(request):
     scape_list = CytoScape.objects.all()
 
@@ -44,6 +47,7 @@ def index(request):
     return render(request, 'djcytoscape/index.html', context)
 
 
+@login_required
 def quest_map(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
     return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
@@ -52,6 +56,7 @@ def quest_map(request, scape_id):
                                                           })
 
 
+@login_required
 def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
     try:
         scape = CytoScape.objects.get(initial_content_type=ct_id, initial_object_id=obj_id)
@@ -64,6 +69,7 @@ def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
             raise Http404
 
 
+@login_required
 def primary(request):
     try:
         scape = CytoScape.objects.get(is_the_primary_scape=True)

@@ -5,7 +5,7 @@
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top"
-{% if request.user.is_authenticated %}style='{% color_style_from_mark request.user %}'{% endif %}>
+{% if request.user.is_authenticated and config.hs_chillax_line_active %}style='{% color_style_from_mark request.user %}'{% endif %}>
     <div class="container-fluid">
         <div class="navbar-header">
             <button type="button" class="navbar-toggle collapsed"
@@ -217,6 +217,7 @@
                 <div class="input-group input-group-unified input-group-sm">
                     <input type="text" class="form-control" name="login" placeholder="Username" autofocus />
                     <input type="password" class="form-control" name="password" placeholder="Password"/>
+                    <input type='hidden' name="next" value="{{ request.GET.next }}">
               <span class="input-group-btn">
                 <button type="submit" class="btn btn-default">Sign In</button>
               </span>

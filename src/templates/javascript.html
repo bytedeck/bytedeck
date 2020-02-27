@@ -120,8 +120,10 @@
         setTimeout(function(){ $('.dismiss-in-5').slideUp(); }, 5000);
       }
 
-      ajaxNotificationsBadge()
-      setInterval(ajaxNotificationsBadge, timeout);
+      {% if request.user.is_authenticated %}
+        ajaxNotificationsBadge()
+        setInterval(ajaxNotificationsBadge, timeout);
+      {% endif %}
 
       {% if request.user.is_staff %}
         ajaxApprovalsBadge()

@@ -2,7 +2,7 @@
     {% if prev_sub %}
         <li class="list-group-item list-group-item-info">Previous Submission of this Repeatable Quest</li>
         <li class="list-group-item">
-        <a href="{{ prev_sub.get_absolute_url }}">{{ prev_sub }} ({{ prev_sub.ordinal }})</a> completed on {{ prev_sub.time_completed }}
+        <a href="{{ prev_sub.get_absolute_url }}">{{ prev_sub }}</a> completed on {{ prev_sub.time_completed }}
         </li>
     {% endif %}
 {% endwith %}
