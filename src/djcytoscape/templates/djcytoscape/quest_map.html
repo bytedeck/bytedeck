@@ -8,7 +8,11 @@
         cursor: move;
     }
 {% endblock %}
-{% block heading_inner %}{{ scape.name }} Quest Map{% endblock%}
+{% block heading_inner %}{{ scape.name }} Quest Map 
+{% if personalized_user %}
+    <br><small>of <a href="{% url 'profiles:profile_detail' personalized_user.profile.id %}">{{personalized_user}}</a>, {{ personalized_user.profile}}</small>
+{%endif %}
+{% endblock%}
 {% block content %}
     {% if user.is_staff %}
         <p>
