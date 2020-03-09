@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.contenttypes.models import ContentType
@@ -13,6 +14,9 @@ from django.urls import reverse_lazy
 from djcytoscape.forms import GenerateQuestMapForm
 
 from .models import CytoScape
+from quest_manager.models import QuestSubmission
+
+User = get_user_model()
 
 
 class ScapeUpdate(UpdateView):
@@ -49,11 +53,38 @@ def index(request):
 
 @login_required
 def quest_map(request, scape_id):
-    scape = get_object_or_404(CytoScape, id=scape_id)
-    return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
-                                                          'cytoscape_json': scape.json(),
-                                                          'fullscreen': True,
-                                                          })
+    return quest_map_personalized(request, scape_id, None)
+
+
+@login_required
+def quest_map_personalized(request, scape_id, user_id):
+    if user_id is None:
+        user = request.user
+    else:
+        user = get_object_or_404(User, id=user_id)
+
+    # other than staff, only users can see their own personalized map
+    if user == request.user or request.user.is_staff:
+        # do not personalize for staff accounts
+        if not user.is_staff:
+            completed_qs = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
+            quest_ids = completed_qs.values_list('quest__id', flat=True)
+            # Evalute and remove doubels by converting to a set
+            quest_ids = set(quest_ids)
+            personalized_user = user
+        else:
+            quest_ids = None
+            personalized_user = None
+
+        scape = get_object_or_404(CytoScape, id=scape_id)
+        return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
+                                                              'cytoscape_json': scape.json(),
+                                                              'completed_quests': quest_ids,
+                                                              'fullscreen': True,
+                                                              'personalized_user': personalized_user,
+                                                              }) 
+    else:
+        raise Http404()
 
 
 @login_required
