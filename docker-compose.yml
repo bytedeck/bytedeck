@@ -16,7 +16,7 @@ services:
   web:
     #restart: unless-stopped
     build: . # current directory
-    # env_file: .env
+    env_file: .env
     command: bash -c "python /app/src/manage.py migrate && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
@@ -28,7 +28,7 @@ services:
       - redis
   celery:
     build: .
-    # env_file: .env
+    env_file: .env
     command: bash -c "cd src &&
                       python manage.py migrate &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
@@ -38,7 +38,7 @@ services:
       - redis
   celery-beat:
     build: .
-    # env_file: .env
+    env_file: .env
     command: bash -c "cd src &&
                       python manage.py migrate && 
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
