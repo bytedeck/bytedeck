@@ -16,4 +16,4 @@ install:
   - sudo docker images
  
 script: 
- - docker run hackerspace_web_1 sh -c "python src/manage.py test src && flake8 src"
+ - docker run hackerspace_web sh -c "python src/manage.py test src && flake8 src"
