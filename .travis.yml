@@ -11,4 +11,4 @@ before_install:
   - docker-compose up -d
 
 script: 
- - docker run web sh -c "python src/manage.py test src && flake8 src"
+ - docker run hackerspace_web_1 sh -c "python src/manage.py test src && flake8 src"
