@@ -7,13 +7,11 @@ sudo: required
 services:
  - docker
 
-before_install: 
-  - pip install docker-compose --no-cache-dir
+before_install:
   - docker-compose build
   - docker-compose up -d
-
-install:
-  - sudo docker images
+  - docker ps -a
+  - docker run --env POSTGRES_HOST="hackerspace_db_1" --env REDIS_HOST="hackerspace_redis_1" hackerspace_web /bin/sh -c "python src/manage.py test src && flake8 src"
  
 script: 
- - docker run hackerspace_web sh -c "python src/manage.py test src && flake8 src"
+ - docker run --env POSTGRES_HOST="hackerspace_db_1" --env REDIS_HOST="hackerspace_redis_1" hackerspace_web /bin/sh -c "python src/manage.py test src && flake8 src"
