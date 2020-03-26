@@ -1,4 +1,4 @@
-FROM python:3.5-slim
+FROM python:3.7-slim
 
 #### For development within the container in VS Code ##
 # https://code.visualstudio.com/docs/remote/containers
@@ -39,7 +39,7 @@ WORKDIR /app
 COPY . /app/
 
 # Install our dependancies (currently installing on the base image, not in venv)
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt --no-cache-dir
 
 # The port
 EXPOSE 8000
