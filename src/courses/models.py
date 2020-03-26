@@ -346,6 +346,7 @@ class ExcludedDate(models.Model):
 
 
 class Course(models.Model, ):
+    teachers = models.ManyToManyField(User, through='TeacherCourseProxy')
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -372,6 +373,13 @@ class Course(models.Model, ):
     @staticmethod
     def autocomplete_search_fields():  # for grapelli prereq selection
         return ("title__icontains",)
+
+
+class TeacherCourseProxy(models.Model):
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='courses')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    is_owner = models.BooleanField(default=False)
+    is_creator = models.BooleanField(default=False)
 
 
 class CourseStudentQuerySet(models.query.QuerySet):
