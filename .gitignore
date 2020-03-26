@@ -98,3 +98,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# celerybeat
+*pid
