@@ -1,4 +1,4 @@
-version: '2' # supported by default install on Ubuntu 18.04
+version: '3' # supported by default install on Ubuntu 18.04
 
 services:
   db:
@@ -26,8 +26,8 @@ services:
     depends_on:
       - db
       - redis
-    links: 
-      - db:db
+    # links: 
+    #   - db:db
   celery:
     build: .
     env_file: .env
