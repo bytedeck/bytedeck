@@ -5,7 +5,10 @@ python:
 services:
  - docker
 
-before_script: pip install docker-compose --no-cache-dir
+before_install: 
+  - pip install docker-compose --no-cache-dir
+  - docker-compose build
+  - docker-compose up -d
 
 script: 
- - docker-compose -f docker-compose.yml run web sh -c "python src/manage.py test src && flake8 src"
+ - docker run web sh -c "python src/manage.py test src && flake8 src"
