@@ -36,8 +36,66 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # EMAIL_USE_TLS = True
 
 # Application definition
+SHARED_APPS = (
+    'tenant_schemas',
+    'tenant',
+    'django.contrib.contenttypes',
+
+
+
+)
+
+TENANT_APPS = (
+    'django.contrib.contenttypes',
+
+    'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.sites',
+    'django.contrib.messages',
+    'django.contrib.admin',
+    'django.contrib.staticfiles',
+
+    'django.contrib.flatpages',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+
+    'grappelli',
+    'crispy_forms',
+    'django_summernote',
+    'bootstrap_datepicker_plus',
+    'djconfig',
+    'embed_video',
+    'django_select2',
+    'jchart',
+    'url_or_relative_url_field',
+    'import_export',
+    'postman',
+    'colorful',
+    'attachments',
+    'hackerspace_online',
+    'django_celery_beat',
+
+
+    # local apps
+    'quest_manager',
+    'profile_manager',
+    'announcements',
+    'comments',
+    'notifications',
+    'courses',
+    'prerequisites',
+    'badges',
+    'suggestions',
+    'djcytoscape',
+    'portfolios',
+    'utilities',
+)
+
 
 INSTALLED_APPS = (
+    'tenant_schemas',
+    'tenant',
 
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
@@ -128,6 +186,7 @@ MIDDLEWARE += [
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
+    'tenant_schemas.middleware.TenantMiddleware',
 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -443,3 +502,23 @@ POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
 
 # https://github.com/charettes/django-colorful
 GRAPPELLI_CLEAN_INPUT_TYPES= False
+
+
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
+POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
+DATABASES = {
+   'default': {
+        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PASSWORD': 'hellonepal',
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT
+    }
+}
+
+DATABASE_ROUTERS = (
+    'tenant_schemas.routers.TenantSyncRouter',
+)
+
+TENANT_MODEL = "tenant.Tenant"
