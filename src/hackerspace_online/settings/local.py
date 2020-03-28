@@ -25,7 +25,7 @@ DEBUG = True
 
 INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
-ALLOWED_HOSTS = ['test.localhost']
+ALLOWED_HOSTS = ['*']
 
 EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
 EMAIL_FILE_PATH = 'sentmail/' # change this to a proper location

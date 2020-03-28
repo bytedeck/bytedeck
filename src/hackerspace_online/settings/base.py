@@ -103,7 +103,7 @@ TENANT_APPS = (
 
 INSTALLED_APPS = (
     'tenant_schemas',
-    'tenant',
+    'tenant.apps.TenantConfig',
 
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
