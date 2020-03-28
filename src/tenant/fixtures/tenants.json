@@ -1,13 +1,13 @@
 [
-    {
-        "model": "tenant.tenant",
-        "pk": 1,
-        "fields": {
-            "domain_url": "localhost",
-            "schema_name": "public",
-            "name": "Public test",
-            "desc": "",
-            "created_on": "2020-03-27"
-        }
+  {
+    "model": "tenant.tenant",
+    "pk": 1,
+    "fields": {
+      "domain_url": "lmsclient.scssconsulting.com.au",
+      "schema_name": "public",
+      "name": "Public test",
+      "desc": "",
+      "created_on": "2020-03-27"
     }
+  }
 ]
