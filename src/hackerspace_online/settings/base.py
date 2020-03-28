@@ -47,6 +47,8 @@ SHARED_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
 
+    'django_celery_beat',
+
     'djconfig',
     'grappelli',
     'crispy_forms',
@@ -79,10 +81,8 @@ TENANT_APPS = (
     'allauth.account',
     'allauth.socialaccount',
 
-
     'attachments',
     'hackerspace_online',
-    'django_celery_beat',
 
 
     # local apps
