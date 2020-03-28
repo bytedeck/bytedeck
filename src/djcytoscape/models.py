@@ -221,9 +221,18 @@ class CytoElement(models.Model):
     href = models.URLField(blank=True, null=True)
 
     objects = CytoElementManager()
+    
+    class Meta:
+        # elements neet to be ordered with nodes first, then edges, or the edges might try to 
+        # connect nodes that don't exist yet and mess up creation of the cytoscape
+        # e.g. https://stackoverflow.com/questions/60825627/cytoscape-js-and-dagre-result-in-one-node-positioned-awkwardly
+
+        # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before 
+        # other nodes within that comound node (campaign)
+        ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
 
     def __str__(self):
-        return str(self.id) + ": " + str(self.label)
+        return str(self.id) + ": " + str(self.label) if self.label else "EDGE"
 
     def get_data_dict(self):
         """:return data_dict text field as a python dictionary."""
@@ -597,7 +606,8 @@ class CytoScape(models.Model):
     objects = CytoScapeManager()
 
     def json(self):
-        elements = CytoElement.objects.all_for_scape(self)
+        elements = self.cytoelement_set.all()
+        print(elements)
 
         json_str = "cytoscape({ \n"
         json_str += "  container: document.getElementById('" + self.container_element_id + "'), \n"
