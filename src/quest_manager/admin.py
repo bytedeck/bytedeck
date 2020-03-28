@@ -1,23 +1,27 @@
 from django.contrib import admin
+from django.db import connection
 from django.contrib import messages
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
-from django_summernote.admin import SummernoteModelAdmin
-# Register your models here.
-from import_export import resources
-from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
-from import_export.fields import Field
+from django.contrib.contenttypes.models import ContentType
 
-from prerequisites.admin import PrereqInline
+from import_export import resources
+from import_export.fields import Field
+from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
+
+from django_summernote.admin import SummernoteModelAdmin
+
 from prerequisites.models import Prereq
-from .models import Quest, Category, QuestSubmission, CommonData
+from prerequisites.admin import PrereqInline
+
 from .signals import tidy_html
+from .models import Quest, Category, QuestSubmission, CommonData
 
 
 def publish_selected_quests(modeladmin, request, queryset):
     num_updates = queryset.update(visible_to_students=True, editor=None)
 
-    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(str(num_updates)) # noqa
+    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(
+        str(num_updates))  # noqa
     messages.success(request, msg_str)
 
 
@@ -159,7 +163,8 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
         PrereqInline,
     ]
 
-    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]  # noqa
+    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests,
+                                           prettify_code_selected_quests, fix_whitespace_bug]  # noqa
 
     change_list_filter_template = "admin/filter_listing.html"
 
@@ -173,10 +178,11 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
     # ]
 
 
-admin.site.register(Quest, QuestAdmin)
-admin.site.register(Category)
-admin.site.register(CommonData, CommonDataAdmin)
-admin.site.register(QuestSubmission, QuestSubmissionAdmin)
-# admin.site.register(Prereq)
-# admin.site.register(Feedback, FeedbackAdmin)
-# admin.site.register(TaggedItem)
+if connection.schema_name != 'public':
+    admin.site.register(Quest, QuestAdmin)
+    admin.site.register(Category)
+    admin.site.register(CommonData, CommonDataAdmin)
+    admin.site.register(QuestSubmission, QuestSubmissionAdmin)
+    # admin.site.register(Prereq)
+    # admin.site.register(Feedback, FeedbackAdmin)
+    # admin.site.register(TaggedItem)

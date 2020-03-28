@@ -1,7 +1,6 @@
 from django.contrib import admin
-# from django.contrib.contenttypes.admin  import GenericTabularInline
+from django.db import connection
 
-# Register your models here.
 from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade, MarkRange
 
 
@@ -45,11 +44,12 @@ class CourseStudentAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     search_fields = ['user__username']
 
 
-admin.site.register(CourseStudent, CourseStudentAdmin)
-admin.site.register(Semester, SemesterAdmin)
-admin.site.register(Block)
-admin.site.register(Course)
-admin.site.register(DateType)
-admin.site.register(Grade)
-admin.site.register(MarkRange, MarkRangeAdmin)
-admin.site.register(Rank, RankAdmin)
+if connection.schema_name != 'public':
+    admin.site.register(CourseStudent, CourseStudentAdmin)
+    admin.site.register(Semester, SemesterAdmin)
+    admin.site.register(Block)
+    admin.site.register(Course)
+    admin.site.register(DateType)
+    admin.site.register(Grade)
+    admin.site.register(MarkRange, MarkRangeAdmin)
+    admin.site.register(Rank, RankAdmin)

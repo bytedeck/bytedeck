@@ -1,6 +1,6 @@
 from django.contrib import admin
+from django.db import connection
 
-# Register your models here.
 from .models import Comment, Document
 
 
@@ -11,5 +11,6 @@ class CommentAdmin(admin.ModelAdmin):
         model = Comment
 
 
-admin.site.register(Comment, CommentAdmin)
-admin.site.register(Document)
+if connection.schema_name != 'public':
+    admin.site.register(Comment, CommentAdmin)
+    admin.site.register(Document)

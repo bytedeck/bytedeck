@@ -1,11 +1,11 @@
 from django.contrib import admin
+from django.db import connection
 from django.contrib import messages
+from django.contrib.auth.models import User
 
 from portfolios.models import Artwork
-from django.contrib.auth.models import User
-from .models import Profile, create_profile
 
-# Register your models here.
+from .models import Profile, create_profile
 
 
 def create_missing_profiles(modeladmin, request, queryset):
@@ -46,5 +46,6 @@ class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     #     return qs
 
 
-admin.site.register(Profile, ProfileAdmin)
-admin.site.register(Artwork)
+if connection.schema_name != 'public':
+    admin.site.register(Profile, ProfileAdmin)
+    admin.site.register(Artwork)

@@ -1,6 +1,7 @@
 from django.contrib import admin
+from django.db import connection
 
-# Register your models here.
 from .models import Notification
 
-admin.site.register(Notification)
+if connection.schema_name != 'public':
+    admin.site.register(Notification)

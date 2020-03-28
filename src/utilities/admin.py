@@ -1,6 +1,6 @@
 from django.contrib import admin
+from django.db import connection
 
-# Register your models here.
 from utilities.models import ImageResource, MenuItem, VideoResource
 
 
@@ -16,6 +16,7 @@ class VideoResourceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'video_file')
 
 
-admin.site.register(ImageResource, ImageResourceAdmin)
-admin.site.register(MenuItem, MenuItemAdmin)
-admin.site.register(VideoResource, VideoResourceAdmin)
+if connection.schema_name != 'public':
+    admin.site.register(MenuItem, MenuItemAdmin)
+    admin.site.register(ImageResource, ImageResourceAdmin)
+    admin.site.register(VideoResource, VideoResourceAdmin)
