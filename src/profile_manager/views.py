@@ -40,7 +40,7 @@ class ProfileList(AllowNonPublicViewMixin, ListView):
         return super(ProfileList, self).dispatch(request, *args, **kwargs)
 
 
-class ProfileListCurrent(AllowNonPublicViewMixin, ProfileList):
+class ProfileListCurrent(ProfileList):
     def get_queryset(self):
         profiles_qs = Profile.objects.all_for_active_semester()
         return self.queryset_append(profiles_qs)
