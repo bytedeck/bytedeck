@@ -8,3 +8,6 @@ class Tenant(TenantMixin):
     name = models.CharField(max_length=100)
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return '%s - %s' % (self.schema_name, self.domain_url)
