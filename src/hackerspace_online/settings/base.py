@@ -41,7 +41,26 @@ SHARED_APPS = (
     'tenant',
     'django.contrib.contenttypes',
 
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'django.contrib.sites',
+    'django.contrib.sessions',
+    'django.contrib.messages',
 
+    'djconfig',
+    'grappelli',
+    'crispy_forms',
+    'django_summernote',
+    'bootstrap_datepicker_plus',
+    'embed_video',
+    'django_select2',
+    'jchart',
+    'url_or_relative_url_field',
+    'import_export',
+    'postman',
+    'colorful',
+
+    'profile_manager',
 
 )
 
@@ -60,18 +79,7 @@ TENANT_APPS = (
     'allauth.account',
     'allauth.socialaccount',
 
-    'grappelli',
-    'crispy_forms',
-    'django_summernote',
-    'bootstrap_datepicker_plus',
-    'djconfig',
-    'embed_video',
-    'django_select2',
-    'jchart',
-    'url_or_relative_url_field',
-    'import_export',
-    'postman',
-    'colorful',
+
     'attachments',
     'hackerspace_online',
     'django_celery_beat',
