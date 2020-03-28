@@ -10,10 +10,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      # POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified      
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_NAME: ${DBNAME}
+      #POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified      
+      POSTGRES_HOST_AUTH_METHOD: "md5"  # to enforce password auth from the beginning
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER} 
+      POSTGRES_PASSWORD: ${POSTGRES_PWD}
 
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6

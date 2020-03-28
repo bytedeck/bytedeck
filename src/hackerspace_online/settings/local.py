@@ -40,9 +40,13 @@ POSTMAN_MAILER_APP = 'django.core.mail'
 
 # Database
 # https://docs.djangoproject.com/en/1.8/ref/settings/#databases
+
 POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
-POSTGRES_PWD = os.environ.get('POSTGRES_PASSWORD', None)
+POSTGRES_PWD = os.environ.get('POSTGRES_PWD', None)
+POSTGRES_USER = os.environ.get("POSTGRES_USER", 'postgres')
+DBNAME = os.environ.get('POSTGRES_DB', 'postgres')
+
 
 DATABASES = {
     # 'default': {
@@ -51,11 +55,11 @@ DATABASES = {
     # }
    'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
-        'USER': 'postgres',
+        'NAME': DBNAME,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PWD,
         'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT,
-        'PASSWORD': POSTGRES_PWD
+        'PORT': POSTGRES_PORT
     }
 }
 
