@@ -9,6 +9,8 @@ services:
       - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6
     ports:
