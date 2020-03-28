@@ -1,9 +1,9 @@
 from django.contrib import admin
-from django.db import connection
 from django.contrib import messages
 from django.contrib.auth.models import User
 
 from portfolios.models import Artwork
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 from .models import Profile, create_profile
 
@@ -22,7 +22,7 @@ def create_missing_profiles(modeladmin, request, queryset):
         messages.success(request, msg_str)
 
 
-class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
+class ProfileAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):  # use SummenoteModelAdmin
     list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'student_number', 'grad_year', 'is_TA',)
 
     actions = [create_missing_profiles]
@@ -46,6 +46,9 @@ class ProfileAdmin(admin.ModelAdmin):  # use SummenoteModelAdmin
     #     return qs
 
 
-if connection.schema_name != 'public':
-    admin.site.register(Profile, ProfileAdmin)
-    admin.site.register(Artwork)
+class ArtworkAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+admin.site.register(Profile, ProfileAdmin)
+admin.site.register(Artwork, ArtworkAdmin)

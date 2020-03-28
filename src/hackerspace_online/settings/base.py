@@ -50,19 +50,19 @@ SHARED_APPS = (
     'django_celery_beat',
 
     'djconfig',
+    'postman',
+
     'grappelli',
     'crispy_forms',
-    'django_summernote',
     'bootstrap_datepicker_plus',
     'embed_video',
     'django_select2',
     'jchart',
     'url_or_relative_url_field',
     'import_export',
-    'postman',
     'colorful',
 
-    'profile_manager',
+    # 'profile_manager',
 
 )
 
@@ -83,9 +83,11 @@ TENANT_APPS = (
 
     'attachments',
     'hackerspace_online',
-
+    'django_summernote',
+    'postman',
 
     # local apps
+    'djconfig',
     'quest_manager',
     'profile_manager',
     'announcements',
@@ -188,14 +190,12 @@ INSTALLED_APPS = (
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
 # SITE_ID = 1
-MIDDLEWARE = []
 
-MIDDLEWARE += [
+MIDDLEWARE = [
+    'tenant_schemas.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
-    'tenant_schemas.middleware.TenantMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

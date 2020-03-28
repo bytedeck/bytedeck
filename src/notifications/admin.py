@@ -1,7 +1,11 @@
 from django.contrib import admin
-from django.db import connection
 
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .models import Notification
 
-if connection.schema_name != 'public':
-    admin.site.register(Notification)
+
+class NotificationAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+admin.site.register(Notification, NotificationAdmin)

@@ -10,8 +10,11 @@ from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
 
 from django_summernote.admin import SummernoteModelAdmin
 
+from tenant_schemas.utils import get_public_schema_name
+
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 from .signals import tidy_html
 from .models import Quest, Category, QuestSubmission, CommonData
@@ -57,11 +60,11 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
-class CommonDataAdmin(SummernoteModelAdmin):
+class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin):
     pass
 
 
-class QuestSubmissionAdmin(admin.ModelAdmin):
+class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('id', 'user', 'quest', 'is_completed', 'is_approved', 'semester')
     list_filter = ['is_completed', 'is_approved', 'semester']
     search_fields = ['user__username']
@@ -152,7 +155,7 @@ class QuestResource(resources.ModelResource):
             self.generate_campaign(parent_quest, data_dict)
 
 
-class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
+class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
                     'common_data', 'campaign', 'editor')
@@ -178,11 +181,14 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
     # ]
 
 
-if connection.schema_name != 'public':
-    admin.site.register(Quest, QuestAdmin)
-    admin.site.register(Category)
-    admin.site.register(CommonData, CommonDataAdmin)
-    admin.site.register(QuestSubmission, QuestSubmissionAdmin)
-    # admin.site.register(Prereq)
-    # admin.site.register(Feedback, FeedbackAdmin)
-    # admin.site.register(TaggedItem)
+class CategoryAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+admin.site.register(Quest, QuestAdmin)
+admin.site.register(Category, CategoryAdmin)
+admin.site.register(CommonData, CommonDataAdmin)
+admin.site.register(QuestSubmission, QuestSubmissionAdmin)
+# admin.site.register(Prereq)
+# admin.site.register(Feedback, FeedbackAdmin)
+# admin.site.register(TaggedItem)

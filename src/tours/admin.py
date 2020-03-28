@@ -1,19 +1,18 @@
 from django.contrib import admin
-from django.db import connection
 
 from .models import Tour, Step
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 
 class StepInline(admin.StackedInline):
     model = Step
 
 
-class TourAdmin(admin.ModelAdmin):
+class TourAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = [
         StepInline,
     ]
     list_display = ('name', 'active')
 
 
-if connection.schema_name != 'public':
-    admin.site.register(Tour, TourAdmin)
+admin.site.register(Tour, TourAdmin)

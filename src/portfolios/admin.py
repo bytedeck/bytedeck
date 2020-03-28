@@ -1,7 +1,11 @@
 from django.contrib import admin
-from django.db import connection
 
 from portfolios.models import Portfolio
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
-if connection.schema_name != 'public':
-    admin.site.register(Portfolio)
+
+class PortfolioAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+admin.site.register(Portfolio, PortfolioAdmin)

@@ -1,5 +1,3 @@
-from .base import * # noqa
-
 try:
     # this file will only exists on the production server
     from .production_hackerspace import *
