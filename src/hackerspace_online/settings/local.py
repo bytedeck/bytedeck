@@ -4,7 +4,7 @@
 import os
 from .base import *
 
-#root of project: ...../src
+# root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # INSTALLED_APPS += (
@@ -28,7 +28,7 @@ INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 ALLOWED_HOSTS = ['*']
 
 EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
-EMAIL_FILE_PATH = 'sentmail/' # change this to a proper location
+EMAIL_FILE_PATH = 'sentmail/'  # change this to a proper location
 
 POSTMAN_MAILER_APP = 'django.core.mail'
 # EMAIL_HOST = 'smtp.gmail.com'
@@ -66,14 +66,14 @@ POSTMAN_MAILER_APP = 'django.core.mail'
 #STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
 
 STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static_in_project",  "static_root"),
+    os.path.join(BASE_DIR, "static_in_project", "static_root"),
     # '/var/www/static/',
 )
 
 MEDIA_URL = "/media/"
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set properly in production settings for deployment
-MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project",  "media_root")
+MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project", "media_root")
 
 
 # END STATIC #######################################

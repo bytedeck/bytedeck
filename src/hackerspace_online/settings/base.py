@@ -183,7 +183,7 @@ INSTALLED_APPS = (
     'djcytoscape',
     'portfolios',
     'utilities',
-   # 'tours',
+    # 'tours',
 )
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
@@ -369,7 +369,7 @@ SUMMERNOTE_CONFIG = {
             ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
             # ['height', ['height']],
             ['table', ['table']],
-            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math',]],  # , 'nugget']],
+            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math', ]],  # , 'nugget']],
             ['view', ['codeview']],
             ['help', ['help']],
         ],
@@ -503,19 +503,23 @@ CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' up
 # Django Postman
 POSTMAN_DISALLOW_ANONYMOUS = True
 # POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
-POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
+
+
+def POSTMAN_NOTIFICATION_APPROVAL(u): return u.profile.get_messages_by_email
+
+
 POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
 POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
 # POSTMAN_SHOW_USER_AS = lambda u: u.id
 
 # https://github.com/charettes/django-colorful
-GRAPPELLI_CLEAN_INPUT_TYPES= False
+GRAPPELLI_CLEAN_INPUT_TYPES = False
 
 
 POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
 DATABASES = {
-   'default': {
+    'default': {
         'ENGINE': 'tenant_schemas.postgresql_backend',
         'NAME': 'postgres',
         'USER': 'postgres',
@@ -530,3 +534,5 @@ DATABASE_ROUTERS = (
 )
 
 TENANT_MODEL = "tenant.Tenant"
+
+DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'
