@@ -221,7 +221,7 @@ class CytoElement(models.Model):
     href = models.URLField(blank=True, null=True)
 
     objects = CytoElementManager()
-    
+
     class Meta:
         # elements neet to be ordered with nodes first, then edges, or the edges might try to 
         # connect nodes that don't exist yet and mess up creation of the cytoscape
