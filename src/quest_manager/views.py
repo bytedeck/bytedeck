@@ -50,6 +50,7 @@ class QuestCreate(UserPassesTestMixin, CreateView):
         context = super(QuestCreate, self).get_context_data(**kwargs)
         context['heading'] = "Create New Quest"
         context['action_value'] = ""
+        context['cancel_url'] = reverse('quests:quests')
         context['submit_btn_value'] = "Create"
         return context
 
@@ -90,6 +91,7 @@ class QuestUpdate(UserPassesTestMixin, UpdateView):
         context = super(QuestUpdate, self).get_context_data(**kwargs)
         context['heading'] = "Update Quest"
         context['action_value'] = ""
+        context['cancel_url'] = reverse('quests:quest_detail', args=[self.object.id])
         context['submit_btn_value'] = "Update"
         return context
 
@@ -648,7 +650,7 @@ def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
-    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are 
+    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are
          recalculated directly/synchromously, so that their available quest list is up to date
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
