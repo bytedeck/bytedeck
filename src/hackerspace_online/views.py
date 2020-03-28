@@ -1,14 +1,17 @@
-from courses.models import Semester
 from django.http import Http404
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from django.contrib.admin.views.decorators import staff_member_required
+
+from djconfig import config
+
+from courses.models import Semester
+from .forms import HackerspaceConfigForm
+from tenant.views import allow_non_public_view
 from quest_manager.models import QuestSubmission
 
-from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
-from django.shortcuts import render, redirect
-from djconfig import config
-from .forms import HackerspaceConfigForm
 
-
+@allow_non_public_view
 def home(request):
     if request.user.is_staff:
         return redirect('quests:approvals')
@@ -19,10 +22,12 @@ def home(request):
     return render(request, "home.html", {})
 
 
+@allow_non_public_view
 def simple(request):
     return render(request, "secret.html", {})
 
 
+@allow_non_public_view
 @staff_member_required
 def config_view(request):
     if not request.user.is_superuser:
