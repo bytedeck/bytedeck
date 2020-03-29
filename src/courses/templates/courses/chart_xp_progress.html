@@ -6,6 +6,8 @@
 
   /*jshint esversion: 6 */
 
+  var max_xp = {{courses.first.course.xp_for_100_percent}} 
+
   var ctx = document.getElementById("myChart");
 
   function DataPoint(x, y) {
@@ -124,9 +126,9 @@
                   id: "y-axis-XP",
                   position: 'left',
                   ticks: {
-                      max: 1000,
+                      max: max_xp,
                       min: 0,
-                      stepSize: 50,
+                      stepSize: max_xp/20,
                   },
 
                   scaleLabel: {
@@ -237,10 +239,11 @@
     ChillaxLineData.data = [];
     GradeAData.data = [];
     GradeFData.data = [];
+
     for (var i = 1; i <= days; i++) {
-        var p = new DataPoint(i, Math.floor(i * 725 / days));
-        var pA = new DataPoint(i, Math.floor(i * 855 / days));
-        var pF = new DataPoint(i, Math.floor(i * 495 / days));
+        var p = new DataPoint(i, Math.floor(i * max_xp*0.725 / days));
+        var pA = new DataPoint(i, Math.floor(i * max_xp*0.855 / days));
+        var pF = new DataPoint(i, Math.floor(i * max_xp*0.495 / days));
         ChillaxLineData.data.push(p);
         GradeAData.data.push(pA);
         GradeFData.data.push(pF);
