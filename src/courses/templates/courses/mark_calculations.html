@@ -69,7 +69,18 @@
               <pre>{{ xp_per_course|floatformat }}/{{ obj.semester.fraction_complete|floatformat:3 }} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
             ">
               {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</a>
-            by the end of the semester, which converts to {{ obj.user.profile.mark|floatformat }}%
+            by the end of the semester.
+          </li>
+          <li>
+            Your course is out of {{courses.first.course.xp_for_100_percent}} XP, which means that if you get {{courses.first.course.xp_for_100_percent}} XP, you'll have 100% in the course.
+          </li>
+          <li>
+            The means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
+               data-placement="top" data-html="true"
+               data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester, 
+               and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
+              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.user.profile.mark|floatformat }} % </pre>
+            ">{{ obj.user.profile.mark|floatformat }}%</a>
           </li>
         </ul>
       </div>
@@ -90,7 +101,7 @@
           <a tabindex="0" data-toggle="popover" data-trigger="hover"
              data-placement="top" data-html="true"
              data-content="You are averaging {{ obj.xp_per_day_ave|floatformat }}
-            XP per day XP, and there are a total of {{ obj.semester.num_days }}
+            XP per day, and there are a total of {{ obj.semester.num_days }}
             days of class in the semester:<br/><br/>
             <pre>{{ obj.xp_per_day_ave|floatformat }} x {{ obj.semester.num_days }} = {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP</pre>
           ">
