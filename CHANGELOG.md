@@ -4,6 +4,13 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [0.25.0] 2020-03-29
+* New personlized maps
+* [teachers] New map option: taxi-edges
+* [teachers] Max-XP per course (default = 1000)
+* [bugfix] Don't allow auto publication of announcements with past date
+* [bugfix] Various minor bugfixes
+
 ### [0.24.1] 2020-02-27
 
 * [bugfix] Login required for maps

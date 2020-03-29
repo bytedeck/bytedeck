@@ -190,7 +190,10 @@ class CytoElement(models.Model):
     GROUP_CHOICES = ((NODES, 'nodes'), (EDGES, 'edges'))
     # name = models.CharField(max_length=200)
     scape = models.ForeignKey('CytoScape', on_delete=models.CASCADE)
-
+    selector_id = models.CharField(
+        max_length=16, blank=True, null=True,
+        help_text="unique id in the form of 'model-#' where the model = Quest (etc) and # = object id."
+    )
     group = models.CharField(max_length=6, choices=GROUP_CHOICES, default=NODES)
     # TODO: make a callable for limit choices to, so that limited to nodes within the same scape
     data_parent = models.ForeignKey('self', blank=True, null=True, related_name="parents",
@@ -219,8 +222,17 @@ class CytoElement(models.Model):
 
     objects = CytoElementManager()
 
+    class Meta:
+        # elements neet to be ordered with nodes first, then edges, or the edges might try to
+        # connect nodes that don't exist yet and mess up creation of the cytoscape
+        # e.g. https://stackoverflow.com/questions/60825627/cytoscape-js-and-dagre-result-in-one-node-positioned-awkwardly
+
+        # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before
+        # other nodes within that comound node (campaign)
+        ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
+
     def __str__(self):
-        return str(self.id) + ": " + str(self.label)
+        return str(self.id) + ": " + str(self.label) if self.label else "EDGE"
 
     def get_data_dict(self):
         """:return data_dict text field as a python dictionary."""
@@ -265,12 +277,22 @@ class CytoElement(models.Model):
             # json_str += "        edgeWeight: 1, \n"  # '" + str(self.edge_weight) + "',\n"
         if self.href:
             json_str += "        href: '" + self.href + "',\n"
+        if self.selector_id:
+            json_str += "        " + self.selector_id + ",\n"
         json_str += "      },\n "  # end data
         if self.classes:
             json_str += "     classes: '" + self.classes + "',\n"
         json_str += "    },\n "
 
         return json_str
+
+    @staticmethod
+    def generate_selector_id(obj):
+        """
+        unique id in the form of 'model-#' where the model = Quest (etc) and # = object id.
+        Examples: Quest-21 or Badge-5
+        """
+        return str(type(obj).__name__) + ": " + str(obj.id)
 
 
 class TempCampaignNode(object):
@@ -584,7 +606,8 @@ class CytoScape(models.Model):
     objects = CytoScapeManager()
 
     def json(self):
-        elements = CytoElement.objects.all_for_scape(self)
+        elements = self.cytoelement_set.all()
+        print(elements)
 
         json_str = "cytoscape({ \n"
         json_str += "  container: document.getElementById('" + self.container_element_id + "'), \n"
@@ -606,7 +629,7 @@ class CytoScape(models.Model):
         # json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
         for element in elements:
             if element.id_styles:
-                json_str += self.get_selector_styles_json('#' + str(element.id), element.id_styles)
+                json_str += self.get_selector_styles_json(str(element.id), element.id_styles)
         json_str += "  ], \n"  # end style: [
         json_str += self.style_set.get_init_options()
         json_str += "});"
@@ -616,7 +639,7 @@ class CytoScape(models.Model):
     @staticmethod
     def get_selector_styles_json(selector, styles):
         json_str = "    { \n"
-        json_str += "      selector: '" + selector + "', \n"
+        json_str += "      selector: '#" + selector + "', \n"
         json_str += "      style: { \n"
         json_str += styles
         json_str += "      } \n"
@@ -673,6 +696,7 @@ class CytoScape(models.Model):
         new_node, created = CytoElement.objects.get_or_create(
             scape=self,
             group=CytoElement.NODES,
+            selector_id=CytoElement.generate_selector_id(obj),
             label=self.generate_label(obj),
             defaults={'id_styles': "'background-image': '" + img_url + "'",
                       'classes': type(obj).__name__, }
