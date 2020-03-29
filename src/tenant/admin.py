@@ -33,9 +33,9 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
 
     def save_model(self, request, obj, form, change):
-        obj.schema_name = obj.name.replace('-', '_')
         if obj.name.lower() == "public":
             return
+        obj.schema_name = obj.name.replace('-', '_')
         obj.domain_url = "%s.%s" % (obj.name.lower(), settings.WEB_URL)
         obj.save()
 
