@@ -37,7 +37,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             return
         if not change:
             obj.schema_name = obj.name.replace('-', '_')
-        obj.domain_url = "%s.%s" % (obj.name.lower(), settings.WEB_URL)
+            obj.domain_url = "%s.%s" % (obj.name.lower(), settings.WEB_URL)
         obj.save()
 
 
