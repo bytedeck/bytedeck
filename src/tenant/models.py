@@ -8,7 +8,7 @@ from tenant_schemas.postgresql_backend.base import _check_schema_name
 
 
 def check_tenant_name(name):
-    if not re.match(re.compile(r'^([a-zA-Z][a-zA-Z0-9]*(\-?[a-zA-Z]+)*[a-zA-Z0-9]*){,62}$'), name):
+    if not re.match(re.compile(r'^([a-zA-Z][a-zA-Z0-9]*(\-?[a-zA-Z0-9]+)*){,62}$'), name):
         raise ValidationError("Invalid string used for the tenant name.")
 
 
