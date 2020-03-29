@@ -348,6 +348,7 @@ class ExcludedDate(models.Model):
 class Course(models.Model, ):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+    xp_for_100_percent = models.PositiveIntegerField(default=1000)
     active = models.BooleanField(default=True)
 
     def __str__(self):
@@ -500,7 +501,7 @@ class CourseStudent(models.Model):
     def calc_mark(self, xp):
         fraction_complete = self.semester.fraction_complete()
         if fraction_complete > 0:
-            return xp / fraction_complete / 10.0
+            return xp / fraction_complete * 100 / self.course.xp_for_100_percent
         else:
             return 0
 
