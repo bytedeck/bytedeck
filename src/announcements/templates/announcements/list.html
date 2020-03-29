@@ -10,14 +10,15 @@
 {% block content %}
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
-  <div id="{{object.id}}" 
+  <div id="{{object.id}}"
     class="panel accordian anchor
     {% if object.id == active_id %} active active-anchor{% endif %}
     {% if object|notification_unread:request.user %}panel-warning note-unread
-    {% elif object.not_yet_released %}panel-warning
-    {% elif object.draft %}panel-warning
-    {% elif object.sticky %}panel-info
-    {% else %}panel-default
+      {% elif object.not_yet_released %}panel-warning
+      {% elif object.draft %}panel-warning
+      {% elif object.sticky %}panel-info
+    {% else %}
+      panel-default
     {% endif %}">
     <div
       {% if object|notification_unread:request.user %}
@@ -58,7 +59,7 @@
           </div>
           {% endif %}
           <!-- <i class="fa fa-quote-left fa-2x pull-left"></i> -->
-          <div>
+          <div class="clearfix">
             {{object.content|safe}}
           </div>
         </li>
