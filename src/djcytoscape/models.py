@@ -223,11 +223,11 @@ class CytoElement(models.Model):
     objects = CytoElementManager()
 
     class Meta:
-        # elements neet to be ordered with nodes first, then edges, or the edges might try to 
+        # elements neet to be ordered with nodes first, then edges, or the edges might try to
         # connect nodes that don't exist yet and mess up creation of the cytoscape
         # e.g. https://stackoverflow.com/questions/60825627/cytoscape-js-and-dagre-result-in-one-node-positioned-awkwardly
 
-        # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before 
+        # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before
         # other nodes within that comound node (campaign)
         ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
 
