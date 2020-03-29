@@ -162,8 +162,7 @@ class CustomSignupForm(SignupForm):
     def clean(self):
         super(CustomSignupForm, self).clean()
         code = self.cleaned_data['course_code']
-        if code != HackerspaceConfigForm.hr_course_code:
-            print("In ELSE IF")
+        if code != str(HackerspaceConfigForm.hr_course_code[0]):
             raise forms.ValidationError("Invalid course code provided.")
 
     def signup(self, request, user):
