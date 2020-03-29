@@ -34,4 +34,3 @@ class AnnouncementForm(forms.ModelForm):
                 'An announcement that is auto published cannot have a past release date.'
             )
         return data
-
