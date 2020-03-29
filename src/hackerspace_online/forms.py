@@ -10,29 +10,13 @@ from utilities.models import ImageResource
 from badges.models import Badge
 from courses.models import Semester
 
+from django.core.validators import RegexValidator
 
-class CustomSignupForm(SignupForm):
-    first_name = forms.CharField(
-        max_length=30, 
-        label='First name',
-        help_text="Please use the name that matches your school records.  You can put a different name in your profile.")  # noqa
-    last_name = forms.CharField(
-        max_length=30, 
-        label='Last name',
-        help_text='Please use the name that matches your school records.')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['username'].help_text = 'Your student number, if you are a student.'
-
-    def signup(self, request, user):
-        user.first_name = self.cleaned_data['first_name']
-        user.last_name = self.cleaned_data['last_name']
-        user.save()
-        return user
 
 
 class HackerspaceConfigForm(ConfigForm):
+
+    hr_course_code = 9999,
 
     hs_site_name = forms.CharField(label="Site Name, Full", initial="Timberline's Digital Hackerspace", required=True,
                                    max_length=50, help_text="This name will appear throughout the site.")
@@ -157,3 +141,33 @@ class HackerspaceConfigForm(ConfigForm):
             return self.cleaned_data['hs_default_icon'].pk
         else:
             return None
+
+class CustomSignupForm(SignupForm):
+    first_name = forms.CharField(
+        max_length=30, 
+        label='First name',
+        help_text="Please use the name that matches your school records.  You can put a different name in your profile.")  # noqa
+    last_name = forms.CharField(
+        max_length=30, 
+        label='Last name',
+        help_text='Please use the name that matches your school records.')
+    course_code = forms.CharField(max_length=4, label="Please Enter The Course Code",
+        validators=[RegexValidator(r'^\d{1,10}$')],
+        help_text = 'Please use the code that matches your school course.')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].help_text = 'Your student number, if you are a student.'
+
+    def clean(self):
+        super(CustomSignupForm, self).clean()
+        code = self.cleaned_data['course_code']
+        if code != HackerspaceConfigForm.hr_course_code:
+            print("In ELSE IF")
+            raise forms.ValidationError("Invalid course code provided.")
+
+    def signup(self, request, user):
+        user.first_name = self.cleaned_data['first_name']
+        user.last_name = self.cleaned_data['last_name']
+        user.save()
+        return user
