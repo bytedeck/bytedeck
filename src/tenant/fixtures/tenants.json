@@ -3,7 +3,7 @@
     "model": "tenant.tenant",
     "pk": 1,
     "fields": {
-      "domain_url": "lmsclient.scssconsulting.com.au",
+      "domain_url": "bytedeck.com",
       "schema_name": "public",
       "name": "Public test",
       "desc": "",

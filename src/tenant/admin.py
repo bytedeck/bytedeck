@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db import connection
 from tenant_schemas.utils import get_public_schema_name
 
@@ -29,6 +31,11 @@ class NonPublicSchemaOnlyAdminAccessMixin:
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
+
+    def save_model(self, request, obj, form, change):
+        obj.schema_name = obj.name.lower()
+        obj.domain_url = "%s.%s" % (obj.schema_name, settings.WEB_URL)
+        obj.save()
 
 
 admin.site.register(Tenant, TenantAdmin)
