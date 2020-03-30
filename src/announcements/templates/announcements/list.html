@@ -15,6 +15,7 @@
 
     permalinks.forEach(function (permalink) {
       permalink.addEventListener("click", function(e) {
+        e.preventDefault();
         e.stopPropagation();
       });
     });
@@ -60,8 +61,13 @@
         {{object.title}}
         <!-- </a> -->
         <small class="pull-right">{{object.datetime_released.date|date:'D, N j, Y'}}
-          <a href="#" title="Copy permalink" class="text-muted permalink" data-clipboard-text="{{object.get_absolute_url}}#{{object.id}}"><i class="fa fa-link"></i></a>
-          <!-- object.get_absolute_url#object.id -->
+          <a href="#"
+             title="Copy permalink"
+             class="text-muted permalink"
+             data-clipboard-text="{{ request.build_absolute_uri }}{{ object.id }}/#{{ object.id }}"
+          >
+           <i class="fa fa-link"></i>
+         </a>
         </small>
       </h4>
     </div>
