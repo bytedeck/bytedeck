@@ -55,23 +55,20 @@ class QuestForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.layout = Layout(
             Div(
+                'name',
+                'xp',
+                'visible_to_students',
+                'verification_required',
+                'icon',
+                'short_description',
+                'instructions',
+                'submission_details',
+                'instructor_notes',
+                'campaign',
+                'common_data',
+                'max_repeats',
+                'hours_between_repeats',
                 Accordion(
-                    AccordionGroup(
-                        'Basic',
-                        'name',
-                        'xp',
-                        'visible_to_students',
-                        'verification_required',
-                        'icon',
-                        'short_description',
-                        'instructions',
-                        'submission_details',
-                        'instructor_notes',
-                        'campaign',
-                        'common_data',
-                        'max_repeats',
-                        'hours_between_repeats',
-                    ),
                     AccordionGroup(
                         'Advanced',
                         'repeat_per_semester',
@@ -86,7 +83,8 @@ class QuestForm(forms.ModelForm):
                         'available_outside_course',
                         'archived',
                         'editor',
-                    )
+                        active=False
+                    ),
                 ),
                 style="margin-top: 10px;"
             )
