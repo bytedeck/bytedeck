@@ -56,7 +56,10 @@
       data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{object.id}}">
       <h4 class="panel-title">
         <!-- <a role="button" data-toggle="collapse" data-parent="#accordion" href="#collapse{{object.id}}" aria-expanded="true" aria-controls="collapse{{object.id}}"> -->
-        {% if object.draft %}<i class="fa fa-wrench">&nbsp;</i>{% endif %}
+        {% if object.draft %}
+          {% if object.auto_publish %}<i class="fa fa-magic">&nbsp;</i>{% endif %}
+          <i class="fa fa-wrench">&nbsp;</i>
+        {% endif %}
         {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
         {{object.title}}
         <!-- </a> -->
@@ -66,7 +69,7 @@
              class="text-muted permalink"
              data-clipboard-text="{{ request.build_absolute_uri }}{{ object.id }}/#{{ object.id }}"
           >
-           <i class="fa fa-link"></i>
+           <i class="fa fa-copy"></i>
          </a>
         </small>
       </h4>
