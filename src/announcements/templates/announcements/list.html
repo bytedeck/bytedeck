@@ -7,6 +7,30 @@
   <a class="btn btn-primary" href="{% url 'announcements:create' %}" role="button">New</a>
 {% endif %}
 {% endblock %}
+
+{% block js %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
+  <script>
+    var permalinks = document.querySelectorAll('.permalink');
+
+    permalinks.forEach(function (permalink) {
+      permalink.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    var clipboard = new ClipboardJS(permalinks);
+    $('.permalink').tooltip();
+
+    clipboard.on('success', function(e) {
+      $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
+      $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
+    });
+
+  </script>
+{% endblock %}
+
 {% block content %}
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
@@ -37,7 +61,13 @@
         {{object.title}}
         <!-- </a> -->
         <small class="pull-right">{{object.datetime_released.date|date:'D, N j, Y'}}
-          <a href="{{object.get_absolute_url}}#{{object.id}}" title="Link to this announcement" class="text-muted"><i class="fa fa-link"></i></a>
+          <a href="#"
+             title="Copy permalink"
+             class="text-muted permalink"
+             data-clipboard-text="{{ request.build_absolute_uri }}{{ object.id }}/#{{ object.id }}"
+          >
+           <i class="fa fa-link"></i>
+         </a>
         </small>
       </h4>
     </div>
