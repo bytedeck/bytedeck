@@ -1,10 +1,14 @@
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
+from crispy_forms.bootstrap import Tab, TabHolder
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout
 from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
 
 from badges.models import Badge
 from utilities.fields import RestrictedFileFormField
+
 from .models import Quest
 
 
@@ -48,6 +52,42 @@ class QuestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.layout = Layout(
+            TabHolder(
+                Tab(
+                    'Basic',
+                    'name',
+                    'xp',
+                    'visible_to_students',
+                    'verification_required',
+                    'icon',
+                    'short_description',
+                    'instructions',
+                    'submission_details',
+                    'instructor_notes',
+                    'campaign',
+                    'common_data',
+                    'max_repeats',
+                    'hours_between_repeats',
+                ),
+                Tab(
+                    'Advanced',
+                    'repeat_per_semester',
+                    'specific_teacher_to_notify',
+                    'blocking',
+                    'hideable',
+                    'sort_order',
+                    'date_available',
+                    'time_available',
+                    'date_expired',
+                    'time_expired',
+                    'available_outside_course',
+                    'archived',
+                    'editor',
+                ),
+            )
+        )
 
         # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
         if user.profile.is_TA:

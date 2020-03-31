@@ -16,7 +16,7 @@
   <a href="/admin/quest_manager/quest/{{object.id}}"
      title="This is required to edit prerequisites"
      role="button" class="btn btn-default">via Admin</a>
-  {{ form|crispy }}
+  {% crispy form %}
   <a href="{% url 'quests:quests' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
