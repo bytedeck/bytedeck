@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
 from djconfig import config
+from tenant_schemas.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
@@ -61,6 +62,7 @@ def user_directory_path(instance, filename):
 
 
 class Profile(models.Model):
+    teachers = models.ManyToManyField(User, through='TeacherStudentProfileProxy', related_name='students')
     student_number_regex_string = r"^(9[89])(\d{5})$"
     student_number_validator = RegexValidator(regex=student_number_regex_string,
                                               message="Invalid student number.",
@@ -266,9 +268,9 @@ class Profile(models.Model):
         else:
             return None
 
-    def teachers(self):
-        teachers = self.current_courses().values_list('block__current_teacher', flat=True)
-        return teachers
+    # def teachers(self):
+    #     teachers = self.current_courses().values_list('block__current_teacher', flat=True)
+    #     return teachers
 
     #################################
     #
@@ -364,32 +366,42 @@ class Profile(models.Model):
         return User.objects.filter(id__in=user_id_list)
 
 
+class TeacherStudentProfileProxy(models.Model):
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='proxy_students')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    is_owner = models.BooleanField(default=False)
+    is_creator = models.BooleanField(default=False)
+
+
 def create_profile(sender, **kwargs):
-    current_user = kwargs["instance"]
+    from django.db import connection
 
-    if kwargs["created"]:
-        new_profile = Profile(user=current_user)
+    if connection.schema_name != get_public_schema_name():
+        current_user = kwargs["instance"]
 
-        # if user's name matches student number (e.g 9912345), set student number:
-        pattern = re.compile(Profile.student_number_regex_string)
-        if pattern.match(current_user.get_username()):
-            new_profile.student_number = int(current_user.get_username())
+        if kwargs["created"]:
+            new_profile = Profile(user=current_user)
 
-        # set first and last name on the profile.  This should be removed and just use the first and last name 
-        # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
-        new_profile.first_name = current_user.first_name
-        new_profile.last_name = current_user.last_name
+            # if user's name matches student number (e.g 9912345), set student number:
+            pattern = re.compile(Profile.student_number_regex_string)
+            if pattern.match(current_user.get_username()):
+                new_profile.student_number = int(current_user.get_username())
 
-        new_profile.save()
+            # set first and last name on the profile.  This should be removed and just use the first and last name
+            # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
+            new_profile.first_name = current_user.first_name
+            new_profile.last_name = current_user.last_name
 
-        staff_list = User.objects.filter(is_staff=True)
-        notify.send(
-            current_user,
-            target=new_profile,
-            recipient=staff_list[0],
-            affected_users=staff_list,
-            icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-            verb='.  New user registered: ')
+            new_profile.save()
+
+            staff_list = User.objects.filter(is_staff=True)
+            notify.send(
+                current_user,
+                target=new_profile,
+                recipient=staff_list[0],
+                affected_users=staff_list,
+                icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+                verb='.  New user registered: ')
 
 
 post_save.connect(create_profile, sender=User)
