@@ -1,0 +1,20 @@
+<div class="panel accordian anchor panel-default">
+  <div
+    class="panel-heading accordian accordian-trigger"
+    role="tab"
+    aria-controls="{{ div.css_id }}"
+    data-parent="#{{ div.data_parent }}"
+    data-toggle="collapse"
+    data-target="#{{ div.css_id }}"
+  >
+    <h4 class="panel-title">
+      <i class="fa fa-caret-down"></i>
+      {{ div.name }}
+    </h4>
+  </div>
+  <div id="{{ div.css_id }}" class="panel-collapse collapse{% if div.active %} in{% endif %}" role="tabpanel">
+    <div class="panel-body">
+      {{ fields|safe }}
+    </div>
+  </div>
+</div>
