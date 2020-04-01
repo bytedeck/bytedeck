@@ -83,7 +83,8 @@ class QuestForm(forms.ModelForm):
                         'available_outside_course',
                         'archived',
                         'editor',
-                        active=False
+                        active=False,
+                        template='crispy_forms/bootstrap3/accordion-group.html'
                     ),
                 ),
                 style="margin-top: 10px;"
