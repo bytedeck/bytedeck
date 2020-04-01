@@ -9,15 +9,18 @@ services:
       - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    env_file: .env
+
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6
     ports:
       - 6379:6379
   web:
     #restart: unless-stopped
-    build: . # current directory
+    build: .
     env_file: .env
-    command: bash -c "python /app/src/manage.py migrate && 
+    command: bash -c "python /app/src/manage.py makemigrations tenant &&
+                      python /app/src/manage.py migrate_schemas --shared && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
       - .:/app
@@ -32,7 +35,7 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate &&
+                      python manage.py migrate_schemas --shared &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
@@ -42,7 +45,7 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate && 
+                      python manage.py migrate_schemas --shared && 
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
@@ -53,4 +56,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-

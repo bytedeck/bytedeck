@@ -13,15 +13,12 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
-
-from hackerspace_online import views
-
+from django.contrib import admin
 from django.conf import settings
 from django.conf.urls import include, url
 from django.conf.urls.static import static
-from django.contrib import admin
 
-# Admin site customizations
+from hackerspace_online import views
 
 admin.site.site_header = "Hackerspace Administration"
 admin.site.site_title = "Hackerspace Admin"
@@ -29,7 +26,11 @@ admin.site.site_title = "Hackerspace Admin"
 app_name = 'hackerspace_online'
 
 urlpatterns = [
-    url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
+    url(r'^grappelli/', include('grappelli.urls')),
+    url(r'^admin/', admin.site.urls)
+]
+
+urlpatterns += [
     url(r'^$', views.home, name='home'),
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     url(r'^config/$', views.config_view, name='config'),
@@ -47,8 +48,6 @@ urlpatterns = [
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
 
-    # admin
-    url(r'^admin/', admin.site.urls),
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth
@@ -80,6 +79,7 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     import debug_toolbar
+
     urlpatterns += [
         url(r'^__debug__/', include(debug_toolbar.urls)),
     ]

@@ -7,17 +7,16 @@ from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import UpdateView
 
+from .models import Profile
+from .forms import ProfileForm
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
-from .forms import ProfileForm
-from .models import Profile
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 
 
-# Create your views here.
-
-class ProfileList(ListView):
+class ProfileList(AllowNonPublicViewMixin, ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
 
@@ -66,7 +65,7 @@ class ProfileListCurrent(ProfileList):
 #         return super(ProfileCreate, self).form_valid(form)
 
 
-class ProfileDetail(DetailView):
+class ProfileDetail(AllowNonPublicViewMixin, DetailView):
     model = Profile
 
     @method_decorator(login_required)
@@ -111,7 +110,7 @@ class ProfileDetail(DetailView):
         return context
 
 
-class ProfileUpdate(UpdateView):
+class ProfileUpdate(AllowNonPublicViewMixin, UpdateView):
     model = Profile
     form_class = ProfileForm
     template_name = 'profile_manager/form.html'
@@ -135,6 +134,7 @@ class ProfileUpdate(UpdateView):
             raise Http404("Sorry, this profile isn't yours!")
 
 
+@allow_non_public_view
 @staff_member_required(login_url='/')
 def recalculate_current_xp(request):
     profiles_qs = Profile.objects.all_for_active_semester()
@@ -155,6 +155,7 @@ def tour_complete(request):
     return redirect('quests:quests')
 
 
+@allow_non_public_view
 @staff_member_required(login_url='/')
 def GameLab_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
@@ -163,11 +164,13 @@ def GameLab_toggle(request, profile_id):
     return redirect_to_previous_page(request)
 
 
+@allow_non_public_view
 @staff_member_required(login_url='/')
 def comment_ban_toggle(request, profile_id):
     return comment_ban(request, profile_id, toggle=True)
 
 
+@allow_non_public_view
 @staff_member_required(login_url='/')
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
