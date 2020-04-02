@@ -2,12 +2,13 @@ version: '2' # supported by default install on Ubuntu 18.04
 
 services:
   db:
-    image: postgres:9.5-alpine # Production server is using 9.5.17
+    build: ./postgresql
     expose:
       - "5432"
     ports:
       - 5432:5432
     volumes:
+      - /home/xillar/dumps:/dumps/
       - postgres_data:/var/lib/postgresql/data/
     env_file: .env
 
@@ -39,6 +40,7 @@ services:
     volumes:
       - .:/app
     depends_on:
+      - db
       - redis
   celery-beat:
     build: .

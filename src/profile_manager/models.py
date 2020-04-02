@@ -62,7 +62,6 @@ def user_directory_path(instance, filename):
 
 
 class Profile(models.Model):
-    teachers = models.ManyToManyField(User, through='TeacherStudentProfileProxy', related_name='students')
     student_number_regex_string = r"^(9[89])(\d{5})$"
     student_number_validator = RegexValidator(regex=student_number_regex_string,
                                               message="Invalid student number.",
@@ -268,9 +267,9 @@ class Profile(models.Model):
         else:
             return None
 
-    # def teachers(self):
-    #     teachers = self.current_courses().values_list('block__current_teacher', flat=True)
-    #     return teachers
+    def teachers(self):
+        teachers = self.current_courses().values_list('block__current_teacher', flat=True)
+        return teachers
 
     #################################
     #
@@ -364,13 +363,6 @@ class Profile(models.Model):
     def current_teachers(self):
         user_id_list = CourseStudent.objects.get_current_teacher_list(self.user)
         return User.objects.filter(id__in=user_id_list)
-
-
-class TeacherStudentProfileProxy(models.Model):
-    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='proxy_students')
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    is_owner = models.BooleanField(default=False)
-    is_creator = models.BooleanField(default=False)
 
 
 def create_profile(sender, **kwargs):
