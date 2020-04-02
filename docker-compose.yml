@@ -2,12 +2,14 @@ version: '2' # supported by default install on Ubuntu 18.04
 
 services:
   db:
-    image: postgres:9.5-alpine # Production server is using 9.5.17
+    container_name: db
+    build: ./postgresql
     expose:
       - "5432"
     ports:
       - 5432:5432
     volumes:
+      - /home/xillar/dumps:/dumps/
       - postgres_data:/var/lib/postgresql/data/
     env_file: .env
 
@@ -19,8 +21,7 @@ services:
     #restart: unless-stopped
     build: .
     env_file: .env
-    command: bash -c "python /app/src/manage.py makemigrations tenant &&
-                      python /app/src/manage.py migrate_schemas --shared && 
+    command: bash -c "python /app/src/manage.py migrate_schemas --shared && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
       - .:/app
@@ -40,6 +41,7 @@ services:
     volumes:
       - .:/app
     depends_on:
+      - db
       - redis
   celery-beat:
     build: .

@@ -3,7 +3,7 @@
     "model": "tenant.tenant",
     "pk": 1,
     "fields": {
-      "domain_url": "bytedeck.com",
+      "domain_url": "localhost",
       "schema_name": "public",
       "name": "Public test",
       "desc": "",
