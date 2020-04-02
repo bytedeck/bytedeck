@@ -6,7 +6,6 @@ from tenant.models import Tenant
 
 def change_domain_ulrs(sender, *args, **kwargs):
     if 'instance' in kwargs and 'created' in kwargs and not kwargs['created']:
-        print(kwargs)
         try:
             public_tenant = Tenant.objects.get(schema_name='public')
         except ObjectDoesNotExist:
