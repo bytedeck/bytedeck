@@ -2,6 +2,7 @@ version: '2' # supported by default install on Ubuntu 18.04
 
 services:
   db:
+    container_name: db
     build: ./postgresql
     expose:
       - "5432"
