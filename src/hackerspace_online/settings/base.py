@@ -46,6 +46,7 @@ SHARED_APPS = (
     'django.contrib.sites',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.flatpages',
 
     'django_celery_beat',
 
@@ -71,12 +72,10 @@ TENANT_APPS = (
 
     'django.contrib.auth',
     'django.contrib.sessions',
-    'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.admin',
     'django.contrib.staticfiles',
 
-    'django.contrib.flatpages',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -287,7 +286,7 @@ STATIC_URL = '/static/'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
-SITE_ID = 3
+SITE_ID = 1
 
 # AllAuth Configuration
 # SOCIALACCOUNT_PROVIDERS = \

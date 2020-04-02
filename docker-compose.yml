@@ -19,8 +19,7 @@ services:
     #restart: unless-stopped
     build: .
     env_file: .env
-    command: bash -c "python /app/src/manage.py makemigrations tenant &&
-                      python /app/src/manage.py migrate_schemas --shared && 
+    command: bash -c "python /app/src/manage.py migrate_schemas --shared && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
       - .:/app

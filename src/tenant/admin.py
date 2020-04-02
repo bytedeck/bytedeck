@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.db import connection
 from tenant_schemas.utils import get_public_schema_name
@@ -37,7 +38,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             return
         if not change:
             obj.schema_name = obj.name.replace('-', '_')
-            obj.domain_url = "%s.%s" % (obj.name.lower(), settings.WEB_URL)
+            obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
         obj.save()
 
 
