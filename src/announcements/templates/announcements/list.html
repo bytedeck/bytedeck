@@ -20,7 +20,12 @@
       });
     });
 
-    var clipboard = new ClipboardJS(permalinks);
+    var clipboard = new ClipboardJS(permalinks, {
+      text: function(trigger) {
+        return trigger.origin + trigger.getAttribute('data-clipboard-text');
+      }
+    });
+
     $('.permalink').tooltip();
 
     clipboard.on('success', function(e) {
@@ -67,9 +72,9 @@
           <a href="#"
              title="Copy permalink"
              class="text-muted permalink"
-             data-clipboard-text="{{ request.build_absolute_uri }}{{ object.id }}/#{{ object.id }}"
+             data-clipboard-text="{{ object.get_absolute_url }}#{{ object.id }}"
           >
-           <i class="fa fa-copy"></i>
+           <i class="fa fa-clipboard"></i>
          </a>
         </small>
       </h4>
