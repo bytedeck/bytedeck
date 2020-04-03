@@ -7,18 +7,19 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.shortcuts import get_object_or_404
+# from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
-from djconfig import config
-import djconfig
+# from djconfig import config
+# import djconfig
 from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
 from colorful.fields import RGBColorField
 
-from utilities.models import ImageResource
+from siteconfig.models import SiteConfig
+# from utilities.models import ImageResource
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -121,11 +122,10 @@ class Rank(models.Model, IsAPrereqMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
-
-        if config.hs_default_icon:
-            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
-            return icon.image.url
-        return static('img/default_icon.png')
+        elif SiteConfig.get().default_icon:
+            return SiteConfig.get().default_icon.img.url
+        else:
+            return static('img/default_icon.png')
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -162,9 +162,9 @@ class SemesterManager(models.Manager):
 
     def get_current(self, as_queryset=False):
         if as_queryset:
-            return self.get_queryset().filter(pk=config.hs_active_semester)
+            return self.get_queryset().filter(pk=SiteConfig.get().active_semester.pk)
         else:
-            return self.get_queryset().get(pk=config.hs_active_semester)
+            return SiteConfig.get().active_semester
 
     def set_active(self, active_sem_id):
         sems = self.get_queryset()
@@ -444,14 +444,13 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        djconfig.reload_maybe()  # prevent celery tasks from breaking when run manually
-        return self.all_for_user(user).get_semester(config.hs_active_semester)
+        return self.all_for_user(user).get_semester(SiteConfig.get().active_semester)
 
     def all_users_for_active_semester(self, students_only=False):
         """
         :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
         """
-        courses = self.all_for_semester(config.hs_active_semester, students_only=students_only)
+        courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
         user_list = courses.values_list('user', flat=True)
         user_list = set(user_list)  # removes doubles
         return User.objects.filter(id__in=user_list)

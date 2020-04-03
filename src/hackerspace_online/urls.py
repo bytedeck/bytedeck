@@ -17,9 +17,10 @@ Including another URLconf
 from hackerspace_online import views
 
 from django.conf import settings
-from django.conf.urls import include, url
+from django.conf.urls import url
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.urls import include, path
 
 # Admin site customizations
 
@@ -46,6 +47,7 @@ urlpatterns = [
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
+    path('config2/', include('siteconfig.urls')),
 
     # admin
     url(r'^admin/', admin.site.urls),

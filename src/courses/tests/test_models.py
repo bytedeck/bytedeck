@@ -1,4 +1,3 @@
-# import djconfig
 from datetime import timedelta, date
 from freezegun import freeze_time
 

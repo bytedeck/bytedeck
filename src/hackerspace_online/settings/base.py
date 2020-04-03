@@ -117,6 +117,7 @@ INSTALLED_APPS = (
     'djcytoscape',
     'portfolios',
     'utilities',
+    'siteconfig',
    # 'tours',
 )
 
