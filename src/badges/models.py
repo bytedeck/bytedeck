@@ -14,10 +14,7 @@ from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
-from utilities.models import ImageResource
 
-
-# from courses.models import Semester
 
 # Create your models here.
 
