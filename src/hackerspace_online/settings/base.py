@@ -163,7 +163,7 @@ TEMPLATES = [
                 # 'allauth.account.context_processors.account',
                 # 'allauth.socialaccount.context_processors.socialaccount',
 
-                # 'djconfig.context_processors.config',
+                'siteconfig.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },
