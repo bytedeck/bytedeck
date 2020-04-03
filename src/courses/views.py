@@ -9,7 +9,8 @@ from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect, render, Http404, HttpResponse
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
-from djconfig import config
+
+from siteconfig.models import SiteConfig
 
 # from .forms import ProfileForm
 from .models import CourseStudent, Rank, Semester
@@ -105,7 +106,6 @@ def end_active_semester(request):
     if not request.user.is_superuser:
         return HttpResponse(status=401)
 
-    from courses.models import Semester
     sem = Semester.objects.complete_active_semester()
     if sem is -1:
         messages.warning(request,
@@ -128,7 +128,7 @@ def ajax_progress_chart(request, user_id=0):
         user = get_object_or_404(User, pk=user_id)
 
     if request.is_ajax() and request.method == "POST":
-        sem = get_object_or_404(Semester, id=config.hs_active_semester)
+        sem = SiteConfig.get().active_semester
 
         # generate a list of dates, from first date of semester to today
         datelist = []

@@ -291,15 +291,6 @@ class Semester(models.Model):
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
-    # def chillax_line_started(self):
-    #     # return timezone.now().date() > self.get_interim1_date()
-    #     return config.hs_chillax_line_active
-
-    # def chillax_line(self):
-    #     cline = config.hs_chillax_line
-    #     fraction = self.fraction_complete()
-    #     return round(1000 * cline * fraction)
-
     def get_student_mark_list(self, students_only=False):
         students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
         mark_list = []

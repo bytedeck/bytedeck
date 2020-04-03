@@ -173,7 +173,6 @@ class QuestManagerTest(TestCase):
     def test_quest_qs_not_completed(self):
         """Should return all the quests that do NOT have a completed submission (during active semester)"""
         active_semester = self.make_test_quests_and_submissions_stack()
-        # with patch('quest_manager.models.config') as cfg:
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_completed(self.student)
         self.assertListEqual(
@@ -184,7 +183,6 @@ class QuestManagerTest(TestCase):
     def test_quest_qs_not_in_progress(self):
         """Should return all the quests that do NOT have an inprogress submission (during active semester)"""
         active_semester = self.make_test_quests_and_submissions_stack()
-        # with patch('quest_manager.models.config') as cfg:
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_in_progress(self.student)
         self.assertListEqual(
@@ -334,24 +332,18 @@ class QuestSubmissionManagerTest(TestCase):
     def test_quest_submission_manager_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""
         submissions = self.make_test_submissions_stack()
-        # with patch('quest_manager.models.config') as cfg:
-        #     # cfg.hs_active_semester = submissions[0].semester
         SiteConfig.get().set_active_semester(submissions[0].semester.id)
         qs = QuestSubmission.objects.get_queryset().order_by('id').values_list('id', flat=True)
         self.assertListEqual(list(qs), [submissions[0].id, submissions[1].id])
 
     def test_quest_submission_manager_get_queryset_for_active_semester(self):
         submissions = self.make_test_submissions_stack()
-        # with patch('quest_manager.models.config') as cfg:
-        #     # cfg.hs_active_semester = submissions[0].semester
         SiteConfig.get().set_active_semester(submissions[0].semester.id)
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True).values_list('id', flat=True)
         self.assertListEqual(list(qs), [submissions[0].id])
 
     def test_quest_submission_manager_get_queryset_for_all_quests(self):
         submissions = self.make_test_submissions_stack()
-        # with patch('quest_manager.models.config') as cfg:
-        #     # cfg.hs_active_semester = submissions[0].semester
         SiteConfig.get().set_active_semester(submissions[0].semester.id)
         qs = QuestSubmission.objects.get_queryset(
             exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
@@ -366,7 +358,6 @@ class QuestSubmissionManagerTest(TestCase):
         active_semester = submissions[0].semester
         quest = submissions[0].quest
         first = mommy.make(QuestSubmission, user=self.student, quest=quest, semester=active_semester)
-        # with patch('quest_manager.models.config') as cfg:
         SiteConfig.get().set_active_semester(active_semester)
         qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])

@@ -68,7 +68,7 @@ class SiteConfig(models.Model):
 
     favicon = models.ImageField(
         verbose_name="Favicon", null=True, blank=True,
-        help_text="The image used in browser tabs (ideally 16x16 px)."
+        help_text="The image used in browser tabs (ideally 16x16 px). It will fall back to your site logo if a seperate favicon is not provided."
     )
 
     submission_quick_text = models.CharField(
@@ -152,6 +152,28 @@ class SiteConfig(models.Model):
             return self.default_icon.url
         else:
             return self.get_site_logo_url()
+
+    def get_favicon_url(self):
+        if self.favicon and hasattr(self.favicon, 'url'):
+            return self.favicon.url
+        elif self.site_logo and hasattr(self.site_logo, 'url'):
+            return self.site_logo.url
+        else:
+            return static('icon/favicon.ico')
+
+    def get_banner_image_url(self):
+        if self.banner_image and hasattr(self.banner_image, 'url'):
+            return self.banner_image.url
+        else:
+            return static('img/banner.svg')
+
+    def get_banner_image_dark_url(self):
+        if self.banner_image_dark and hasattr(self.banner_image_dark, 'url'):
+            return self.banner_image_dark.url
+        elif self.banner_image and hasattr(self.banner_image, 'url'):
+            return self.banner_image.url
+        else:
+            return static('img/banner_slate.svg')
 
     def set_active_semester(self, semester):
         from courses.models import Semester  # import here to prevent ciruclar imports
