@@ -5,9 +5,6 @@ from model_mommy import mommy
 
 from siteconfig.models import SiteConfig
 
-# from badges.models import BadgeAssertion
-from courses.models import Semester
-
 
 class ProfileViewTests(TestCase):
 
