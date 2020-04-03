@@ -1,11 +1,13 @@
-import djconfig
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
 
+from siteconfig.models import SiteConfig
 from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries, BadgeRarity
+
 
 User = get_user_model()
 
@@ -67,10 +69,7 @@ class BadgeTestModel(TestCase):
 class BadgeAssertionTestModel(TestCase):
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
-        # needed because BadgeAssertions use a default that might not exist yet
-        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
+        self.sem = SiteConfig.get().active_semester
 
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)

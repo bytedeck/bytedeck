@@ -122,10 +122,8 @@ class Rank(models.Model, IsAPrereqMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
-        elif SiteConfig.get().default_icon:
-            return SiteConfig.get().default_icon.img.url
         else:
-            return static('img/default_icon.png')
+            return SiteConfig.get().get_default_icon_url()
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one

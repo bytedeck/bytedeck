@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import models
+from django.templatetags.static import static
 
 
 User = get_user_model()
@@ -45,7 +46,7 @@ class SiteConfig(models.Model):
 
     site_logo = models.ImageField(
         verbose_name="Site Logo", null=True, blank=True, 
-        help_text="This will be displayed at the top left of your site's header (ideally 36x36 px)."
+        help_text="This will be displayed at the top left of your site's header (ideally 256x256 px)."
     )
 
     banner_image = models.ImageField(
@@ -58,9 +59,10 @@ class SiteConfig(models.Model):
         help_text="An optional, alternate banner to be used with the dark theme."
     )
 
-    site_logo = models.ImageField(
-        verbose_name="Site Logo", null=True, blank=True, 
+    default_icon = models.ImageField(
+        verbose_name="Default Icon", null=True, blank=True, 
         help_text="This becomes the default icon for quests and badges and other places where icons are used (ideally 256x256 px)."
+                  "If no icon is provided, it will fall back on the site logo (so you can leave this blank if you want to use your logo)"
     )
 
     favicon = models.ImageField(
@@ -137,6 +139,18 @@ class SiteConfig(models.Model):
     )
     # hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
     #                                               default=True, required=False)
+
+    def get_site_logo_url(self):
+        if self.site_logo and hasattr(self.site_logo, 'url'):
+            return self.site_logo.url
+        else:
+            return static('img/default_icon.png')
+
+    def get_default_icon_url(self):
+        if self.default_icon and hasattr(self.default_icon, 'url'):
+            return self.default_icon.url
+        else:
+            return self.get_site_logo_url()
 
     @classmethod
     def get(cls):
