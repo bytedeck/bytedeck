@@ -21,7 +21,14 @@ User = get_user_model()
 
 class ScapeUpdate(UpdateView):
     model = CytoScape
-    fields = '__all__'
+    fields = [
+        'name',
+        'initial_content_type', 'initial_object_id',
+        'parent_scape',
+        'style_set',
+        'is_the_primary_scape',
+        'autobreak'
+    ]
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
