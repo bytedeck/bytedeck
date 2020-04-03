@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import models
+from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
 
@@ -151,6 +152,16 @@ class SiteConfig(models.Model):
             return self.default_icon.url
         else:
             return self.get_site_logo_url()
+
+    def set_active_semester(self, semester):
+        from courses.models import Semester  # import here to prevent ciruclar imports
+
+        # check if id or model object was given
+        if isinstance(semester, Semester):
+            self.active_semester = semester
+        else:  # assume it's an id
+            self.active_semester = get_object_or_404(Semester, id=semester)
+        self.save()
 
     @classmethod
     def get(cls):

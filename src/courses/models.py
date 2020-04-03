@@ -1,25 +1,22 @@
 from datetime import timedelta, date, datetime
 
 import numpy
+
 from django.conf import settings
 from django.core.validators import validate_comma_separated_integer_list
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-# from django.shortcuts import get_object_or_404
-from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
-# from djconfig import config
-# import djconfig
+
 from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
 from colorful.fields import RGBColorField
 
 from siteconfig.models import SiteConfig
-# from utilities.models import ImageResource
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission

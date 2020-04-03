@@ -1,14 +1,14 @@
 import re
 
-import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
-from mock import patch
 from django.utils.timezone import localtime
 from datetime import timedelta
 from freezegun import freeze_time
+
+from siteconfig.models import SiteConfig
 
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from courses.models import Semester
@@ -99,7 +99,6 @@ class QuestTestModel(TestCase):
         def test_is_repeat_available(self, user):"""
 
         User = get_user_model()
-        semester = mommy.make(Semester)
         mommy.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = mommy.make(User)
         quest_not_repeatable = mommy.make(Quest, name="quest-not-repeatable")
@@ -109,99 +108,95 @@ class QuestTestModel(TestCase):
                                            repeat_per_semester=True)
         quest_semester = mommy.make(Quest, name="quest-semester", max_repeats=0, repeat_per_semester=True)
 
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = semester.id
+        # TESTS WITH NOT REPEATABLE QUEST
+        sub_not_repeatable = QuestSubmission.objects.create_submission(student, quest_not_repeatable)
+        # non-repeatable quest is not available again.
+        self.assertFalse(quest_not_repeatable.is_repeat_available(student))
+        # even when completed
+        sub_not_repeatable.mark_completed()
+        self.assertFalse(quest_not_repeatable.is_repeat_available(student))
+        # and when approved
+        sub_not_repeatable.mark_approved()
+        self.assertFalse(quest_not_repeatable.is_repeat_available(student))
 
-            # TESTS WITH NOT REPEATABLE QUEST
-            sub_not_repeatable = QuestSubmission.objects.create_submission(student, quest_not_repeatable)
-            # non-repeatable quest is not available again.
-            self.assertFalse(quest_not_repeatable.is_repeat_available(student))
-            # even when completed
-            sub_not_repeatable.mark_completed()
-            self.assertFalse(quest_not_repeatable.is_repeat_available(student))
-            # and when approved
-            sub_not_repeatable.mark_approved()
-            self.assertFalse(quest_not_repeatable.is_repeat_available(student))
+        # TESTS WITH INFINITE REPEATABLE QUEST, 0HRS COOLDOWN
+        # in progress, shouldn't be available.
+        sub_infinite_repeatable = QuestSubmission.objects.create_submission(student, quest_infinite_repeat)
+        self.assertFalse(quest_infinite_repeat.is_repeat_available(student))
+        # available after completion
+        sub_infinite_repeatable.mark_completed()
+        self.assertTrue(quest_infinite_repeat.is_repeat_available(student))
+        # and when approved
+        sub_infinite_repeatable.mark_approved()
+        self.assertTrue(quest_infinite_repeat.is_repeat_available(student))
 
-            # TESTS WITH INFINITE REPEATABLE QUEST, 0HRS COOLDOWN
-            # in progress, shouldn't be available.
-            sub_infinite_repeatable = QuestSubmission.objects.create_submission(student, quest_infinite_repeat)
-            self.assertFalse(quest_infinite_repeat.is_repeat_available(student))
-            # available after completion
-            sub_infinite_repeatable.mark_completed()
-            self.assertTrue(quest_infinite_repeat.is_repeat_available(student))
-            # and when approved
-            sub_infinite_repeatable.mark_approved()
-            self.assertTrue(quest_infinite_repeat.is_repeat_available(student))
+        # TESTS WITH REPEATABLE QUEST, 1HRS COOLDOWN
+        # started
+        sub_repeat_1hr = QuestSubmission.objects.create_submission(student, quest_repeat_1hr)
+        self.assertFalse(quest_repeat_1hr.is_repeat_available(student))
+        sub_repeat_1hr.mark_completed()
 
-            # TESTS WITH REPEATABLE QUEST, 1HRS COOLDOWN
-            # started
-            sub_repeat_1hr = QuestSubmission.objects.create_submission(student, quest_repeat_1hr)
+        # jump ahead an hour so repeat cooldown is over
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            self.assertTrue(quest_repeat_1hr.is_repeat_available(student))
+            # start another one
+            QuestSubmission.objects.create_submission(student, quest_repeat_1hr)
             self.assertFalse(quest_repeat_1hr.is_repeat_available(student))
-            sub_repeat_1hr.mark_completed()
 
-            # jump ahead an hour so repeat cooldown is over
-            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-                self.assertTrue(quest_repeat_1hr.is_repeat_available(student))
-                # start another one
-                QuestSubmission.objects.create_submission(student, quest_repeat_1hr)
-                self.assertFalse(quest_repeat_1hr.is_repeat_available(student))
+        # TESTS WITH REPEATABLE QUEST, BY SEMESTER
+        # started
+        sub_repeat_semester = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
+        self.assertFalse(quest_semester_repeat.is_repeat_available(student))
+        sub_repeat_semester.mark_completed()
+        # one repeat avail per semester
+        self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
-            # TESTS WITH REPEATABLE QUEST, BY SEMESTER
-            # started
-            sub_repeat_semester = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
-            self.assertFalse(quest_semester_repeat.is_repeat_available(student))
-            sub_repeat_semester.mark_completed()
-            # one repeat avail per semester
-            self.assertTrue(quest_semester_repeat.is_repeat_available(student))
+        sub_repeat_semester2 = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
+        sub_repeat_semester2.mark_completed()
+        # Ran out this semester
+        self.assertFalse(quest_semester_repeat.is_repeat_available(student))
 
-            sub_repeat_semester2 = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
-            sub_repeat_semester2.mark_completed()
-            # Ran out this semester
-            self.assertFalse(quest_semester_repeat.is_repeat_available(student))
-
-            # TEST NO REPEAT, BUT YES SEMESTER
-            # started
-            sub_semester = QuestSubmission.objects.create_submission(student, quest_semester)
-            self.assertFalse(quest_semester.is_repeat_available(student))
-            sub_semester.mark_completed()
-            # No repeat left this semester
-            self.assertFalse(quest_semester.is_repeat_available(student))
+        # TEST NO REPEAT, BUT YES SEMESTER
+        # started
+        sub_semester = QuestSubmission.objects.create_submission(student, quest_semester)
+        self.assertFalse(quest_semester.is_repeat_available(student))
+        sub_semester.mark_completed()
+        # No repeat left this semester
+        self.assertFalse(quest_semester.is_repeat_available(student))
 
         # change semesters and the quest should appear
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = mommy.make(Semester).id  # new active semester
-            self.assertTrue(quest_semester_repeat.is_repeat_available(student))
+        new_active_sem = mommy.make(Semester, active=True)
+        SiteConfig.get().set_active_semester(new_active_sem.id)
+        self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
-            # Repeat this semester, another two should be available
+        # Repeat this semester, another two should be available
 
-            sub_repeat_semester = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
-            self.assertFalse(quest_semester_repeat.is_repeat_available(student))
-            sub_repeat_semester.mark_completed()
+        sub_repeat_semester = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
+        self.assertFalse(quest_semester_repeat.is_repeat_available(student))
+        sub_repeat_semester.mark_completed()
 
-            # one repeat avail per semester
-            self.assertTrue(quest_semester_repeat.is_repeat_available(student))
+        # one repeat avail per semester
+        self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
-            sub_repeat_semester2 = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
-            sub_repeat_semester2.mark_completed()
+        sub_repeat_semester2 = QuestSubmission.objects.create_submission(student, quest_semester_repeat)
+        sub_repeat_semester2.mark_completed()
 
-            # Ran out this semester
-            self.assertFalse(quest_semester_repeat.is_repeat_available(student))
+        # Ran out this semester
+        self.assertFalse(quest_semester_repeat.is_repeat_available(student))
 
-            # TEST NO REPEAT, BUT YES SEMESTER, in this new semester
-            self.assertTrue(quest_semester.is_repeat_available(student))
-            # started
-            sub_semester = QuestSubmission.objects.create_submission(student, quest_semester)
-            self.assertFalse(quest_semester.is_repeat_available(student))
-            sub_semester.mark_completed()
-            # No repeat left this semester
-            self.assertFalse(quest_semester.is_repeat_available(student))
+        # TEST NO REPEAT, BUT YES SEMESTER, in this new semester
+        self.assertTrue(quest_semester.is_repeat_available(student))
+        # started
+        sub_semester = QuestSubmission.objects.create_submission(student, quest_semester)
+        self.assertFalse(quest_semester.is_repeat_available(student))
+        sub_semester.mark_completed()
+        # No repeat left this semester
+        self.assertFalse(quest_semester.is_repeat_available(student))
 
 
 class SubmissionTestModel(TestCase):
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
         User = get_user_model()
         self.semester = mommy.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
@@ -241,7 +236,6 @@ class SubmissionTestModel(TestCase):
         self.assertIsNone(first_sub.get_previous())
         # need to complete so can make another
         first_sub.mark_completed()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = first_sub.semester.id
-            second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
-            self.assertEqual(first_sub, second_sub.get_previous())
+        SiteConfig.get().set_active_semester(first_sub.semester.id)
+        second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
+        self.assertEqual(first_sub, second_sub.get_previous())
