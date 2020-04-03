@@ -9,7 +9,8 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
-from djconfig import config
+
+from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
@@ -252,7 +253,7 @@ class Profile(models.Model):
 
     @cached_property
     def has_past_courses(self):
-        semester = config.hs_active_semester
+        semester = SiteConfig.get().active_semester
         return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
 
     @cached_property
