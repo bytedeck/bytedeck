@@ -20,7 +20,7 @@ from django.conf import settings
 from django.conf.urls import url
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include
 
 # Admin site customizations
 
@@ -33,7 +33,6 @@ urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^$', views.home, name='home'),
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
-    # url(r'^config/$', views.config_view, name='config'),
     # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     # profile_manager
