@@ -88,6 +88,10 @@ tr.detail-view {
     background-color: #EEE;
 }
 
+form > div.alert.alert-block.alert-danger {
+  margin-top: 8px;
+}
+
 /******* Accordian ***********************/
 
 .panel-default > .panel-heading.accordian-trigger {
@@ -172,7 +176,7 @@ a.list-group-item-muted {
     color: #555;
 }
 
-/* COMMENT and annoucnement higlights */ 
+/* COMMENT and annoucnement higlights */
 
 @keyframes temporaryHighlight {
     0% { background:  gold}
