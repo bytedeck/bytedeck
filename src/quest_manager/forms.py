@@ -1,7 +1,7 @@
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Div
+from crispy_forms.layout import Layout, Div, HTML
 from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
@@ -52,8 +52,21 @@ class QuestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
+
+        cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
+        submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
+        admin_btn = (
+            '<a href="/admin/quest_manager/quest/{{object.id}}"'
+            ' title="This is required to edit prerequisites"'
+            ' role="button" class="btn btn-default">'
+            ' via Admin</a>'
+        )
+
         self.helper = FormHelper()
         self.helper.layout = Layout(
+            HTML(cancel_btn),
+            HTML(submit_btn),
+            HTML(admin_btn),
             Div(
                 'name',
                 'xp',
@@ -87,6 +100,8 @@ class QuestForm(forms.ModelForm):
                         template='crispy_forms/bootstrap3/accordion-group.html'
                     ),
                 ),
+                HTML(cancel_btn),
+                HTML(submit_btn),
                 style="margin-top: 10px;"
             )
         )

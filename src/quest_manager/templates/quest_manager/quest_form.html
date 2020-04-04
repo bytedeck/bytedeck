@@ -10,14 +10,8 @@
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
-<form action="{{ action_value }}" enctype="multipart/form-data" method="post">{% csrf_token %}
-  <a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a>
-  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
-  <a href="/admin/quest_manager/quest/{{object.id}}"
-     title="This is required to edit prerequisites"
-     role="button" class="btn btn-default">via Admin</a>
+<form action="{{ action_value }}" enctype="multipart/form-data" method="post">
+  {% csrf_token %}
   {% crispy form %}
-  <a href="{% url 'quests:quests' %}" role="button" class="btn btn-danger">Cancel</a>
-  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>
 {% endblock %}
