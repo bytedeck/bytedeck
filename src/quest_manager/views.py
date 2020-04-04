@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse_lazy, reverse
 from django.views.generic.edit import DeleteView, UpdateView, CreateView
 
-from djconfig import config
+from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
@@ -438,7 +438,7 @@ def approve(request, submission_id):
                        "<i class='fa fa-check fa-stack-2x text-success'></i>" + \
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "</span>"
-                blank_comment_text = config.hs_blank_approval_text
+                blank_comment_text = SiteConfig.get().blank_approval_text
                 submission.mark_approved()
             elif 'comment_button' in request.POST:
                 note_verb = "commented on"
@@ -453,7 +453,7 @@ def approve(request, submission_id):
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
                        "</span>"
-                blank_comment_text = config.hs_blank_return_text
+                blank_comment_text = SiteConfig.get().blank_return_text
                 submission.mark_returned()
             else:
                 raise Http404("unrecognized submit button")
@@ -635,7 +635,7 @@ def approvals(request, quest_id=None):
         "current_teacher_only": current_teacher_only,
         "past_approvals_all": past_approvals_all,
         "quest": quest,
-        "quick_reply_text": config.hs_submission_quick_text
+        "quick_reply_text": SiteConfig.get().submission_quick_text
     }
     return render(request, "quest_manager/quest_approval.html", context)
 
@@ -953,7 +953,7 @@ def submission(request, submission_id=None, quest_id=None):
         # "comments": comments,
         "submission_form": main_comment_form,
         # "reply_comment_form": reply_comment_form,
-        "quick_reply_text": config.hs_submission_quick_text,
+        "quick_reply_text": SiteConfig.get().submission_quick_text,
     }
     return render(request, 'quest_manager/submission.html', context)
 

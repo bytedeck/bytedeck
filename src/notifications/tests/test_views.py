@@ -1,5 +1,3 @@
-# Create your tests here.
-import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
@@ -13,8 +11,6 @@ class NotificationViewTests(TestCase):
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
         User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?

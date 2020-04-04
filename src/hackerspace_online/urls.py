@@ -17,9 +17,10 @@ Including another URLconf
 from hackerspace_online import views
 
 from django.conf import settings
-from django.conf.urls import include, url
+from django.conf.urls import url
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.urls import include
 
 # Admin site customizations
 
@@ -32,7 +33,6 @@ urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^$', views.home, name='home'),
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
-    url(r'^config/$', views.config_view, name='config'),
     # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     # profile_manager
@@ -46,6 +46,7 @@ urlpatterns = [
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
+    url(r'^config/', include('siteconfig.urls')),
 
     # admin
     url(r'^admin/', admin.site.urls),

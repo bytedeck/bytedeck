@@ -1,12 +1,9 @@
-# Create your tests here.
-import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
 
-# from badges.models import BadgeAssertion
-from courses.models import Semester
+from siteconfig.models import SiteConfig
 
 
 class ProfileViewTests(TestCase):
@@ -15,8 +12,6 @@ class ProfileViewTests(TestCase):
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
         User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -29,7 +24,7 @@ class ProfileViewTests(TestCase):
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
-        self.active_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester)
+        self.active_sem = SiteConfig.get().active_semester
 
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
@@ -83,6 +78,6 @@ class ProfileViewTests(TestCase):
     def test_profile_recalculate_xp_status_codes(self):
         """Need to test this view with students in an active course"""
         # why testing this here?
-        self.assertEqual(self.active_sem.pk, djconfig.config.hs_active_semester)
+        self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)

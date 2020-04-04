@@ -6,8 +6,8 @@ from django.template.loader import get_template
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.shortcuts import get_object_or_404
-from djconfig import config, reload_maybe
 
+from siteconfig.models import SiteConfig
 from courses.models import CourseStudent
 from notifications.signals import notify
 
@@ -18,7 +18,6 @@ User = get_user_model()
 
 @shared_task(name='announcements.tasks.send_notifications')
 def send_notifications(user_id, announcement_id):
-    reload_maybe()  # needed for automated user: hs_hackerspace_ai
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
     affected_users = CourseStudent.objects.all_users_for_active_semester()
@@ -35,15 +34,12 @@ def send_notifications(user_id, announcement_id):
 
 @shared_task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, url):
-    reload_maybe()  # needed for automated user: hs_hackerspace_ai
     users_to_email = User.objects.filter(
         is_active=True,
         profile__get_announcements_by_email=True
     ).exclude(email='').values_list('email', flat=True)
 
-    print(config)
-
-    subject = '{} Announcement'.format(config.hs_site_name_short)
+    subject = '{} Announcement'.format(SiteConfig.get().site_name_short)
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({

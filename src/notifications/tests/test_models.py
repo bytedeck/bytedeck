@@ -1,4 +1,3 @@
-import djconfig
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
@@ -10,8 +9,6 @@ from notifications.models import Notification
 class NotificationTestModel(TestCase):
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = mommy.make(User)

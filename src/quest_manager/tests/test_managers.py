@@ -1,16 +1,13 @@
-# import djconfig
 from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from model_mommy import mommy
-# from model_mommy.recipe import Recipe
 from freezegun import freeze_time
 from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
 from django.utils.timezone import localtime
-from mock import patch
-import djconfig
 
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -19,7 +16,6 @@ User = get_user_model()
 class QuestManagerTest(TestCase):
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
         self.student = mommy.make(User, username='student', is_staff=False)
 
@@ -177,9 +173,8 @@ class QuestManagerTest(TestCase):
     def test_quest_qs_not_completed(self):
         """Should return all the quests that do NOT have a completed submission (during active semester)"""
         active_semester = self.make_test_quests_and_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = active_semester
-            qs = Quest.objects.order_by('id').not_completed(self.student)
+        SiteConfig.get().set_active_semester(active_semester.id)
+        qs = Quest.objects.order_by('id').not_completed(self.student)
         self.assertListEqual(
             list(qs.values_list('name', flat=True)), 
             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
@@ -188,9 +183,8 @@ class QuestManagerTest(TestCase):
     def test_quest_qs_not_in_progress(self):
         """Should return all the quests that do NOT have an inprogress submission (during active semester)"""
         active_semester = self.make_test_quests_and_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = active_semester
-            qs = Quest.objects.order_by('id').not_in_progress(self.student)
+        SiteConfig.get().set_active_semester(active_semester.id)
+        qs = Quest.objects.order_by('id').not_in_progress(self.student)
         self.assertListEqual(
             list(qs.values_list('name', flat=True)),
             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed', 'Quest-1hr-cooldown']  # noqa
@@ -208,24 +202,23 @@ class QuestManagerTest(TestCase):
         7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
         """
         active_semester = self.make_test_quests_and_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = active_semester
-            qs = Quest.objects.get_available(self.student)
-            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
+        # with patch('quest_manager.models.SiteConfig') as cfg:
+        SiteConfig.get().set_active_semester(active_semester.id)
+        qs = Quest.objects.get_available(self.student)
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
 
-            # Start the blocking quest.
-            blocking_quest = Quest.objects.get(name='Quest-blocking')
-            blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, 
-                                      user=self.student, semester=active_semester)
+        # Start the blocking quest.
+        blocking_quest = Quest.objects.get(name='Quest-blocking')
+        blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, user=self.student, semester=active_semester)
 
-            # Should have no available quests while the blocking quest is in progress
-            qs = Quest.objects.get_available(self.student)
-            self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
+        # Should have no available quests while the blocking quest is in progress
+        qs = Quest.objects.get_available(self.student)
+        self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
 
-            # complete the blocking quest to make others available
-            blocking_sub.mark_completed()
-            qs = Quest.objects.get_available(self.student)
-            self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
+        # complete the blocking quest to make others available
+        blocking_sub.mark_completed()
+        qs = Quest.objects.get_available(self.student)
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
@@ -339,24 +332,21 @@ class QuestSubmissionManagerTest(TestCase):
     def test_quest_submission_manager_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""
         submissions = self.make_test_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = submissions[0].semester
-            qs = QuestSubmission.objects.get_queryset().order_by('id').values_list('id', flat=True)
+        SiteConfig.get().set_active_semester(submissions[0].semester.id)
+        qs = QuestSubmission.objects.get_queryset().order_by('id').values_list('id', flat=True)
         self.assertListEqual(list(qs), [submissions[0].id, submissions[1].id])
 
     def test_quest_submission_manager_get_queryset_for_active_semester(self):
         submissions = self.make_test_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = submissions[0].semester
-            qs = QuestSubmission.objects.get_queryset(active_semester_only=True).values_list('id', flat=True)
+        SiteConfig.get().set_active_semester(submissions[0].semester.id)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True).values_list('id', flat=True)
         self.assertListEqual(list(qs), [submissions[0].id])
 
     def test_quest_submission_manager_get_queryset_for_all_quests(self):
         submissions = self.make_test_submissions_stack()
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = submissions[0].semester
-            qs = QuestSubmission.objects.get_queryset(
-                exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
+        SiteConfig.get().set_active_semester(submissions[0].semester.id)
+        qs = QuestSubmission.objects.get_queryset(
+            exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
         self.assertEqual(qs.count(), 7)
 
     def test_quest_submission_manager_all_for_user_quest(self):
@@ -368,9 +358,8 @@ class QuestSubmissionManagerTest(TestCase):
         active_semester = submissions[0].semester
         quest = submissions[0].quest
         first = mommy.make(QuestSubmission, user=self.student, quest=quest, semester=active_semester)
-        with patch('quest_manager.models.config') as cfg:
-            cfg.hs_active_semester = active_semester
-            qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True).values_list('id', flat=True)
+        SiteConfig.get().set_active_semester(active_semester)
+        qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
     def make_test_submissions_stack(self):

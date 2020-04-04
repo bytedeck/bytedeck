@@ -1,10 +1,11 @@
-from badges.models import Badge, BadgeAssertion
+from badges.models import BadgeAssertion
 from badges.views import grant_badge
 from comments.forms import CommentForm
 from comments.models import Comment
-from courses.models import Semester
-from djconfig import config
+# from djconfig import config
 from notifications.signals import notify
+
+from siteconfig.models import SiteConfig
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -77,7 +78,7 @@ def suggestion_list(request, id=None, completed=False):
     template_name = 'suggestions/suggestion_list.html'
 
     # Are we within the dates of the active semester?
-    semester = get_object_or_404(Semester, pk=config.hs_active_semester)
+    semester = SiteConfig.get().active_semester
 
     if completed:
         suggestions = Suggestion.objects.all_completed()
@@ -95,8 +96,8 @@ def suggestion_list(request, id=None, completed=False):
     votes_total = request.user.vote_set.all().count()
     votes_this_semester = Vote.objects.all_this_semester(request.user).count()
 
-    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
-    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
+    vote_badge = SiteConfig.get().voting_badge
+    suggestion_badge = SiteConfig.get().suggestion_badge
 
     comment_form = CommentForm(request.POST or None, label="")
     context = {
@@ -107,7 +108,7 @@ def suggestion_list(request, id=None, completed=False):
         'votes_total': votes_total,
         'suggestion_badge': suggestion_badge,
         'vote_badge': vote_badge,
-        'num_votes': config.hs_num_votes,
+        'num_votes': SiteConfig.get().num_votes,
         'votes_this_semester': votes_this_semester,
         'semester': semester,
     }
@@ -183,7 +184,7 @@ def suggestion_approve(request, id):
            "</span>"
 
     # TODO don't hardcode this, put it in the settings!
-    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
+    suggestion_badge = SiteConfig.get().suggestion_badge
     grant_badge(request, suggestion_badge.id, suggestion.user.id)
 
     notify.send(
@@ -264,7 +265,7 @@ def down_vote(request, id):
 
 @login_required
 def vote(request, id, vote_score):
-    if not config.hs_suggestions_on:
+    if not SiteConfig.get().suggestions_on:
         raise Http404
 
     suggestion = get_object_or_404(Suggestion, id=id)
@@ -290,9 +291,9 @@ def vote(request, id, vote_score):
 
 def check_votes_and_grant_badge(request, user):
     user_votes_this_sem = Vote.objects.all_this_semester(user).count()
-    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
+    vote_badge = SiteConfig.get().voting_badge
     user_num_votes_badge = BadgeAssertion.objects.num_assertions(user, vote_badge, active_semester_only=True)
-    votes_per_badge = config.hs_num_votes
+    votes_per_badge = SiteConfig.get().hs_num_votes
 
     vote_badges_earned = int(user_votes_this_sem / votes_per_badge)
 

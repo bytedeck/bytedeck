@@ -13,15 +13,12 @@ from announcements.models import Announcement
 
 # from unittest.mock import patch
 
-
 User = get_user_model()
 
 
 class AnnouncementViewTests(TestCase):
 
     def setUp(self):
-        # djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
 
@@ -29,9 +26,6 @@ class AnnouncementViewTests(TestCase):
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
         self.test_student2 = mommy.make(User)
-
-        # needed because BadgeAssertions use a default that might not exist yet
-        # self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
 
         self.test_announcement = mommy.make(Announcement, draft=False)
         self.ann_pk = self.test_announcement.pk

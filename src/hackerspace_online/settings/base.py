@@ -72,7 +72,8 @@ INSTALLED_APPS = (
     'bootstrap_datepicker_plus',
 
     # django-djconfig.readthedocs.org/en/
-    'djconfig',
+    # Not used any more.  Use the siteconfig app instead.
+    # 'djconfig',
 
     # https://github.com/yetty/django-embed-video
     # used for the EmbedVideoField that validates YouTube and Vimeo urls
@@ -117,6 +118,7 @@ INSTALLED_APPS = (
     'djcytoscape',
     'portfolios',
     'utilities',
+    'siteconfig',
    # 'tours',
 )
 
@@ -137,7 +139,7 @@ MIDDLEWARE += [
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'djconfig.middleware.DjConfigMiddleware',
+    # 'djconfig.middleware.DjConfigMiddleware',
 ]
 
 ROOT_URLCONF = 'hackerspace_online.urls'
@@ -161,7 +163,7 @@ TEMPLATES = [
                 # 'allauth.account.context_processors.account',
                 # 'allauth.socialaccount.context_processors.socialaccount',
 
-                'djconfig.context_processors.config',
+                'siteconfig.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },
