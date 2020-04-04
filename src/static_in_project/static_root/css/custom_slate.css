@@ -6,6 +6,10 @@ Light: #3e444c
 Text: #c8c8c8
 */
 
+h5 {
+  color: white;
+}
+
 figure {
     border-color:#0c0d0e;
     background-color: #272b30;
