@@ -10,8 +10,7 @@ from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
 from attachments.models import Attachment
 
-from sitesettings.model import SiteSettings
-
+from siteconfig.models import SiteConfig
 from utilities.fields import RestrictedFileFormField
 
 from comments.models import clean_html
@@ -55,7 +54,7 @@ class HackerspaceWriteForm(WriteForm):
 
     @staticmethod
     def message_exchange_filter(sender, recipient, recipients_list):
-        if SiteSettings.get().message_teachers_only and not sender.is_staff and not recipient.is_staff:
+        if SiteConfig.get().message_teachers_only and not sender.is_staff and not recipient.is_staff:
             return 'Students may only message teachers. Sorry!'
 
         return None  # comms ok between these two people
@@ -75,7 +74,7 @@ class HackerspaceWriteForm(WriteForm):
 
         super().__init__(*args, **kwargs)
 
-        if SiteSettings.get().message_teachers_only and sender and not sender.is_staff:
+        if SiteConfig.get().message_teachers_only and sender and not sender.is_staff:
             # only allow students to send to staff
             self.fields['recipients'].widget.queryset = User.objects.filter(is_staff=True)
 
