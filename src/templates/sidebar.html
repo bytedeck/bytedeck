@@ -63,14 +63,6 @@
       {% endif %}
     </a>
 
-    {% if config.hs_suggestions_on %}
-    <a id="suggestions-menu" class="list-group-item
-        {% if '/suggestions/' in request.path_info %}active{% endif %}"
-       href="{% url 'suggestions:list' %}">
-      <i class="fa fa-lightbulb-o fa-fw"></i>&nbsp; Suggestions
-    </a>
-    {% endif %}
-
     <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
        href="{% url 'profiles:profile_list_current' %}">
       <i class="fa fa-users fa-fw"></i>&nbsp; Students

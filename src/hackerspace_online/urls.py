@@ -42,7 +42,6 @@ urlpatterns = [
     url(r'^notifications/', include('notifications.urls', namespace='notifications')),
     url(r'^courses/', include('courses.urls', namespace='courses')),
     url(r'^achievements/', include('badges.urls', namespace='badges')),
-    url(r'^suggestions/', include('suggestions.urls', namespace='suggestions')),
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),

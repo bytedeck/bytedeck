@@ -114,7 +114,7 @@ INSTALLED_APPS = (
     'courses',
     'prerequisites',
     'badges',
-    'suggestions',
+    # 'suggestions',
     'djcytoscape',
     'portfolios',
     'utilities',
