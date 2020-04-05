@@ -1,9 +1,10 @@
 from django.contrib import admin
 
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .models import CytoScape, CytoStyleSet, CytoStyleClass
 
 
-class CytoScapeAdmin(admin.ModelAdmin):
+class CytoScapeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     fields = [
         'name',
         'initial_content_type', 'initial_object_id',
@@ -20,6 +21,14 @@ class CytoScapeAdmin(admin.ModelAdmin):
     }
 
 
+class CytoStyleSetAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+class CytoStyleClassAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
 admin.site.register(CytoScape, CytoScapeAdmin)
-admin.site.register(CytoStyleSet)
-admin.site.register(CytoStyleClass)
+admin.site.register(CytoStyleSet, CytoStyleSetAdmin)
+admin.site.register(CytoStyleClass, CytoStyleClassAdmin)
