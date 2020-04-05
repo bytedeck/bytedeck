@@ -3,12 +3,8 @@ from django.contrib import messages
 from django.shortcuts import render, redirect
 from django.contrib.admin.views.decorators import staff_member_required
 
-from djconfig import config
-
 from courses.models import Semester
-from .forms import HackerspaceConfigForm
 from tenant.views import allow_non_public_view
-from quest_manager.models import QuestSubmission
 
 
 @allow_non_public_view

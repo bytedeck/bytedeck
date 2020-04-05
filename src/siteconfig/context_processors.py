@@ -1,4 +1,7 @@
+from django.db import connection
+
 from .models import SiteConfig
+from tenant_schemas.utils import get_public_schema_name
 
 
 def config(request):
@@ -10,4 +13,6 @@ def config(request):
             'siteconfig.context_processors.config',
         )
     """
-    return {"config": SiteConfig.get()}
+    if connection.schema_name != get_public_schema_name():
+        return {"config": SiteConfig.get()}
+    return {"config": None}

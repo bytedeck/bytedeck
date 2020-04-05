@@ -50,7 +50,7 @@ SHARED_APPS = (
 
     'django_celery_beat',
 
-    'djconfig',
+    # 'djconfig',
     'postman',
 
     'grappelli',
@@ -86,7 +86,7 @@ TENANT_APPS = (
     'postman',
 
     # local apps
-    'djconfig',
+    # 'djconfig',
     'quest_manager',
     'profile_manager',
     'announcements',
