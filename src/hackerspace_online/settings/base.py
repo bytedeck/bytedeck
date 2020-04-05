@@ -218,6 +218,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
@@ -538,5 +539,3 @@ DATABASE_ROUTERS = (
 TENANT_MODEL = "tenant.Tenant"
 
 DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'
-
-WEB_URL = os.environ.get('WEB_URL', 'localhost')

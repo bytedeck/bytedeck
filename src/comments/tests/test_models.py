@@ -1,13 +1,13 @@
-# Create your tests here.
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
+from tenant_schemas.test.cases import TenantTestCase
 
 from comments.models import Comment
 
 
-class CommentTestModel(TestCase):
+class CommentTestModel(TenantTestCase):
 
     def setUp(self):
         User = get_user_model()

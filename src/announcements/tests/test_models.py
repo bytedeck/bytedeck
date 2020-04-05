@@ -1,10 +1,10 @@
-from django.test import TestCase
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
 
 from announcements.models import Announcement
 
 
-class AnnouncementTestModel(TestCase):
+class AnnouncementTestModel(TenantTestCase):
     def setUp(self):
         self.announcement = mommy.make(Announcement)
 

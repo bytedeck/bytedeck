@@ -1,11 +1,11 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
 
 from notifications.models import Notification
 
 
-class NotificationViewTests(TestCase):
+class NotificationViewTests(TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']

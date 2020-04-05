@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase, SimpleTestCase
+from django.test import SimpleTestCase
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
+from tenant_schemas.test.cases import TenantTestCase
 
 from siteconfig.models import SiteConfig
 
@@ -9,7 +10,7 @@ from courses.models import Semester
 from profile_manager.models import Profile, smart_list
 
 
-class ProfileTestModel(TestCase):
+class ProfileTestModel(TenantTestCase):
 
     def setUp(self):
         User = get_user_model()
