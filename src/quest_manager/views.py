@@ -947,7 +947,6 @@ def drop(request, submission_id):
 @login_required
 def submission(request, submission_id=None, quest_id=None):
     # sub = QuestSubmission.objects.get(id = submission_id)
-    import ipdb; ipdb.set_trace()
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
