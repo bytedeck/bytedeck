@@ -5,8 +5,6 @@ from django.contrib.auth.models import User
 from django.shortcuts import render, redirect, get_object_or_404, Http404
 from django.utils import timezone
 
-from djconfig import config
-
 from badges.models import Badge, BadgeAssertion
 from badges.views import grant_badge
 from comments.forms import CommentForm
