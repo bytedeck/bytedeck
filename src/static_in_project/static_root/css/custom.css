@@ -88,10 +88,6 @@ tr.detail-view {
     background-color: #EEE;
 }
 
-form > div.alert.alert-block.alert-danger {
-  margin-top: 8px;
-}
-
 /******* Accordian ***********************/
 
 .panel-default > .panel-heading.accordian-trigger {
