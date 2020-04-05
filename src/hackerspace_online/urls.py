@@ -42,7 +42,6 @@ urlpatterns = [
     url(r'^notifications/', include('notifications.urls', namespace='notifications')),
     url(r'^courses/', include('courses.urls', namespace='courses')),
     url(r'^achievements/', include('badges.urls', namespace='badges')),
-    url(r'^suggestions/', include('suggestions.urls', namespace='suggestions')),
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
@@ -59,23 +58,6 @@ urlpatterns = [
     url(r'^select2/', include('django_select2.urls')),
 ]
 
-# from hackerspace_online.postman import HackerspaceWriteForm  # noqa: E402
-# from postman.views import WriteView  # noqa: E402
-# from postman.forms import AnonymousWriteForm  # noqa: E402
-from django.urls import re_path  # noqa: E402
-from hackerspace_online.postman import HackerspaceWriteView  # noqa: E402
-
-# django-postman
-urlpatterns += [
-    re_path(r'^messages/write/(?:(?P<recipients>[^/#]+)/)?$', HackerspaceWriteView.as_view(), name='write'),
-    url(r'^messages/', include('postman.urls', namespace='postman')),
-    # url(r'^reply/(?P<message_id>[\d]+)/$',
-    #     ReplyView.as_view(form_class=MyCustomFullReplyForm),
-    #     name='reply'),
-    # url(r'^view/(?P<message_id>[\d]+)/$',
-    #     MessageView.as_view(form_class=MyCustomQuickReplyForm),
-    #     name='view'),
-]
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

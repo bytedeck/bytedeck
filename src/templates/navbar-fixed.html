@@ -1,7 +1,6 @@
 {% load static %}
 {% load utility_tags %}
 {% load courses_tags %}
-{% load postman_tags %}
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top"
@@ -102,14 +101,7 @@
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
                     <span class="visible-xs-inline">Announcements</span></a>
                 </li>
-                <li>
-                    <a title="Messages" href="{% url 'postman:inbox' %}"><i class="fa fa-comments-o fa-fw"></i>
-                    <span class="visible-xs-inline">Messages</span>
-                        {% postman_unread as unread_count %}{% if unread_count %}
-                        <span id="messages-badge-mobile" class="badge alert-danger list-group-item-badge ">{{unread_count}}</span>
-                        {% endif %}
-                    </a>
-                </li>
+
                 {% if request.user.is_staff %}
                 <li class="visible-xs-block">
                     <a title="Students" href="{% url 'profiles:profile_list_current' %}">
