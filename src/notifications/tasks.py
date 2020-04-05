@@ -1,6 +1,4 @@
-# http://docs.celeryproject.org/en/latest/django/first-steps-with-django.html#using-the-shared-task-decorator
 from __future__ import absolute_import, unicode_literals
-from celery import shared_task
 
 from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from django.utils import timezone
@@ -9,14 +7,14 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import mail
 from django.core.mail import EmailMultiAlternatives
-
 from django.template.loader import get_template
 
+from celery import shared_task
+from tenant_schemas.utils import get_tenant_model, tenant_context
 
 from .models import Notification
 
 User = get_user_model()
-
 
 email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
     minute='0',
@@ -27,7 +25,6 @@ email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
 
 def get_notification_emails():
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
-    # print("Users to email: {}".format(str(users_to_email)))
     if len(users_to_email) > 90:
         print("Gmail is limited to sending 100 emails per day... gonna trim the list!")
     subject = 'Hackerspace notifications'
@@ -52,7 +49,6 @@ def get_notification_emails():
                     'profile_edit_url': profile_edit_url,
                 }
             )
-            # print("Preparing notification email for {} at {}.".format(user, to_email_address))
             email_msg = EmailMultiAlternatives(subject, text_content, to=[to_email_address])
             email_msg.attach_alternative(html_content, "text/html")
             notification_emails.append(email_msg)
@@ -61,11 +57,18 @@ def get_notification_emails():
 
 
 @shared_task
-def email_notifications_to_users():
+def send_email_notification_tenant():
     notification_emails = get_notification_emails()
     connection = mail.get_connection()
     connection.send_messages(notification_emails)
     print("Sending {} notification emails.".format(len(notification_emails)))
+
+
+@shared_task
+def email_notifications_to_users():
+    for tenant in get_tenant_model().objects.exclude(schema_name='public'):
+        with tenant_context(tenant):
+            send_email_notification_tenant.delay()
 
 
 PeriodicTask.objects.get_or_create(
@@ -74,12 +77,3 @@ PeriodicTask.objects.get_or_create(
     task='notifications.tasks.email_notifications_to_users',
     queue='default'
 )
-
-# send_mail(
-#     'Test from Django',
-#     'Testing DJango celery beat.',
-#     'timberline.hackerspace@gmail.com',
-#     ['tylere.couture@sd72.bc.ca'],
-#     fail_silently=False,
-# )
-# print("for reals this time")

@@ -9,10 +9,12 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView
 
 from notifications.signals import notify
+from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
 from .forms import BadgeForm, BadgeAssertionForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeType, BadgeAssertion
 
 
+@allow_non_public_view
 @login_required
 def badge_list(request):
     badge_types = BadgeType.objects.all()
@@ -31,7 +33,7 @@ def badge_list(request):
     return render(request, "badges/list.html", context)
 
 
-class BadgeDelete(DeleteView):
+class BadgeDelete(AllowNonPublicViewMixin, DeleteView):
     model = Badge
     success_url = reverse_lazy('badges:list')
 
@@ -40,7 +42,7 @@ class BadgeDelete(DeleteView):
         return super(BadgeDelete, self).dispatch(*args, **kwargs)
 
 
-class BadgeUpdate(UpdateView):
+class BadgeUpdate(AllowNonPublicViewMixin, UpdateView):
     model = Badge
     form_class = BadgeForm
 
@@ -59,6 +61,7 @@ class BadgeUpdate(UpdateView):
         return super(BadgeUpdate, self).dispatch(*args, **kwargs)
 
 
+@allow_non_public_view
 @staff_member_required(login_url='/')
 def badge_create(request):
     form = BadgeForm(request.POST or None, request.FILES or None)
@@ -73,6 +76,7 @@ def badge_create(request):
     return render(request, "badges/badge_form.html", context)
 
 
+@allow_non_public_view
 @staff_member_required
 def badge_copy(request, badge_id):
     new_badge = get_object_or_404(Badge, pk=badge_id)
@@ -91,6 +95,7 @@ def badge_copy(request, badge_id):
     return render(request, "badges/badge_form.html", context)
 
 
+@allow_non_public_view
 @login_required
 def detail(request, badge_id):
     # if there is an active submission, get it and display accordingly
@@ -108,7 +113,7 @@ def detail(request, badge_id):
 
 # ########## Badge Assertion Views #########################
 
-
+@allow_non_public_view
 @staff_member_required
 def bulk_assertion_create(request, badge_id=None):
     initial = {}
@@ -139,6 +144,7 @@ def bulk_assertion_create(request, badge_id=None):
     return render(request, "badges/assertion_form.html", context)
 
 
+@allow_non_public_view
 @staff_member_required
 def assertion_create(request, user_id, badge_id):
     initial = {}
@@ -166,6 +172,7 @@ def assertion_create(request, user_id, badge_id):
     return render(request, "badges/assertion_form.html", context)
 
 
+@allow_non_public_view
 @staff_member_required
 def assertion_delete(request, assertion_id):
     assertion = get_object_or_404(BadgeAssertion, pk=assertion_id)

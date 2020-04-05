@@ -7,11 +7,11 @@ from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 
+from tenant.views import allow_non_public_view
 from .models import Notification
 
 
-# Create your views here.
-
+@allow_non_public_view
 @login_required
 def list(request):
     notifications = Notification.objects.all_for_user(request.user)
@@ -21,6 +21,7 @@ def list(request):
     return render(request, "notifications/list.html", context)
 
 
+@allow_non_public_view
 @login_required
 def list_unread(request):
     notifications = Notification.objects.all_unread(request.user)
@@ -30,6 +31,7 @@ def list_unread(request):
     return render(request, "notifications/list.html", context)
 
 
+@allow_non_public_view
 @login_required
 def read_all(request):
     notifications = Notification.objects.all_unread(request.user)
@@ -42,6 +44,7 @@ def read_all(request):
     return redirect('notifications:list')
 
 
+@allow_non_public_view
 @login_required
 def read(request, id):
     try:
@@ -57,11 +60,12 @@ def read(request, id):
                 return HttpResponseRedirect(reverse('notifications:list'))
         else:
             raise Http404
-    except: # noqa
+    except:  # noqa
         # TODO deal with this bare exception
         raise HttpResponseRedirect(reverse('notifications:list'))
 
 
+@allow_non_public_view
 @login_required
 def ajax(request):
     if request.is_ajax() and request.method == "POST":
@@ -75,11 +79,11 @@ def ajax(request):
         notes = []
         for note in notifications:
             removable = note.target_content_type != ContentType.objects.get(
-                app_label="announcements", 
+                app_label="announcements",
                 model='announcement'
             )
             notes.append(
-                { 
+                {
                     'link': str(note.get_link()),
                     'id': str(note.id),
                     'removable': removable,
@@ -98,6 +102,7 @@ def ajax(request):
         raise Http404
 
 
+@allow_non_public_view
 @login_required
 def ajax_mark_read(request):
     if request.is_ajax() and request.method == "POST":

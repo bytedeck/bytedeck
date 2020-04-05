@@ -479,7 +479,6 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         else:
             # Why doesn't this work?!? it only works for some teachers? with or without pk
             # return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
-
             pk_sub_list = [
                 sub.pk for sub in self
                 if teacher.pk in sub.user.profile.teachers() or sub.quest.specific_teacher_to_notify == teacher

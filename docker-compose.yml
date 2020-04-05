@@ -2,47 +2,52 @@ version: '2' # supported by default install on Ubuntu 18.04
 
 services:
   db:
-    image: postgres:9.5-alpine # Production server is using 9.5.17
+    container_name: db
+    build: ./postgresql
     expose:
       - "5432"
     ports:
       - 5432:5432
     volumes:
+      - /home/xillar/dumps:/dumps/
       - postgres_data:/var/lib/postgresql/data/
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6
     ports:
-    - 6379:6379
+      - 6379:6379
   web:
     #restart: unless-stopped
-    build: . # current directory
+    build: .
     env_file: .env
-    command: bash -c "python /app/src/manage.py migrate && 
+    command: bash -c "python /app/src/manage.py migrate_schemas --shared && 
                       python /app/src/manage.py runserver 0.0.0.0:8000"
     volumes: 
       - .:/app
     ports:
-      - "8000:8000"
+      - 8000:8000
     depends_on:
       - db
       - redis
+    links: 
+      - db:db
   celery:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate &&
+                      python manage.py migrate_schemas --shared &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
     depends_on:
+      - db
       - redis
   celery-beat:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate && 
+                      python manage.py migrate_schemas --shared && 
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
@@ -53,4 +58,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
