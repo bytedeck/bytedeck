@@ -198,9 +198,6 @@ def default_end_date():
 
 
 class Semester(models.Model):
-    SEMESTER_CHOICES = ((1, 1), (2, 2),)
-
-    number = models.PositiveIntegerField(choices=SEMESTER_CHOICES)
     first_day = models.DateField(blank=True, null=True, default=date.today)
     last_day = models.DateField(blank=True, null=True, default=default_end_date)
     active = models.BooleanField(default=False)

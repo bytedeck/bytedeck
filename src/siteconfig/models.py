@@ -24,7 +24,7 @@ def get_active_semester():
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
         # is this only needed for tests? If not then need a unique username probably, not this!
-        semester, created = Semester.objects.get_or_create(defaults={'number': 1, 'active': True})
+        semester, created = Semester.objects.get_or_create(defaults={'active': True})
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
     return semester.id
