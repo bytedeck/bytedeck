@@ -190,7 +190,6 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 200)
 
         # View it
-        import ipdb; ipdb.set_trace()
         self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
         # Flag it
         # self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
