@@ -1,22 +1,24 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from freezegun import freeze_time
 from mock import patch
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from badges.models import Badge, BadgeAssertion
 from courses.models import CourseStudent, Semester
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 
-
 User = get_user_model()
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class PrerequisitesSignalsTest(TestCase):
+class PrerequisitesSignalsTest(TenantTestCase):
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
         self.student = mommy.make(User, username='student', is_staff=False)
 

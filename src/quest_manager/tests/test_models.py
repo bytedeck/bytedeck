@@ -1,12 +1,14 @@
 import re
 
+from datetime import timedelta
+from django.utils.timezone import localtime
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
-from django.utils.timezone import localtime
-from datetime import timedelta
 from freezegun import freeze_time
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from siteconfig.models import SiteConfig
 
@@ -14,7 +16,7 @@ from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from courses.models import Semester
 
 
-class CategoryTestModel(TestCase):  # aka Campaigns
+class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
         self.category = mommy.make(Category)
 
@@ -23,7 +25,7 @@ class CategoryTestModel(TestCase):  # aka Campaigns
         self.assertEqual(str(self.category), self.category.title)
 
 
-class CommonDataTestModel(TestCase):
+class CommonDataTestModel(TenantTestCase):
     def setUp(self):
         self.common_data = mommy.make(CommonData)
 
@@ -32,9 +34,10 @@ class CommonDataTestModel(TestCase):
         self.assertEqual(str(self.common_data), self.common_data.title)
 
 
-class QuestTestModel(TestCase):
+class QuestTestModel(TenantTestCase):
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         self.quest = mommy.make(Quest)
 
     def test_badge_creation(self):
@@ -194,9 +197,10 @@ class QuestTestModel(TestCase):
         self.assertFalse(quest_semester.is_repeat_available(student))
 
 
-class SubmissionTestModel(TestCase):
+class SubmissionTestModel(TenantTestCase):
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         User = get_user_model()
         self.semester = mommy.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.

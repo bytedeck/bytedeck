@@ -3,8 +3,8 @@
     "model": "sites.site",
     "pk": 1,
     "fields": {
-      "domain": "bytedeck.com",
-      "name": "bytedeck.com"
+      "domain": "localhost",
+      "name": "localhost"
     }
   }
 ]

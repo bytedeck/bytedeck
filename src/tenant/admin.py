@@ -32,6 +32,7 @@ class NonPublicSchemaOnlyAdminAccessMixin:
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
+    exclude = ('domain_url', 'schema_name')
 
     def save_model(self, request, obj, form, change):
         if obj.name.lower() == "public":

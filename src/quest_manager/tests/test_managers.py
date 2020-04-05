@@ -1,11 +1,13 @@
 from datetime import timedelta
+from django.utils.timezone import localtime
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from model_mommy import mommy
 from freezegun import freeze_time
+from tenant_schemas.test.cases import TenantTestCase
+
 from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
-from django.utils.timezone import localtime
 
 from siteconfig.models import SiteConfig
 
@@ -13,7 +15,7 @@ User = get_user_model()
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestManagerTest(TestCase):
+class QuestManagerTest(TenantTestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
@@ -29,9 +31,9 @@ class QuestManagerTest(TestCase):
         quest2_to_hide = mommy.make(Quest, name='Quest2-hidden')
 
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
-        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden'] 
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden']
         # Nothing hidden yet
-        self.assertListEqual(list(qs), expected_result)     
+        self.assertListEqual(list(qs), expected_result)
 
         self.student.profile.hide_quest(quest1_to_hide.id)
         self.student.profile.hide_quest(quest2_to_hide.id)
@@ -39,7 +41,7 @@ class QuestManagerTest(TestCase):
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
         expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
         # a couple hidden
-        self.assertListEqual(list(qs), expected_result) 
+        self.assertListEqual(list(qs), expected_result)
 
     def test_quest_qs_block_if_needed(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
@@ -49,8 +51,8 @@ class QuestManagerTest(TestCase):
         mommy.make(Quest, name='Quest-not-blocked')
 
         qs = Quest.objects.order_by('id').block_if_needed()
-        expected_result = ['Quest-blocking', 'Quest-also-blocking'] 
-        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result) 
+        expected_result = ['Quest-blocking', 'Quest-also-blocking']
+        self.assertListEqual(list(qs.values_list('name', flat=True)), expected_result)
 
         # Test the user specific part via QuestManager.get_available test"
 
@@ -166,7 +168,7 @@ class QuestManagerTest(TestCase):
         with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
             qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
         self.assertListEqual(
-            list(qs.values_list('name', flat=True)), 
+            list(qs.values_list('name', flat=True)),
             ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
         )
 
@@ -176,7 +178,7 @@ class QuestManagerTest(TestCase):
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_completed(self.student)
         self.assertListEqual(
-            list(qs.values_list('name', flat=True)), 
+            list(qs.values_list('name', flat=True)),
             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
         )
 
@@ -187,7 +189,8 @@ class QuestManagerTest(TestCase):
         qs = Quest.objects.order_by('id').not_in_progress(self.student)
         self.assertListEqual(
             list(qs.values_list('name', flat=True)),
-            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed', 'Quest-1hr-cooldown']  # noqa
+            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
+             'Quest-1hr-cooldown']  # noqa
         )
 
     def test_quest_manager_get_available(self):
@@ -205,7 +208,7 @@ class QuestManagerTest(TestCase):
         # with patch('quest_manager.models.SiteConfig') as cfg:
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])  
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])
 
         # Start the blocking quest.
         blocking_quest = Quest.objects.get(name='Quest-blocking')
@@ -213,12 +216,12 @@ class QuestManagerTest(TestCase):
 
         # Should have no available quests while the blocking quest is in progress
         qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), []) 
+        self.assertListEqual(list(qs.values_list('name', flat=True)), [])
 
         # complete the blocking quest to make others available
         blocking_sub.mark_completed()
         qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started']) 
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started'])
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
@@ -250,13 +253,14 @@ class QuestManagerTest(TestCase):
         sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
         sub_complete.mark_completed()
         quest_1hr_cooldown = mommy.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
-        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown, semester=active_semester)  # noqa
+        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
+                                           semester=active_semester)  # noqa
         sub_cooldown_complete.mark_completed()
         return active_semester
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionQuerysetTest(TestCase):
+class QuestSubmissionQuerysetTest(TenantTestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)
@@ -323,7 +327,7 @@ class QuestSubmissionQuerysetTest(TestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionManagerTest(TestCase):
+class QuestSubmissionManagerTest(TenantTestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)

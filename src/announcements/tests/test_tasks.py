@@ -1,7 +1,8 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
+
 from siteconfig.models import SiteConfig
 
 from announcements import tasks
@@ -10,7 +11,7 @@ from announcements.models import Announcement
 User = get_user_model()
 
 
-class AnnouncementTasksTests(TestCase):
+class AnnouncementTasksTests(TenantTestCase):
     """ Run tasks asyncronously with apply() """
 
     def setUp(self):
