@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 from siteconfig.models import SiteConfig
+from tenant_schemas.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent
@@ -366,31 +367,34 @@ class Profile(models.Model):
 
 
 def create_profile(sender, **kwargs):
-    current_user = kwargs["instance"]
+    from django.db import connection
 
-    if kwargs["created"]:
-        new_profile = Profile(user=current_user)
+    if connection.schema_name != get_public_schema_name():
+        current_user = kwargs["instance"]
 
-        # if user's name matches student number (e.g 9912345), set student number:
-        pattern = re.compile(Profile.student_number_regex_string)
-        if pattern.match(current_user.get_username()):
-            new_profile.student_number = int(current_user.get_username())
+        if kwargs["created"]:
+            new_profile = Profile(user=current_user)
 
-        # set first and last name on the profile.  This should be removed and just use the first and last name 
-        # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
-        new_profile.first_name = current_user.first_name
-        new_profile.last_name = current_user.last_name
+            # if user's name matches student number (e.g 9912345), set student number:
+            pattern = re.compile(Profile.student_number_regex_string)
+            if pattern.match(current_user.get_username()):
+                new_profile.student_number = int(current_user.get_username())
 
-        new_profile.save()
+            # set first and last name on the profile.  This should be removed and just use the first and last name
+            # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
+            new_profile.first_name = current_user.first_name
+            new_profile.last_name = current_user.last_name
 
-        staff_list = User.objects.filter(is_staff=True)
-        notify.send(
-            current_user,
-            target=new_profile,
-            recipient=staff_list[0],
-            affected_users=staff_list,
-            icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-            verb='.  New user registered: ')
+            new_profile.save()
+
+            staff_list = User.objects.filter(is_staff=True)
+            notify.send(
+                current_user,
+                target=new_profile,
+                recipient=staff_list[0],
+                affected_users=staff_list,
+                icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+                verb='.  New user registered: ')
 
 
 post_save.connect(create_profile, sender=User)

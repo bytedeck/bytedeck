@@ -1,33 +1,34 @@
 from django.contrib import admin
+from django.db import connection
 
-# Register your models here.
 from import_export import resources
 from import_export.admin import ImportExportActionModelAdmin
 
 from prerequisites.admin import PrereqInline
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion, BadgeRarity
 
 
-class BadgeRarityAdmin(admin.ModelAdmin):
+class BadgeRarityAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('name', 'percentile', 'color', 'fa_icon')
 
 
-class BadgeAssertionAdmin(admin.ModelAdmin):
+class BadgeAssertionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('badge', 'user', 'ordinal', 'timestamp')
 
 
-class BadgeTypeAdmin(admin.ModelAdmin):
+class BadgeTypeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('name', 'sort_order', 'fa_icon')
 
 
-class BadgeResource(resources.ModelResource):
+class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource):
     class Meta:
         model = Badge
         exclude = ('xp',)
 
 
-class BadgeAdmin(ImportExportActionModelAdmin):
+class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):
     resource_class = BadgeResource
     list_display = ('name', 'xp', 'active')
     inlines = [
@@ -35,8 +36,12 @@ class BadgeAdmin(ImportExportActionModelAdmin):
     ]
 
 
+class BadgeSeriesAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
 admin.site.register(Badge, BadgeAdmin)
-admin.site.register(BadgeSeries)
-admin.site.register(BadgeRarity, BadgeRarityAdmin)
 admin.site.register(BadgeType, BadgeTypeAdmin)
+admin.site.register(BadgeSeries, BadgeSeriesAdmin)
+admin.site.register(BadgeRarity, BadgeRarityAdmin)
 admin.site.register(BadgeAssertion, BadgeAssertionAdmin)

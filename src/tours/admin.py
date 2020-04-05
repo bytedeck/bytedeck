@@ -1,14 +1,14 @@
 from django.contrib import admin
 
-# Register your models here.
 from .models import Tour, Step
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 
 class StepInline(admin.StackedInline):
     model = Step
 
 
-class TourAdmin(admin.ModelAdmin):
+class TourAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = [
         StepInline,
     ]

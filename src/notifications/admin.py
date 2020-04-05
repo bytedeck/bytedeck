@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-# Register your models here.
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .models import Notification
 
-admin.site.register(Notification)
+
+class NotificationAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
+admin.site.register(Notification, NotificationAdmin)
