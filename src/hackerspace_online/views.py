@@ -1,9 +1,5 @@
-from django.http import Http404
-from django.contrib import messages
 from django.shortcuts import render, redirect
-from django.contrib.admin.views.decorators import staff_member_required
 
-from courses.models import Semester
 from tenant.views import allow_non_public_view
 
 

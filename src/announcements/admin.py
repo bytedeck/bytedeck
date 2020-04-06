@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.db import connection
 
 from django_summernote.admin import SummernoteModelAdmin
 

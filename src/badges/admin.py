@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.db import connection
 
 from import_export import resources
 from import_export.admin import ImportExportActionModelAdmin

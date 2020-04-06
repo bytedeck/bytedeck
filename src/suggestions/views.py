@@ -5,16 +5,14 @@ from django.contrib.auth.models import User
 from django.shortcuts import render, redirect, get_object_or_404, Http404
 from django.utils import timezone
 
-from badges.models import Badge, BadgeAssertion
+from badges.models import BadgeAssertion
 from badges.views import grant_badge
 from comments.forms import CommentForm
 from comments.models import Comment
-from courses.models import Semester
 from notifications.signals import notify
 from tenant.views import allow_non_public_view
 from .forms import SuggestionForm
 from .models import Suggestion, Vote
-
 from siteconfig.models import SiteConfig
 
 
