@@ -194,13 +194,6 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
-        # Not this student's submission
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:complete', args=[s2_pk])).status_code, 404)
-
         # Non existent submissions
         self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
