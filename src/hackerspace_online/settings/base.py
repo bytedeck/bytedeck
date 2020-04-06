@@ -248,12 +248,15 @@ CACHES = {
         "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+        },
+        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
     },
     'select2': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'cache_table',
         'TIMEOUT': None,
+        'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
 SELECT2_CACHE_BACKEND = 'select2'
@@ -523,7 +526,7 @@ POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
 POSTGRES_DB_NAME = os.environ.get('POSTGRES_DB_NAME', 'postgres')
 POSTGRES_USER = os.environ.get('POSTGRES_USER', 'postgres')
-POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', '')
+POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'hellonepal')
 
 DATABASES = {
     'default': {

@@ -1,8 +1,7 @@
-from django.conf import settings
 from django.contrib import admin
-from django.contrib.sites.models import Site
-from django.core.exceptions import ValidationError
 from django.db import connection
+from django.contrib.sites.models import Site
+
 from tenant_schemas.utils import get_public_schema_name
 
 from tenant.models import Tenant

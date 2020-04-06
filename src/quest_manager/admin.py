@@ -1,21 +1,16 @@
 from django.contrib import admin
-from django.db import connection
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 
 from import_export import resources
 from import_export.fields import Field
-from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
-
 from django_summernote.admin import SummernoteModelAdmin
-
-from tenant_schemas.utils import get_public_schema_name
+from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
 
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
-
 from .signals import tidy_html
 from .models import Quest, Category, QuestSubmission, CommonData
 
