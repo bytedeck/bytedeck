@@ -1,17 +1,17 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 
 from django_celery_beat.models import PeriodicTask
 
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
 
 from announcements.models import Announcement
 
 User = get_user_model()
 
 
-class AnnouncementsSignalsTest(TestCase):
+class AnnouncementsSignalsTest(TenantTestCase):
 
     def setUp(self):
         self.teacher = mommy.make(User, username='teacher', is_staff=True)

@@ -36,6 +36,7 @@ class BulkBadgeAssertionForm(forms.Form):
 
     def __init__(self, *args, **kwds):
         super(BulkBadgeAssertionForm, self).__init__(*args, **kwds)
+        # Is this still relevant because no longer using djconfig?  Not broken so...
         # Need to set queryset on init because config isn't available until apps are loaded.
         # https://github.com/nitely/django-djconfig/issues/14
         self.fields['students'].queryset = Profile.objects.all_for_active_semester()

@@ -1,21 +1,20 @@
-# Create your tests here.
-import djconfig
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
+from siteconfig.models import SiteConfig
 from badges.models import BadgeAssertion, Badge
 
 
-class ViewTests(TestCase):
+class ViewTests(TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
+        self.client = TenantClient(self.tenant)
         User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -27,7 +26,7 @@ class ViewTests(TestCase):
         self.test_student2 = mommy.make(User)
 
         # needed because BadgeAssertions use a default that might not exist yet
-        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
+        self.sem = SiteConfig.get().active_semester
 
         self.test_badge = mommy.make(Badge)
         self.test_assertion = mommy.make(BadgeAssertion)

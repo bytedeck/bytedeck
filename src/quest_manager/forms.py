@@ -1,10 +1,14 @@
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
+from crispy_forms.bootstrap import Accordion, AccordionGroup
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout, Div, HTML
 from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
 
 from badges.models import Badge
 from utilities.fields import RestrictedFileFormField
+
 from .models import Quest
 
 
@@ -48,6 +52,59 @@ class QuestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
+
+        cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
+        submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
+        admin_btn = (
+            '<a href="/admin/quest_manager/quest/{{object.id}}"'
+            ' title="This is required to edit prerequisites"'
+            ' role="button" class="btn btn-default">'
+            ' via Admin</a>'
+        )
+
+        self.helper = FormHelper()
+        self.helper.layout = Layout(
+            HTML(cancel_btn),
+            HTML(submit_btn),
+            HTML(admin_btn),
+            Div(
+                'name',
+                'xp',
+                'visible_to_students',
+                'verification_required',
+                'icon',
+                'short_description',
+                'instructions',
+                'submission_details',
+                'instructor_notes',
+                'campaign',
+                'common_data',
+                'max_repeats',
+                'hours_between_repeats',
+                Accordion(
+                    AccordionGroup(
+                        'Advanced',
+                        'repeat_per_semester',
+                        'specific_teacher_to_notify',
+                        'blocking',
+                        'hideable',
+                        'sort_order',
+                        'date_available',
+                        'time_available',
+                        'date_expired',
+                        'time_expired',
+                        'available_outside_course',
+                        'archived',
+                        'editor',
+                        active=False,
+                        template='crispy_forms/bootstrap3/accordion-group.html'
+                    ),
+                ),
+                HTML(cancel_btn),
+                HTML(submit_btn),
+                style="margin-top: 10px;"
+            )
+        )
 
         # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
         if user.profile.is_TA:

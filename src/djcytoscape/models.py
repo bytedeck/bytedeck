@@ -18,6 +18,9 @@ class CytoStyleClass(models.Model):
     styles = models.TextField(blank=True, null=True,
                               help_text="Format = key1: value1, key2: value2, ... (see http://js.cytoscape.org/#style)")
 
+    class Meta:
+        verbose_name = "Map Style"
+
     def __str__(self):
         return self.name
 
@@ -98,6 +101,9 @@ class CytoStyleSet(models.Model):
     javascript = models.TextField(blank=True, null=True, default=JAVASCRIPT_DEFAULT,
                                   help_text="Will be placed inside script tags. JQuery available. "
                                             "See http://js.cytoscape.org/#core")
+
+    class Meta:
+        verbose_name = "Map Style Set"
 
     def __str__(self):
         return self.name
@@ -581,6 +587,7 @@ class CytoScape(models.Model):
 
     class Meta:
         unique_together = (('initial_content_type', 'initial_object_id'),)
+        verbose_name = "Quest Map"
 
     def __str__(self):
         return self.name

@@ -1,23 +1,24 @@
-# Create your tests here.
-import djconfig
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
+
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
+
+from siteconfig.models import SiteConfig
 
 from quest_manager.models import QuestSubmission, Quest
 
 
-class QuestViewTests(TestCase):
+class QuestViewTests(TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
+        self.client = TenantClient(self.tenant)
         User = get_user_model()
-        self.sem = mommy.make('courses.semester', pk=djconfig.config.hs_active_semester)
+        self.sem = SiteConfig.get().active_semester
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
@@ -42,7 +43,6 @@ class QuestViewTests(TestCase):
         )
 
     def test_all_quest_page_status_codes_for_students(self):
-
         # log in a student
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -114,14 +114,13 @@ class QuestViewTests(TestCase):
     #     self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
 
-class SubmissionViewTests(TestCase):
+class SubmissionViewTests(TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
+        self.client = TenantClient(self.tenant)
         User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -140,7 +139,6 @@ class SubmissionViewTests(TestCase):
         self.sub3 = mommy.make(QuestSubmission, quest=self.quest2)
 
     def test_all_submission_page_status_codes_for_students(self):
-
         # log in a student
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -182,7 +180,6 @@ class SubmissionViewTests(TestCase):
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
     def test_all_submission_page_status_codes_for_teachers(self):
-
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
@@ -225,7 +222,6 @@ class SubmissionViewTests(TestCase):
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
     def test_student_quest_completion(self):
-
         # self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
 
         # self.assertRedirects(
@@ -263,7 +259,7 @@ class SubmissionViewTests(TestCase):
         }
 
         response = self.client.post(
-            reverse('quests:ajax_save_draft'), 
+            reverse('quests:ajax_save_draft'),
             data=ajax_data,
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )

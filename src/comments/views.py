@@ -6,13 +6,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
 
-# Create your views here.
-from notifications.signals import notify
-
 from .models import Comment
 from .forms import CommentForm
+from notifications.signals import notify
+from tenant.views import allow_non_public_view
 
 
+@allow_non_public_view
 @staff_member_required
 def unflag(request, id):
     comment = get_object_or_404(Comment, pk=id)
@@ -20,6 +20,7 @@ def unflag(request, id):
     return redirect(comment.path)
 
 
+@allow_non_public_view
 @staff_member_required
 def delete(request, id, template_name='comments/confirm_delete.html'):
     comment = get_object_or_404(Comment, pk=id)
@@ -30,6 +31,7 @@ def delete(request, id, template_name='comments/confirm_delete.html'):
     return render(request, template_name, {'object': comment})
 
 
+@allow_non_public_view
 @staff_member_required
 def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
@@ -52,6 +54,7 @@ def flag(request, id):
     return redirect(comment.path)
 
 
+@allow_non_public_view
 @login_required
 def comment_thread(request, id):
     comment = get_object_or_404(Comment, id=id)
@@ -64,6 +67,7 @@ def comment_thread(request, id):
     return render(request, "comments/comment_thread.html", context)
 
 
+@allow_non_public_view
 @login_required
 def comment_create(request):
     if request.method == "POST" and request.user.is_authenticated:
@@ -79,7 +83,7 @@ def comment_create(request):
             # quest = Quest.objects.get(id = quest_id)
             content_type = ContentType.objects.get_for_id(target_content_type_id)
             target = content_type.get_object_for_this_type(id=target_object_id)
-        except: # noqa
+        except:  # noqa
             # TODO deal with this
             target = None
 
@@ -87,7 +91,7 @@ def comment_create(request):
         if parent_id is not None:
             try:
                 parent_comment = Comment.objects.get(id=parent_id)
-            except: # noqa
+            except:  # noqa
                 # TODO deal with this
                 parent_comment = None
 

@@ -1,40 +1,26 @@
-# import djconfig
 from datetime import timedelta, date
-from freezegun import freeze_time
-
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from model_mommy import mommy
-# from model_mommy.recipe import Recipe
+from freezegun import freeze_time
+from tenant_schemas.test.cases import TenantTestCase
 
 from courses.models import MarkRange, Course, Semester
 
 User = get_user_model()
 
 
-class MarkRangeTestModel(TestCase):
+class MarkRangeTestModel(TenantTestCase):
 
     def setUp(self):
         self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
-        # djconfig.reload_maybe()  # https://github.com/nitely/django-djconfig/issues/31#issuecomment-451587942
-
-        # self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        # self.user = mommy.make(User)
-        # Profiles are created automatically with each user, so we only need to access profiles via users
-        # self.profile = self.user.profile
-
-        # self.active_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester)
-
-        # Why is this required?  Why can't I just mommy.make(Semester)?  For some reason when I
-        # use mommy.make(Semester) it tried to duplicate the pk, using pk=1 again?!
-        # self.inactive_sem = mommy.make(Semester, pk=djconfig.config.hs_active_semester+1)
 
     def test_marke_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
         # self.assertEqual(str(self.mr_50), self.user.username)
 
 
-class MarkRangeTestManager(TestCase):
+class MarkRangeTestManager(TenantTestCase):
     def setUp(self):
         self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
 
@@ -67,7 +53,7 @@ class MarkRangeTestManager(TestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
 
 
-class SemesterTestModel(TestCase):
+class SemesterTestModel(TenantTestCase):
 
     def setUp(self):
         self.semester_start = date(2020, 9, 8)
@@ -109,7 +95,7 @@ class SemesterTestModel(TestCase):
         # Timezone problems?    
 
 
-class CourseTestModel(TestCase):
+class CourseTestModel(TenantTestCase):
 
     def setUp(self):
         self.course = mommy.make(Course)

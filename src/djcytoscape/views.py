@@ -11,24 +11,32 @@ from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView
 from django.urls import reverse_lazy
-from djcytoscape.forms import GenerateQuestMapForm
 
 from .models import CytoScape
 from quest_manager.models import QuestSubmission
+from djcytoscape.forms import GenerateQuestMapForm
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 
 User = get_user_model()
 
 
-class ScapeUpdate(UpdateView):
+class ScapeUpdate(AllowNonPublicViewMixin, UpdateView):
     model = CytoScape
-    fields = '__all__'
+    fields = [
+        'name',
+        'initial_content_type', 'initial_object_id',
+        'parent_scape',
+        'style_set',
+        'is_the_primary_scape',
+        'autobreak'
+    ]
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         return super(ScapeUpdate, self).dispatch(*args, **kwargs)
 
 
-class ScapeDelete(DeleteView):
+class ScapeDelete(AllowNonPublicViewMixin, DeleteView):
     model = CytoScape
     success_url = reverse_lazy('djcytoscape:list')
 
@@ -37,10 +45,11 @@ class ScapeDelete(DeleteView):
         return super(ScapeDelete, self).dispatch(*args, **kwargs)
 
 
-class ScapeList(LoginRequiredMixin, ListView):
+class ScapeList(AllowNonPublicViewMixin, LoginRequiredMixin, ListView):
     model = CytoScape
 
 
+@allow_non_public_view
 @login_required
 def index(request):
     scape_list = CytoScape.objects.all()
@@ -51,11 +60,13 @@ def index(request):
     return render(request, 'djcytoscape/index.html', context)
 
 
+@allow_non_public_view
 @login_required
 def quest_map(request, scape_id):
     return quest_map_personalized(request, scape_id, None)
 
 
+@allow_non_public_view
 @login_required
 def quest_map_personalized(request, scape_id, user_id):
     if user_id is None:
@@ -82,11 +93,12 @@ def quest_map_personalized(request, scape_id, user_id):
                                                               'completed_quests': quest_ids,
                                                               'fullscreen': True,
                                                               'personalized_user': personalized_user,
-                                                              }) 
+                                                              })
     else:
         raise Http404()
 
 
+@allow_non_public_view
 @login_required
 def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
     try:
@@ -100,6 +112,7 @@ def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
             raise Http404
 
 
+@allow_non_public_view
 @login_required
 def primary(request):
     try:
@@ -109,6 +122,7 @@ def primary(request):
         return generate_map(request)
 
 
+@allow_non_public_view
 @staff_member_required
 def generate_map(request, ct_id=None, obj_id=None, scape_id=None, autobreak=True):
     """
@@ -155,6 +169,7 @@ def generate_map(request, ct_id=None, obj_id=None, scape_id=None, autobreak=True
     return render(request, 'djcytoscape/generate_new_form.html', context)
 
 
+@allow_non_public_view
 @staff_member_required
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
@@ -162,6 +177,7 @@ def regenerate(request, scape_id):
     return redirect('djcytoscape:quest_map', scape_id=scape.id)
 
 
+@allow_non_public_view
 @staff_member_required
 def regenerate_all(request):
     for scape in CytoScape.objects.all():

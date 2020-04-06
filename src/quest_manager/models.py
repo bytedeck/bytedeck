@@ -7,16 +7,17 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
-from django.shortcuts import get_object_or_404
-from django.templatetags.static import static
+# from django.shortcuts import get_object_or_404
+# from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
-from djconfig import config
+
+from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
-from utilities.models import ImageResource
+# from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
@@ -361,14 +362,10 @@ class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
-        if self.campaign and self.campaign.icon and hasattr(self.campaign.icon, 'url'):
+        elif self.campaign and self.campaign.icon and hasattr(self.campaign.icon, 'url'):
             return self.campaign.icon.url
-
-        if config.hs_default_icon:
-            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
-            return icon.image.url
-
-        return static('img/default_icon.png')            
+        else:
+            return SiteConfig.get().get_default_icon_url()
 
     def is_repeat_available(self, user):
         "Assumes one submission has already been completed"
@@ -482,7 +479,6 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         else:
             # Why doesn't this work?!? it only works for some teachers? with or without pk
             # return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
-
             pk_sub_list = [
                 sub.pk for sub in self
                 if teacher.pk in sub.user.profile.teachers() or sub.quest.specific_teacher_to_notify == teacher
@@ -510,7 +506,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(config.hs_active_semester)
+            qs = qs.get_semester(SiteConfig.get().active_semester.pk)
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_visible_to_students:
@@ -577,7 +573,7 @@ class QuestSubmissionManager(models.Manager):
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False).get_user(user).completed()
-        return qs.get_not_semester(config.hs_active_semester).order_by('is_approved', '-time_approved')
+        return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
@@ -598,7 +594,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
-            qs = self.get_queryset(True).not_approved().completed(config.hs_approve_oldest_first)\
+            qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
                 .for_teacher_only(teacher)
             return qs
         return self.get_queryset(True).get_user(user).not_approved().completed()
@@ -664,7 +660,7 @@ class QuestSubmissionManager(models.Manager):
                 quest=quest,
                 user=user,
                 ordinal=ordinal,
-                semester_id=config.hs_active_semester,
+                semester_id=SiteConfig.get().active_semester.pk,
             )
             new_submission.save()
             return new_submission
@@ -709,7 +705,7 @@ class QuestSubmissionManager(models.Manager):
         # print("NOT APPROVED ********")
         # print(qs)
         for sub in qs:
-            sub.semester_id = config.hs_active_semester
+            sub.semester_id = SiteConfig.get().active_semester.id
             sub.save()
 
         # started but not submitted
@@ -717,7 +713,7 @@ class QuestSubmissionManager(models.Manager):
         # print("NOT COMPLETED ********")
         # print(qs)
         for sub in qs:
-            sub.semester_id = config.hs_active_semester
+            sub.semester_id = SiteConfig.get().active_semester.id
             sub.save()
 
     def remove_in_progress(self):

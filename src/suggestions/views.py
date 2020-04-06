@@ -1,21 +1,22 @@
-from badges.models import Badge, BadgeAssertion
-from badges.views import grant_badge
-from comments.forms import CommentForm
-from comments.models import Comment
-from courses.models import Semester
-from djconfig import config
-from notifications.signals import notify
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import render, redirect, get_object_or_404, Http404
 from django.utils import timezone
+
+from badges.models import BadgeAssertion
+from badges.views import grant_badge
+from comments.forms import CommentForm
+from comments.models import Comment
+from notifications.signals import notify
+from tenant.views import allow_non_public_view
 from .forms import SuggestionForm
 from .models import Suggestion, Vote
+from siteconfig.models import SiteConfig
 
 
+@allow_non_public_view
 @login_required
 def comment(request, id):
     suggestion = get_object_or_404(Suggestion, pk=id)
@@ -68,16 +69,18 @@ def comment(request, id):
         raise Http404
 
 
+@allow_non_public_view
 def suggestion_list_beta(request, id=None, completed=False):
     return suggestion_list(request, id, completed, beta=True)
 
 
+@allow_non_public_view
 @login_required
 def suggestion_list(request, id=None, completed=False):
     template_name = 'suggestions/suggestion_list.html'
 
     # Are we within the dates of the active semester?
-    semester = get_object_or_404(Semester, pk=config.hs_active_semester)
+    semester = SiteConfig.get().active_semester
 
     if completed:
         suggestions = Suggestion.objects.all_completed()
@@ -95,8 +98,8 @@ def suggestion_list(request, id=None, completed=False):
     votes_total = request.user.vote_set.all().count()
     votes_this_semester = Vote.objects.all_this_semester(request.user).count()
 
-    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
-    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
+    vote_badge = SiteConfig.get().voting_badge
+    suggestion_badge = SiteConfig.get().suggestion_badge
 
     comment_form = CommentForm(request.POST or None, label="")
     context = {
@@ -107,17 +110,19 @@ def suggestion_list(request, id=None, completed=False):
         'votes_total': votes_total,
         'suggestion_badge': suggestion_badge,
         'vote_badge': vote_badge,
-        'num_votes': config.hs_num_votes,
+        'num_votes': SiteConfig.get().num_votes,
         'votes_this_semester': votes_this_semester,
         'semester': semester,
     }
     return render(request, template_name, context)
 
 
+@allow_non_public_view
 def suggestion_list_completed(request, id=None):
     return suggestion_list(request, id, completed=True)
 
 
+@allow_non_public_view
 @login_required
 def suggestion_create(request):
     template_name = 'suggestions/suggestion_form.html'
@@ -148,6 +153,7 @@ def suggestion_create(request):
     return render(request, template_name, {'form': form})
 
 
+@allow_non_public_view
 @staff_member_required
 def suggestion_update(request, pk):
     template_name = 'suggestions/suggestion_form.html'
@@ -159,6 +165,7 @@ def suggestion_update(request, pk):
     return render(request, template_name, {'form': form})
 
 
+@allow_non_public_view
 @staff_member_required
 def suggestion_delete(request, pk):
     template_name = 'suggestions/suggestion_confirm_delete.html'
@@ -169,6 +176,7 @@ def suggestion_delete(request, pk):
     return render(request, template_name, {'object': suggestion})
 
 
+@allow_non_public_view
 @staff_member_required
 def suggestion_approve(request, id):
     suggestion = get_object_or_404(Suggestion, id=id)
@@ -183,7 +191,7 @@ def suggestion_approve(request, id):
            "</span>"
 
     # TODO don't hardcode this, put it in the settings!
-    suggestion_badge = get_object_or_404(Badge, pk=config.hs_suggestion_badge)
+    suggestion_badge = SiteConfig.get().suggestion_badge
     grant_badge(request, suggestion_badge.id, suggestion.user.id)
 
     notify.send(
@@ -200,6 +208,7 @@ def suggestion_approve(request, id):
     return redirect(suggestion.get_absolute_url())
 
 
+@allow_non_public_view
 @staff_member_required
 def suggestion_complete(request, pk):
     suggestion = get_object_or_404(Suggestion, pk=pk)
@@ -226,6 +235,7 @@ def suggestion_complete(request, pk):
     return redirect(suggestion.get_absolute_url())
 
 
+@allow_non_public_view
 @staff_member_required
 def suggestion_reject(request, pk):
     suggestion = get_object_or_404(Suggestion, pk=pk)
@@ -252,19 +262,22 @@ def suggestion_reject(request, pk):
     return redirect(suggestion.get_absolute_url())
 
 
+@allow_non_public_view
 @login_required
 def up_vote(request, id):
     return vote(request, id, 1)
 
 
+@allow_non_public_view
 @login_required
 def down_vote(request, id):
     return vote(request, id, -1)
 
 
+@allow_non_public_view
 @login_required
 def vote(request, id, vote_score):
-    if not config.hs_suggestions_on:
+    if not SiteConfig.get().suggestions_on:
         raise Http404
 
     suggestion = get_object_or_404(Suggestion, id=id)
@@ -290,9 +303,9 @@ def vote(request, id, vote_score):
 
 def check_votes_and_grant_badge(request, user):
     user_votes_this_sem = Vote.objects.all_this_semester(user).count()
-    vote_badge = get_object_or_404(Badge, pk=config.hs_voting_badge)
+    vote_badge = SiteConfig.get().voting_badge
     user_num_votes_badge = BadgeAssertion.objects.num_assertions(user, vote_badge, active_semester_only=True)
-    votes_per_badge = config.hs_num_votes
+    votes_per_badge = SiteConfig.get().hs_num_votes
 
     vote_badges_earned = int(user_votes_this_sem / votes_per_badge)
 

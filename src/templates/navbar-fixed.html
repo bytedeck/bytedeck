@@ -150,7 +150,7 @@
                         <li><a title="This may take a few moments..."
                                 href="{% url 'profiles:recalculate_xp_current' %}">
                           Recalculate XP for all current users</a></li>
-                        <li><a href="/config">Site Configuration</a></li>
+                        <li><a href="/config/{{ config.id }}">Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Database</li>
                         <li><a href="/admin">Django Admin</a></li>

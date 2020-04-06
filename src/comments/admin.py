@@ -1,10 +1,10 @@
 from django.contrib import admin
 
-# Register your models here.
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .models import Comment, Document
 
 
-class CommentAdmin(admin.ModelAdmin):
+class CommentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ['id', '__str__', 'text']
 
     class Meta:

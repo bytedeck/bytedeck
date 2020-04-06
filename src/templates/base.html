@@ -10,7 +10,7 @@
     <meta name="description" content="">
     <meta name="author" content="">
 
-    <title>{% block head_title%}{% endblock%} {{ config.hs_site_name }}</title>
+    <title>{% block head_title%}{% endblock%} {{ config.site_name }}</title>
     {% include 'head_css.html' %}
 
     <!-- Added at the top because too many components can't handle lazy loading of Jquery and BS at the bottom.. -->
@@ -88,7 +88,7 @@
     {% else %}
     <img class="img-responsive jumbo-banner banner1"
          src="{% static 'img/banner_closed.jpg' %}"
-         alt="{{ config.hs_site_name }} is Closed for Maintenance"/>
+         alt="{{ config.site_name }} is Closed for Maintenance"/>
     {% endif %}
 </div> <!-- /container -->
 

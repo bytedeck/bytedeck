@@ -5,19 +5,16 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Max, Sum
 from django.shortcuts import get_object_or_404
-from django.templatetags.static import static
 from django.urls import reverse
-from djconfig import config
 
 from django.dispatch import receiver
 from django.db.models.signals import post_save
+
+from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
-from utilities.models import ImageResource
 
-
-# from courses.models import Semester
 
 # Create your models here.
 
@@ -178,11 +175,8 @@ class Badge(models.Model, IsAPrereqMixin, HasPrereqsMixin):
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url
-
-        if config.hs_default_icon:
-            icon = get_object_or_404(ImageResource, pk=config.hs_default_icon)
-            return icon.image.url
-        return static('img/default_icon.png')
+        else:
+            return SiteConfig.get().get_default_icon_url()
 
     # @cached_property
     def fraction_of_active_users_granted_this(self):
@@ -233,7 +227,7 @@ class BadgeAssertionManager(models.Manager):
     def get_queryset(self, active_semester_only=False):
         qs = BadgeAssertionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            return qs.get_semester(config.hs_active_semester)
+            return qs.get_semester(SiteConfig.get().active_semester)
         else:
             return qs
 
@@ -280,10 +274,10 @@ class BadgeAssertionManager(models.Manager):
     def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None):
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
-            issued_by = get_object_or_404(User, pk=config.hs_hackerspace_ai)
+            issued_by = get_object_or_404(User, SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
-            active_semester = config.hs_active_semester
+            active_semester = SiteConfig.get().active_semester.id
 
         new_assertion = BadgeAssertion(
             badge=badge,
