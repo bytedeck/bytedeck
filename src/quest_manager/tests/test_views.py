@@ -120,6 +120,7 @@ class SubmissionViewTests(TestCase):
 
     def setUp(self):
         User = get_user_model()
+        self.sem = SiteConfig.get().active_semester
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
@@ -132,9 +133,27 @@ class SubmissionViewTests(TestCase):
         self.quest1 = mommy.make(Quest)
         self.quest2 = mommy.make(Quest)
 
-        self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-        self.sub2 = mommy.make(QuestSubmission, quest=self.quest1)
-        self.sub3 = mommy.make(QuestSubmission, quest=self.quest2)
+        self.sub1 = mommy.make(
+            QuestSubmission,
+            user=self.test_student1,
+            quest=self.quest1,
+            is_completed=True,
+            semester=self.sem
+        )
+
+        self.sub2 = mommy.make(
+            QuestSubmission,
+            quest=self.quest1,
+            is_completed=True,
+            semester=self.sem
+        )
+
+        self.sub3 = mommy.make(
+            QuestSubmission,
+            quest=self.quest2,
+            semester=self.sem,
+            is_completed=False
+        )
 
     def test_all_submission_page_status_codes_for_students(self):
 
