@@ -259,7 +259,7 @@ CACHES = {
         'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
-SELECT2_CACHE_BACKEND = 'select2'
+SELECT2_CACHE_BACKEND = 'default'
 
 AUTHENTICATION_BACKENDS = (
 
