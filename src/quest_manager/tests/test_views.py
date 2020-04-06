@@ -176,7 +176,6 @@ class SubmissionViewTests(TenantTestCase):
         self.assertTrue(success)
 
         s1_pk = self.sub1.pk
-        s2_pk = self.sub2.pk
 
         # Student's own submission
         self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
@@ -265,7 +264,6 @@ class SubmissionViewTests(TenantTestCase):
 
         # Should be able to see own submission even when quest is closed
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 200)
-
 
     def test_ajax_save_draft(self):
         # loging required for this view
