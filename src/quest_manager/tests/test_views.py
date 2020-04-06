@@ -153,6 +153,7 @@ class SubmissionViewTests(TenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         User = get_user_model()
+        self.sem = SiteConfig.get().active_semester
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
