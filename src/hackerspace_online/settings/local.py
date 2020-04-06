@@ -63,7 +63,7 @@ POSTMAN_MAILER_APP = 'django.core.mail'
 
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set in production settings for deployment
-#STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
+# STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
 
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static_in_project", "static_root"),
@@ -101,3 +101,7 @@ DEBUG_TOOLBAR_PANELS = [
     'debug_toolbar.panels.logging.LoggingPanel',
     'debug_toolbar.panels.redirects.RedirectsPanel',
 ]
+
+
+TENANT_DEFAULT_SUPERUSER_USERNAME = 'admin'
+TENANT_DEFAULT_SUPERUSER_PASSWORD = 'admin1234'
