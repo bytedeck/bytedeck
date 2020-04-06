@@ -930,17 +930,20 @@ def drop(request, submission_id):
 
 @login_required
 def submission(request, submission_id=None, quest_id=None):
-    # sub = QuestSubmission.objects.get(id = submission_id)
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
-    if sub.user != request.user and not request.user.is_staff:
-        return redirect('quests:quests')
+
+    initial = {}
 
     if request.user.is_staff:
-        # Staff form has additional fields such as award granting.
-        main_comment_form = SubmissionFormStaff(request.POST or None)
+        qs = QuestSubmission.objects.all_completed()
+        sub = get_object_or_404(qs, pk=submission_id)
+        CustomSubmissionForm = SubmissionFormStaff
     else:
-        initial = {'comment_text': sub.draft_text}
-        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+        qs = QuestSubmission.objects.all_completed(request.user)
+        sub = get_object_or_404(qs, pk=submission_id)
+        initial['comment_text'] = sub.draft_text
+        CustomSubmissionForm = SubmissionForm
+
+    main_comment_form = CustomSubmissionForm(request.POST or None, initial=initial)
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
