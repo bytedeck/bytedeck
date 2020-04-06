@@ -263,13 +263,9 @@ class SubmissionViewTests(TenantTestCase):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Make quest invisible to students
-        self.quest1.visible_to_students = False
-        self.quest1.save()
-        self.assertFalse(self.quest1.visible_to_students)
+        # Should be able to see own submission even when quest is closed
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 200)
 
-        # TODO: should redirect, not 404?
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
 
     def test_ajax_save_draft(self):
         # loging required for this view
