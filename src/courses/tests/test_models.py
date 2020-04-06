@@ -1,17 +1,16 @@
 from datetime import timedelta, date
-from freezegun import freeze_time
-
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+
 from model_mommy import mommy
-# from model_mommy.recipe import Recipe
+from freezegun import freeze_time
+from tenant_schemas.test.cases import TenantTestCase
 
 from courses.models import MarkRange, Course, Semester
 
 User = get_user_model()
 
 
-class MarkRangeTestModel(TestCase):
+class MarkRangeTestModel(TenantTestCase):
 
     def setUp(self):
         self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
@@ -21,7 +20,7 @@ class MarkRangeTestModel(TestCase):
         # self.assertEqual(str(self.mr_50), self.user.username)
 
 
-class MarkRangeTestManager(TestCase):
+class MarkRangeTestManager(TenantTestCase):
     def setUp(self):
         self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
 
@@ -54,7 +53,7 @@ class MarkRangeTestManager(TestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
 
 
-class SemesterTestModel(TestCase):
+class SemesterTestModel(TenantTestCase):
 
     def setUp(self):
         self.semester_start = date(2020, 9, 8)
@@ -96,7 +95,7 @@ class SemesterTestModel(TestCase):
         # Timezone problems?    
 
 
-class CourseTestModel(TestCase):
+class CourseTestModel(TenantTestCase):
 
     def setUp(self):
         self.course = mommy.make(Course)

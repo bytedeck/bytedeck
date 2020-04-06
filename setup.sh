@@ -25,6 +25,7 @@ echo "# Enter username and password to create admin user."
 echo "####################################"
 docker-compose run web python src/manage.py createsuperuser
 
+
 echo -e "\n####################################"
 echo "# CREATING CACHE TABLE..."
 echo "####################################"

@@ -36,8 +36,76 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # EMAIL_USE_TLS = True
 
 # Application definition
+SHARED_APPS = (
+    'tenant_schemas',
+    'tenant',
+    'django.contrib.contenttypes',
+
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'django.contrib.sites',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.flatpages',
+
+    'django_celery_beat',
+
+    # 'djconfig',
+    'postman',
+
+    'grappelli',
+    'crispy_forms',
+    'bootstrap_datepicker_plus',
+    'embed_video',
+    'django_select2',
+    'jchart',
+    'url_or_relative_url_field',
+    'import_export',
+    'colorful',
+
+    # 'profile_manager',
+
+)
+
+TENANT_APPS = (
+    'django.contrib.contenttypes',
+
+    'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.admin',
+    'django.contrib.staticfiles',
+
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+
+    'attachments',
+    'hackerspace_online',
+    'django_summernote',
+    'postman',
+
+    # local apps
+    # 'djconfig',
+    'quest_manager',
+    'profile_manager',
+    'announcements',
+    'comments',
+    'notifications',
+    'courses',
+    'prerequisites',
+    'badges',
+    'suggestions',
+    'djcytoscape',
+    'portfolios',
+    'utilities',
+    'siteconfig',
+)
+
 
 INSTALLED_APPS = (
+    'tenant_schemas',
+    'tenant.apps.TenantConfig',
 
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
@@ -124,13 +192,12 @@ INSTALLED_APPS = (
 
 # http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
 # SITE_ID = 1
-MIDDLEWARE = []
 
-MIDDLEWARE += [
+MIDDLEWARE = [
+    'tenant_schemas.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -151,6 +218,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
@@ -180,15 +248,18 @@ CACHES = {
         "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+        },
+        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
     },
     'select2': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'cache_table',
         'TIMEOUT': None,
+        'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
-SELECT2_CACHE_BACKEND = 'select2'
+SELECT2_CACHE_BACKEND = 'default'
 
 AUTHENTICATION_BACKENDS = (
 
@@ -222,7 +293,7 @@ STATIC_URL = '/static/'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
-SITE_ID = 3
+SITE_ID = 1
 
 # AllAuth Configuration
 # SOCIALACCOUNT_PROVIDERS = \
@@ -304,7 +375,7 @@ SUMMERNOTE_CONFIG = {
             ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
             # ['height', ['height']],
             ['table', ['table']],
-            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math',]],  # , 'nugget']],
+            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math', ]],  # , 'nugget']],
             ['view', ['codeview']],
             ['help', ['help']],
         ],
@@ -438,10 +509,40 @@ CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' up
 # Django Postman
 POSTMAN_DISALLOW_ANONYMOUS = True
 # POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
-POSTMAN_NOTIFICATION_APPROVAL = lambda u: u.profile.get_messages_by_email
+
+
+def POSTMAN_NOTIFICATION_APPROVAL(u): return u.profile.get_messages_by_email
+
+
 POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
 POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
 # POSTMAN_SHOW_USER_AS = lambda u: u.id
 
 # https://github.com/charettes/django-colorful
-GRAPPELLI_CLEAN_INPUT_TYPES= False
+GRAPPELLI_CLEAN_INPUT_TYPES = False
+
+
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
+POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
+POSTGRES_DB_NAME = os.environ.get('POSTGRES_DB_NAME', 'postgres')
+POSTGRES_USER = os.environ.get('POSTGRES_USER', 'postgres')
+POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'hellonepal')
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'NAME': POSTGRES_DB_NAME,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT
+    }
+}
+
+DATABASE_ROUTERS = (
+    'tenant_schemas.routers.TenantSyncRouter',
+)
+
+TENANT_MODEL = "tenant.Tenant"
+
+DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'

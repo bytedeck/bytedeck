@@ -1,17 +1,20 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
+
 from model_mommy import mommy
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from siteconfig.models import SiteConfig
 
 
-class ProfileViewTests(TestCase):
+class ProfileViewTests(TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?

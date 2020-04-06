@@ -1,18 +1,18 @@
-
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.utils import timezone
+
 from model_mommy import mommy
 from model_mommy.recipe import Recipe
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from siteconfig.models import SiteConfig
 from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries, BadgeRarity
 
-
 User = get_user_model()
 
 
-class BadgeRarityTestModel(TestCase):
+class BadgeRarityTestModel(TenantTestCase):
     def setUp(self):
         self.common = mommy.make(BadgeRarity)
 
@@ -32,7 +32,7 @@ class BadgeRarityTestModel(TestCase):
         self.assertEqual(BadgeRarity.objects.get_rarity(110.0), self.common)
 
 
-class BadgeTypeTestModel(TestCase):
+class BadgeTypeTestModel(TenantTestCase):
     def setUp(self):
         self.badge_type = mommy.make(BadgeType)
 
@@ -41,7 +41,7 @@ class BadgeTypeTestModel(TestCase):
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
 
-class BadgeSeriesTestModel(TestCase):
+class BadgeSeriesTestModel(TenantTestCase):
     def setUp(self):
         self.badge_series = mommy.make(BadgeSeries)
 
@@ -50,9 +50,10 @@ class BadgeSeriesTestModel(TestCase):
         self.assertEqual(str(self.badge_series), self.badge_series.name)
 
 
-class BadgeTestModel(TestCase):
+class BadgeTestModel(TenantTestCase):
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         self.badge = mommy.make(Badge)
 
     def test_badge_creation(self):
@@ -66,9 +67,10 @@ class BadgeTestModel(TestCase):
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
 
-class BadgeAssertionTestModel(TestCase):
+class BadgeAssertionTestModel(TenantTestCase):
 
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
@@ -126,7 +128,7 @@ class BadgeAssertionTestModel(TestCase):
             values.append(repr(badge_assertion))
 
         qs = badge_assertion.get_duplicate_assertions()
-        self.assertQuerysetEqual(list(qs), values,)
+        self.assertQuerysetEqual(list(qs), values, )
 
     def test_badge_assertion_manager_create_assertion(self):
         new_assertion = BadgeAssertion.objects.create_assertion(

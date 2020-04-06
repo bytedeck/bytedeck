@@ -1,23 +1,25 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
-from django_summernote.admin import SummernoteModelAdmin
-# Register your models here.
-from import_export import resources
-from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
-from import_export.fields import Field
+from django.contrib.contenttypes.models import ContentType
 
-from prerequisites.admin import PrereqInline
+from import_export import resources
+from import_export.fields import Field
+from django_summernote.admin import SummernoteModelAdmin
+from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
+
 from prerequisites.models import Prereq
-from .models import Quest, Category, QuestSubmission, CommonData
+from prerequisites.admin import PrereqInline
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .signals import tidy_html
+from .models import Quest, Category, QuestSubmission, CommonData
 
 
 def publish_selected_quests(modeladmin, request, queryset):
     num_updates = queryset.update(visible_to_students=True, editor=None)
 
-    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(str(num_updates)) # noqa
+    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(
+        str(num_updates))  # noqa
     messages.success(request, msg_str)
 
 
@@ -53,11 +55,11 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
-class CommonDataAdmin(SummernoteModelAdmin):
+class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin):
     pass
 
 
-class QuestSubmissionAdmin(admin.ModelAdmin):
+class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('id', 'user', 'quest', 'is_completed', 'is_approved', 'semester')
     list_filter = ['is_completed', 'is_approved', 'semester']
     search_fields = ['user__username']
@@ -148,7 +150,7 @@ class QuestResource(resources.ModelResource):
             self.generate_campaign(parent_quest, data_dict)
 
 
-class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
+class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
                     'common_data', 'campaign', 'editor')
@@ -159,7 +161,8 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
         PrereqInline,
     ]
 
-    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]  # noqa
+    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests,
+                                           prettify_code_selected_quests, fix_whitespace_bug]  # noqa
 
     change_list_filter_template = "admin/filter_listing.html"
 
@@ -173,8 +176,12 @@ class QuestAdmin(SummernoteModelAdmin, ImportExportActionModelAdmin):  # use Sum
     # ]
 
 
+class CategoryAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    pass
+
+
 admin.site.register(Quest, QuestAdmin)
-admin.site.register(Category)
+admin.site.register(Category, CategoryAdmin)
 admin.site.register(CommonData, CommonDataAdmin)
 admin.site.register(QuestSubmission, QuestSubmissionAdmin)
 # admin.site.register(Prereq)

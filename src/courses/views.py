@@ -13,12 +13,13 @@ from django.views.generic.edit import CreateView
 from siteconfig.models import SiteConfig
 
 # from .forms import ProfileForm
+from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
 from .models import CourseStudent, Rank, Semester
 from .forms import CourseStudentForm
 
 
 # Create your views here.
-
+@allow_non_public_view
 @login_required
 def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
@@ -47,14 +48,15 @@ def mark_calculations(request, user_id=None):
     return render(request, template_name, context)
 
 
-class RankList(ListView):
+class RankList(AllowNonPublicViewMixin, ListView):
     model = Rank
 
 
-class CourseStudentList(ListView):
+class CourseStudentList(AllowNonPublicViewMixin, ListView):
     model = CourseStudent
 
 
+@allow_non_public_view
 @staff_member_required
 def add_course_student(request, user_id):
     if int(user_id) > 0:
@@ -78,7 +80,7 @@ def add_course_student(request, user_id):
     return render(request, 'courses/coursestudent_form.html', context)
 
 
-class CourseStudentCreate(SuccessMessageMixin, CreateView):
+class CourseStudentCreate(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
@@ -101,6 +103,7 @@ class CourseStudentCreate(SuccessMessageMixin, CreateView):
 
 #
 
+@allow_non_public_view
 @staff_member_required
 def end_active_semester(request):
     if not request.user.is_superuser:
@@ -120,6 +123,7 @@ def end_active_semester(request):
     return redirect('config')
 
 
+@allow_non_public_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
     if user_id == 0:

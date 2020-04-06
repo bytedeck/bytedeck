@@ -1,9 +1,7 @@
-# Create your tests here.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
-from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from model_mommy import mommy
@@ -11,17 +9,19 @@ from model_mommy import mommy
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 
-# from unittest.mock import patch
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(TestCase):
+class AnnouncementViewTests(TenantTestCase):
 
     def setUp(self):
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.client = TenantClient(self.tenant)
 
+        self.test_password = "password"
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
@@ -65,7 +65,6 @@ class AnnouncementViewTests(TestCase):
         self.assertRedirectsAdmin('announcements:publish', args=[1])
 
     def test_all_announcement_page_status_codes_for_students(self):
-
         # log in a student
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
