@@ -4,6 +4,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.0.0] 2020-04-05 - Multi tenancy
+* Multi-tenant support!
+* [teachers]
+* Bazillians of small bugfixes and tweaks to existing features
+ 
 ### [0.25.1] 2020-03-29
 * [bugfix] Use new custom course XP in profiles and chart
 
