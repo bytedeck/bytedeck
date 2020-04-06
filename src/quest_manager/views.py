@@ -917,7 +917,8 @@ def ajax_save_draft(request):
 
 @login_required
 def drop(request, submission_id):
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    completed_submissions = QuestSubmission.objects.all_completed(request.user)
+    sub = get_object_or_404(completed_submissions, pk=submission_id)
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
