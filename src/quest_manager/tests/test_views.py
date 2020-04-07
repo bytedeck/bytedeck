@@ -1,15 +1,12 @@
-from mock import patch
-
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-
-from model_bakery import baker
+from mock import patch
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from model_bakery import baker
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-
-from quest_manager.models import QuestSubmission, Quest
 
 
 class QuestViewTests(TenantTestCase):
@@ -169,6 +166,14 @@ class SubmissionViewTests(TenantTestCase):
         self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
         self.sub3 = baker.make(QuestSubmission, quest=self.quest2)
+
+        self.sub4 = baker.make(
+            QuestSubmission,
+            user=self.test_student1,
+            quest=self.quest3,
+            semester=self.sem,
+            is_completed=True
+        )
 
     def test_all_submission_page_status_codes_for_students(self):
         # log in a student
