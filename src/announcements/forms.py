@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from bootstrap_datepicker_plus import DateTimePickerInput
 from django import forms
 from django.utils import timezone
@@ -8,6 +10,12 @@ from .models import Announcement
 
 class AnnouncementForm(forms.ModelForm):
     # formfield_callback = make_custom_datetimefield
+
+    def __init__(self, *args, **kwargs):
+        super(AnnouncementForm, self).__init__(*args, **kwargs)
+        self.fields['datetime_released'].initial = (
+            datetime.now().strftime('%Y-%m-%d %H:%M')
+        )
 
     class Meta:
         model = Announcement

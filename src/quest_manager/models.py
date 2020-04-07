@@ -1,6 +1,5 @@
 import uuid
 import json
-from datetime import time, date
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
@@ -10,7 +9,7 @@ from django.db.models import Q, Max, Sum
 # from django.shortcuts import get_object_or_404
 # from django.templatetags.static import static
 from django.urls import reverse
-from django.utils import timezone
+from django.utils import timezone, datetime_safe
 
 from siteconfig.models import SiteConfig
 
@@ -62,12 +61,12 @@ class XPItem(models.Model):
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     repeat_per_semester = models.BooleanField(
-        default=False, 
+        default=False,
         help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
-    date_available = models.DateField(default=date.today)  # timezone aware!
-    time_available = models.TimeField(default=time().min)  # midnight local time
+    date_available = models.DateField(default=timezone.now)  # timezone aware!
+    time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')
     time_expired = models.TimeField(blank=True, null=True,  # local time
@@ -151,9 +150,9 @@ class QuestQuerySet(models.query.QuerySet):
         return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
 
     def block_if_needed(self, user=None):
-        """ If there are blocking quests or blocking subs in progress, only return blocking quests.  
+        """ If there are blocking quests or blocking subs in progress, only return blocking quests.
         Otherwise, return full qs """
-        blocking_quests = self.filter(blocking=True) 
+        blocking_quests = self.filter(blocking=True)
         if user:
             blocking_subs_in_progress = QuestSubmission.objects.all_not_completed(user=user, blocking=False).filter(quest__blocking=True)  # noqa
         else:
@@ -231,14 +230,14 @@ class QuestQuerySet(models.query.QuerySet):
         return self.filter(pk__in=pk_list)
 
     def not_completed(self, user):
-        """ 
+        """
         Exclude all quests where the user has a completed submission (whether approved or not)
         """
         completed_subs = QuestSubmission.objects.all_completed(user=user)
         return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
 
     def not_in_progress(self, user):
-        """ 
+        """
         Exclude all quests where the user has a submission in progress,
         """
         in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
@@ -427,7 +426,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
 
     def block_if_needed(self):
         """ If there are blocking quests, only return them.  Otherwise, return full qs """
-        subs_with_blocking_quests = self.filter(quest__blocking=True) 
+        subs_with_blocking_quests = self.filter(quest__blocking=True)
         if subs_with_blocking_quests:
             return subs_with_blocking_quests
         else:
@@ -652,7 +651,7 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
-        # this logic should probably be removed from this location?  
+        # this logic should probably be removed from this location?
         # When would I want to return None that isn't already handled?
         if self.not_submitted_or_inprogress(user, quest):
             ordinal = self.num_submissions(user, quest) + 1

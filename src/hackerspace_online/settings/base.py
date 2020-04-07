@@ -161,9 +161,6 @@ INSTALLED_APPS = (
 
     'django_celery_beat',
 
-    # django-postman 
-    'postman',
-
     # https://github.com/charettes/django-colorful
     'colorful',
 
@@ -182,7 +179,7 @@ INSTALLED_APPS = (
     'courses',
     'prerequisites',
     'badges',
-    'suggestions',
+    # 'suggestions',
     'djcytoscape',
     'portfolios',
     'utilities',
@@ -223,13 +220,6 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-
-                'postman.context_processors.inbox',
-
-                # "allauth" specific context processors
-                # 0.22.0 http://django-allauth.readthedocs.io/en/latest/release-notes.html#id17
-                # 'allauth.account.context_processors.account',
-                # 'allauth.socialaccount.context_processors.socialaccount',
 
                 'siteconfig.context_processors.config',
             ],
