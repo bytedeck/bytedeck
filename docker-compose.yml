@@ -26,6 +26,7 @@ services:
                       python manage.py migrate_schemas --shared &&
                       uwsgi --socket 0.0.0.0:8000 --wsgi-file hackerspace_online/wsgi.py --master --processes 4 --threads 2"
     volumes: 
+      - /var/www/bytedeck/static:/var/static
       - .:/app
     ports:
       - 8000:8000
