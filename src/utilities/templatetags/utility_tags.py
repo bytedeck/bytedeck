@@ -16,14 +16,14 @@ def not_allow_public_tenant(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if connection.schema_name == get_public_schema_name():
-            return None
+            return ''
         return f(*args, **kwargs)
 
     return wrapper
 
 
-@register.simple_tag(takes_context=True)
 @not_allow_public_tenant
+@register.simple_tag(takes_context=True)
 def banner_url(context):
     if context.request.user.is_anonymous or not context.request.user.profile.dark_theme:
         return SiteConfig.get().get_banner_image_url()
