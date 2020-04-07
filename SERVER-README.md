@@ -19,6 +19,7 @@
 - ``uwsgi`` is used to run the django application inside docker container
 - ``nginx`` reverse proxy is configured to point the docker django application mapped port
 - static and media files are served by ``nginx`` itself by pointing the url to the static and media directory of the application ie. ``/var/www/bytedeck/static`` and ``/var/www/bytedeck/media``
+- For static web hosting, check docker compose location of volume map for setting `STATIC_ROOT`. Current configuration suits for `STATIC_ROOT='/var/static'`.
 
 
 ### Production setup
