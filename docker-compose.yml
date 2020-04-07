@@ -27,6 +27,7 @@ services:
                       uwsgi --socket 0.0.0.0:8000 --wsgi-file hackerspace_online/wsgi.py --master --processes 4 --threads 2"
     volumes: 
       - /var/www/bytedeck/static:/var/static
+      - /var/www/bytedeck/media:/var/media
       - .:/app
     ports:
       - 8000:8000
@@ -35,6 +36,7 @@ services:
       - redis
     links: 
       - db:db
+    user: $UID:$GID
   celery:
     build: .
     env_file: .env
