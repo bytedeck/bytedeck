@@ -3,5 +3,5 @@ try:
     from .production_hackerspace import *
 except:
     print("***** NO PRODUCTION SETTINGS FOUND     *******")
-    print("***** IMPORTING LOCAL SETTINGS         *******")
+    print("***** IMPORTING LOCAL DEVELOPMENT SETTINGS         *******")
     from .local import *
