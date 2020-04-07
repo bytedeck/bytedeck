@@ -141,6 +141,10 @@ class SiteConfig(models.Model):
     # hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
     #                                               default=True, required=False)
 
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('site_config_update', args=[str(self.id)])
+
     def get_site_logo_url(self):
         if self.site_logo and hasattr(self.site_logo, 'url'):
             return self.site_logo.url
