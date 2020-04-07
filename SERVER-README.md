@@ -14,6 +14,15 @@
 - to deploy changes, use ``docker-compose down`` then ``git pull``
 - next run the application using ``docker-compose build && docker-compose up -d``
 
+**Note, since media uploads and static files volumes of the application's container `/var/media` and `/var/static` are mapped to host `/var/www/bytedeck/media` and `/var/www/bytedeck/static`. Since application container by default run on root user, and the files created on the mounts will automatically become root ownership files, which will not be accessible from browser requests.**
+
+**To override this phenomenon user's $UID and $GID is explicitly passed on `web` service of docker-compose so that the files created under the process are owned by that $UID and $GID. This are set by**
+```shell
+    $ export UID=$(id -u)
+    $ export GID=$(id -g)
+```
+**before running any docker-compose commands.**
+
 
 ### Workflow
 - ``uwsgi`` is used to run the django application inside docker container

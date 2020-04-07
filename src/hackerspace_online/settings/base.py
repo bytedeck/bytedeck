@@ -545,4 +545,4 @@ DATABASE_ROUTERS = (
 
 TENANT_MODEL = "tenant.Tenant"
 
-DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'
+# DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'
