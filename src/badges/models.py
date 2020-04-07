@@ -78,7 +78,6 @@ class BadgeRarity(models.Model):
             self.name,
             self.color,
         )
-        print(icon)
         aria_span = "<span class='sr-only'>{}</span>".format(self.name)
         return icon + aria_span
 
@@ -247,9 +246,10 @@ class BadgeAssertionManager(models.Manager):
         if db_engine == 'django.db.backends.postgresql_psycopg2' or db_engine == 'django.db.backends.postgresql':
             return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
         else:
-            print("Database is {}".format(db_engine))
-            print("Multiple badge assertions for a use will be duplicated instead of combined.")
-            print("Only django.db.backends.postgresql_psycopg2' supports distinct() method.")
+            pass
+            # print("Database is {}".format(db_engine))
+            # print("Multiple badge assertions for a use will be duplicated instead of combined.")
+            # print("Only django.db.backends.postgresql_psycopg2' supports distinct() method.")
         return self.get_queryset(False).get_user(user)
 
     def badge_assertions_dict_items(self, user):

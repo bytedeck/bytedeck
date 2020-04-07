@@ -1,12 +1,13 @@
+from datetime import date
+
+from badges.models import Badge
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Div, HTML
+from crispy_forms.layout import HTML, Div, Layout
 from django import forms
 from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
-
-from badges.models import Badge
 from utilities.fields import RestrictedFileFormField
 
 from .models import Quest
@@ -52,6 +53,8 @@ class QuestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
+
+        self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
 
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '

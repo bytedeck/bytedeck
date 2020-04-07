@@ -172,7 +172,7 @@ a.list-group-item-muted {
     color: #555;
 }
 
-/* COMMENT and annoucnement higlights */ 
+/* COMMENT and annoucnement higlights */
 
 @keyframes temporaryHighlight {
     0% { background:  gold}

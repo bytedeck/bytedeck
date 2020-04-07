@@ -24,7 +24,7 @@ def get_active_semester():
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
         # is this only needed for tests? If not then need a unique username probably, not this!
-        semester, created = Semester.objects.get_or_create(defaults={'number': 1, 'active': True})
+        semester, created = Semester.objects.get_or_create(defaults={'active': True})
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
     return semester.id
@@ -140,6 +140,10 @@ class SiteConfig(models.Model):
     )
     # hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
     #                                               default=True, required=False)
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('site_config_update', args=[str(self.id)])
 
     def get_site_logo_url(self):
         if self.site_logo and hasattr(self.site_logo, 'url'):

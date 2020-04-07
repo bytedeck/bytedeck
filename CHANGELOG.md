@@ -4,6 +4,12 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.1.0] 2020-04-07
+* Redirect to login page when accessing via mobile device
+* remove some janky/old/unused apps including django-postman (Messages) and Suggestions.
+* [dev] Add [CONTRIBUTING.md](https://github.com/timberline-secondary/hackerspace/blob/develop/CONTRIBUTING.md) guidelines for code contributers
+* [bugfix] Hotfixes to get production server to play nice
+
 ### [1.0.0] 2020-04-05 - Multi tenancy
 * Multi-tenant support!
 * [teachers]

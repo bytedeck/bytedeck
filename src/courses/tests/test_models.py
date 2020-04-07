@@ -60,7 +60,6 @@ class SemesterTestModel(TenantTestCase):
         self.semester_end = date(2021, 1, 22)
         self.today_fake = date(2020, 10, 20)  # some date in the semester
         self.semester = mommy.make(Semester,
-                                   number=Semester.SEMESTER_CHOICES[1][1],
                                    first_day=self.semester_start,
                                    last_day=self.semester_end
                                    )

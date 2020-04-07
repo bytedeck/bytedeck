@@ -1,3 +1,0 @@
-{% load i18n %}{% autoescape off %}
-Message "{{ object.subject|truncatechars:30 }}" from {{ object.sender.profile }} at {{ site.name }}
-{% endautoescape %}
