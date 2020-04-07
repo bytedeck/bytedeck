@@ -44,6 +44,10 @@ Tenants are identified via their host name (i.e tenant.domain.com). This informa
 - Tenant application name - ```tenant```
 - Tenant model - ```tenant/Tenant```
 
+#### Tenant Default Admin on creation settings
+- `TENANT_DEFAULT_SUPERUSER_USERNAME` - username of admin
+- `TENANT_DEFAULT_SUPERUSER_PASSWORD` - password of admin
+
 
 ### Populating public schema and a admin user for public schema on first run
 ```shell

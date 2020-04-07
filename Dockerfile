@@ -4,18 +4,22 @@ FROM python:3.5-slim
 # https://code.visualstudio.com/docs/remote/containers
 # https://github.com/Microsoft/vscode-remote-try-python
 
-RUN pip install pylint
-
 # Configure apt
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get -y install --no-install-recommends apt-utils 2>&1
 
+RUN pip install pylint
+
 # Install git, process tools, lsb-release (common in install instructions for CLIs)
-RUN apt-get -y install git procps lsb-release
+RUN apt-get install -y git procps lsb-release
 
 # Install any missing dependencies for enhanced language service
 RUN apt-get install -y libicu[0-9][0-9]
+
+# Install uwsgi
+RUN apt-get install -y build-essential
+RUN pip install uwsgi
 
 ######################################################
 
