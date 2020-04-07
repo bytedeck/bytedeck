@@ -935,13 +935,20 @@ def submission(request, submission_id=None, quest_id=None):
     initial = {}
 
     if request.user.is_staff:
+        # Return all completed quest submissions when user is an admin/staff
         qs = QuestSubmission.objects.all_completed()
         sub = get_object_or_404(qs, pk=submission_id)
+
+        # Use a different form for this user
         CustomSubmissionForm = SubmissionFormStaff
     else:
+        # Only fetch the requesting student's quest submission instead of
+        # everyone's submission
         qs = QuestSubmission.objects.all_completed(request.user)
         sub = get_object_or_404(qs, pk=submission_id)
         initial['comment_text'] = sub.draft_text
+
+        # Default form for students
         CustomSubmissionForm = SubmissionForm
 
     main_comment_form = CustomSubmissionForm(request.POST or None, initial=initial)
