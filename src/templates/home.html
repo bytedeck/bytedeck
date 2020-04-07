@@ -17,4 +17,12 @@
 
 {% block content_last %}{% endblock %}
 
-{% block js %}{% endblock %}
+{% block js %}
+<script>
+  /* Best way to detect a mobile device
+    https://stackoverflow.com/a/24600597/3788603 */
+  if (/Mobi|Android/i.test(navigator.userAgent)) {
+    window.location.href = "{% url 'account_login' %}";
+  }
+</script>
+{% endblock %}
