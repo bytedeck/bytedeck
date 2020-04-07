@@ -50,9 +50,6 @@ SHARED_APPS = (
 
     'django_celery_beat',
 
-    # 'djconfig',
-    'postman',
-
     'grappelli',
     'crispy_forms',
     'bootstrap_datepicker_plus',
@@ -83,10 +80,7 @@ TENANT_APPS = (
     'attachments',
     'hackerspace_online',
     'django_summernote',
-    'postman',
 
-    # local apps
-    # 'djconfig',
     'quest_manager',
     'profile_manager',
     'announcements',
@@ -95,7 +89,6 @@ TENANT_APPS = (
     'courses',
     'prerequisites',
     'badges',
-    'suggestions',
     'djcytoscape',
     'portfolios',
     'utilities',
