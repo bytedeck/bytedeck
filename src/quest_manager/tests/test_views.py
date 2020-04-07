@@ -132,27 +132,17 @@ class SubmissionViewTests(TestCase):
 
         self.quest1 = mommy.make(Quest)
         self.quest2 = mommy.make(Quest)
+        self.quest3 = mommy.make(Quest)
 
-        self.sub1 = mommy.make(
+        self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+        self.sub2 = mommy.make(QuestSubmission, quest=self.quest1)
+        self.sub3 = mommy.make(QuestSubmission, quest=self.quest2)
+        self.sub4 = mommy.make(
             QuestSubmission,
             user=self.test_student1,
-            quest=self.quest1,
-            is_completed=True,
-            semester=self.sem
-        )
-
-        self.sub2 = mommy.make(
-            QuestSubmission,
-            quest=self.quest1,
-            is_completed=True,
-            semester=self.sem
-        )
-
-        self.sub3 = mommy.make(
-            QuestSubmission,
-            quest=self.quest2,
+            quest=self.quest3,
             semester=self.sem,
-            is_completed=False
+            is_completed=True
         )
 
     def test_all_submission_page_status_codes_for_students(self):
