@@ -181,11 +181,13 @@ class SubmissionViewTests(TenantTestCase):
         self.assertTrue(success)
 
         s1_pk = self.sub1.pk
+        s2_pk = self.sub2.pk
+        s4_pk = self.sub4.pk
 
         # Student's own submission
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s4_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[s4_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s4_pk])).status_code, 200)
 
         # Students shouldn't have access to these
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 302)
@@ -193,10 +195,17 @@ class SubmissionViewTests(TenantTestCase):
         # Student's own submission
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+
+        # Not this student's submission
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:complete', args=[s2_pk])).status_code, 404)
 
         # Non existent submissions
         self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
@@ -214,16 +223,17 @@ class SubmissionViewTests(TenantTestCase):
         self.assertTrue(success)
 
         s1_pk = self.sub1.pk
+        s4_pk = self.sub4.pk
         # s2_pk = self.sub2.pk
 
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 200)
 
         # View it
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[s4_pk])).status_code, 200)
         # Flag it
         # self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
         self.assertRedirects(
-            response=self.client.get(reverse('quests:flag', args=[s1_pk])),
+            response=self.client.get(reverse('quests:flag', args=[s4_pk])),
             expected_url=reverse('quests:approvals'),
         )
         # TODO Why does this fail? Why is self.sub1.flagged_by == None
@@ -231,13 +241,13 @@ class SubmissionViewTests(TenantTestCase):
 
         # Unflag it
         self.assertRedirects(
-            response=self.client.get(reverse('quests:unflag', args=[s1_pk])),
+            response=self.client.get(reverse('quests:unflag', args=[s4_pk])),
             expected_url=reverse('quests:approvals'),
         )
         self.assertIsNone(self.sub1.flagged_by)
 
         # self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s4_pk])).status_code, 200)
 
         # Non existent submissions
         self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
@@ -268,7 +278,7 @@ class SubmissionViewTests(TenantTestCase):
         self.assertTrue(success)
 
         # Should be able to see own submission even when quest is closed
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub4.pk])).status_code, 200)
 
     def test_ajax_save_draft(self):
         # loging required for this view
