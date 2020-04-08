@@ -9,7 +9,6 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - /home/xillar/dumps:/dumps/
       - postgres_data:/var/lib/postgresql/data/
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
@@ -26,8 +25,6 @@ services:
                       python manage.py migrate_schemas --shared &&
                       uwsgi --socket 0.0.0.0:8000 --wsgi-file hackerspace_online/wsgi.py --master --processes 4 --threads 2"
     volumes: 
-      - /var/www/bytedeck/static:/var/static
-      - /var/www/bytedeck/media:/var/media
       - .:/app
     ports:
       - 8000:8000
