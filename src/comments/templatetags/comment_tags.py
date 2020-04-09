@@ -15,4 +15,7 @@ def content_type(obj):
 
 @register.filter
 def filename(value):
-    return os.path.basename(value.file.name)
+    try:
+        return os.path.basename(value.file.name)
+    except FileNotFoundError: 
+        return '<i class="fa fa-exclamation-triangle text-warning"></i>[File Missing]'
