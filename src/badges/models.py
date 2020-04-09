@@ -274,7 +274,7 @@ class BadgeAssertionManager(models.Manager):
     def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None):
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
-            issued_by = get_object_or_404(User, SiteConfig.get().deck_ai.pk)
+            issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
             active_semester = SiteConfig.get().active_semester.id

@@ -131,12 +131,21 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertQuerysetEqual(list(qs), values, )
 
     def test_badge_assertion_manager_create_assertion(self):
+
+        # no semester
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
             mommy.make(Badge),
             self.teacher
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
+
+        # no teacher
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student,
+            mommy.make(Badge),
+        )
+        self.assertIsInstance(new_assertion, BadgeAssertion) 
 
     def test_badge_assertion_manager_xp_to_date(self):
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
