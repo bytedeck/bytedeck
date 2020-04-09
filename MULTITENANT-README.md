@@ -37,8 +37,6 @@ Tenants are identified via their host name (i.e tenant.domain.com). This informa
 
 - **Configure Tenant and Shared Applications -> [here](https://django-tenant-schemas.readthedocs.io/en/latest/install.html#configure-tenant-and-shared-applications)**
 
-- ```.env``` file  -> ```WEB_URL``` for application base url.
-
 
 ### Tenant
 - Tenant application name - ```tenant```
@@ -56,10 +54,10 @@ $ bash init_public_schema.sh
 
 
 ### Loading the dump
-- place your dumps to the host location where the ``/dumps`` location in db container is mounted
+- place your dumps to the host location which can accessible by the `db` container (using volume mounts)
 
-- create a tenant from admin 
+- create a tenant for the schema you want to dump, from admin 
 
-- ```$ docker exec db bash scripts/load_dump.sh <dump_name> <schema_name_to_dump_in>```
+- ```$ docker exec db bash scripts/load_dump.sh <dump_location> <schema_name_to_dump_in>```
 
 _Note: scheman_name_to_dump_in is same as tenant's name._
