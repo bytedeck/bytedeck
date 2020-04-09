@@ -5,10 +5,10 @@ from django.contrib.flatpages.admin import FlatPageAdmin
 
 from django_summernote.admin import SummernoteModelAdmin
 
-from tenant.admin import PublicSchemaOnlyAdminAccessMixin
+from tenant.admin import PublicSchemaOnlyAdminAccessMixin, NonPublicSchemaOnlyAdminAccessMixin
 
 
-class FlatPageAdmin2(PublicSchemaOnlyAdminAccessMixin, FlatPageAdmin, SummernoteModelAdmin):
+class FlatPageAdmin2(NonPublicSchemaOnlyAdminAccessMixin, FlatPageAdmin, SummernoteModelAdmin):
     list_display = ('url', 'title', 'registration_required',)
 
 

@@ -75,6 +75,7 @@ TENANT_APPS = (
     'django.contrib.messages',
     'django.contrib.admin',
     'django.contrib.staticfiles',
+    'django.contrib.flatpages',
 
     'allauth',
     'allauth.account',
@@ -545,4 +546,4 @@ DATABASE_ROUTERS = (
 
 TENANT_MODEL = "tenant.Tenant"
 
-# DEFAULT_FILE_STORAGE = 'tenant_schemas.storage.TenantFileSystemStorage'
+SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
