@@ -5,7 +5,7 @@
 {% if scape_list %}
     <ul>
     {% for scape in scape_list %}
-        <li><a href="{% url 'djcytoscape:quest_map' scape.initial_quest_id %}">{{ scape.name }}</a></li>
+        <li><a href="{% url 'djcytoscape:quest_map' scape.id %}">{{ scape.name }}</a></li>
     {% endfor %}
     </ul>
 {% else %}
