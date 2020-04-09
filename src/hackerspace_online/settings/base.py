@@ -546,4 +546,6 @@ DATABASE_ROUTERS = (
 
 TENANT_MODEL = "tenant.Tenant"
 
+# See this: https://github.com/timberline-secondary/hackerspace/issues/388
+# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
 SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
