@@ -13,16 +13,16 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
-from django.contrib import admin
 from django.conf import settings
 from django.conf.urls import url
-from django.urls import include
 from django.conf.urls.static import static
-
+from django.contrib import admin
+from django.urls import include
 from hackerspace_online import views
+from siteconfig.models import SiteConfig
 
-admin.site.site_header = "Hackerspace Administration"
-admin.site.site_title = "Hackerspace Admin"
+admin.site.site_header = lambda: SiteConfig.objects.first().site_name
+admin.site.site_title = lambda: SiteConfig.objects.first().site_name_short
 
 app_name = 'hackerspace_online'
 
