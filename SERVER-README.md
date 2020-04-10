@@ -18,10 +18,12 @@
 
 **To override this phenomenon user's $UID and $GID is explicitly passed on `web` service of docker-compose so that the files created under the process are owned by that $UID and $GID. This are set by**
 ```shell script
-    $ export UID=$(id -u)
-    $ export GID=$(id -g)
+    $ export WUID=<user_id>
+    $ export WGID=<group_id>
 ```
-**before running any docker-compose commands.**
+_`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run container with_
+
+_run these commands before running any `docker-compose` commands_
 
 _To check which user is running which container_
 ```shell script
