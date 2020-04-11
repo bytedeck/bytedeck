@@ -18,6 +18,7 @@ Pull requests are the best way to propose changes to the codebase (we use [Githu
 
 1. Fork the repo and create your own [feature branch](https://nvie.com/posts/a-successful-git-branching-model/) from `develop`.
 2. Provide full docstrings to any new modules, classes, and methods.
+2. Keep the multi-tenant architecture of the app in mind (see next section below)
 2. If you've added code that should be tested, add tests.
 3. If you've changed APIs, update the documentation.
 4. Ensure the test suite passes: `python src/manage.py test src`
@@ -27,6 +28,14 @@ Pull requests are the best way to propose changes to the codebase (we use [Githu
 6. Issue that pull request!
 7. Check to make sure your PR [passes its checks on TravisCI](https://travis-ci.org/github/timberline-secondary/hackerspace/pull_requests)
 8. Engage in the review of your PR until it is accepted
+
+
+### Contributing with Multitenant Architecture in Mind:
+When contributing to this repo, you need to keep in mind its multi-tenant architecture.  Here are a few quick tips:
+* **Views**: If you create a new view, class-based views need to use the `AllowNonPublicViewMixin` and function-based views need the `@allow_non_public_view` decorator (see tenants/views.py for definitions for these two)
+* **Admin**: Model admin classes must all use the `NonPublicSchemaOnlyAdminAccessMixin`
+* **Tests**: All(?) tests need to inherit from the [`TenantTestCase`](https://django-tenant-schemas.readthedocs.io/en/latest/test.html) and use the `TenantClient`
+* **Migrations**: Do NOT use the standard migrate command! I for some reason you need to manually migrate, use the `migrate_schemas` commadn instead (you can find docs for this and other management commands [here](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#management-commands)
 
 
 ## Report bugs using Github's [issues](https://github.com/timberline-secondary/hackerspace/issues)

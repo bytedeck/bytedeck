@@ -61,3 +61,5 @@ $ bash init_public_schema.sh
 - ```$ docker exec db bash scripts/load_dump.sh <dump_location> <schema_name_to_dump_in>```
 
 _Note: scheman_name_to_dump_in is same as tenant's name._
+
+

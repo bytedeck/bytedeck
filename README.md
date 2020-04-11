@@ -38,6 +38,7 @@ Add yourself to the docker group:
 
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
+3. The main branch of this repo is the `develop` branch, make sure you are on that branch.
 3. Click the "Fork" button on the top right corner. 
 4. This will allow you to have your own copy of the project on your GitHub account.
 
@@ -59,7 +60,11 @@ This will create your docker containers and initialize the database by running m
 `docker-compose up db redis celery celery-beat`
 5. Keep an eye out for errors as it goes through each step *(currently celery-beat is not working, but you can leave that one off for now)
 6. Initialize the database with some key data: `bash init_public_schema.sh`
-7. Try running the app locally in a new terminal with: `./src/manage.py runserver`
+7. Run the django app locally: (TEMPORARY until docker-compose is setup to [work in development too](https://docs.docker.com/compose/extends/) 
+   1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.7`
+   2. Enter the virtual environment: `source venv/bin/activate`
+   3. Install our requirements: pip install -r requirements.txt
+   4. Run the app with: `./src/manage.py runserver`
 8. You should get a 404 page (until we create a lnading page) at http://localhost:8000
 9. But you should be able to log in to the admin site!  http://http://localhost:8000/admin/
    - user: admin
@@ -77,7 +82,6 @@ If everything has worked so far, you should now be able to create your own hacke
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
 ## Setting up a VS Code development environment
-
 (UNTESTED)
 
 1. Install [Visual Studio Code](https://code.visualstudio.com/docs/setup/setup-overview): 
@@ -90,20 +94,23 @@ If everything has worked so far, you should now be able to create your own hacke
    6. Optional: Docker (Microsoft) 
    7. Optional: Git Graph (mhutchie)
    8. Optional: YAML (Red Hat)
+   9. Got any good suggestions? =D
 4. Restart VS Code so the extension work
 5. Open the project in VS Code (File > Open Folder)
 
-## Contributing
+## Contributing Quick Reference
 
 For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/timberline-secondary/hackerspace/blob/develop/CONTRIBUTING.md)
 
 1. Move into your cloned directory. `cd ~/Developer/hackerspace`
 2. Add the upstream remote: `git remote add upstream git@github.com:timberline-secondary/hackerspace.git`
-3. Pull in changes from the upstream master: `git fetch upstream`
-4. Merge the changes: `git merge upstream/master`
+3. Pull in changes from the upstream master: `git pull upstream` (in case anything has changed since you cloned it)
 5. Create a new branch: `git checkout -b yourbranchname`
-6. Make your changes and them commit: `git commit -am "yourchangeshere"`
+6. Make your changes and them commit: `git commit -am "Useful description of your changes"`
+7. Make sure your code is up to date again! `git pull upstream`
 7. Push your branch to your fork of the project: `git push origin yourbranchname`
-8. Go to your fork of the repository.
-9. Select your recently pushed branch and create a pull request.
+8. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
+9. Select your recently pushed branch and create a pull request (you should see a button for this).
 10. Complete pull request.
+11. Start work on another feature by checking out the develop branch again: `git checkout develop`
+12. Start again at Step 3 and repeat!
