@@ -18,11 +18,12 @@ from django.conf.urls import url
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include
+
 from hackerspace_online import views
 from siteconfig.models import SiteConfig
 
-admin.site.site_header = lambda: SiteConfig.objects.first().site_name
-admin.site.site_title = lambda: SiteConfig.objects.first().site_name_short
+admin.site.site_header = lambda: SiteConfig.get().site_name
+admin.site.site_title = lambda: SiteConfig.get().site_name_short
 
 app_name = 'hackerspace_online'
 
@@ -59,8 +60,10 @@ urlpatterns += [
 
 
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL,
+                          document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL,
+                          document_root=settings.MEDIA_ROOT)
     import debug_toolbar
 
     urlpatterns += [
