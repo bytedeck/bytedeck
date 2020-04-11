@@ -21,8 +21,7 @@ Pull requests are the best way to propose changes to the codebase (we use [Githu
 2. Keep the multi-tenant architecture of the app in mind (see next section below)
 2. If you've added code that should be tested, add tests.
 3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes: `python src/manage.py test src`
-5. Make sure your code lints: `flake8 src`
+4. Ensure the test suite passes and lints: `python src/manage.py test src && flake8 src`
 6. If you have to make minor changes (typos, linting), please [squash those little commits](https://www.internalpointers.com/post/squash-commits-into-one-git)
 6. [Please pull and rebase](https://coderwall.com/p/7aymfa/please-oh-please-use-git-pull-rebase) before sending your PR: `git pull --rebase`
 6. Issue that pull request!

@@ -107,7 +107,7 @@ For full details on code contributions, please see [CONTRIBUTING.md](https://git
 3. Pull in changes from the upstream master: `git pull upstream` (in case anything has changed since you cloned it)
 5. Create a new branch: `git checkout -b yourbranchname`
 6. Make your changes and them commit: `git commit -am "Useful description of your changes"`
-7. Make sure your code is up to date again! `git pull upstream`
+7. Make sure your code is up to date again and rebase onto any changes: `git pull upstream --rebase`
 7. Push your branch to your fork of the project: `git push origin yourbranchname`
 8. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
 9. Select your recently pushed branch and create a pull request (you should see a button for this).
