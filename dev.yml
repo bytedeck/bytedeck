@@ -43,7 +43,6 @@ services:
     depends_on:
       - db
       - redis
-      - web
   celery-beat:
     build: .
     env_file: .env
@@ -54,7 +53,6 @@ services:
     depends_on:
       - db 
       - redis
-      - web
 volumes:
   postgres_data:
   redis_data:

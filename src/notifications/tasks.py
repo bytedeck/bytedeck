@@ -16,12 +16,21 @@ from .models import Notification
 
 User = get_user_model()
 
-email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
+scheduled_notificaitons = CrontabSchedule.objects.filter(
     minute='0',
     hour='5',
     timezone=timezone.get_current_timezone()
 )
-
+if len(scheduled_notificaitons) == 0:
+    email_notifications_schedule = CrontabSchedule(
+        minute='0',
+        hour='5',
+        timezone=timezone.get_current_timezone()
+    )
+    email_notifications_schedule.save()
+else:
+    email_notifications_schedule = scheduled_notificaitons[0]
+    
 
 def get_notification_emails():
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
@@ -71,9 +80,19 @@ def email_notifications_to_users():
             send_email_notification_tenant.delay()
 
 
-PeriodicTask.objects.get_or_create(
+period_tasks = PeriodicTask.objects.filter(
     crontab=email_notifications_schedule,
     name='Send daily email notifications',
     task='notifications.tasks.email_notifications_to_users',
     queue='default'
 )
+if len(period_tasks) == 0:
+    period_task = PeriodicTask(
+        crontab=email_notifications_schedule,
+        name='Send daily email notifications',
+        task='notifications.tasks.email_notifications_to_users',
+        queue='default'
+    )
+    period_task.save()
+
+
