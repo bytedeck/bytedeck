@@ -33,7 +33,7 @@ services:
       - redis
     links: 
       - db:db
-    user: $UID:$GID
+    user: $WUID:$WGID
   celery:
     build: .
     env_file: .env
