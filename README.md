@@ -50,6 +50,8 @@ Add yourself to the docker group:
 4. Click "Clone or download" and copy the url, then paste it into the command: `git clone yoururlhere`
 5. This will download the project into ~/Developer/hackerspace/
 
+### Running the Code
+
 #### Initial setup
 This will create your docker containers and initialize the database by running migrations and creating some inital data that is required:
 
@@ -57,8 +59,8 @@ This will create your docker containers and initialize the database by running m
 2. Move into the project directory: `cd ~/Developer/hackerspace`
 3. Build the containers: `docker-compose build`
 4. Start 4 of the containers (the database, redis, celery, and celery-beat):
-`docker-compose up db redis celery celery-beat`
-5. Keep an eye out for errors as it goes through each step *(currently celery-beat is not working, but you can leave that one off for now)
+`docker-compose up db redis`
+5. Keep an eye out for errors as it goes through each step *(currently celery and celery-beat are not working, but you can ignore them for now)
 6. Initialize the database with some key data: `bash init_public_schema.sh`
 7. Run the django app locally: (TEMPORARY until docker-compose is setup to [work in development too](https://docs.docker.com/compose/extends/)
    1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.7`
@@ -81,31 +83,19 @@ If everything has worked so far, you should now be able to create your own hacke
 4. Now you should be in your own Hackerspace site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
-### Loading fixtures for a tenant
+### Installing some initial Sample Data
+The empty website is pretty boring, and kind of hard to get working because there is no data.  There is some initial sample data in the "tenant_specific_data.json" file you should import into your site.
 
-There are two ways to load a fixture:
+Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
 
-1. This is the recommended way of loading a fixture for multi-tenant setup
-  ```sh
-  $ python manage.py tenant_command loaddata --schema=<schema_name> tenant_specific_data.json
-  ```
- > Note: This assumes you are under the src/ directory.
-
- Some breaking changes were introduced in Django 2 that made this not working:
-  - https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240
-  - https://github.com/bernardopires/django-tenant-schemas/issues/613
-
-
-2. This is a sort of a hacky version but it and is a workaround for loading a fixture for a specific tenant
- ```sh
- $ python manage.py tenant_command shell --schema=<schema_name>
- ```
-
- Inside the shell, execute the following commands
- ```python
- from django.core.management import call_command
- call_command('loaddata', 'tenant_specific_data.json')
- ```
+1. Open a Python shell specific to your tenant: `./src/manage.py tenant_command shell`
+2. Type `?` to see a list of tenants you've made.  You should have at least one that is not "public".  Select it by entering it's name (without the "- localhost" part).
+3. Inside the shell, execute the following commands:
+   ```python
+   from django.core.management import call_command
+   call_command('loaddata', '/src/tenant_specific_data.json')
+   ```
+4. use Ctrl + D or `exit()` to close the Python shell. 
 
 ## Setting up a VS Code development environment
 (UNTESTED)
