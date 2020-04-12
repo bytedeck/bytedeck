@@ -2,7 +2,7 @@ LMS for Timberline Secondary School's Digital Hackerspace
 
 [![Build Status](https://travis-ci.org/timberline-secondary/hackerspace.svg?branch=develop)](https://travis-ci.org/timberline-secondary/hackerspace)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/timberline-secondary/hackerspace.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/timberline-secondary/hackerspace/alerts/)
-i
+
 # Hackerspace development environment installation
 
 ## Installing and running the project
@@ -39,7 +39,7 @@ Add yourself to the docker group:
 1. Create a Github account.
 2. Go to https://github.com/timberline-secondary/hackerspace
 3. The main branch of this repo is the `develop` branch, make sure you are on that branch.
-3. Click the "Fork" button on the top right corner. 
+3. Click the "Fork" button on the top right corner.
 4. This will allow you to have your own copy of the project on your GitHub account.
 
 #### Clone your fork
@@ -60,7 +60,7 @@ This will create your docker containers and initialize the database by running m
 `docker-compose up db redis celery celery-beat`
 5. Keep an eye out for errors as it goes through each step *(currently celery-beat is not working, but you can leave that one off for now)
 6. Initialize the database with some key data: `bash init_public_schema.sh`
-7. Run the django app locally: (TEMPORARY until docker-compose is setup to [work in development too](https://docs.docker.com/compose/extends/) 
+7. Run the django app locally: (TEMPORARY until docker-compose is setup to [work in development too](https://docs.docker.com/compose/extends/)
    1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.7`
    2. Enter the virtual environment: `source venv/bin/activate`
    3. Install our requirements: pip install -r requirements.txt
@@ -78,20 +78,46 @@ If everything has worked so far, you should now be able to create your own hacke
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
    - user: admin
    - password: admin1234 (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
-4. Now you should be in your own Hackerspace site!  
+4. Now you should be in your own Hackerspace site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
+
+### Loading fixtures for a tenant
+
+There are two ways to load a fixture:
+
+1. This is the recommended way of loading a fixture for multi-tenant setup
+  ```sh
+  $ python manage.py tenant_command loaddata --schema=<schema_name> tenant_specific_data.json
+  ```
+ > Note: This assumes you are under the src/ directory.
+
+ Some breaking changes were introduced in Django 2 that made this not working:
+  - https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240
+  - https://github.com/bernardopires/django-tenant-schemas/issues/613
+
+
+2. This is a sort of a hacky version but it and is a workaround for loading a fixture for a specific tenant
+ ```sh
+ $ python manage.py tenant_command shell --schema=<schema_name>
+ ```
+
+ Inside the shell, execute the following commands
+ ```python
+ from django.core.management import call_command
+ call_command('loaddata', 'tenant_specific_data.json')
+ ```
 
 ## Setting up a VS Code development environment
 (UNTESTED)
 
-1. Install [Visual Studio Code](https://code.visualstudio.com/docs/setup/setup-overview): 
+1. Install [Visual Studio Code](https://code.visualstudio.com/docs/setup/setup-overview):
 2. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
 3. Install the following extensions:
    1. Required: Python (Microsoft)
    3. Optional: Django Template (bibhasdn)
    4. Optional: ESLint: (Dirk Baeumer)
    5. Optional: GitLens (Eric Amodio)
-   6. Optional: Docker (Microsoft) 
+   6. Optional: Docker (Microsoft)
    7. Optional: Git Graph (mhutchie)
    8. Optional: YAML (Red Hat)
    9. Got any good suggestions? =D
