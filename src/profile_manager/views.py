@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import Http404
+
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
@@ -16,9 +18,12 @@ from quest_manager.models import QuestSubmission
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 
 
-class ProfileList(AllowNonPublicViewMixin, ListView):
+class ProfileList(AllowNonPublicViewMixin, UserPassesTestMixin, ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
+
+    def test_func(self):
+        return self.request.user.is_staff
 
     def queryset_append(self, profiles_qs):
         profiles_qs = profiles_qs.select_related('user__portfolio')
@@ -41,6 +46,18 @@ class ProfileList(AllowNonPublicViewMixin, ListView):
 
 
 class ProfileListCurrent(ProfileList):
+    """This view only displays currently enrolled students in its list, as opposed to 
+    all students ever.  Student's shouldn't be able to view all students ever, only their
+    current colleagues.
+
+    Arguments:
+        ProfileList -- Base class
+    """
+
+    # override the staff requirement for ProfileList
+    def test_func(self):
+        return self.request.user.is_authenticated
+
     def get_queryset(self):
         profiles_qs = Profile.objects.all_for_active_semester()
         return self.queryset_append(profiles_qs)

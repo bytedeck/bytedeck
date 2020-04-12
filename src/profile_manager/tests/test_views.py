@@ -49,10 +49,11 @@ class ProfileViewTests(TenantTestCase):
         # self.assertEqual(self.client.get(reverse('profiles:profile_detail')).status_code, 200)
         self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
+
         self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
 
-        # students shouldn't have access to these and should be redirected to login
+        # students shouldn't have access to these and should be redirected to login or permission denied
+        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 403)
         self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)

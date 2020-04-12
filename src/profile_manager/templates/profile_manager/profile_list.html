@@ -8,12 +8,15 @@
 {% block head_title %}{% if title %}{{ title }}{% endif %}{% endblock %}
 
 {% block heading %}Students
-    <div class="btn-group">
-        <a href="{% url 'profiles:profile_list_current' %}"
-           class="btn {% if current_only %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
-        <a href="{% url 'profiles:profile_list' %}"
-           class="btn {% if not current_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
-    </div>
+    {% if request.user.is_staff %}
+        <div class="btn-group">
+            <a href="{% url 'profiles:profile_list_current' %}"
+            class="btn {% if current_only %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+            
+            <a href="{% url 'profiles:profile_list' %}"
+            class="btn {% if not current_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+        </div>
+    {% endif %}
     <i class="fa fa-users pull-right"></i>
 {% endblock %}
 
