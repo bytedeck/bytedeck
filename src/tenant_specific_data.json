@@ -168,7 +168,6 @@
     "model": "courses.semester",
     "pk": 1,
     "fields": {
-      "number": 1,
       "first_day": "2016-09-06",
       "last_day": "2017-01-20",
       "active": false,
