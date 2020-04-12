@@ -1,11 +1,13 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Create a report to help us improve this app.
 title: ''
 labels: ''
 assignees: ''
 
 ---
+
+Please complete as much of the info below as you can. Thanks!
 
 **Describe the bug**
 A clear and concise description of what the bug is.
