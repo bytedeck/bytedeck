@@ -98,3 +98,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+#static root folder
+src/static_in_project/local_static_root/

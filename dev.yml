@@ -1,4 +1,4 @@
-version: '2' # supported by default install on Ubuntu 18.04
+version: '2.2' # supported by default install on Ubuntu 18.04
 
 services:
   db:
@@ -12,24 +12,35 @@ services:
       - postgres_data:/var/lib/postgresql/data/
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   redis:
     image: "redis:5.0-alpine" # Production server is using 3.0.6
     ports:
       - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
   web:
     #restart: unless-stopped
     build: .
     env_file: .env
     command: bash -c "cd /app/src/ &&
-                      python manage.py migrate_schemas --shared &&
                       python manage.py runserver 0.0.0.0:8000"
     volumes: 
       - .:/app
     ports:
       - 8000:8000
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     links: 
       - db:db
     user: $UID:$GID
@@ -41,8 +52,10 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   celery-beat:
     build: .
     env_file: .env
@@ -51,8 +64,10 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - db 
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   postgres_data:
   redis_data:
