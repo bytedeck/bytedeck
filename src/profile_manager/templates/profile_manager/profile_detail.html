@@ -8,9 +8,10 @@
   <a class="btn btn-warning" title="Change your Password"
     href="{% url 'account_change_password' %}"
     role="button"><i class="fa fa-key"></i></a>
-  <a class= "btn btn-primary" title="View your Mark Calculations"
+  {% comment %} # DISABLE MARKS {% endcomment %}
+  {% comment %} <a class= "btn btn-primary" title="View your Mark Calculations"
     href="{% url 'courses:marks' object.user.id %}"
-    role="button"><i class="fa fa-line-chart"></i></a>
+    role="button"><i class="fa fa-line-chart"></i></a> {% endcomment %}
   <a class= "btn btn-success" title="View your Portfolio"
     href="{% url 'portfolios:detail' object.user.id %}"
     role="button"><i class="fa fa-picture-o"></i></a>
