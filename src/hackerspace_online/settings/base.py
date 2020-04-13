@@ -78,6 +78,10 @@ SHARED_APPS = (
 
     # 'profile_manager',
 
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+
 )
 
 TENANT_APPS = (
@@ -90,9 +94,9 @@ TENANT_APPS = (
     'django.contrib.staticfiles',
     'django.contrib.flatpages',
 
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
+    # 'allauth',
+    # 'allauth.account',
+    # 'allauth.socialaccount',
 
     # 'attachments',
     # 'hackerspace_online',
