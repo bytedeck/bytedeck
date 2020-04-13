@@ -31,6 +31,7 @@
             data-export-types="['csv', 'json']"
            {% endif %}
 
+           data-custom-sort="customSort"
            data-icons='icons'
            data-icons-prefix='fa'
            data-classes="table table-no-bordered table-hover"
@@ -175,6 +176,21 @@
       export: 'fa-share',
       columns: 'fa-th-list',
   }
+  function customSort(sortName, sortOrder, data) {
+    var order = sortOrder === 'desc' ? -1 : 1
+    data.sort(function (a, b) {
+      var aa = +((a[sortName] + '').replace(/[^\d]/g, ''))
+      var bb = +((b[sortName] + '').replace(/[^\d]/g, ''))
+      if (aa < bb) {
+        return order * -1
+      }
+      if (aa > bb) {
+        return order
+      }
+      return 0
+    });
+  }
+
 </script>
 
 {#  <script src="{% static 'js/bootstrap-table-filter-control.js'%}"></script>#}
