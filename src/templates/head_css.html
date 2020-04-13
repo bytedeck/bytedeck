@@ -51,7 +51,7 @@
 <link rel="manifest" href="{% static 'icon/manifest.json' %}">
 <meta name="msapplication-TileColor" content="#ffffff">
 <meta name="msapplication-TileImage" content="{% static 'icon/ms-icon-144x144.png' %}">
-<meta name="theme-color" content="#ffffff"> 
+<meta name="theme-color" content="#ffffff">
 {% endif %}
 
-<link rel="icon" href="{% favicon_url %}">
+<link rel="icon" href="{{ config.get_favicon_url }}">
