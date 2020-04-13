@@ -49,7 +49,7 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      CELERY_RDBSIG=1 celery -A hackerspace_online worker -l info -c 3 -Q default"
+                      celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
     depends_on:
@@ -61,7 +61,7 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      CELERY_RDBSIG=1 celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+                      celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
     depends_on:

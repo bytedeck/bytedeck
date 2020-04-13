@@ -77,7 +77,6 @@ SHARED_APPS = (
     'colorful',
 
     # 'profile_manager',
-
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -94,26 +93,26 @@ TENANT_APPS = (
     'django.contrib.staticfiles',
     'django.contrib.flatpages',
 
-    # 'allauth',
-    # 'allauth.account',
-    # 'allauth.socialaccount',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
 
-    # 'attachments',
-    # 'hackerspace_online',
-    # 'django_summernote',
+    'attachments',
+    'hackerspace_online',
+    'django_summernote',
 
-    # 'quest_manager',
-    # 'profile_manager',
-    # 'announcements',
-    # 'comments',
-    # 'notifications',
-    # 'courses',
-    # 'prerequisites',
-    # 'badges',
-    # 'djcytoscape',
-    # 'portfolios',
-    # 'utilities',
-    # 'siteconfig',
+    'quest_manager',
+    'profile_manager',
+    'announcements',
+    'comments',
+    'notifications',
+    'courses',
+    'prerequisites',
+    'badges',
+    'djcytoscape',
+    'portfolios',
+    'utilities',
+    'siteconfig',
 )
 
 
