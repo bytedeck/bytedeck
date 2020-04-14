@@ -17,5 +17,5 @@ def content_type(obj):
 def filename(value):
     try:
         return os.path.basename(value.file.name)
-    except FileNotFoundError: 
-        return '<i class="fa fa-exclamation-triangle text-warning"></i>[File Missing]'
+    except FileNotFoundError:
+        return '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]'
