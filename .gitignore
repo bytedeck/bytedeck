@@ -6,6 +6,7 @@ sentmail/
 #to fill this directory if needed run:
 # python manage.py collectstatic
 static_in_venv/
+local_static_root/
 
 #celery
 celerybeat.pid
