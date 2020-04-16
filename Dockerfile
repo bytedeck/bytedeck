@@ -49,8 +49,7 @@ RUN pip install -r requirements.txt
 EXPOSE 8000
 
 # Command to run when the container is started
-# now uses docker-compose.yml
-#CMD ["python", "src/manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["python", "src/manage.py", "migrate_schemas", "--shared"]
 
 
 #### More from https://github.com/Microsoft/vscode-remote-try-python ##
