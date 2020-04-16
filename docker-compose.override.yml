@@ -1,0 +1,17 @@
+version: '2.2' # supported by default install on Ubuntu 18.04
+
+###############################################################################
+#
+# FOR DOCKER_COMPOSE SETTINGS SPECIFIC TO DEVELOPMENT
+# 
+# It is run automatically with `docker-compose up` on top of the the settings in docker-compose.yml
+#
+# docker-compose.overide.yml
+# https://docs.docker.com/compose/extends/
+################################################################################
+
+services:
+  web:
+    command: bash -c "cd /app/src/ &&
+                      python manage.py migrate_schemas --shared &&
+                      python manage.py runserver 0.0.0.0:8000"   # no need for uwsgi in development, this is easier

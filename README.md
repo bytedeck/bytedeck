@@ -59,14 +59,16 @@ This will create your docker containers and initialize the database by running m
 2. Move into the project directory: `cd ~/Developer/hackerspace`
 3. Build the containers: `docker-compose build`
 4. Start 4 of the containers (the database, redis, celery, and celery-beat):
-`docker-compose up db redis`
+`docker-compose up`
 5. Keep an eye out for errors as it goes through each step *(currently celery and celery-beat are not working, but you can ignore them for now)
-6. Initialize the database with some key data: `bash init_public_schema.sh`
-7. Run the django app locally: (TEMPORARY until docker-compose is setup to [work in development too](https://docs.docker.com/compose/extends/)
-   1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.7`
+6. Initialize the database with some key data in a new terminal: `bash init_public_schema.sh`
+7. ALTERNATE - RUN LOCALLY: If the web container isn't working for you, or you find developing in a container annoying, you can run the django app locally:
+   1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.5`  # 3.5 is important, if you try a different python version you may get some migration inconsistancies or other problems!
    2. Enter the virtual environment: `source venv/bin/activate`
-   3. Install our requirements: pip install -r requirements.txt
+   3. Install our requirements: `pip install -r requirements.txt`
+   3. Run migrations: `./src/manage.py migrate_schemas --shared`
    4. Run the app with: `./src/manage.py runserver`
+
 8. You should get a 404 page (until we create a lnading page) at http://localhost:8000
 9. But you should be able to log in to the admin site!  http://http://localhost:8000/admin/
    - user: admin
@@ -93,7 +95,7 @@ Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/late
 3. Inside the shell, execute the following commands:
    ```python
    from django.core.management import call_command
-   call_command('loaddata', '/src/tenant_specific_data.json')
+   call_command('loaddata', 'src/tenant_specific_data.json')
    ```
 4. use Ctrl + D or `exit()` to close the Python shell. 
 
