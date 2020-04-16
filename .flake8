@@ -12,6 +12,7 @@ max-line-length = 150
 # W504 line break after binary operator
 # W503 line break before binary operator
 # E126 continuation line over-indented for hanging indent
-ignore = W291, E216, W504, W503, E126
+# W293 blank line contains whitespace
+ignore = W291, E216, W504, W503, E126, W293
 
 
