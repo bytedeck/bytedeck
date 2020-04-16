@@ -140,7 +140,9 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications.apply_async(args=[request.user, new_announcement.id], queue='default')
+            # CELERY BROKEN
+            # send_notifications.apply_async(args=[request.user, new_announcement.id], queue='default')
+            send_notifications(request.user, new_announcement.id)
         return redirect(new_announcement)
 
     context = {
@@ -157,7 +159,9 @@ def copy(request, ann_id):
 def publish(request, ann_id):
     announcement = get_object_or_404(Announcement, pk=ann_id)
     url = request.build_absolute_uri(announcement.get_absolute_url())
-    publish_announcement.apply_async(args=[request.user.id, ann_id, url], queue='default')
+    # CELERY BROKEN
+    # publish_announcement.apply_async(args=[request.user.id, ann_id, url], queue='default')
+    publish_announcement(request.user.id, ann_id, url)
     return redirect(announcement)
 
 
@@ -172,10 +176,9 @@ class Create(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            # users_to_notify = CourseStudent.objects.all_users_for_active_semester()
-            send_notifications.apply_async(args=[self.request.user, new_announcement.id], queue='default')
-
-        # new_announcement.send_by_mail()
+            # CELERY BROKEN
+            # send_notifications.apply_async(args=[self.request.user, new_announcement.id], queue='default')
+            send_notifications(self.request.user, new_announcement.id)
 
         return super(Create, self).form_valid(form)
 
