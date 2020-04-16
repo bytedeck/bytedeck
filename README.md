@@ -112,6 +112,13 @@ Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/late
    ```
 4. use Ctrl + D or `exit()` to close the Python shell. 
 
+### Running Tests and Checking Code Style
+You can run tests through the web container, or locally:
+1. This will run all the project's tests and if successful, will also check the code style using flake 8: 
+`docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
+2. Or from within a virtual environment, you can run the tests and style checker locally:  
+`./src/manage.py test src && flake8 src`
+
 ## Setting up a VS Code development environment
 (UNTESTED)
 

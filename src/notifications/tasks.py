@@ -9,7 +9,7 @@ from django.core import mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 
-from celery import shared_task
+from hackerspace_online.celery import app
 from tenant_schemas.utils import get_tenant_model, tenant_context
 
 from .models import Notification
@@ -56,7 +56,7 @@ def get_notification_emails():
     return notification_emails
 
 
-@shared_task
+@app.task(name='notifications.tasks.send_email_notification_tenant')
 def send_email_notification_tenant():
     notification_emails = get_notification_emails()
     connection = mail.get_connection()
@@ -64,7 +64,7 @@ def send_email_notification_tenant():
     print("Sending {} notification emails.".format(len(notification_emails)))
 
 
-@shared_task
+@app.task(name='notifications.tasks.email_notifications_to_users')
 def email_notifications_to_users():
     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
         with tenant_context(tenant):
