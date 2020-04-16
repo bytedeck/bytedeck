@@ -20,15 +20,13 @@ The instructions assume you are using Ubuntu (or another Debian based linux dist
 Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
 https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
 
-By the end, you should be able to run docker's test image:
-
+By the end, you should be able to run docker's test image:  
 `$ sudo docker run hello-world`
 
 #### Install docker-compose
 `sudo apt install docker-compose`
 
-Add yourself to the docker group:
-
+Add yourself to the docker group:  
 `sudo usermod -aG docker $USER`
 
 
@@ -44,10 +42,13 @@ Add yourself to the docker group:
 
 #### Clone your fork
 
-1. Open the directory where you want to put the code.  I like to create a new directory for my code projects called Developer: `mkdir ~/Developer`
-2. Move into the parent directory of the project: `cd ~/Developer`
+1. Open the directory where you want to put the code.  I like to create a new directory for my code projects called Developer:  
+`mkdir ~/Developer`
+2. Move into the parent directory of the project:  
+`cd ~/Developer`
 3. Go to your forked repository in github
-4. Click "Clone or download" and copy the url, then paste it into the command: `git clone yoururlhere`
+4. Click "Clone or download" and copy the url, then paste it into the command:  
+`git clone yoururlhere`
 5. This will download the project into ~/Developer/hackerspace/
 
 ### Running the Code
@@ -56,21 +57,30 @@ Add yourself to the docker group:
 This will create your docker containers and initialize the database by running migrations and creating some inital data that is required:
 
 1. Open a terminal
-2. Move into the project directory: `cd ~/Developer/hackerspace`
-3. Build the containers: `docker-compose build`
+2. Move into the project directory:  
+`cd ~/Developer/hackerspace`
+3. Build the containers:  
+`docker-compose build`
 4. Start 4 of the containers (the database, redis, celery, and celery-beat):
 `docker-compose up`
 5. Keep an eye out for errors as it goes through each step *(currently celery and celery-beat are not working, but you can ignore them for now)
-6. Initialize the database with some key data in a new terminal: `bash init_public_schema.sh`
+6. Initialize the database with some key data in a new terminal:  
+`bash init_public_schema.sh`
 7. ALTERNATE - RUN LOCALLY: If the web container isn't working for you, or you find developing in a container annoying, you can run the django app locally:
-   1. Create a python virtual environment (we'll put ours in a venv directory): `virtualenv venv --python=python3.5`  # 3.5 is important, if you try a different python version you may get some migration inconsistancies or other problems!
-   2. Enter the virtual environment: `source venv/bin/activate`
-   3. Install our requirements: `pip install -r requirements.txt`
-   3. Run migrations: `./src/manage.py migrate_schemas --shared`
-   4. Run the app with: `./src/manage.py runserver`
+   1. Create a python virtual environment (we'll put ours in a venv directory):   
+   `virtualenv venv --python=python3.5`  
+   Note: 3.5 is important, if you try a different python version you may get some migration inconsistancies or other problems!
+   2. Enter the virtual environment:  
+   `source venv/bin/activate`
+   3. Install our requirements:  
+   `pip install -r requirements.txt`
+   3. Run migrations:  
+   `./src/manage.py migrate_schemas --shared`
+   4. Run the app with:  
+   `./src/manage.py runserver`
 
 8. You should get a 404 page (until we create a lnading page) at http://localhost:8000
-9. But you should be able to log in to the admin site!  http://http://localhost:8000/admin/
+9. But you should be able to log in to the admin site!  http://localhost:8000/admin/
    - user: admin
    - password: hellonepal
 
@@ -81,7 +91,7 @@ If everything has worked so far, you should now be able to create your own hacke
 2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
    - user: admin
-   - password: admin1234 (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
+   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
 4. Now you should be in your own Hackerspace site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
@@ -90,7 +100,10 @@ The empty website is pretty boring, and kind of hard to get working because ther
 
 Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
 
-1. Open a Python shell specific to your tenant: `./src/manage.py tenant_command shell`
+1. Open a shell in the web container (this assumes the container is running, or you can run the next commands locally if you are using a virtual environment) 
+`docker-compose exec web sh` 
+2. Open a Python shell specific to your tenant:  
+`./src/manage.py tenant_command shell`
 2. Type `?` to see a list of tenants you've made.  You should have at least one that is not "public".  Select it by entering it's name (without the "- localhost" part).
 3. Inside the shell, execute the following commands:
    ```python
