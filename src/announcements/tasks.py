@@ -71,7 +71,11 @@ def publish_announcement(user_id, announcement_id, absolute_url):
     announcement.save()
 
     # push notifications
-    send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
-
+    # CELERY BROKEN
+    # send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
+    send_notifications(user_id, announcement_id)
+    
     # Send the announcements by email to those who have ask for them, using celery
-    send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
+    # CELERY BROKEN
+    # send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
+    # Email not set up anyway
