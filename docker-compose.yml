@@ -38,7 +38,6 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate_schemas --shared &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
@@ -49,7 +48,6 @@ services:
     build: .
     env_file: .env
     command: bash -c "cd src &&
-                      python manage.py migrate_schemas --shared && 
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
