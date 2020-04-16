@@ -63,7 +63,7 @@ POSTMAN_MAILER_APP = 'django.core.mail'
 
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set in production settings for deployment
-# STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "static_root")
+STATIC_ROOT = os.path.join(BASE_DIR, "static_in_project",  "local_static_root")
 
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static_in_project", "static_root"),
