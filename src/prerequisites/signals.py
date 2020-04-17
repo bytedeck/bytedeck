@@ -1,4 +1,3 @@
-# CELERY BROKEN
 from django.conf import settings
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
@@ -23,7 +22,6 @@ def update_conditions_met_for_user(sender, instance, *args, **kwargs):
 # Don't need post_delete, it doesn't affect on result and will be updated on next all conditions update
 @receiver([post_save], sender=Quest)
 def update_conditions_met_for_quest(sender, instance, *args, **kwargs):
-
     update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.id, 'start_from_user_id': 1}, queue='default')
 
 

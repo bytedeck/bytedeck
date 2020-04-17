@@ -408,11 +408,16 @@ class Prereq(models.Model, IsAPrereqMixin):
 
 
 class PrereqAllConditionsMet(models.Model):
-    """ I think these are a list of prereq objects used for caching?
+    """This is a cache of the Prereq.objects.all_conditions_met(obj, user) method which is super innefficient and clunky
+    but also critical to how this site works.
+
+    It is recalulated asynchronously using celery (see tasks.py).
     """
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    ids = models.TextField()  # ids of what?!?  Prerequisites?
-    model_name = models.CharField(max_length=256)
+    # these next two fields look like a custom Generic Foreign Key implementation?
+    ids = models.TextField()  # str representation of a list of ids for the model, e.g '[25, 34, 55, 56, 77]'
+    model_name = models.CharField(max_length=256)  # model name as a strnig with .get_model_name() .... only Quests or other models too?
 
     def add_id(self, new_id):
         ids = self.get_ids([])

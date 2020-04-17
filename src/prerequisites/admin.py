@@ -1,9 +1,12 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 
-from .models import Prereq, PrereqAllConditionsMet
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
+
+from .models import Prereq, PrereqAllConditionsMet
+from .tasks import update_quest_conditions_all
 
 
 class PrereqInlineForm(forms.ModelForm):
@@ -40,6 +43,10 @@ def auto_name_selected_prereqs(modeladmin, request, queryset):
         prereq.save()
 
 
+def recalculate_available_quests_for_all_users(modeladmin, request, queryset):
+    update_quest_conditions_all.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+
+
 class PrereqAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('id', 'parent', '__str__', 'name')
     actions = [auto_name_selected_prereqs]
@@ -47,6 +54,7 @@ class PrereqAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
 class PrereqAllConditionsMetAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('id', 'user_id', 'model_name')
+    actions = [recalculate_available_quests_for_all_users]
 
 
 admin.site.register(Prereq, PrereqAdmin)
