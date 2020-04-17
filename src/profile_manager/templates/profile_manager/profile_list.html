@@ -12,7 +12,7 @@
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"
             class="btn {% if current_only %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
-            
+
             <a href="{% url 'profiles:profile_list' %}"
             class="btn {% if not current_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
         </div>
@@ -31,7 +31,6 @@
             data-export-types="['csv', 'json']"
            {% endif %}
 
-           data-custom-sort="customSort"
            data-icons='icons'
            data-icons-prefix='fa'
            data-classes="table table-no-bordered table-hover"
@@ -77,9 +76,10 @@
             </th>
 
             {% if request.user.is_staff %}
-            <th data-sortable='true' data-field='last_sub'>
+            <th data-sortable='true' data-field='last_sub' data-sort-name='last_sub_datetime'>
                 Last Quest
             </th>
+            <th data-field='last_sub_datetime' data-visible='false'></th>
             <th data-sortable='true' data-field='sn'>
                 Student #
             </th>
@@ -121,16 +121,19 @@
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
                 {% if request.user.is_staff %}
-                    <td>
-                      {% with last_submission=object.last_submission_completed_value %}
-                        {% if last_submission %}
-                            {{ last_submission.time_completed|date:'y/m/d' }}<br>
-                            <small>{{ last_submission.time_completed|timesince }} ago</small>
-                        {% else %}
-                            &nbsp;Never
-                        {% endif %}
-                      {% endwith %}
-                    </td>
+                    {% with last_submission=object.last_submission_completed_value %}
+                      <td>
+                          {% if last_submission %}
+                              {{ last_submission.time_completed|date:'y/m/d' }}<br>
+                              <small>{{ last_submission.time_completed|timesince }} ago</small>
+                          {% else %}
+                              &nbsp;Never
+                          {% endif %}
+                      </td>
+                      <td>
+                        {{ last_submission.time_completed|date:"y/m/d" }} {{ last_submission.time_completed|time:"H:i:s"}}
+                      </td>
+                    {% endwith %}
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user }}</a></td>
 
                     {#      Admin buttons #}
@@ -176,21 +179,6 @@
       export: 'fa-share',
       columns: 'fa-th-list',
   }
-  function customSort(sortName, sortOrder, data) {
-    var order = sortOrder === 'desc' ? -1 : 1
-    data.sort(function (a, b) {
-      var aa = +((a[sortName] + '').replace(/[^\d]/g, ''))
-      var bb = +((b[sortName] + '').replace(/[^\d]/g, ''))
-      if (aa < bb) {
-        return order * -1
-      }
-      if (aa > bb) {
-        return order
-      }
-      return 0
-    });
-  }
-
 </script>
 
 {#  <script src="{% static 'js/bootstrap-table-filter-control.js'%}"></script>#}
