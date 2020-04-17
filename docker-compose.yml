@@ -50,7 +50,6 @@ services:
         condition: service_healthy
     links: 
       - db:db
-    user: $WUID:$WGID
   celery:
     build: .
     env_file: .env
