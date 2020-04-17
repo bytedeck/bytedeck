@@ -31,7 +31,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
         announcement.auto_publish = True
         announcement.save()
 
-        # CELERY-BEAT DISABLED
+        # CELERY-BEAT BROKEN
         # task = PeriodicTask.objects.get(name__contains=announcement.id)
 
         # self.assertEqual(task.queue, "default")

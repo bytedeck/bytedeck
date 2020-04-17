@@ -20,3 +20,4 @@ services:
       - .:/app
       - /var/www/bytedeck/media/:/app/media
       - /var/www/bytedeck/static/:/app/static
+    user: $WUID:$WGID
