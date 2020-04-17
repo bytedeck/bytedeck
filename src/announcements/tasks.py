@@ -56,7 +56,7 @@ def send_announcement_emails(content, url):
     )
     email_msg.attach_alternative(html_content, "text/html")
     email_msg.send()
-    print("Sending {} announcement emails.".format(len(users_to_email)))
+    # print("Sending {} announcement emails.".format(len(users_to_email)))
 
 
 @app.task(name='announcements.tasks.publish_announcement')
