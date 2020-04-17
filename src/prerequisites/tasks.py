@@ -6,7 +6,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.utils import OperationalError
-from celery import shared_task, Task
+
+from tenant_schemas_celery.task import TenantTask
+
+from hackerspace_online.celery import app
 
 from quest_manager.models import Quest
 from prerequisites.models import Prereq, PrereqAllConditionsMet
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-class TransactionAwareTask(Task):
+class TransactionAwareTask(TenantTask):
     abstract = True
 
     def apply_async(self, *args, **kwargs):
@@ -33,7 +36,7 @@ class TransactionAwareTask(Task):
             logger.error(traceback.format_exc())
 
 
-@shared_task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
 def update_quest_conditions_for_user(self, user_id):
     user = User.objects.filter(id=user_id).first()
     if not user:
@@ -44,7 +47,7 @@ def update_quest_conditions_for_user(self, user_id):
     return met_list.id
 
 
-@shared_task(base=TransactionAwareTask, bind=True, name='update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
 def update_conditions_for_quest(self, quest_id, start_from_user_id):
     quest = Quest.objects.filter(id=quest_id).first()
     if not quest:
@@ -65,15 +68,14 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
         user_id = user.id + 1
         user = User.objects.filter(id__gte=user_id).values('id').first()
         if user:
-            # CELERY BROKEN
-            # self.apply_async(
-            #     kwargs={'quest_id': quest.id, 'start_from_user_id': user_id},
-            #     queue='default', countdown=20
-            # )
-            self(quest.id, user_id)
+            self.apply_async(
+                queue='default',
+                countdown=20,
+                kwargs={'quest_id': quest.id, 'start_from_user_id': user_id}
+            )
 
 
-@shared_task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_all', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_all', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
 def update_quest_conditions_all(self, start_from_user_id):
     if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
         return
@@ -82,12 +84,8 @@ def update_quest_conditions_all(self, start_from_user_id):
 
     users = list(User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]) # noqa
     for uid in users:
-        # CELERY BROKEN
-        # update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
-        update_quest_conditions_for_user(uid)
+        update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
 
     if users:
         user = User.objects.filter(id__gte=users[-1] + 1).values('id').first()
-        # CELERY BROKEN
-        # user and self.apply_async(args=[user['id']], queue='default', countdown=100)
-        user and self(user['id'])
+        user and self.apply_async(args=[user['id']], queue='default', countdown=100)

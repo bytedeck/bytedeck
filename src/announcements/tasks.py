@@ -1,11 +1,12 @@
 from __future__ import absolute_import, unicode_literals
-from celery import shared_task
 
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.shortcuts import get_object_or_404
+
+from hackerspace_online.celery import app
 
 from siteconfig.models import SiteConfig
 from courses.models import CourseStudent
@@ -16,7 +17,7 @@ from .models import Announcement
 User = get_user_model()
 
 
-@shared_task(name='announcements.tasks.send_notifications')
+@app.task(name='announcements.tasks.send_notifications')
 def send_notifications(user_id, announcement_id):
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
@@ -32,7 +33,7 @@ def send_notifications(user_id, announcement_id):
     )
 
 
-@shared_task(name='announcements.tasks.send_announcement_emails')
+@app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, url):
     users_to_email = User.objects.filter(
         is_active=True,
@@ -58,7 +59,7 @@ def send_announcement_emails(content, url):
     # print("Sending {} announcement emails.".format(len(users_to_email)))
 
 
-@shared_task(name='announcements.tasks.publish_announcement')
+@app.task(name='announcements.tasks.publish_announcement')
 def publish_announcement(user_id, announcement_id, absolute_url):
     """ Publish the announcement, including:
             - edit model instance
@@ -71,11 +72,8 @@ def publish_announcement(user_id, announcement_id, absolute_url):
     announcement.save()
 
     # push notifications
-    # CELERY BROKEN
-    # send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
-    send_notifications(user_id, announcement_id)
+    send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
 
     # Send the announcements by email to those who have ask for them, using celery
-    # CELERY BROKEN
-    # send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
+    send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
     # Email not set up anyway
