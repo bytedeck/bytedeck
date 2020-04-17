@@ -1,6 +1,6 @@
 from __future__ import absolute_import, unicode_literals
 
-from django_celery_beat.models import CrontabSchedule, PeriodicTask
+from django_celery_beat.models import CrontabSchedule  # , PeriodicTask
 from django.utils import timezone
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -61,7 +61,7 @@ def send_email_notification_tenant():
     notification_emails = get_notification_emails()
     connection = mail.get_connection()
     connection.send_messages(notification_emails)
-    print("Sending {} notification emails.".format(len(notification_emails)))
+    # print("Sending {} notification emails.".format(len(notification_emails)))
 
 
 @app.task(name='notifications.tasks.email_notifications_to_users')
@@ -70,10 +70,10 @@ def email_notifications_to_users():
         with tenant_context(tenant):
             send_email_notification_tenant.delay()
 
-
-PeriodicTask.objects.get_or_create(
-    crontab=email_notifications_schedule,
-    name='Send daily email notifications',
-    task='notifications.tasks.email_notifications_to_users',
-    queue='default'
-)
+# CELERY-BEAT BROKEN
+# PeriodicTask.objects.get_or_create(
+#     crontab=email_notifications_schedule,
+#     name='Send daily email notifications',
+#     task='notifications.tasks.email_notifications_to_users',
+#     queue='default'
+# )

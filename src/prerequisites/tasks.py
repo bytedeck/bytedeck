@@ -6,7 +6,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.utils import OperationalError
-from celery import Task
+
+from tenant_schemas_celery.task import TenantTask
 
 from hackerspace_online.celery import app
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-class TransactionAwareTask(Task):
+class TransactionAwareTask(TenantTask):
     abstract = True
 
     def apply_async(self, *args, **kwargs):
@@ -68,9 +69,9 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
         user = User.objects.filter(id__gte=user_id).values('id').first()
         if user:
             self.apply_async(
-                kwargs={'quest_id': quest.id, 'start_from_user_id': user_id},
-                queue='default', 
-                countdown=20
+                queue='default',
+                countdown=20,
+                kwargs={'quest_id': quest.id, 'start_from_user_id': user_id}
             )
 
 

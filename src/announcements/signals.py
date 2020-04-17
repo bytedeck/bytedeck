@@ -1,5 +1,7 @@
-import json
+# CELERY-BEAT BROKEN
+# import json
 
+from django.db import connection
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
@@ -35,31 +37,38 @@ def save_announcement_signal(sender, instance, **kwargs):
             clocked_time=instance.datetime_released
         )
 
-        # PeriodicTask doesn't have an update_or_create method for some reason, so do it long way
+        # PeriodicTask doesn't have an update_or_create() method for some reason, so do it long way
         # https://github.com/celery/django-celery-beat/issues/106
-        defaults = {
-            'clocked': schedule,
-            'task': 'announcements.tasks.publish_announcement',
-            'queue': 'default',
-            'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
-                'user_id': sending_user.id,
-                'announcement_id': instance.id,
-                'absolute_url': instance.get_absolute_url(),
-            }),
-            'one_off': True,
-            'enabled': True,
-        }
+        # print(connection.schema_name)
 
-        try:
-            task = PeriodicTask.objects.get(name=task_name)
-            for key, value in defaults.items():
-                setattr(task, key, value)
-            task.save()
-        except PeriodicTask.DoesNotExist:
-            new_values = {'name': task_name}
-            new_values.update(defaults)
-            task = PeriodicTask(**new_values)
-            task.save()
+        # CELERY-BEAT BROKEN
+        # defaults = {
+        #     'clocked': schedule,
+        #     'task': 'announcements.tasks.publish_announcement',
+        #     'queue': 'default',
+        #     'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
+        #         'user_id': sending_user.id,
+        #         'announcement_id': instance.id,
+        #         'absolute_url': instance.get_absolute_url(),
+        #         '_schema_name': connection.schema_name,
+        #     }),
+        #     'one_off': True,
+        #     'enabled': True,
+        # }
+
+        # CELERY-BEAT BROKEN
+        # try:
+        #     task = PeriodicTask.objects.get(name=task_name)
+        #     for key, value in defaults.items():
+        #         setattr(task, key, value)
+        #     task.save()
+        # except PeriodicTask.DoesNotExist:
+        #     new_values = {'name': task_name}
+        #     new_values.update(defaults)
+        #     task = PeriodicTask(**new_values)
+        #     task.save()
+
+        # End manual update_or_create() ############
 
     else:  # There shouldn't be a task so delete if it exists
         try:
