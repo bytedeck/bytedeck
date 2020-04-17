@@ -5,22 +5,23 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render, get_object_or_404, redirect, Http404
+from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
-from django.urls import reverse_lazy, reverse
-from django.views.generic.edit import DeleteView, UpdateView, CreateView
-
-from siteconfig.models import SiteConfig
+from django.urls import reverse, reverse_lazy
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from notifications.signals import notify
 from prerequisites.models import Prereq
 from prerequisites.tasks import update_quest_conditions_for_user
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
-from .forms import QuestForm, SubmissionForm, SubmissionFormStaff, SubmissionQuickReplyForm
+from siteconfig.models import SiteConfig
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+
+from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+                    SubmissionQuickReplyForm)
 from .models import Quest, QuestSubmission
 
 
@@ -352,9 +353,10 @@ def quest_copy(request, quest_id):
         return redirect(new_quest)
 
     context = {
-        "heading": "Copy a Quest",
-        "form": form,
-        "submit_btn_value": "Create",
+        'heading': 'Copy a Quest',
+        'form': form,
+        'submit_btn_value': 'Create',
+        'cancel_url': reverse('quests:quests')
     }
     return render(request, "quest_manager/quest_form.html", context)
 
