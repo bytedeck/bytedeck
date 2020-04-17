@@ -1,6 +1,6 @@
 from django import forms
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.contenttypes.admin import GenericTabularInline
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
@@ -45,6 +45,10 @@ def auto_name_selected_prereqs(modeladmin, request, queryset):
 
 def recalculate_available_quests_for_all_users(modeladmin, request, queryset):
     update_quest_conditions_all.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+    messages.add_message(
+        request, messages.INFO, 
+        'Recalculating... this might take a while so I\'m doing it the background. You don\'t need to stick around and can leave this page.'
+    )
 
 
 class PrereqAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
