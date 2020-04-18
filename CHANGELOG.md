@@ -4,6 +4,30 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.2.0] 2020-04-18
+* Require an Access Code to register (this can be set in your Site Configuration and defaults to 314159)
+* Bugfixes:
+  - [#450](https://github.com/timberline-secondary/hackerspace/issues/450)
+  - [#447](https://github.com/timberline-secondary/hackerspace/issues/447)
+  - [#437](https://github.com/timberline-secondary/hackerspace/issues/434)
+  - [#427](https://github.com/timberline-secondary/hackerspace/issues/427)
+  - [#424](https://github.com/timberline-secondary/hackerspace/issues/424)
+  - [#422](https://github.com/timberline-secondary/hackerspace/issues/422)
+  - [#419](https://github.com/timberline-secondary/hackerspace/issues/419)
+  - [#369](https://github.com/timberline-secondary/hackerspace/issues/369)
+  - [#402](https://github.com/timberline-secondary/hackerspace/issues/402)
+  - [#369](https://github.com/timberline-secondary/hackerspace/issues/369)
+  - [#400](https://github.com/timberline-secondary/hackerspace/issues/400)
+  - [#395](https://github.com/timberline-secondary/hackerspace/issues/395)
+  - [#389](https://github.com/timberline-secondary/hackerspace/issues/389)
+  - [#392](https://github.com/timberline-secondary/hackerspace/issues/392)
+  - [#395](https://github.com/timberline-secondary/hackerspace/issues/395)
+  - [#387](https://github.com/timberline-secondary/hackerspace/issues/387)
+  - [#386](https://github.com/timberline-secondary/hackerspace/issues/386)
+  - [#383](https://github.com/timberline-secondary/hackerspace/issues/386)
+  - [#377](https://github.com/timberline-secondary/hackerspace/issues/377)
+  - [#375](https://github.com/timberline-secondary/hackerspace/issues/375)
+
 ### [1.1.0] 2020-04-07
 * Redirect to login page when accessing via mobile device
 * remove some janky/old/unused apps including django-postman (Messages) and Suggestions.
@@ -12,7 +36,6 @@ This file chronologically records all notable changes to this website, including
 
 ### [1.0.0] 2020-04-05 - Multi tenancy
 * Multi-tenant support!
-* [teachers]
 * Bazillians of small bugfixes and tweaks to existing features
  
 ### [0.25.1] 2020-03-29
