@@ -1,6 +1,5 @@
-# CELERY-BEAT BROKEN
-# import json
-# from django.db import connection
+import json
+from django.db import connection
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -17,11 +16,11 @@ User = get_user_model()
 
 @receiver(post_save, sender=Announcement)
 def save_announcement_signal(sender, instance, **kwargs):
-    """ After an announcement is saves, check if it's a draft and that it should auto-publish the results.
+    """ After an announcement is saved, check if it's a draft and that it should auto-publish the results.
     If it should, then check if there is already a beat task scheduled and replace it, or create a new schedule
     """
 
-    task_name = "Autopublication task for announcement #{}".format(instance.id)
+    task_name = "Autopublication task for announcement #{} on schema {}".format(instance.id, connection.schema_name)
 
     if instance.draft and instance.auto_publish:
 
@@ -39,34 +38,34 @@ def save_announcement_signal(sender, instance, **kwargs):
 
         # PeriodicTask doesn't have an update_or_create() method for some reason, so do it long way
         # https://github.com/celery/django-celery-beat/issues/106
-        # print(connection.schema_name)
+        defaults = {
+            'clocked': schedule,
+            'task': 'announcements.tasks.publish_announcement',
+            'queue': 'default',
+            'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
+                'user_id': sending_user.id,
+                'announcement_id': instance.id,
+                'absolute_url': instance.get_absolute_url(),
+            }),
+            # Inject the schema name into the task's header, as that's where tenant-schema-celery 
+            # will be looking for it to ensure it is tenant aware
+            'headers': json.dumps({
+                '_schema_name': connection.schema_name,
+            }),
+            'one_off': True,
+            'enabled': True,
+        }
 
-        # CELERY-BEAT BROKEN
-        # defaults = {
-        #     'clocked': schedule,
-        #     'task': 'announcements.tasks.publish_announcement',
-        #     'queue': 'default',
-        #     'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
-        #         'user_id': sending_user.id,
-        #         'announcement_id': instance.id,
-        #         'absolute_url': instance.get_absolute_url(),
-        #         '_schema_name': connection.schema_name,
-        #     }),
-        #     'one_off': True,
-        #     'enabled': True,
-        # }
-
-        # CELERY-BEAT BROKEN
-        # try:
-        #     task = PeriodicTask.objects.get(name=task_name)
-        #     for key, value in defaults.items():
-        #         setattr(task, key, value)
-        #     task.save()
-        # except PeriodicTask.DoesNotExist:
-        #     new_values = {'name': task_name}
-        #     new_values.update(defaults)
-        #     task = PeriodicTask(**new_values)
-        #     task.save()
+        try:
+            task = PeriodicTask.objects.get(name=task_name)
+            for key, value in defaults.items():
+                setattr(task, key, value)
+            task.save()
+        except PeriodicTask.DoesNotExist:
+            new_values = {'name': task_name}
+            new_values.update(defaults)
+            task = PeriodicTask(**new_values)
+            task.save()
 
         # End manual update_or_create() ############
 

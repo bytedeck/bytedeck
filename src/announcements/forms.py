@@ -16,10 +16,6 @@ class AnnouncementForm(forms.ModelForm):
         self.fields['datetime_released'].initial = (
             datetime.now().strftime('%Y-%m-%d %H:%M')
         )
-        # CELERY_BEAT BROKEN
-        self.fields['auto_publish'].disabled = True  # remove after beat is fixed
-        self.fields['auto_publish'].help_text = "Auto publishing of announcements is temporarily disabled. \
-        Please manually publish with the 'Publish' button after saving an announcement as a draft."  # remove after beat is fixed
 
     class Meta:
         model = Announcement
