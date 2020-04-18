@@ -3,7 +3,7 @@ exclude =
     migrations,
     __pycache__,
     manage.py,
-    hackerspace_online/settings/*
+    src/hackerspace_online/settings/*
 #max-complexity = 12
 max-line-length = 150
 
