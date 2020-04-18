@@ -59,14 +59,11 @@ This will create your docker containers and initialize the database by running m
 1. Open a terminal
 2. Move into the project directory:  
 `cd ~/Developer/hackerspace`
-3. Build the containers:  
+3. Build the containers (db, redis, celery, and celery-beat):  
 `docker-compose build`
-4. Start 4 of the containers (the database, redis, celery, and celery-beat):
-`docker-compose up`
-5. Keep an eye out for errors as it goes through each step *(currently celery and celery-beat are not working, but you can ignore them for now)
-6. Initialize the database with some key data in a new terminal:  
-`bash init_public_schema.sh`
-7. ALTERNATE - RUN LOCALLY: If the web container isn't working for you, or you find developing in a container annoying, you can run the django app locally:
+4. Start the postgres database container (db)
+`docker-compose up db`
+5. For development, let's run the django app in a vertiual environment instead of using the web container:
    1. Create a python virtual environment (we'll put ours in a venv directory):   
    `virtualenv venv --python=python3.5`  
    Note: 3.5 is important, if you try a different python version you may get some migration inconsistancies or other problems!
@@ -74,13 +71,14 @@ This will create your docker containers and initialize the database by running m
    `source venv/bin/activate`
    3. Install our requirements:  
    `pip install -r requirements.txt`
-   3. Run migrations:  
+   3. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):  
    `./src/manage.py migrate_schemas --shared`
    4. Run the app with:  
    `./src/manage.py runserver`
-
-8. You should get a 404 page (until we create a lnading page) at http://localhost:8000
-9. But you should be able to log in to the admin site!  http://localhost:8000/admin/
+6. Now that we've migrated, run a setup script to create the public tenant and a superuser, this will run through the web container:
+`bash init_public_schema.sh`
+7. You should now get a 404 page (until we create a lnading page) at http://localhost:8000
+8. But you should be able to log in to the admin site!  http://localhost:8000/admin/
    - user: admin
    - password: hellonepal
 
@@ -100,9 +98,7 @@ The empty website is pretty boring, and kind of hard to get working because ther
 
 Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
 
-1. Open a shell in the web container (this assumes the container is running, or you can run the next commands locally if you are using a virtual environment) 
-`docker-compose exec web sh` 
-2. Open a Python shell specific to your tenant:  
+1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated):  
 `./src/manage.py tenant_command shell`
 2. Type `?` to see a list of tenants you've made.  You should have at least one that is not "public".  Select it by entering it's name (without the "- localhost" part).
 3. Inside the shell, execute the following commands:
@@ -113,11 +109,31 @@ Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/late
 4. use Ctrl + D or `exit()` to close the Python shell. 
 
 ### Running Tests and Checking Code Style
-You can run tests through the web container, or locally:
-1. This will run all the project's tests and if successful, will also check the code style using flake 8: 
-`docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
-2. Or from within a virtual environment, you can run the tests and style checker locally:  
+You can run tests either locally, or through the web container:
+1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):  
 `./src/manage.py test src && flake8 src`
+2. Or run via the web container (assuming it's running. If not, change `exec` to `run`)
+`docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
+
+### Advanced: Inspecting the database with pgadmin4
+Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
+1. Run the pg-admin container:  
+`docker-compose up pg-admin`
+2. Log in with:
+   - email: admin@admin.com
+   - password: password
+3. Click "Add New Server"
+4. Give it any Name you want
+5. In the Connection tab set:  
+   - Host name/address: db
+   - Port: 5432
+   - Maintenance database: postgres
+   - Username: admin
+   - Password: hellonepal
+6. Hit Save
+7. At the top left expand the Servers tree to find the database, and explore!
+8. You'll probably want to look at Schemas > (pick a schema) > Tables
+
 
 ## Setting up a VS Code development environment
 (UNTESTED)
@@ -152,3 +168,5 @@ For full details on code contributions, please see [CONTRIBUTING.md](https://git
 10. Complete pull request.
 11. Start work on another feature by checking out the develop branch again: `git checkout develop`
 12. Start again at Step 3 and repeat!
+
+If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html). 
