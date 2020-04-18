@@ -48,10 +48,6 @@ RUN pip install -r requirements.txt
 # The port
 EXPOSE 8000
 
-# Command to run when the container is started
-CMD ["python", "src/manage.py", "migrate_schemas", "--shared"]
-
-
 #### More from https://github.com/Microsoft/vscode-remote-try-python ##
 
 # Clean up

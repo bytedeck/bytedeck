@@ -39,6 +39,7 @@ services:
     #restart: unless-stopped
     build: .
     env_file: .env
+    # command: # see docker-compose.overide.yml or docker-compose.prod.yml
     volumes: 
       - .:/app
     ports:
