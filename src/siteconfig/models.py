@@ -45,6 +45,11 @@ class SiteConfig(models.Model):
         help_text="Used when the full site name is too cumbersome, for example: Hackerspace."
     )
 
+    access_code = models.CharField(
+        verbose_name="Access Code", default="314159", max_length=128,
+        help_text="Students will need this to sign up to your deck.  You can set it to any string of characters you like."
+    )   
+
     site_logo = models.ImageField(
         verbose_name="Site Logo", null=True, blank=True, 
         help_text="This will be displayed at the top left of your site's header (ideally 256x256 px)."
@@ -94,39 +99,18 @@ class SiteConfig(models.Model):
     #     help_text="This is close your site to students"
     # )
 
-    # hs_tour_on = forms.BooleanField(label="Activate Pop-up Welcome Tour",
-    #                                 default=False, required=False)
-    # hs_view_active_semester_only = forms.BooleanField(label="View Students and Submissions from active semester only",
-    #                                                   default=False, required=False)
     deck_ai = models.ForeignKey(
         User, limit_choices_to={'is_staff': True},
         verbose_name="User for automated stuff", default=get_superadmin, on_delete=models.SET_DEFAULT, 
         help_text="This user will appear as granting automatic badges, sending out announcements, and other automated actions. "
                   "Fun suggestion: create a new staff user named `R2-D2` or `Hal` or a similar AI name that fits the theme of your site."
     )
-    # hs_suggestions_on = forms.BooleanField(label="Turn on Suggestions", default=True,
-    #                                        required=False)
-
-    # hs_suggestion_badge = forms.ModelChoiceField(label="Suggestion Badge",
-    #                                              queryset=Badge.objects.all(), default=1, required=True,
-    #                                              help_text="This is only relevant if Suggestions are turned on.")
-
-    # hs_voting_badge = forms.ModelChoiceField(label="Voting Badge",
-    #                                          queryset=Badge.objects.all(), default=1, required=True,
-    #                                          help_text="This is only relevant if Suggestions are turned on.")
-
-    # hs_num_votes = forms.IntegerField(label="Number of Votes Required for Badge",
-    #                                   min_value=0, default=5, required=True,
-    #                                   help_text="This is only relevant if Suggestions are turned on.")
 
     active_semester = models.ForeignKey(
         'courses.Semester',
         verbose_name="Active Semester", default=get_active_semester, on_delete=models.SET_DEFAULT, 
         help_text="Your currently active semester.  New semesters can be created from the admin menu."
     )
-
-    # hs_chillax_line = forms.FloatField(label="Chillax Line %", default=72.5,
-    #                                    required=True)
 
     # hs_chillax_line_active
     color_headers_by_mark = models.BooleanField(
@@ -138,8 +122,6 @@ class SiteConfig(models.Model):
         verbose_name="Sort quests awaiting approval with oldest on top", default=False,
         help_text="Check this if you want to have the quest that have been waiting the longed to appear on top of the list."
     )
-    # hs_message_teachers_only = forms.BooleanField(label="Limit students so they can only message teachers",
-    #                                               default=True, required=False)
 
     def get_absolute_url(self):
         from django.urls import reverse
