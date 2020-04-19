@@ -140,7 +140,7 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications.apply_async(args=[request.user, new_announcement.id], queue='default')
+            send_notifications.apply_async(args=[request.user.id, new_announcement.id], queue='default')
         return redirect(new_announcement)
 
     context = {
@@ -172,7 +172,7 @@ class Create(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            send_notifications.apply_async(args=[self.request.user, new_announcement.id], queue='default')
+            send_notifications.apply_async(args=[self.request.user.id, new_announcement.id], queue='default')
 
         return super(Create, self).form_valid(form)
 
