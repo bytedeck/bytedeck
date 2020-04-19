@@ -1,6 +1,6 @@
 from __future__ import absolute_import, unicode_literals
 
-from django_celery_beat.models import CrontabSchedule  # , PeriodicTask
+from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from django.utils import timezone
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -11,6 +11,8 @@ from django.template.loader import get_template
 
 from hackerspace_online.celery import app
 from tenant_schemas.utils import get_tenant_model, tenant_context
+
+from siteconfig.models import SiteConfig
 
 from .models import Notification
 
@@ -25,9 +27,10 @@ email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
 
 def get_notification_emails():
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
-    if len(users_to_email) > 90:
-        print("Gmail is limited to sending 100 emails per day... gonna trim the list!")
-    subject = 'Hackerspace notifications'
+    # If testing with a gmail account, might want this:
+    # if len(users_to_email) > 90:
+    #     print("Gmail is limited to sending 100 emails per day... gonna trim the list!")
+    subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
     notification_emails = []
     for user in users_to_email:
 
@@ -37,6 +40,7 @@ def get_notification_emails():
         if unread_notifications:
             text_content = str(unread_notifications)
             html_template = get_template('notifications/email_notifications.html')
+            # TODO: this link needs to incorporate tenant/schema subdomain...
             profile_edit_url = "https://{}{}".format(
                 Site.objects.get_current(),
                 reverse('profiles:profile_update', kwargs={'pk': user.profile.id})
@@ -70,10 +74,11 @@ def email_notifications_to_users():
         with tenant_context(tenant):
             send_email_notification_tenant.delay()
 
+
 # CELERY-BEAT BROKEN
-# PeriodicTask.objects.get_or_create(
-#     crontab=email_notifications_schedule,
-#     name='Send daily email notifications',
-#     task='notifications.tasks.email_notifications_to_users',
-#     queue='default'
-# )
+PeriodicTask.objects.get_or_create(
+    crontab=email_notifications_schedule,
+    name='Send daily email notifications',
+    task='notifications.tasks.email_notifications_to_users',
+    queue='default'
+)
