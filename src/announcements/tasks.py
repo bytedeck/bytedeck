@@ -3,8 +3,8 @@ from __future__ import absolute_import, unicode_literals
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.contrib.auth import get_user_model
-from django.contrib.sites.models import Site
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 
 from hackerspace_online.celery import app
 
@@ -34,7 +34,7 @@ def send_notifications(user_id, announcement_id):
 
 
 @app.task(name='announcements.tasks.send_announcement_emails')
-def send_announcement_emails(content, url):
+def send_announcement_emails(content, scheme_and_domain, absolute_url):
     users_to_email = User.objects.filter(
         is_active=True,
         profile__get_announcements_by_email=True
@@ -45,13 +45,14 @@ def send_announcement_emails(content, url):
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({
         'content': content, 
-        'absolute_url': url,
-        'domain': Site.objects.get_current().domain
+        'absolute_url': absolute_url,
+        'scheme_and_domain': scheme_and_domain,
+        'profile_edit_url': reverse('profiles:profile_edit_own')
     })
     email_msg = EmailMultiAlternatives(
         subject,
         body=text_content,
-        to=['timberline.hackerspace@gmail.com'],
+        to=['contact@bytedeck.com'],
         bcc=users_to_email
     )
     email_msg.attach_alternative(html_content, "text/html")
@@ -60,7 +61,7 @@ def send_announcement_emails(content, url):
 
 
 @app.task(name='announcements.tasks.publish_announcement')
-def publish_announcement(user_id, announcement_id, absolute_url):
+def publish_announcement(user_id, announcement_id, scheme_and_domain):
     """ Publish the announcement, including:
             - edit model instance
             - push notifications
@@ -71,9 +72,11 @@ def publish_announcement(user_id, announcement_id, absolute_url):
     announcement.draft = False
     announcement.save()
 
+    absolute_url = announcement.get_absolute_url()
+
     # push notifications
     send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
 
     # Send the announcements by email to those who have ask for them, using celery
-    send_announcement_emails.apply_async(args=[announcement.content, absolute_url], queue='default')
+    send_announcement_emails.apply_async(args=[announcement.content, scheme_and_domain, absolute_url], queue='default')
     # Email not set up anyway
