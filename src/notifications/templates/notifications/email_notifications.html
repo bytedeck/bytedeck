@@ -3,7 +3,7 @@
 <!DOCTYPE html>
 <html>
 <body>
-<p>Hello {{user}},</p>
+<p>Hello {{user.get_full_name}},</p>
 
 <p>You have unread notifications:</p>
 
@@ -12,10 +12,11 @@
 <li>{{notice|safe}}</li>
 {% endfor %}
 </ul>
+<hr>
 
 <p>Have a day!</p>
 <p>Love, {{ config.deck_ai }}</p>
 
-<p><img alt="[Logo]" src="{% site_logo_url %}"></p>
-<p>If you no longer want to receive these emails, edit your profile settings <a href="{{ profile_edit_url }}">here</a></p>
+<p><img alt="[Logo]" src="{{ scheme_and_domain }}{% site_logo_url %}"></p>
+<p>If you no longer want to receive these emails, <a href="{{scheme_and_domain}}{{profile_edit_url}}">edit your profile</a>.</p>
 </body>
