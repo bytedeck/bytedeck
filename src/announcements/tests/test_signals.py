@@ -31,17 +31,16 @@ class AnnouncementsSignalsTest(TenantTestCase):
         announcement.auto_publish = True
         announcement.save()
 
-        # CELERY-BEAT BROKEN
-        # task = PeriodicTask.objects.get(name__contains=announcement.id)
+        task = PeriodicTask.objects.get(name__contains=announcement.id)
 
-        # self.assertEqual(task.queue, "default")
+        self.assertEqual(task.queue, "default")
 
-        # # task should have a schedule date matching the announcement:
-        # self.assertEqual(task.clocked.clocked_time, announcement.datetime_released)
+        # task should have a schedule date matching the announcement:
+        self.assertEqual(task.clocked.clocked_time, announcement.datetime_released)
 
-        # # changing the announcement to not be a draft should cause the signal to delete the task
-        # announcement.draft = False
-        # announcement.save()
+        # changing the announcement to not be a draft should cause the signal to delete the task
+        announcement.draft = False
+        announcement.save()
 
-        # with self.assertRaises(ObjectDoesNotExist):
-        #     PeriodicTask.objects.get(name__contains=announcement.id)
+        with self.assertRaises(ObjectDoesNotExist):
+            PeriodicTask.objects.get(name__contains=announcement.id)

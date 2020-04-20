@@ -140,7 +140,7 @@ def copy(request, ann_id):
         form.save()
 
         if not new_announcement.draft:
-            send_notifications.apply_async(args=[request.user, new_announcement.id], queue='default')
+            send_notifications.apply_async(args=[request.user.id, new_announcement.id], queue='default')
         return redirect(new_announcement)
 
     context = {
@@ -156,8 +156,8 @@ def copy(request, ann_id):
 @staff_member_required
 def publish(request, ann_id):
     announcement = get_object_or_404(Announcement, pk=ann_id)
-    url = request.build_absolute_uri(announcement.get_absolute_url())
-    publish_announcement.apply_async(args=[request.user.id, ann_id, url], queue='default')
+    scheme_and_domain = request.build_absolute_uri()[:-1]  # remove the trailing slash
+    publish_announcement.apply_async(args=[request.user.id, ann_id, scheme_and_domain], queue='default')
     return redirect(announcement)
 
 
@@ -172,7 +172,7 @@ class Create(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
         new_announcement.save()
 
         if not new_announcement.draft:
-            send_notifications.apply_async(args=[self.request.user, new_announcement.id], queue='default')
+            send_notifications.apply_async(args=[self.request.user.id, new_announcement.id], queue='default')
 
         return super(Create, self).form_valid(form)
 

@@ -151,6 +151,13 @@ class ProfileUpdate(AllowNonPublicViewMixin, UpdateView):
             raise Http404("Sorry, this profile isn't yours!")
 
 
+class ProfileUpdateOwn(ProfileUpdate):
+    """ Provides a single url for users to edit only their own profile, so the link can be included in emails """
+
+    def get_object(self):
+        return self.request.user.profile
+
+
 @allow_non_public_view
 @staff_member_required(login_url='/')
 def recalculate_current_xp(request):
