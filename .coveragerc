@@ -1,0 +1,7 @@
+[run]
+source = src
+branch = True
+omit =
+   */tests/*
+   tests.py
+   */test*.py
