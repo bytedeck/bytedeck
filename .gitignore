@@ -80,7 +80,7 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 htmlcov/
 .tox/
-.coverage
+# .coverage need for TravisCI integration with coveralls?
 .coverage.*
 .cache
 nosetests.xml
