@@ -4,6 +4,12 @@ FROM python:3.5-slim
 # https://code.visualstudio.com/docs/remote/containers
 # https://github.com/Microsoft/vscode-remote-try-python
 
+# Allow for an orderly, graceful shutdown of services
+# Specifically in our case:
+# 1. give coverage a chance to send its report to coveralls.io
+# 2. allow celerybeat to delete its pid file (does this actually happen?)
+STOPSIGNAL SIGINT
+
 # Configure apt
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
