@@ -28,7 +28,7 @@ class NotificationsConfig(AppConfig):
     #                 task='notifications.tasks.email_notifications_to_users',
     #                 queue='default',
     #                 kwargs=json.dumps({  # beat needs json serializable args, so make sure they are
-    #                     'tenant_domain_url': tenant.domain_url,
+    #                     'root_url': get_root_url(),
     #                 }),
     #                 headers=json.dumps({
     #                     '_schema_name': tenant.schema_name

@@ -34,7 +34,7 @@ def send_notifications(user_id, announcement_id):
 
 
 @app.task(name='announcements.tasks.send_announcement_emails')
-def send_announcement_emails(content, scheme_and_domain, absolute_url):
+def send_announcement_emails(content, root_url, absolute_url):
     users_to_email = User.objects.filter(
         is_active=True,
         profile__get_announcements_by_email=True
@@ -46,7 +46,7 @@ def send_announcement_emails(content, scheme_and_domain, absolute_url):
     html_content = html_template.render({
         'content': content, 
         'absolute_url': absolute_url,
-        'scheme_and_domain': scheme_and_domain,
+        'root_url': root_url,
         'profile_edit_url': reverse('profiles:profile_edit_own')
     })
     email_msg = EmailMultiAlternatives(
@@ -61,7 +61,7 @@ def send_announcement_emails(content, scheme_and_domain, absolute_url):
 
 
 @app.task(name='announcements.tasks.publish_announcement')
-def publish_announcement(user_id, announcement_id, scheme_and_domain):
+def publish_announcement(user_id, announcement_id, root_url):
     """ Publish the announcement, including:
             - edit model instance
             - push notifications
@@ -78,5 +78,5 @@ def publish_announcement(user_id, announcement_id, scheme_and_domain):
     send_notifications.apply_async(args=[user_id, announcement_id], queue='default')
 
     # Send the announcements by email to those who have ask for them, using celery
-    send_announcement_emails.apply_async(args=[announcement.content, scheme_and_domain, absolute_url], queue='default')
+    send_announcement_emails.apply_async(args=[announcement.content, root_url, absolute_url], queue='default')
     # Email not set up anyway
