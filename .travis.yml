@@ -12,4 +12,4 @@ script:
  - docker-compose -f docker-compose.yml run web sh -c "coverage run --source=src ./src/manage.py test src && flake8 src"
 
 after_success:
- - coveralls
+ - docker-compose -f docker-compose.yml run web sh -c "coveralls"
