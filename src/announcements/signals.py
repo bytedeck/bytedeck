@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django_celery_beat.models import ClockedSchedule, PeriodicTask
 
 from siteconfig.models import SiteConfig
+from tenant.utils import get_root_url
 
 from .models import Announcement
 
@@ -20,7 +21,7 @@ def save_announcement_signal(sender, instance, **kwargs):
     If it should, then check if there is already a beat task scheduled and replace it, or create a new schedule
     """
 
-    task_name = "Autopublication task for announcement #{} on schema {}".format(instance.id, connection.schema_name)
+    task_name = "Autopublish task for Announcement #{} on schema {}".format(instance.id, connection.schema_name)
 
     if instance.draft and instance.auto_publish:
 
@@ -38,6 +39,7 @@ def save_announcement_signal(sender, instance, **kwargs):
 
         # PeriodicTask doesn't have an update_or_create() method for some reason, so do it long way
         # https://github.com/celery/django-celery-beat/issues/106
+
         defaults = {
             'clocked': schedule,
             'task': 'announcements.tasks.publish_announcement',
@@ -45,7 +47,7 @@ def save_announcement_signal(sender, instance, **kwargs):
             'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
                 'user_id': sending_user.id,
                 'announcement_id': instance.id,
-                'absolute_url': instance.get_absolute_url(),
+                'root_url': get_root_url(),
             }),
             # Inject the schema name into the task's header, as that's where tenant-schema-celery 
             # will be looking for it to ensure it is tenant aware
