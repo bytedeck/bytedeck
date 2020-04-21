@@ -9,7 +9,7 @@ services:
 before_script: pip install docker-compose
 
 script: 
- - docker-compose -f docker-compose.yml run web sh -c "coverage run --source=src ./src/manage.py test src && flake8 src"
+ - docker-compose -f docker-compose.yml run web sh -c "coverage run ./src/manage.py test src && flake8 src"
 
 after_success:
  - docker-compose -f docker-compose.yml run web sh -c "coveralls"
