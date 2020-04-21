@@ -1,6 +1,7 @@
 language: python
 python:
  - "3.5"
+ - "3.7"
 
 services:
  - docker
@@ -8,7 +9,7 @@ services:
 before_script: pip install docker-compose
 
 script: 
- - docker-compose -f docker-compose.yml run web sh -c "python src/manage.py test src && flake8 src"
+ - docker-compose -f docker-compose.yml run web sh -c "coverage run --source=src ./src/manage.py test src && flake8 src"
 
 after_success:
-- coveralls --base_dir src
+ - coveralls
