@@ -33,7 +33,7 @@ class AnnouncementTasksTests(TenantTestCase):
         task_result = tasks.send_announcement_emails.apply(
             kwargs={
                 "content": "", 
-                "scheme_and_domain": "https://example.com", 
+                "root_url": "https://example.com", 
                 "absolute_url": "/link/to/announcement/"
             }
         )
@@ -45,7 +45,7 @@ class AnnouncementTasksTests(TenantTestCase):
             kwargs={
                 'user_id': self.test_teacher.id,
                 'announcement_id': self.announcement.id,
-                'scheme_and_domain': "https://example.com"
+                'root_url': "https://example.com"
             }
         )
         self.assertTrue(task_result.successful())

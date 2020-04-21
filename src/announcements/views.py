@@ -15,10 +15,12 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from comments.forms import CommentForm
 from comments.models import Comment
 from notifications.signals import notify
+from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
+from tenant.utils import get_root_url
+
 from .forms import AnnouncementForm
 from .models import Announcement
 from .tasks import publish_announcement, send_notifications
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
 
 
 @allow_non_public_view
@@ -156,8 +158,7 @@ def copy(request, ann_id):
 @staff_member_required
 def publish(request, ann_id):
     announcement = get_object_or_404(Announcement, pk=ann_id)
-    scheme_and_domain = request.build_absolute_uri()[:-1]  # remove the trailing slash
-    publish_announcement.apply_async(args=[request.user.id, ann_id, scheme_and_domain], queue='default')
+    publish_announcement.apply_async(args=[request.user.id, ann_id, get_root_url()], queue='default')
     return redirect(announcement)
 
 
