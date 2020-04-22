@@ -774,44 +774,19 @@ def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
-        raise Http404
-
-    new_sub = QuestSubmission.objects.create_submission(request.user, quest)
-    # if new_sub is None:
-    #     print("This quest is not available, why is it showing up?")
-    #     raise Http404 #shouldn't get here
-    # should just do this, but the redirect is screwing up with the tour...
-    # return redirect('quests:submission', submission_id = new_sub.id)
-
-    if new_sub is None:  # might be because quest was already started
-        # so try to get the started Quest
-        sub = QuestSubmission.objects.all_for_user_quest(request.user, quest, True).last()
-        if sub is None:
+        # check if it's not available because they already have a submission in progress
+        sub = QuestSubmission.objects.all_not_completed(request.user).filter(quest_id=quest_id).first()
+        if not sub:
+            # They're trying to start a quest they don't have access too. This
+            # could happen if they manually enter a different quest.id in the start url
             raise Http404
+        else:
+            # We found an in-progress/not completed submission for the quest,
+            # so send them to it instead of starting a new one
+            return redirect(sub)
     else:
-        sub = new_sub
-
-    if sub.user != request.user and not request.user.is_staff:
-        return redirect('quests:quests')
-
-    # Ideally do this!
-    return redirect(sub)
-
-    # # comment_form = SubmissionForm(request.POST or None)
-    # main_comment_form = SubmissionForm(request.POST or None)
-    # #main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    # #reply_comment_form = CommentForm(request.POST or None, label="")
-    # # comments = Comment.objects.all_with_target_object(sub)
-
-    # Migth need this for the tour to work!
-    # context = {
-    #     "heading": sub.quest.name,
-    #     "submission": sub,
-    #     # "comments": comments,
-    #     "submission_form": main_comment_form,
-    #     # "reply_comment_form": reply_comment_form,
-    # }
-    # return render(request, 'quest_manager/submission.html', context)
+        new_sub = QuestSubmission.objects.create_submission(request.user, quest)
+        return redirect(new_sub)
 
 
 @allow_non_public_view

@@ -1,3 +1,5 @@
+from mock import patch
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -112,6 +114,35 @@ class QuestViewTests(TenantTestCase):
     #     # since there's only one semester, it should be by default the active_semester (pk=1)
     #     self.assertEqual(sem.pk, djconfig.config.hs_active_semester)
     #     self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+
+    def test_start(self):
+        # log in a student from setUp
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # if the quest is unavailable to the student, then should get a 404 if there is no submission started yet
+        # but we don't care about implementation of `is_available()` here, so just patch it to return False
+        with patch('quest_manager.models.Quest.is_available', return_value=False):
+            response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+            self.assertEqual(response.status_code, 404)
+
+        # if the quest has not been started yet, and it's available to the student, 
+        # (quests created with default settings should be to students, as long as they are registered in a course)
+        # then should redirect to the new submission that this view creates
+        response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+
+        # check that a submission was created (should only be one at this point, so use `get()`
+        sub = self.quest1.questsubmission_set.get(user=self.test_student1)
+        # the view's response should redirect to the new submission's page
+        self.assertRedirects(response, sub.get_absolute_url())       
+
+        # try it again
+        response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+        # this time shouldn't work because there is already submission in progress for this quest!
+        # check that there is still one (and that another wasn't created)
+        self.assertEqual(self.quest1.questsubmission_set.count(), 1)
+        # the view should have redirect to the same submission:
+        self.assertRedirects(response, sub.get_absolute_url()) 
 
 
 class SubmissionViewTests(TenantTestCase):
