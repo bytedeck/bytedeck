@@ -772,6 +772,12 @@ def complete(request, submission_id):
 @login_required
 def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
+    quest_submission = (QuestSubmission.objects.all_not_completed(user=request.user)
+                        .filter(quest_id=quest_id)).first()
+
+    if quest_submission:
+        return redirect(reverse('quests:submission',
+                                kwargs={'submission_id': quest_submission.id}))
 
     if not quest.is_available(request.user):
         raise Http404
