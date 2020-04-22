@@ -4,12 +4,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.http import Http404
-from django.shortcuts import render, redirect, get_object_or_404, HttpResponseRedirect
+from django.shortcuts import (HttpResponseRedirect, get_object_or_404,
+                              redirect, render)
 
-from .models import Comment
-from .forms import CommentForm
 from notifications.signals import notify
 from tenant.views import allow_non_public_view
+
+from .forms import CommentForm
+from .models import Comment
 
 
 @allow_non_public_view
@@ -108,7 +110,7 @@ def comment_create(request):
             if parent_comment is not None:
                 comment_new = Comment.objects.create_comment(
                     user=request.user,
-                    path=parent_comment.get_origin,
+                    path=parent_comment.get_origin(),
                     text=comment_text,
                     # quest = quest,
                     target=target,
