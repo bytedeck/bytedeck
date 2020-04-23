@@ -2,8 +2,6 @@
 
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
-from django.core.management.commands import loaddata
 
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.utils import tenant_context
