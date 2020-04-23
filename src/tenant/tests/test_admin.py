@@ -4,7 +4,6 @@ from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.commands import loaddata
-from django.test import TestCase
 
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.utils import tenant_context
@@ -33,7 +32,7 @@ class NonPublicTenantAdminTest(TenantTestCase):
             tenant_model_admin.save_model(obj=Tenant(), request=None, form=None, change=None)
 
 
-class PublicTenantTestAdminPublic(TestCase):
+class PublicTenantTestAdminPublic(TenantTestCase):
     """ For testing the `public` tenant. Use normal TestCase base class because we want to 
     test outside of the  tenant architecture
     """
@@ -44,6 +43,7 @@ class PublicTenantTestAdminPublic(TestCase):
 
     # Don't use setup because we don't want to load fixtures every time and it doesn't seem to work anyway
     # So initialize some data as class variables that will be persistant through all tests.
+
     call_command(loaddata.Command(), 'src/tenant/fixtures/tenants.json', verbosity=0)
     tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
     public_tenant = Tenant.objects.get(schema_name="public")
@@ -56,14 +56,16 @@ class PublicTenantTestAdminPublic(TestCase):
         self.assertEqual(self.public_tenant.domain_url, "localhost")
 
     def test_public_tenant_admin_save_model(self):
-        non_public_tenant = Tenant(name="Non-Public")
-        # public tenant should be able to create new tenant/schemas
-        self.tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
-        self.assertIsInstance(non_public_tenant, Tenant)
-        # schema names should be all lower case and dashes converted to underscores
-        self.assertEqual(non_public_tenant.schema_name, "non_public")
+        with tenant_context(self.public_tenant):
+            non_public_tenant = Tenant(name="Non-Public")
+            # public tenant should be able to create new tenant/schemas
+            self.tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
+            self.assertIsInstance(non_public_tenant, Tenant)
+            # schema names should be all lower case and dashes converted to underscores
+            self.assertEqual(non_public_tenant.schema_name, "non_public")
 
-        # switch back to public tenant (why does it switch to non_public we just created?)
+        # oddly, seems to switch connections to the newly created "non_public" schema
+        # so need to set context back to public to test more stuff
         with tenant_context(self.public_tenant):
             # tenant names with spaces should be rejected:
             with self.assertRaises(ValidationError):
