@@ -785,6 +785,11 @@ kbd
     padding:.1em .6em;
 }
 
+/* Make action buttons have a fixed width so they would only expand horizontally */
+div.btn-group.action-btn-group {
+    width: 100px;
+}
+
 /*Make the container act like container-fluid at small and medium sizes*/
 
 /*LESS to mimic Bootstrap without importing the less files.*/
