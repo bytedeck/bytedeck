@@ -9,4 +9,4 @@ services:
 before_script: pip install docker-compose
 
 script: 
- - docker-compose -f docker-compose.yml run -e COVERALLS_REPO_TOKEN web sh -c "coverage run ./src/manage.py test src && flake8 src && coveralls"
+ - docker-compose -f docker-compose.yml -f docker-compose.override.yml run -e COVERALLS_REPO_TOKEN web sh -c "coverage run ./src/manage.py test src && flake8 src && coveralls"
