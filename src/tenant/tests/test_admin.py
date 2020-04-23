@@ -37,19 +37,11 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     test outside of the  tenant architecture
     """
 
-    # fixtures = ['tenants.json']
-    # ^ That doesn't work, maybe because tenants isn't in the installed apps list, so it doesn't search this app for fixtures
-    # So load fixtures manually
+    fixtures = ['tenant/tenants.json']
 
-    # Don't use setup because we don't want to load fixtures every time and it doesn't seem to work anyway
-    # So initialize some data as class variables that will be persistant through all tests.
-
-    call_command(loaddata.Command(), 'src/tenant/fixtures/tenants.json', verbosity=0)
+    # This doesn't seem to work when placed in SetUp, so make them class variables.
     tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
     public_tenant = Tenant.objects.get(schema_name="public")
-
-    def setUp(self):
-        pass
 
     def test_public_tenant_exists(self):
         self.assertIsInstance(self.public_tenant, Tenant)
