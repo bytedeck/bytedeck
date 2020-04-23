@@ -41,16 +41,7 @@ SHARED_APPS = (
     'tenant',
     'django.contrib.contenttypes',
 
-    'django.contrib.auth',
-    'django.contrib.admin',
     'django.contrib.sites',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.flatpages',
-
-    # tenant beat is not supported, have to do it manually with:
-    # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
-    'django_celery_beat',
 
     'grappelli',
     'crispy_forms',
@@ -61,8 +52,6 @@ SHARED_APPS = (
     'url_or_relative_url_field',
     'import_export',
     'colorful',
-
-    # 'profile_manager',
 
 )
 
@@ -79,6 +68,11 @@ TENANT_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+
+    # tenant beat is not supported, have to do it manually with:
+    # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
+    # placing here instead of shared means...?
+    'django_celery_beat',
 
     'attachments',
     'hackerspace_online',
@@ -135,10 +129,6 @@ INSTALLED_APPS = (
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
 
-    # django-djconfig.readthedocs.org/en/
-    # Not used any more.  Use the siteconfig app instead.
-    # 'djconfig',
-
     # https://github.com/yetty/django-embed-video
     # used for the EmbedVideoField that validates YouTube and Vimeo urls
     'embed_video',
@@ -175,16 +165,11 @@ INSTALLED_APPS = (
     'courses',
     'prerequisites',
     'badges',
-    # 'suggestions',
     'djcytoscape',
     'portfolios',
     'utilities',
     'siteconfig',
-   # 'tours',
 )
-
-# http://django-allauth.readthedocs.io/en/latest/installation.html#post-installation
-# SITE_ID = 1
 
 MIDDLEWARE = [
     'tenant_schemas.middleware.TenantMiddleware',
@@ -199,7 +184,6 @@ MIDDLEWARE = [
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    # 'djconfig.middleware.DjConfigMiddleware',
 ]
 
 ROOT_URLCONF = 'hackerspace_online.urls'

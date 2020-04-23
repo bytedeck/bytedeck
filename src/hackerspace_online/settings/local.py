@@ -2,16 +2,20 @@
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+import sys
 from .base import *
 
 # root of project: ...../src
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# INSTALLED_APPS += (
-#     # https://django-debug-toolbar.readthedocs.io/en/1.4/
-#     'debug_toolbar',
-# )
 
+
+TESTING = 'test' in sys.argv
+if TESTING:
+    # Use weaker password hasher for speeding up tests (when tested)
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
