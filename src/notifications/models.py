@@ -8,10 +8,12 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
+from tenant.utils import get_root_url
+
 from .signals import notify
 
-
 # Create your models here.
+
 
 class UserNotificationOptionSet(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -135,13 +137,13 @@ class Notification(models.Model):
         action = strip_tags(action)
 
         # absolute url needed for when notfication sare sent via email
-        current_site = Site.objects.get_current()
+        root_url = get_root_url()
         context = {
             "sender": self.sender_object,
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
-            "verify_read": "https://{}{}".format(current_site, reverse('notifications:read', kwargs={"id": self.id})),
+            "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
 
@@ -264,7 +266,7 @@ def new_notification(sender, **kwargs):
                     if obj is not None:
                         setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
                         setattr(new_note, "%s_object_id" % option, obj.id)
-                except: # noqa 
+                except:  # noqa 
                     # TODO make this except explicit, don't remember what it's doing
                     pass
             new_note.save()
