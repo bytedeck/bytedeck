@@ -708,6 +708,9 @@ def complete(request, submission_id):
                     note_verb += ", awaiting approval."
                 else:
                     note_verb += " and automatically approved."
+                    note_verb += " Please give me a moment to calculate what new quests this should make available to you."
+                    note_verb += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
+                    note_verb = note_verb.format(deck_ai=SiteConfig.get().deck_ai)
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
 
@@ -721,7 +724,7 @@ def complete(request, submission_id):
                 if not submission.quest.verification_required:
                     submission.mark_approved()
                     # Immediate/synchronous recalculation of available quests:
-                    update_quest_conditions_for_user.apply(args=[request.user.id])
+                    update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
@@ -752,6 +755,7 @@ def complete(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
+            print(note_verb)
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
