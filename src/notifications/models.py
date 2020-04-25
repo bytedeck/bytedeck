@@ -123,6 +123,10 @@ class Notification(models.Model):
     def __str__(self):
         try:
             target_url = self.target_object.get_absolute_url()
+
+            # Is this the right place to do this?
+            if 'commented on' in self.verb:
+                target_url += '#comment-{}'.format(self.action_object_id)
         except AttributeError:
             target_url = None
 
