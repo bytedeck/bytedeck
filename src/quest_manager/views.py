@@ -492,6 +492,12 @@ def approve(request, submission_id):
                 action = comment_new
 
             affected_users = [submission.user, ]
+            main_teacher = submission.user.coursestudent_set.first().block.current_teacher
+
+            # Only notify main teacher if the user who commented is another teacher
+            if 'comment_button' in request.POST and request.user != main_teacher:
+                affected_users.append(main_teacher)
+
             notify.send(
                 request.user,
                 action=action,
@@ -748,7 +754,6 @@ def complete(request, submission_id):
             else:
                 raise Http404("unrecognized submit button")
 
-            print(affected_users)
             notify.send(
                 request.user,
                 action=comment_new,
