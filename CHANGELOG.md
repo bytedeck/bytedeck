@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.2.1] 2020-04-24
+* Clean up menu items and profile options
+* Last login date added to student list for teachers
+* [bugfix] replying to a flagged comment [#459](https://github.com/timberline-secondary/hackerspace/issues/459)
+* [bugfix] fix links in emails [#60](https://github.com/timberline-secondary/hackerspace/issues/460)
+* [bugfix] redirect instead of 404 when student tries to start same quest twice [#455](https://github.com/timberline-secondary/hackerspace/issues/455)
+* [bugfix] asychronous celery processes and beat scheduling for auto-publishing announcements
+
 ### [1.2.0] 2020-04-18
 * Require an Access Code to register (this can be set in your Site Configuration and defaults to 314159)
 * Bugfixes:
