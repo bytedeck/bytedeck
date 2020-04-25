@@ -67,6 +67,32 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
 
+class BadgeAssertionTestManager(TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.sem = SiteConfig.get().active_semester
+
+        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        self.student = mommy.make(User)
+        # self.assertion = mommy.make(BadgeAssertion, semester=self.sem)
+        # self.badge = Recipe(Badge, xp=20).make()
+
+        # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
+
+    def test_all_for_user_distinct(self):
+        badge = mommy.make(Badge)
+
+        # give the student two of the badge
+        badge_assertion = mommy.make(BadgeAssertion, user=self.student, badge=badge)
+        mommy.make(BadgeAssertion, user=self.student, badge=badge)
+
+        # this should only return the first one
+        qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
+
+        self.assertListEqual(list(qs), [badge_assertion])
+
+
 class BadgeAssertionTestModel(TenantTestCase):
 
     def setUp(self):

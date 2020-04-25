@@ -238,19 +238,10 @@ class BadgeAssertionManager(models.Manager):
 
     def all_for_user_distinct(self, user):
         """
-        This only works in a postgresql database
+        This only works in a postgresql database, but the app is designed around postgres
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
-
-        db_engine = settings.DATABASES['default']['ENGINE']
-        if db_engine == 'django.db.backends.postgresql_psycopg2' or db_engine == 'django.db.backends.postgresql':
-            return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
-        else:
-            pass
-            # print("Database is {}".format(db_engine))
-            # print("Multiple badge assertions for a use will be duplicated instead of combined.")
-            # print("Only django.db.backends.postgresql_psycopg2' supports distinct() method.")
-        return self.get_queryset(False).get_user(user)
+        return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
 
     def badge_assertions_dict_items(self, user):
         earned_assertions = self.all_for_user_distinct(user)
