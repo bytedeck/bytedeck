@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
-from model_mommy import mommy
+from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
@@ -25,9 +25,9 @@ class AnnouncementViewTests(TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
-        self.test_announcement = mommy.make(Announcement, draft=False)
+        self.test_announcement = baker.make(Announcement, draft=False)
         self.ann_pk = self.test_announcement.pk
 
     def assertRedirectsHome(self, url_name, args=None):
@@ -130,7 +130,7 @@ class AnnouncementViewTests(TenantTestCase):
         )
 
     def test_draft_announcement(self):
-        draft_announcement = mommy.make(Announcement)  # default is draft
+        draft_announcement = baker.make(Announcement)  # default is draft
         self.assertTrue(draft_announcement.draft)
 
         # log in a student
@@ -149,7 +149,7 @@ class AnnouncementViewTests(TenantTestCase):
 
     # @patch('announcements.views.publish_announcement.apply_async')
     def test_publish_announcement(self):
-        draft_announcement = mommy.make(Announcement)
+        draft_announcement = baker.make(Announcement)
 
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -174,7 +174,7 @@ class AnnouncementViewTests(TenantTestCase):
         self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
 
     def test_create_announcement_from_past_date_auto_publish(self):
-        draft_announcement = mommy.make(
+        draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
             auto_publish=True,

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
-from model_mommy.recipe import Recipe
+from model_bakery import baker
+from model_bakery.recipe import Recipe
 from tenant_schemas.test.cases import TenantTestCase
 
 from notifications.models import Notification
@@ -12,9 +12,9 @@ class NotificationTestModel(TenantTestCase):
     def setUp(self):
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
-        self.notification = mommy.make(Notification)
-        # self.assertion = mommy.make(BadgeAssertion)
+        self.student = baker.make(User)
+        self.notification = baker.make(Notification)
+        # self.assertion = baker.make(BadgeAssertion)
         # self.badge = Recipe(Badge, xp=20).make()
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
 
@@ -42,7 +42,7 @@ class NotificationTestModel(TenantTestCase):
     #
     # def test_badge_assertion_count_bootstrap_badge(self):
     #     """Returns empty string if count < 2, else returns proper count"""
-    #     badge_assertion = mommy.make(BadgeAssertion)
+    #     badge_assertion = baker.make(BadgeAssertion)
     #     self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
     #
     #     num = randint(1, 9)
@@ -70,7 +70,7 @@ class NotificationTestModel(TenantTestCase):
     # def test_badge_assertion_manager_create_assertion(self):
     #     new_assertion = BadgeAssertion.objects.create_assertion(
     #         self.student,
-    #         mommy.make(Badge)
+    #         baker.make(Badge)
     #     )
     #     self.assertIsInstance(new_assertion, BadgeAssertion)
     #

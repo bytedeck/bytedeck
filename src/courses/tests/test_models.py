@@ -1,7 +1,7 @@
 from datetime import timedelta, date
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
+from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
@@ -13,7 +13,7 @@ User = get_user_model()
 class MarkRangeTestModel(TenantTestCase):
 
     def setUp(self):
-        self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
+        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
     def test_marke_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
@@ -22,11 +22,11 @@ class MarkRangeTestModel(TenantTestCase):
 
 class MarkRangeTestManager(TenantTestCase):
     def setUp(self):
-        self.mr_50 = mommy.make(MarkRange, minimum_mark=50.0)
+        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
     def test_get_range(self):
-        self.mr_75 = mommy.make(MarkRange, minimum_mark=75.0)
-        self.mr_100 = mommy.make(MarkRange, minimum_mark=100.0)
+        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
+        self.mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
@@ -35,12 +35,12 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0), self.mr_100)
 
     def test_get_range_with_course(self):
-        c1 = mommy.make(Course)
-        c2 = mommy.make(Course)
-        self.mr_50_c1 = mommy.make(MarkRange, minimum_mark=50.0, courses=[c1])
-        self.mr_50_c2 = mommy.make(MarkRange, minimum_mark=50.0, courses=[c2])
-        self.mr_75 = mommy.make(MarkRange, minimum_mark=75.0)
-        self.mr_100_c1 = mommy.make(MarkRange, minimum_mark=100.0, courses=[c1])
+        c1 = baker.make(Course)
+        c2 = baker.make(Course)
+        self.mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
+        self.mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
+        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
+        self.mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
@@ -59,7 +59,7 @@ class SemesterTestModel(TenantTestCase):
         self.semester_start = date(2020, 9, 8)
         self.semester_end = date(2021, 1, 22)
         self.today_fake = date(2020, 10, 20)  # some date in the semester
-        self.semester = mommy.make(Semester,
+        self.semester = baker.make(Semester,
                                    first_day=self.semester_start,
                                    last_day=self.semester_end
                                    )
@@ -97,7 +97,7 @@ class SemesterTestModel(TenantTestCase):
 class CourseTestModel(TenantTestCase):
 
     def setUp(self):
-        self.course = mommy.make(Course)
+        self.course = baker.make(Course)
 
     def test_semester_creation(self):
         self.assertIsInstance(self.course, Course)

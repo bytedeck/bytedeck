@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from model_mommy import mommy
+from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
@@ -23,13 +23,13 @@ class ViewTests(TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = SiteConfig.get().active_semester
 
-        self.test_badge = mommy.make(Badge)
-        self.test_assertion = mommy.make(BadgeAssertion)
+        self.test_badge = baker.make(Badge)
+        self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''

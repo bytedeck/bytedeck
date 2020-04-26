@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
-from model_mommy.recipe import Recipe
+from model_bakery import baker
+from model_bakery.recipe import Recipe
 from tenant_schemas.test.cases import TenantTestCase
 
 from comments.models import Comment
@@ -12,10 +12,10 @@ class CommentTestModel(TenantTestCase):
     def setUp(self):
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
+        self.student = baker.make(User)
 
     def test_comment_creation(self):
-        comment = mommy.make(Comment)
+        comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
         # self.assertEqual(str("Test"), self.submission.quest.name)
 

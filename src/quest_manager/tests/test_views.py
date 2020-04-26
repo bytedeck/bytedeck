@@ -3,7 +3,7 @@ from mock import patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from model_mommy import mommy
+from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
@@ -28,13 +28,13 @@ class QuestViewTests(TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
-        self.quest1 = mommy.make(Quest)
-        self.quest2 = mommy.make(Quest)
+        self.quest1 = baker.make(Quest)
+        self.quest2 = baker.make(Quest)
 
-        # self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-        # self.sub2 = mommy.make(QuestSubmission, quest=self.quest1)
+        # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+        # self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
 
     def test_all_quest_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
@@ -110,7 +110,7 @@ class QuestViewTests(TenantTestCase):
     #
     # def test_profile_recalculate_xp_status_codes(self):
     #     """Need to test this view with students in an active course"""
-    #     sem = mommy.make(Semester)
+    #     sem = baker.make(Semester)
     #     # since there's only one semester, it should be by default the active_semester (pk=1)
     #     self.assertEqual(sem.pk, djconfig.config.hs_active_semester)
     #     self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
@@ -160,14 +160,14 @@ class SubmissionViewTests(TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
-        self.quest1 = mommy.make(Quest)
-        self.quest2 = mommy.make(Quest)
+        self.quest1 = baker.make(Quest)
+        self.quest2 = baker.make(Quest)
 
-        self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-        self.sub2 = mommy.make(QuestSubmission, quest=self.quest1)
-        self.sub3 = mommy.make(QuestSubmission, quest=self.quest2)
+        self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+        self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
+        self.sub3 = baker.make(QuestSubmission, quest=self.quest2)
 
     def test_all_submission_page_status_codes_for_students(self):
         # log in a student
@@ -253,7 +253,7 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
     def test_student_quest_completion(self):
-        # self.sub1 = mommy.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
+        # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
 
         # self.assertRedirects(
         #     response=self.client.post(reverse('quests:complete', args=[self.sub1.id])),
@@ -280,8 +280,8 @@ class SubmissionViewTests(TenantTestCase):
     def test_ajax_save_draft(self):
         # loging required for this view
         self.client.force_login(self.test_student1)
-        quest = mommy.make(Quest, name="TestSaveDrafts")
-        sub = mommy.make(QuestSubmission, quest=quest)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        sub = baker.make(QuestSubmission, quest=quest)
         draft_comment = "Test draft comment"
         # Send some draft data via the ajax view, which should save it.
         ajax_data = {

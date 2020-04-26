@@ -2,7 +2,7 @@ from datetime import timedelta
 from django.utils.timezone import localtime
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
+from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
@@ -18,17 +18,17 @@ User = get_user_model()
 class QuestManagerTest(TenantTestCase):
 
     def setUp(self):
-        self.teacher = mommy.make(User, username='teacher', is_staff=True)
-        self.student = mommy.make(User, username='student', is_staff=False)
+        self.teacher = baker.make(User, username='teacher', is_staff=True)
+        self.student = baker.make(User, username='student', is_staff=False)
 
     def test_quest_qs_exclude_hidden(self):
         """QuestQuerySet.datetime_available should return all quests that are not 
         on a user profile's hidden quest list."""
 
-        mommy.make(Quest, name='Quest-not-hidden')
-        mommy.make(Quest, name='Quest-also-not-hidden')
-        quest1_to_hide = mommy.make(Quest, name='Quest1-hidden')
-        quest2_to_hide = mommy.make(Quest, name='Quest2-hidden')
+        baker.make(Quest, name='Quest-not-hidden')
+        baker.make(Quest, name='Quest-also-not-hidden')
+        quest1_to_hide = baker.make(Quest, name='Quest1-hidden')
+        quest2_to_hide = baker.make(Quest, name='Quest2-hidden')
 
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
         expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden']
@@ -46,9 +46,9 @@ class QuestManagerTest(TenantTestCase):
     def test_quest_qs_block_if_needed(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
         otherwise, return full qs """
-        mommy.make(Quest, name='Quest-blocking', blocking=True)
-        mommy.make(Quest, name='Quest-also-blocking', blocking=True)
-        mommy.make(Quest, name='Quest-not-blocked')
+        baker.make(Quest, name='Quest-blocking', blocking=True)
+        baker.make(Quest, name='Quest-also-blocking', blocking=True)
+        baker.make(Quest, name='Quest-not-blocked')
 
         qs = Quest.objects.order_by('id').block_if_needed()
         expected_result = ['Quest-blocking', 'Quest-also-blocking']
@@ -67,13 +67,13 @@ class QuestManagerTest(TenantTestCase):
         tomorrow = (cur_datetime + timedelta(days=1)).date()
 
         # available_quests:
-        mommy.make(Quest, name='Quest-curent', date_available=cur_date, time_available=time_now)
-        mommy.make(Quest, name='Quest-later-today', date_available=cur_date, time_available=time_later)
-        mommy.make(Quest, name='Quest-tomorrow', date_available=tomorrow, time_available=time_earlier)
+        baker.make(Quest, name='Quest-curent', date_available=cur_date, time_available=time_now)
+        baker.make(Quest, name='Quest-later-today', date_available=cur_date, time_available=time_later)
+        baker.make(Quest, name='Quest-tomorrow', date_available=tomorrow, time_available=time_earlier)
 
         # not available quests:
-        mommy.make(Quest, name='Quest-earlier-today', date_available=cur_date, time_available=time_earlier)
-        mommy.make(Quest, name='Quest-yesterday', date_available=yesterday, time_available=time_later)
+        baker.make(Quest, name='Quest-earlier-today', date_available=cur_date, time_available=time_earlier)
+        baker.make(Quest, name='Quest-yesterday', date_available=yesterday, time_available=time_later)
 
         qs = Quest.objects.order_by('id').datetime_available().values_list('name', flat=True)
         self.assertListEqual(list(qs), ['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'])
@@ -96,16 +96,16 @@ class QuestManagerTest(TenantTestCase):
         tomorrow = (cur_datetime + timedelta(days=1)).date()
 
         # not expired quests:
-        mommy.make(Quest, name='Quest-never-expired', date_expired=None, time_expired=None)
+        baker.make(Quest, name='Quest-never-expired', date_expired=None, time_expired=None)
         # TODO: should quest whish expires now be available as not expired ???
-        mommy.make(Quest, name='Quest-expired-now', date_expired=cur_date, time_expired=time_now)
-        mommy.make(Quest, name='Quest-expired-today-midnight', date_expired=cur_date, time_expired=None)
-        mommy.make(Quest, name='Quest-expired-tomorrow', date_expired=tomorrow, time_expired=time_earlier)
+        baker.make(Quest, name='Quest-expired-now', date_expired=cur_date, time_expired=time_now)
+        baker.make(Quest, name='Quest-expired-today-midnight', date_expired=cur_date, time_expired=None)
+        baker.make(Quest, name='Quest-expired-tomorrow', date_expired=tomorrow, time_expired=time_earlier)
 
         # expired quests:
-        mommy.make(Quest, name='Quest-expired-earlier-today', date_expired=cur_date, time_expired=time_earlier)
-        mommy.make(Quest, name='Quest-expired-yesterday', date_expired=yesterday, time_expired=time_later)
-        mommy.make(Quest, name='Quest-expired-by-time', date_expired=None, time_expired=time_earlier)
+        baker.make(Quest, name='Quest-expired-earlier-today', date_expired=cur_date, time_expired=time_earlier)
+        baker.make(Quest, name='Quest-expired-yesterday', date_expired=yesterday, time_expired=time_later)
+        baker.make(Quest, name='Quest-expired-by-time', date_expired=None, time_expired=time_earlier)
 
         qs = Quest.objects.order_by('id').not_expired().values_list('name', flat=True)
         result = ['Quest-never-expired', 'Quest-expired-now', 'Quest-expired-today-midnight', 'Quest-expired-tomorrow']
@@ -113,21 +113,21 @@ class QuestManagerTest(TenantTestCase):
 
     def test_quest_qs_visible(self):
         """QuestQuerySet.visible should return visible for students quests"""
-        mommy.make(Quest, name='Quest-visible', visible_to_students=True)
-        mommy.make(Quest, name='Quest-invisible', visible_to_students=False)
+        baker.make(Quest, name='Quest-visible', visible_to_students=True)
+        baker.make(Quest, name='Quest-invisible', visible_to_students=False)
         self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
 
     def test_quest_qs_not_archived(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
-        mommy.make(Quest, name='Quest-not-archived', archived=False)
-        mommy.make(Quest, name='Quest-archived', archived=True)
+        baker.make(Quest, name='Quest-not-archived', archived=False)
+        baker.make(Quest, name='Quest-archived', archived=True)
         qs = Quest.objects.all().not_archived().values_list('name', flat=True)
         self.assertListEqual(list(qs), ['Quest-not-archived'])
 
     def test_quest_qs_available_without_course(self):
         """QuestQuerySet.available_without_course should return quests available_outside_course"""
-        mommy.make(Quest, name='Quest-available-without-course', available_outside_course=True)
-        mommy.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
+        baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
+        baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
         self.assertListEqual(list(qs), ['Quest-available-without-course'])
 
@@ -136,11 +136,11 @@ class QuestManagerTest(TenantTestCase):
         QuestQuerySet.editable should return quests allowed to edit for given user,
         when user is_staff or editor for the quest
         """
-        teacher = mommy.make(User, is_staff=True)
-        student1 = mommy.make(User, is_staff=False)
-        student2 = mommy.make(User, is_staff=False)
-        mommy.make(Quest, name='Quest-editable-for-student1', editor=student1)
-        mommy.make(Quest, name='Quest-editable-for-teacher', editor=teacher)
+        teacher = baker.make(User, is_staff=True)
+        student1 = baker.make(User, is_staff=False)
+        student2 = baker.make(User, is_staff=False)
+        baker.make(Quest, name='Quest-editable-for-student1', editor=student1)
+        baker.make(Quest, name='Quest-editable-for-teacher', editor=teacher)
         self.assertEqual(Quest.objects.all().editable(teacher).count(), 2)
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
@@ -212,7 +212,7 @@ class QuestManagerTest(TenantTestCase):
 
         # Start the blocking quest.
         blocking_quest = Quest.objects.get(name='Quest-blocking')
-        blocking_sub = mommy.make(QuestSubmission, quest=blocking_quest, user=self.student, semester=active_semester)
+        blocking_sub = baker.make(QuestSubmission, quest=blocking_quest, user=self.student, semester=active_semester)
 
         # Should have no available quests while the blocking quest is in progress
         qs = Quest.objects.get_available(self.student)
@@ -234,26 +234,26 @@ class QuestManagerTest(TenantTestCase):
         Quest-1hr-cooldown      Y       True         1
         Quest-blocking          N       NA           NA
         """
-        active_semester = mommy.make(Semester, active=True)
+        active_semester = baker.make(Semester, active=True)
 
-        quest_inprog_sem2 = mommy.make(Quest, name='Quest-inprogress-sem2')
-        sub_inprog_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
+        quest_inprog_sem2 = baker.make(Quest, name='Quest-inprogress-sem2')
+        sub_inprog_sem2 = baker.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
         sem2 = sub_inprog_sem2.semester
-        quest_complete_sem2 = mommy.make(Quest, name='Quest-completed-sem2')
-        sub_complete_sem2 = mommy.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
+        quest_complete_sem2 = baker.make(Quest, name='Quest-completed-sem2')
+        sub_complete_sem2 = baker.make(QuestSubmission, user=self.student, quest=quest_complete_sem2, semester=sem2)
         sub_complete_sem2.mark_completed()
 
-        mommy.make(Quest, name='Quest-not-started')
-        mommy.make(Quest, name='Quest-blocking', blocking=True)
+        baker.make(Quest, name='Quest-not-started')
+        baker.make(Quest, name='Quest-blocking', blocking=True)
 
-        quest_inprogress = mommy.make(Quest, name='Quest-inprogress')
-        mommy.make(QuestSubmission, user=self.student, quest=quest_inprogress, semester=active_semester)
+        quest_inprogress = baker.make(Quest, name='Quest-inprogress')
+        baker.make(QuestSubmission, user=self.student, quest=quest_inprogress, semester=active_semester)
         # active_semester = first_sub.semester
-        quest_completed = mommy.make(Quest, name='Quest-completed')
-        sub_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
+        quest_completed = baker.make(Quest, name='Quest-completed')
+        sub_complete = baker.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
         sub_complete.mark_completed()
-        quest_1hr_cooldown = mommy.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
-        sub_cooldown_complete = mommy.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
+        quest_1hr_cooldown = baker.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
+        sub_cooldown_complete = baker.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
                                            semester=active_semester)  # noqa
         sub_cooldown_complete.mark_completed()
         return active_semester
@@ -263,45 +263,45 @@ class QuestManagerTest(TenantTestCase):
 class QuestSubmissionQuerysetTest(TenantTestCase):
 
     def setUp(self):
-        self.teacher = mommy.make(User, username='teacher', is_staff=True)
-        self.student = mommy.make(User, username='student', is_staff=False)
+        self.teacher = baker.make(User, username='teacher', is_staff=True)
+        self.student = baker.make(User, username='student', is_staff=False)
 
     def test_quest_submission_qs_get_user(self):
         """QuestSubmissionQuerySet.get_user should return all quest submissions for given user"""
-        first = mommy.make(QuestSubmission, user=self.student)
-        mommy.make(QuestSubmission, user=self.teacher)
-        mommy.make(QuestSubmission)
+        first = baker.make(QuestSubmission, user=self.student)
+        baker.make(QuestSubmission, user=self.teacher)
+        baker.make(QuestSubmission)
         qs = QuestSubmission.objects.all().get_user(self.student).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
     def test_quest_submission_qs_block_if_needed(self):
         """QuestSubmissionQuerySet.block_if_needed: 
         if there are blocking quests, only return them.  Otherwise, return full qs """
-        first = mommy.make(QuestSubmission)
+        first = baker.make(QuestSubmission)
 
         # No blocking quests yet, so should be all
         qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-        blocking_q = mommy.make(Quest, blocking=True)
-        blocked_sub = mommy.make(QuestSubmission, quest=blocking_q)
+        blocking_q = baker.make(Quest, blocking=True)
+        blocked_sub = baker.make(QuestSubmission, quest=blocking_q)
         # Now block, only it should appear
         qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
         self.assertListEqual(list(qs), [blocked_sub.id])
 
     def test_quest_submission_qs_get_quest(self):
         """QuestSubmissionQuerySet.get_quest should return all quest submissions for given quest"""
-        quest = mommy.make(Quest, name='Sub')
-        first, second = mommy.make(QuestSubmission, quest=quest), mommy.make(QuestSubmission, quest=quest)
-        mommy.make(QuestSubmission)
+        quest = baker.make(Quest, name='Sub')
+        first, second = baker.make(QuestSubmission, quest=quest), baker.make(QuestSubmission, quest=quest)
+        baker.make(QuestSubmission)
         qs = QuestSubmission.objects.order_by('id').get_quest(quest).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id, second.id])
 
     def test_quest_submission_qs_get_semester(self):
         """QuestSubmissionQuerySet.get_semester should return all quest submissions for given semester"""
-        semester = mommy.make(Semester, active=True)
-        first = mommy.make(QuestSubmission, semester=semester)
-        mommy.make(QuestSubmission)
+        semester = baker.make(Semester, active=True)
+        first = baker.make(QuestSubmission, semester=semester)
+        baker.make(QuestSubmission)
         qs = QuestSubmission.objects.order_by('id').get_semester(semester).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
@@ -310,8 +310,8 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         QuestSubmissionQuerySet.exclude_archived_quests should return quest submissions
         without submissions for archived_quests
         """
-        first = mommy.make(QuestSubmission, quest__archived=False)
-        mommy.make(QuestSubmission, quest__archived=True)
+        first = baker.make(QuestSubmission, quest__archived=False)
+        baker.make(QuestSubmission, quest__archived=True)
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
@@ -320,8 +320,8 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         QuestSubmissionQuerySet.exclude_quests_not_visible_to_students should return quest submissions
         without submissions for invisible quests
         """
-        first = mommy.make(QuestSubmission, quest__visible_to_students=True)
-        mommy.make(QuestSubmission, quest__visible_to_students=False)
+        first = baker.make(QuestSubmission, quest__visible_to_students=True)
+        baker.make(QuestSubmission, quest__visible_to_students=False)
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
@@ -330,8 +330,8 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 class QuestSubmissionManagerTest(TenantTestCase):
 
     def setUp(self):
-        self.teacher = mommy.make(User, username='teacher', is_staff=True)
-        self.student = mommy.make(User, username='student', is_staff=False)
+        self.teacher = baker.make(User, username='teacher', is_staff=True)
+        self.student = baker.make(User, username='student', is_staff=False)
 
     def test_quest_submission_manager_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""
@@ -361,19 +361,19 @@ class QuestSubmissionManagerTest(TenantTestCase):
         submissions = self.make_test_submissions_stack()
         active_semester = submissions[0].semester
         quest = submissions[0].quest
-        first = mommy.make(QuestSubmission, user=self.student, quest=quest, semester=active_semester)
+        first = baker.make(QuestSubmission, user=self.student, quest=quest, semester=active_semester)
         SiteConfig.get().set_active_semester(active_semester)
         qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
     def make_test_submissions_stack(self):
-        active = mommy.make(Semester, active=True)
-        inactive = mommy.make(Semester, active=False)
-        quest1 = mommy.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=active)
-        mommy.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=active)
-        mommy.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=active)
-        quest2 = mommy.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=inactive)
-        mommy.make(QuestSubmission, quest__visible_to_students=False, quest__archived=True, semester=inactive)
-        mommy.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=inactive)
-        mommy.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=inactive)
+        active = baker.make(Semester, active=True)
+        inactive = baker.make(Semester, active=False)
+        quest1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=active)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=active)
+        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=active)
+        quest2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=inactive)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=True, semester=inactive)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=inactive)
+        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=inactive)
         return quest1, quest2
