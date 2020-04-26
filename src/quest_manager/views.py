@@ -492,6 +492,12 @@ def approve(request, submission_id):
                 action = comment_new
 
             affected_users = [submission.user, ]
+            main_teacher = submission.user.coursestudent_set.first().block.current_teacher
+
+            # Only notify main teacher if the user who commented is another teacher
+            if 'comment_button' in request.POST and request.user != main_teacher:
+                affected_users.append(main_teacher)
+
             notify.send(
                 request.user,
                 action=action,
@@ -704,6 +710,8 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb = "completed"
+                affected_users = None
+
                 if submission.quest.verification_required:
                     note_verb += ", awaiting approval."
                 else:
@@ -719,7 +727,10 @@ def complete(request, submission_id):
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
                     affected_users = [submission.quest.specific_teacher_to_notify, ]
                 else:
-                    affected_users = None
+                    # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
+                    if form.cleaned_data.get('comment_text'):
+                        affected_users = [request.user.coursestudent_set.first().block.current_teacher]
+
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
