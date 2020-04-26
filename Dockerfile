@@ -1,4 +1,4 @@
-FROM python:3.5-slim
+FROM python:3.7-slim
 
 #### For development within the container in VS Code ##
 # https://code.visualstudio.com/docs/remote/containers

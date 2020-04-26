@@ -65,8 +65,7 @@ This will create your docker containers and initialize the database by running m
 `docker-compose up db`
 5. For development, let's run the django app in a vertiual environment instead of using the web container:
    1. Create a python virtual environment (we'll put ours in a venv directory):   
-   `virtualenv venv --python=python3.5`  
-   Note: 3.5 is important, if you try a different python version you may get some migration inconsistancies or other problems!
+   `virtualenv venv --python=python3.7`
    2. Enter the virtual environment:  
    `source venv/bin/activate`
    3. Install our requirements:  
