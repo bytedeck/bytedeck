@@ -724,8 +724,8 @@ def complete(request, submission_id):
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
                     affected_users = [submission.quest.specific_teacher_to_notify, ]
                 else:
-                    # Send notification to current teacher when a quest is auto-approved
-                    if comment_text:
+                    # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
+                    if comment_text != '(submitted without comment)':
                         affected_users = [request.user.coursestudent_set.first().block.current_teacher]
 
                 submission.mark_completed()
