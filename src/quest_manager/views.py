@@ -755,7 +755,6 @@ def complete(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
-            print(note_verb)
             messages.success(request, ("Quest " + note_verb))
             return redirect("quests:quests")
         else:
