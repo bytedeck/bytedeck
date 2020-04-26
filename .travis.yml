@@ -8,5 +8,8 @@ services:
 
 before_script: pip install docker-compose
 
-script: 
- - docker-compose -f docker-compose.yml -f docker-compose.override.yml run -e COVERALLS_REPO_TOKEN web sh -c "coverage run ./src/manage.py test src && flake8 src && coveralls"
+# Don't use coveralls for Pull Requests because it doesn't have access to the environment variables
+# https://docs.travis-ci.com/user/pull-requests/#pull-requests-and-security-restrictions
+script:
+   - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then docker-compose -f docker-compose.yml -f docker-compose.override.yml run web sh -c "./src/manage.py test src && flake8 src"; fi'
+   - 'if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then bash docker-compose -f docker-compose.yml -f docker-compose.override.yml run -e COVERALLS_REPO_TOKEN web sh -c "coverage run ./src/manage.py test src && flake8 src && coveralls"; fi'
