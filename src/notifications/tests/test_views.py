@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
+from django.shortcuts import reverse
+
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
-from notifications.models import Notification
+User = get_user_model()
 
 
 class NotificationViewTests(TenantTestCase):
@@ -11,8 +14,8 @@ class NotificationViewTests(TenantTestCase):
     # fixtures = ['initial_data.json']
 
     def setUp(self):
-        User = get_user_model()
-
+        self.client = TenantClient(self.tenant)
+        
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
 
@@ -21,88 +24,99 @@ class NotificationViewTests(TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
         self.test_student2 = baker.make(User)
 
-        self.test_notification = baker.make(Notification)
+    def test_all_notification_page_status_codes_for_anonymous(self):
+        ''' If not logged in then all views should redirect to home page '''
 
-#
-#     def test_all_badge_page_status_codes_for_anonymous(self):
-#         ''' If not logged in then all views should redirect to home page  '''
-#
-#         self.assertRedirects(
-#             response=self.client.get(reverse('badges:list')),
-#             expected_url='%s?next=%s' % (reverse('home'), reverse('badges:list')),
-#         )
-#
-#         # for path in urlpatterns:
-#         #     name = 'badges:%s' % path.name
-#         #     # path.name
-#         #     # print(url)
-#         #     self.assertRedirects(
-#         #         response=self.client.get(reverse(name)),
-#         #         expected_url='%s?next=%s' % (reverse('home'), reverse(name)),
-#         #         msg_prefix=name,
-#         #     )
-#
-#     def test_all_badge_page_status_codes_for_students(self):
-#
-#         # log in a student
-#         success = self.client.login(username=self.test_student1.username, password=self.test_password)
-#         self.assertTrue(success)
-#
-#         b_pk = self.test_badge.pk
-#         a_pk = self.test_assertion.pk
-#         s_pk = self.test_student1.pk
-#
-#         self.assertEqual(self.client.get(reverse('badges:list')).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_detail', args=[b_pk])).status_code, 200)
-#
-#         # students shouldn't have access to these and should be redirected
-#         self.assertEqual(self.client.get(reverse('badges:badge_create')).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:badge_update', args=[b_pk])).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:badge_copy', args=[b_pk])).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:badge_delete', args=[b_pk])).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:grant', args=[b_pk, s_pk])).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:bulk_grant_badge', args=[b_pk])).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:bulk_grant')).status_code, 302)
-#         self.assertEqual(self.client.get(reverse('badges:revoke', args=[s_pk])).status_code, 302)
-#
-#     def test_all_badge_page_status_codes_for_teachers(self):
-#         # log in a teacher
-#         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-#         self.assertTrue(success)
-#
-#         b_pk = self.test_badge.pk
-#         a_pk = self.test_assertion.pk
-#         s_pk = self.test_student1.pk
-#
-#         self.assertEqual(self.client.get(reverse('badges:list')).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_detail', args=[b_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_create')).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_update', args=[b_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_copy', args=[b_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:badge_delete', args=[b_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:grant', args=[b_pk, s_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:bulk_grant_badge', args=[b_pk])).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:bulk_grant')).status_code, 200)
-#         self.assertEqual(self.client.get(reverse('badges:revoke', args=[a_pk])).status_code, 200)
-#
-#
-# # class ViewTests(TestCase):
-#
-#
-#     # def test_view_url_by_name(self):
-#     #     response = self.client.get(reverse('home'))
-#     #     self.assertEqual(response.status_code, 200)
-#     #
-#     # def test_view_uses_correct_template(self):
-#     #     response = self.client.get(reverse('home'))
-#     #     self.assertEqual(response.status_code, 200)
-#     #     self.assertTemplateUsed(response, 'home.html')
-#     #
-#     # def test_home_page_contains_correct_html(self):
-#     #     response = self.client.get('/')
-#     #     self.assertContains(response, '<h1>Homepage</h1>')
-#     #
-#     # def test_home_page_does_not_contain_incorrect_html(self):
-#     #     response = self.client.get('/')
-#     #     self.assertNotContains(
-#     #         response, 'Hi there! I should not be on the page.')
+        self.assertRedirects(
+            response=self.client.get(reverse('notifications:list')),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:list')),
+        )
+        self.assertRedirects(
+            response=self.client.get(reverse('notifications:list_unread')),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:list_unread')),
+        )
+        self.assertRedirects(  # this doesn't make sense.  Should 404
+            response=self.client.get(reverse('notifications:ajax')),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:ajax')),
+        )
+        self.assertRedirects( 
+            response=self.client.get(reverse('notifications:read', kwargs={'id': 1})),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:read', kwargs={'id': 1})),
+        )
+        self.assertRedirects(
+            response=self.client.get(reverse('notifications:read_all')),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:read_all')),
+        )
+        self.assertRedirects(  # this doesn't make sense.  Should 404
+            response=self.client.get(reverse('notifications:ajax_mark_read')),
+            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:ajax_mark_read')),
+        )
+    
+    def test_all_notification_page_status_codes_for_students(self):
+        # log in student1
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Accessible views:
+        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+
+        self.assertRedirects(  
+            response=self.client.get(reverse('notifications:read_all')),
+            expected_url=reverse('notifications:list'),
+        )
+        
+        # Inaccessible views:
+        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires AJAX
+        self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
+
+    def test_all_notification_page_status_codes_for_teachers(self):
+        # log in student1
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Accessible views:
+        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+
+        self.assertRedirects(  
+            response=self.client.get(reverse('notifications:read_all')),
+            expected_url=reverse('notifications:list'),
+        )
+        
+        # Inaccessible views:
+        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires POST
+        self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
+
+    def test_ajax_mark_read(self):
+        """ Marks a Notification as read via Ajax (by setting unread = FALSE)
+        """
+        # log in student1
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+        
+        notification = baker.make('notifications.Notification', recipient=self.test_student1)
+        # make sure it is unread
+        self.assertTrue(notification.unread)
+
+        # mark it as read via the view being tested
+        ajax_data = {
+            'id': notification.id,
+        }
+        response = self.client.post(
+            reverse('notifications:ajax_mark_read'),
+            data=ajax_data,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_ajax(self):
+        # log in student1
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        response = self.client.post(
+            reverse('notifications:ajax'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
