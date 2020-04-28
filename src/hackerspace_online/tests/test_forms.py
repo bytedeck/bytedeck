@@ -31,7 +31,8 @@ class CustomSignUpFormTest(TenantTestCase):
         )
         self.assertTrue(form.is_valid())
 
-    def test_bad_access_code(self):
+    def test_bad_access_codecoverage(self):
+        """ Test that a sign up form with the wrong access code doesn't validate """
         form = CustomSignupForm(
             {
                 'username': "username",
@@ -47,7 +48,7 @@ class CustomSignUpFormTest(TenantTestCase):
         with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
             form.clean()
 
-    def test_signup(self):
+    def test_sign_up_via_post(self):
         self.client = TenantClient(self.tenant)
         form_data = {
             'username': "username",
@@ -59,6 +60,5 @@ class CustomSignUpFormTest(TenantTestCase):
         }
         response = self.client.post(reverse('account_signup'), form_data, follow=True,)
         self.assertRedirects(response, reverse('quests:quests'))
-
-        # and this shouldn't throw an error!
-        User.objects.get(username="username")
+        user = User.objects.get(username="username")
+        self.assertEqual(user.first_name, "firsttest")

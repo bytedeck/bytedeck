@@ -33,9 +33,3 @@ class CustomSignupForm(SignupForm):
         access_code = self.cleaned_data['access_code']
         if access_code != SiteConfig.get().access_code:
             raise forms.ValidationError("Access code unrecognized.")
-
-    def signup(self, request, user):
-        user.first_name = self.cleaned_data['first_name']
-        user.last_name = self.cleaned_data['last_name']
-        user.save()
-        return user
