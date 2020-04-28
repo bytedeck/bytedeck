@@ -923,7 +923,11 @@ def ajax_save_draft(request):
 @allow_non_public_view
 @login_required
 def drop(request, submission_id):
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    try:
+        sub = QuestSubmission.objects.get(pk=submission_id)
+    except QuestSubmission.DoesNotExist:
+        sub = get_object_or_404(QuestSubmission.objects.all_completed(request.user), pk=submission_id)
+
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
@@ -938,7 +942,13 @@ def drop(request, submission_id):
 @login_required
 def submission(request, submission_id=None, quest_id=None):
     # sub = QuestSubmission.objects.get(id = submission_id)
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    try:
+        sub = QuestSubmission.objects.get(pk=submission_id)
+    except QuestSubmission.DoesNotExist:
+        # Student might have completed the submission and suddenly quest became unavailable
+        # So, we'll take a look at their completed quests instead
+        sub = get_object_or_404(QuestSubmission.objects.all_completed(request.user), pk=submission_id)
+
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 
