@@ -255,6 +255,34 @@ class SubmissionViewTests(TenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertNotContains(response, 'Submit Quest for Completion')
 
+    def test_drop_button_not_visible_when_submission_approved(self):
+        """
+        Make sure drop button is not visible when quest submission is already approved
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.sub4.is_approved = True
+        self.sub4.save()
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:submission', args=[s4_pk]))
+        self.assertNotContains(response, 'Drop Quest')
+
+    def test_drop_approved_submission_results_to_404(self):
+        """
+        Make sure a student cannot drop an approved submission
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.sub4.is_approved = True
+        self.sub4.save()
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:drop', args=[s4_pk]))
+        self.assertEqual(response.status_code, 404)
+
     def test_all_submission_page_status_codes_for_teachers(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
