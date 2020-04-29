@@ -1,15 +1,12 @@
-from mock import patch
-
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-
-from model_bakery import baker
+from mock import patch
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from model_bakery import baker
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-
-from quest_manager.models import QuestSubmission, Quest
 
 
 class QuestViewTests(TenantTestCase):
@@ -164,10 +161,18 @@ class SubmissionViewTests(TenantTestCase):
 
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
+        self.quest3 = baker.make(Quest, visible_to_students=False)
 
         self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
         self.sub3 = baker.make(QuestSubmission, quest=self.quest2)
+        self.sub4 = baker.make(
+            QuestSubmission,
+            user=self.test_student1,
+            quest=self.quest3,
+            is_completed=True,
+            semester=SiteConfig.get().active_semester
+        )
 
     def test_all_submission_page_status_codes_for_students(self):
         # log in a student
@@ -209,6 +214,74 @@ class SubmissionViewTests(TenantTestCase):
 
         # These Needs to be completed via POST
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+
+    def test_student_can_view_completed_submission_when_hidden(self):
+        """
+        Make sure user can view quest even when visible_to_students is False
+        and a student has a submission to it.
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:submission', args=[s4_pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_student_can_drop_completed_submission_when_hidden(self):
+        """
+        Make sure student can drop a submission from a quest when an admin decides
+        to hide it.
+        """
+
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:drop', args=[s4_pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_hidden_submission_does_not_contain_submit_button(self):
+        """
+        Make sure that submit for completion button is hidden since it's not available
+        for students to submit anymore.
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:submission', args=[s4_pk]))
+        self.assertNotContains(response, 'Submit Quest for Completion')
+
+    def test_drop_button_not_visible_when_submission_approved(self):
+        """
+        Make sure drop button is not visible when quest submission is already approved
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.sub4.is_approved = True
+        self.sub4.save()
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:submission', args=[s4_pk]))
+        self.assertNotContains(response, 'Drop Quest')
+
+    def test_drop_approved_submission_results_to_404(self):
+        """
+        Make sure a student cannot drop an approved submission
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.sub4.is_approved = True
+        self.sub4.save()
+        s4_pk = self.sub4.pk
+
+        response = self.client.get(reverse('quests:drop', args=[s4_pk]))
+        self.assertEqual(response.status_code, 404)
 
     def test_all_submission_page_status_codes_for_teachers(self):
         # log in a teacher
