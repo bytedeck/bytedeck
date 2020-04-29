@@ -1,7 +1,7 @@
 LMS for Timberline Secondary School's Digital Hackerspace
 
 [![Build Status](https://travis-ci.org/timberline-secondary/hackerspace.svg?branch=develop)](https://travis-ci.org/timberline-secondary/hackerspace)
-[![Coverage Status](https://coveralls.io/repos/github/timberline-secondary/hackerspace/badge.svg?branch=develop)](https://coveralls.io/github/timberline-secondary/hackerspace?branch=develop)
+[![Coverage Status](https://coveralls.io/repos/github/timberline-secondary/hackerspace/badge.svg?branch=HEAD)](https://coveralls.io/github/timberline-secondary/hackerspace?branch=HEAD)
 
 # Hackerspace development environment installation
 
