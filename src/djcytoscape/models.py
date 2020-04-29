@@ -614,7 +614,7 @@ class CytoScape(models.Model):
 
     def json(self):
         elements = self.cytoelement_set.all()
-        print(elements)
+        # print(elements)
 
         json_str = "cytoscape({ \n"
         json_str += "  container: document.getElementById('" + self.container_element_id + "'), \n"
@@ -622,12 +622,13 @@ class CytoScape(models.Model):
         for element in elements:
             json_str += element.json()
         json_str += "  ], \n"
-        json_str += self.style_set.get_layout_json()
-        json_str += "  style: [ \n"
-        json_str += self.style_set.get_node_styles()
-        json_str += self.style_set.get_edge_styles()
-        json_str += self.style_set.get_parent_styles()
-        json_str += self.style_set.get_classes()
+        if self.style_set:
+            json_str += self.style_set.get_layout_json()
+            json_str += "  style: [ \n"
+            json_str += self.style_set.get_node_styles()
+            json_str += self.style_set.get_edge_styles()
+            json_str += self.style_set.get_parent_styles()
+            json_str += self.style_set.get_classes()
         # json_str += self.get_selector_styles_json('.Quest', self.quest_styles)
         # json_str += self.get_selector_styles_json('.Badge', self.badge_styles)
         # json_str += self.get_selector_styles_json('.campaign', self.campaign_styles)
@@ -638,7 +639,8 @@ class CytoScape(models.Model):
             if element.id_styles:
                 json_str += self.get_selector_styles_json(str(element.id), element.id_styles)
         json_str += "  ], \n"  # end style: [
-        json_str += self.style_set.get_init_options()
+        if self.style_set:
+            json_str += self.style_set.get_init_options()
         json_str += "});"
 
         return json_str
