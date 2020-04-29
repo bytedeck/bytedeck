@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.urls import reverse
+# from django.urls import reverse
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
