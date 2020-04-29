@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 from siteconfig.models import SiteConfig
-from tenant_schemas.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
 from courses.models import Rank, CourseStudent

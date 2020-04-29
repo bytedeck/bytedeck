@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.db import connection
 from django.contrib.sites.models import Site
 
-from tenant_schemas.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name
 
 from tenant.models import Tenant
 

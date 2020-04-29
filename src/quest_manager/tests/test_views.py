@@ -1,10 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+
 from mock import patch
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 from model_bakery import baker
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
+
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 

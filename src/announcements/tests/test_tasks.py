@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from siteconfig.models import SiteConfig
 

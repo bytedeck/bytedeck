@@ -2,7 +2,7 @@ from __future__ import absolute_import, unicode_literals
 import os
 
 from django.conf import settings
-from tenant_schemas_celery.app import CeleryApp
+from django_tenants_celery.app import CeleryApp
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'hackerspace_online.settings')

@@ -1,4 +1,5 @@
-django-tenant-schemas==1.10.0
+# django-tenant-schemas==1.10.0
+django-tenants==3.1.0
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.8,<4.9
 celery>=4.4,<5.0

@@ -11,8 +11,8 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 
 User = get_user_model()
 

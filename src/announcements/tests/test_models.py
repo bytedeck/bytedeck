@@ -1,5 +1,5 @@
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from announcements.models import Announcement
 

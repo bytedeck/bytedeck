@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 from freezegun import freeze_time
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester

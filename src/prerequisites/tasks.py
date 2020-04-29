@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.utils import OperationalError
 
-from tenant_schemas_celery.task import TenantTask
+from django_tenants_celery.task import TenantTask
 
 from hackerspace_online.celery import app
 

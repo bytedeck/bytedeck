@@ -3,8 +3,8 @@
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.utils import tenant_context
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import tenant_context
 
 from tenant.models import Tenant
 from tenant.admin import TenantAdmin

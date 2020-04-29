@@ -2,7 +2,7 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from tenant_schemas.models import TenantMixin
+from django_tenants.models import TenantMixin
 
 
 def check_tenant_name(name):
