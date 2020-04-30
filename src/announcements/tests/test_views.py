@@ -86,9 +86,9 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        self.assertEqual(self.client.get(reverse('announcements:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('announcements:list2')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
+        self.assert200('announcements:list')
+        self.assert200('announcements:list2')
+        self.assert200('announcements:list', args=[self.ann_pk])
 
         # Announcement from setup() should appear in the list
         self.assertContains(self.client.get(reverse('announcements:list')), self.test_announcement.title)
@@ -165,3 +165,43 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
         form = AnnouncementForm(data=model_to_dict(draft_announcement))
         self.assertFalse(form.is_valid())
+
+    def test_comment_on_announcement_by_student(self):
+        # log in a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        form_data = {
+            'comment_text': "test comment",
+            'submit': 'comment_button'
+        }
+        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
+        self.assertEqual(response.status_code, 404)  # invalid submit button
+
+        # make sure it was submitted with the 'comment_button'
+        # HOW?!!?
+        # response = self.client.post(
+        #     reverse('announcements:comment', args=[self.test_announcement.id]), 
+        #     data=form_data,
+        #     ????=''comment_button'
+        # )
+    
+    def test_copy_announcement(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # test view via post request
+        form_data = {
+            'ann_id': self.test_announcement.id,
+        }
+        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
+
+        # Get the newest announcement
+        new_ann = Announcement.objects.latest('datetime_created')
+
+        # if successful, should redirect to the new announcement
+        self.assertRedirects(
+            response, 
+            new_ann.get_absolute_url()
+        )

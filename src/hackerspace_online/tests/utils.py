@@ -9,7 +9,7 @@ class ViewTestUtilsMixin():
 
     def assertRedirectsAdmin(self, url_name, *args, **kwargs):
         """
-        Assert that a response to reverse(url_name, *args, **kwargs) redirected to the admin login page.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the admin login page.
         with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
         
         """
@@ -20,7 +20,7 @@ class ViewTestUtilsMixin():
 
     def assertRedirectsHome(self, url_name, *args, **kwargs):
         """
-        Assert that a response to reverse(url_name, *args, **kwargs) redirected to the home page
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the home page
         with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
         """
         self.assertRedirects(
@@ -30,7 +30,7 @@ class ViewTestUtilsMixin():
 
     def assertRedirectsQuests(self, url_name, *args, **kwargs):
         """
-        Assert that a response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
         Provide any url and path parameters as args or kwargs.
         """
         self.assertRedirects(
@@ -40,7 +40,7 @@ class ViewTestUtilsMixin():
 
     def assert200(self, url_name, *args, **kwargs):
         """
-        Assert that a response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
         Provide any url and path parameters as args or kwargs.
         """
         self.assertEqual(
@@ -50,7 +50,7 @@ class ViewTestUtilsMixin():
 
     def assert404(self, url_name, *args, **kwargs):
         """
-        Assert that a response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
         Provide any url and path parameters as args or kwargs.
         """
         self.assertEqual(
