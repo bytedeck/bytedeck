@@ -1,13 +1,10 @@
 from comments.models import Comment
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.urls import reverse
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
-
-from siteconfig.models import SiteConfig
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
