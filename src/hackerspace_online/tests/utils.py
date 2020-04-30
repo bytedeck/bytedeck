@@ -28,6 +28,16 @@ class ViewTestUtilsMixin():
             expected_url='%s?next=%s' % (reverse('home'), reverse(url_name, *args, **kwargs)),
         )
 
+    def assertRedirectsQuests(self, url_name, *args, **kwargs):
+        """
+        Assert that a response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
+        Provide any url and path parameters as args or kwargs.
+        """
+        self.assertRedirects(
+            response=self.client.get(reverse(url_name, *args, **kwargs)),
+            expected_url=reverse('quest_manager:quests'),
+        )
+
     def assert200(self, url_name, *args, **kwargs):
         """
         Assert that a response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
@@ -46,4 +56,14 @@ class ViewTestUtilsMixin():
         self.assertEqual(
             self.client.get(reverse(url_name, *args, **kwargs)).status_code,
             404
+        )
+
+    def assert403(self, url_name, *args, **kwargs):
+        """
+        Assert that a response to reverse(url_name, *args, **kwargs) is permission denied: 403
+        Provide any url and path parameters as args or kwargs.
+        """
+        self.assertEqual(
+            self.client.get(reverse(url_name, *args, **kwargs)).status_code,
+            403
         )

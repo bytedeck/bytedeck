@@ -359,9 +359,6 @@ class Course(models.Model, ):
 
 
 class CourseStudentQuerySet(models.query.QuerySet):
-    def sticky(self):
-        return self.filter(sticky=True)
-
     def get_user(self, user):
         return self.filter(user=user)
 

@@ -5,10 +5,12 @@ from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
+
 from siteconfig.models import SiteConfig
 
 
-class ProfileViewTests(TenantTestCase):
+class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -32,10 +34,7 @@ class ProfileViewTests(TenantTestCase):
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
 
-        self.assertRedirects(
-            response=self.client.get(reverse('profiles:profile_list')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('profiles:profile_list')),
-        )
+        self.assertRedirectsHome('profiles:profile_list')
 
     def test_all_profile_page_status_codes_for_students(self):
 
@@ -46,21 +45,23 @@ class ProfileViewTests(TenantTestCase):
         s_pk = self.test_student1.profile.pk
         s2_pk = self.test_student2.profile.pk
 
-        # self.assertEqual(self.client.get(reverse('profiles:profile_detail')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
+        self.assert200('profiles:profile_detail', args=[s_pk])
+        self.assert200('profiles:profile_update', args=[s_pk])
 
-        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        self.assert200('profiles:profile_list_current')
 
         # students shouldn't have access to these and should be redirected to login or permission denied
-        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s2_pk])).status_code, 302)
+        self.assert403('profiles:profile_list')
+
+        # viewing the profile of another student
+        self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
+
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s2_pk])).status_code, 404)
+        self.assert404('profiles:profile_update', args=[s2_pk])
 
     def test_all_profile_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -70,10 +71,10 @@ class ProfileViewTests(TenantTestCase):
         s_pk = self.test_student1.profile.pk
         # s2_pk = self.test_student2.pk
 
-        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
+        self.assert200('profiles:profile_detail', args=[s_pk])
+        self.assert200('profiles:profile_update', args=[s_pk])
+        self.assert200('profiles:profile_list')
+        self.assert200('profiles:profile_list_current')
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)

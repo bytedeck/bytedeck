@@ -6,6 +6,8 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
+
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 
@@ -15,7 +17,7 @@ from tenant_schemas.test.client import TenantClient
 User = get_user_model()
 
 
-class AnnouncementViewTests(TenantTestCase):
+class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -29,24 +31,6 @@ class AnnouncementViewTests(TenantTestCase):
 
         self.test_announcement = baker.make(Announcement, draft=False)
         self.ann_pk = self.test_announcement.pk
-
-    def assertRedirectsHome(self, url_name, args=None):
-        self.assertRedirects(
-            response=self.client.get(reverse(url_name, args=args)),
-            expected_url='%s?next=%s' % (reverse('home'), reverse(url_name, args=args)),
-        )
-
-    def assertRedirectsAdmin(self, url_name, args=None):
-        self.assertRedirects(
-            response=self.client.get(reverse(url_name, args=args)),
-            expected_url='{}?next={}'.format('/admin/login/', reverse(url_name, args=args)),
-        )
-
-    def assert200(self, url_name, args=None):
-        self.assertEqual(
-            self.client.get(reverse(url_name, args=args)).status_code,
-            200
-        )
 
     def test_all_announcement_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin  '''
