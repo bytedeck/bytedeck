@@ -173,33 +173,48 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         form_data = {
             'comment_text': "test comment",
-            'submit': 'comment_button'
         }
         response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
         self.assertEqual(response.status_code, 404)  # invalid submit button
 
         # make sure it was submitted with the 'comment_button'
-        # HOW?!!?
-        # response = self.client.post(
-        #     reverse('announcements:comment', args=[self.test_announcement.id]), 
-        #     data=form_data,
-        #     ????=''comment_button'
-        # )
+        form_data['comment_button'] = True
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]), 
+            data=form_data
+        )
+        # where does this redirect to?
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
     
     def test_copy_announcement(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        # test view via post request
+        # hit the view as a get request first, to load a copy of the announcement in the form
+        response = self.client.get(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Don't know how to get the form data from the get request...
+        # https://stackoverflow.com/questions/61532873/how-to-plug-the-reponse-of-a-django-view-get-request-into-the-same-view-as-a-pos
+
+        # So, instead we'll manually create valid form data for post request:
         form_data = {
-            'ann_id': self.test_announcement.id,
+            'title': "Copy test",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59"  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
         }
-        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data
+        )
 
         # Get the newest announcement
         new_ann = Announcement.objects.latest('datetime_created')
-
+        self.assertEqual(new_ann.title, "Copy test")
         # if successful, should redirect to the new announcement
         self.assertRedirects(
             response, 
