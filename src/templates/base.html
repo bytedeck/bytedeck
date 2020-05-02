@@ -38,7 +38,7 @@
     {% endif %}
 </head>
 
-<body>
+<body {% if request.user.profile.dark_theme %}data-theme="dark"{% endif %}>
 <div id='popover-fake-orphan-anchor'></div>
 
 <!-- ** content_first block ** -->
@@ -61,7 +61,7 @@
     {% endif %}
     <div role="alert" class="alert alert-dismissible fade in
           {% if 'error' in message.tags %}alert-danger
-          {% elif 'warning' in message.tags %}alert-warningvn ?.,bnm,.,mbnn,./n m ,m k.;,,l 
+          {% elif 'warning' in message.tags %}alert-warningvn ?.,bnm,.,mbnn,./n m ,m k.;,,l
           {% elif 'info' in message.tags %}alert-info
           {% elif 'success' in message.tags %}alert-success
           {% endif %}
