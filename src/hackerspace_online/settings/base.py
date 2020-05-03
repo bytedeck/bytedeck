@@ -394,6 +394,7 @@ SUMMERNOTE_CONFIG = {
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js_for_inplace': (

@@ -1,0 +1,32 @@
+[data-theme="dark"] .note-editor.note-frame .note-editing-area .note-editable {
+    color: #c8c8c8;
+    background-color: #2e3338;
+}
+
+[data-theme="dark"] .note-editor.note-frame {
+    border-color: rgba(0,0,0,0.6);
+}
+
+[data-theme="dark"] .note-editor.note-frame .note-statusbar {
+    background-color: #3e444c;
+}
+
+[data-theme="dark"] .note-icon-font {
+    background-color: #cc0000;
+    color: #c8c8c8;
+}
+
+[data-theme="dark"] .note-color-reset {
+    background-image: -webkit-linear-gradient(#484e55, #3a3f44 60%, #313539);
+    background-image: -o-linear-gradient(#484e55, #3a3f44 60%, #313539);
+    background-image: -webkit-gradient(linear, left top, left bottom, from(#484e55), color-stop(60%, #3a3f44), to(#313539));
+    background-image: linear-gradient(#484e55, #3a3f44 60%, #313539);
+}
+
+[data-theme="dark"] .note-color-reset:hover {
+    background-color: #0c0d0e;
+}
+
+[data-theme="dark"] .note-color-palette div .note-color-btn {
+    border-color: #272b30;
+}
