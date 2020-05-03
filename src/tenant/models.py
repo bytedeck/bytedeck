@@ -2,7 +2,7 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django_tenants.models import TenantMixin
+from django_tenants.models import DomainMixin, TenantMixin
 
 
 def check_tenant_name(name):
@@ -40,3 +40,7 @@ class Tenant(TenantMixin):
         """ Used to access the Tenant object for the current connection """
         from django.db import connection
         return Tenant.objects.get(schema_name=connection.schema_name)
+
+
+class TenantDomain(DomainMixin):
+    pass

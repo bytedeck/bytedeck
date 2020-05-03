@@ -223,13 +223,14 @@ CACHES = {
         'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key'
     },
     'select2': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'cache_table',
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
         'TIMEOUT': None,
-        'KEY_FUNCTION': 'django_tenants.cache.make_key'
+        'KEY_FUNCTION': 'django_tenants.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key'
     }
 }
-SELECT2_CACHE_BACKEND = 'default'
+SELECT2_CACHE_BACKEND = 'select2'
 
 AUTHENTICATION_BACKENDS = (
 
@@ -514,6 +515,7 @@ DATABASE_ROUTERS = (
 )
 
 TENANT_MODEL = "tenant.Tenant"
+TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning

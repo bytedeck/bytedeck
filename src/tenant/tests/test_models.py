@@ -1,5 +1,4 @@
 from django.contrib.auth import get_user_model
-
 from django_tenants.test.cases import TenantTestCase
 
 from tenant.models import Tenant
