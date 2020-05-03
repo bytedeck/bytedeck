@@ -183,9 +183,17 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             reverse('announcements:comment', args=[self.test_announcement.id]), 
             data=form_data
         )
-        # where does this redirect to?
-        self.assertRedirects(response, self.test_announcement.get_absolute_url())
-    
+
+        # Empty comment strings should be replaced with blank string or we get an error 
+        # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
+        # Old code not relevant any more?
+        # form_data['comment_text'] = None
+        # response = self.client.post(
+        #     reverse('announcements:comment', args=[self.test_announcement.id]), 
+        #     data=form_data
+        # )
+        # self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
     def test_copy_announcement(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
