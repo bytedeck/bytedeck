@@ -4,14 +4,13 @@ from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
+
 from siteconfig.models import SiteConfig
 from badges.models import BadgeAssertion, Badge
 
 
-class ViewTests(TenantTestCase):
-
-    # includes some basic model data
-    # fixtures = ['initial_data.json']
+class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
@@ -32,22 +31,21 @@ class ViewTests(TenantTestCase):
         self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page  '''
+        ''' If not logged in then all views should redirect to home or admin page  '''
+        b_pk = self.test_badge.pk
+        a_pk = self.test_assertion.pk
+        s_pk = self.test_student1.pk
 
-        self.assertRedirects(
-            response=self.client.get(reverse('badges:list')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('badges:list')),
-        )
-
-        # for path in urlpatterns:
-        #     name = 'badges:%s' % path.name
-        #     # path.name
-        #     # print(url)
-        #     self.assertRedirects(
-        #         response=self.client.get(reverse(name)),
-        #         expected_url='%s?next=%s' % (reverse('home'), reverse(name)),
-        #         msg_prefix=name,
-        #     )
+        self.assertRedirectsHome('badges:list')
+        self.assertRedirectsHome('badges:badge_detail', args=[b_pk])
+        self.assertRedirectsHome('badges:badge_create')
+        self.assertRedirectsAdmin('badges:badge_update', args=[b_pk])
+        self.assertRedirectsAdmin('badges:badge_copy', args=[b_pk])
+        self.assertRedirectsAdmin('badges:badge_delete', args=[b_pk])
+        self.assertRedirectsAdmin('badges:grant', args=[b_pk, s_pk])
+        self.assertRedirectsAdmin('badges:bulk_grant_badge', args=[b_pk])
+        self.assertRedirectsAdmin('badges:bulk_grant')
+        self.assertRedirectsAdmin('badges:revoke', args=[a_pk])
 
     def test_all_badge_page_status_codes_for_students(self):
 
@@ -59,8 +57,8 @@ class ViewTests(TenantTestCase):
         # a_pk = self.test_assertion.pk
         s_pk = self.test_student1.pk
 
-        self.assertEqual(self.client.get(reverse('badges:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_detail', args=[b_pk])).status_code, 200)
+        self.assert200('badges:list')
+        self.assert200('badges:badge_detail', args=[b_pk])
 
         # students shouldn't have access to these and should be redirected
         self.assertEqual(self.client.get(reverse('badges:badge_create')).status_code, 302)
@@ -81,35 +79,13 @@ class ViewTests(TenantTestCase):
         a_pk = self.test_assertion.pk
         s_pk = self.test_student1.pk
 
-        self.assertEqual(self.client.get(reverse('badges:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_detail', args=[b_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_create')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_update', args=[b_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_copy', args=[b_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:badge_delete', args=[b_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:grant', args=[b_pk, s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:bulk_grant_badge', args=[b_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:bulk_grant')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('badges:revoke', args=[a_pk])).status_code, 200)
-
-
-# class ViewTests(TestCase):
-
-
-#     def test_view_url_by_name(self):
-#         response = self.client.get(reverse('home'))
-#         self.assertEqual(response.status_code, 200)
-
-#     def test_view_uses_correct_template(self):
-#         response = self.client.get(reverse('home'))
-#         self.assertEqual(response.status_code, 200)
-#         self.assertTemplateUsed(response, 'home.html')
-
-#     def test_home_page_contains_correct_html(self):
-#         response = self.client.get('/')
-#         self.assertContains(response, '<h1>Homepage</h1>')
-
-#     def test_home_page_does_not_contain_incorrect_html(self):
-#         response = self.client.get('/')
-#         self.assertNotContains(
-#             response, 'Hi there! I should not be on the page.')
+        self.assert200('badges:list')
+        self.assert200('badges:badge_detail', args=[b_pk])
+        self.assert200('badges:badge_create')
+        self.assert200('badges:badge_update', args=[b_pk])
+        self.assert200('badges:badge_copy', args=[b_pk])
+        self.assert200('badges:badge_delete', args=[b_pk])
+        self.assert200('badges:grant', args=[b_pk, s_pk])
+        self.assert200('badges:bulk_grant_badge', args=[b_pk])
+        self.assert200('badges:bulk_grant')
+        self.assert200('badges:revoke', args=[a_pk])
