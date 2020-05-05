@@ -7,14 +7,15 @@ from tenant_schemas.test.client import TenantClient
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 from siteconfig.models import SiteConfig
-from badges.models import BadgeAssertion, Badge
+from badges.models import BadgeAssertion, Badge, BadgeType
+
+User = get_user_model()
 
 
-class ViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        User = get_user_model()
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
@@ -27,7 +28,8 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = SiteConfig.get().active_semester
 
-        self.test_badge = baker.make(Badge)
+        self.test_badge = baker.make(Badge, )
+        self.test_badge_type = baker.make(BadgeType)
         self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
@@ -61,14 +63,15 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:badge_detail', args=[b_pk])
 
         # students shouldn't have access to these and should be redirected
-        self.assertEqual(self.client.get(reverse('badges:badge_create')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:badge_update', args=[b_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:badge_copy', args=[b_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:badge_delete', args=[b_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:grant', args=[b_pk, s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:bulk_grant_badge', args=[b_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:bulk_grant')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('badges:revoke', args=[s_pk])).status_code, 302)
+
+        self.assertRedirectsQuests('badges:badge_create', follow=True),
+        self.assertRedirectsAdmin('badges:badge_update', args=[b_pk])
+        self.assertRedirectsAdmin('badges:badge_copy', args=[b_pk])
+        self.assertRedirectsAdmin('badges:badge_delete', args=[b_pk])
+        self.assertRedirectsAdmin('badges:grant', args=[b_pk, s_pk])
+        self.assertRedirectsAdmin('badges:bulk_grant_badge', args=[b_pk])
+        self.assertRedirectsAdmin('badges:bulk_grant')
+        self.assertRedirectsAdmin('badges:revoke', args=[s_pk])
 
     def test_all_badge_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -89,3 +92,80 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:bulk_grant_badge', args=[b_pk])
         self.assert200('badges:bulk_grant')
         self.assert200('badges:revoke', args=[a_pk])
+
+    def test_badge_create(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        form_data = {
+            'name': "badge test",
+            'xp': 5,
+            'content': "test content",
+            'badge_type': self.test_badge_type.id,
+            'author': self.test_teacher.id
+        }
+
+        response = self.client.post(
+            reverse('badges:badge_create'),
+            data=form_data
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+
+        # Get the newest object
+        new_badge = Badge.objects.latest('datetime_created')
+        self.assertEqual(new_badge.name, "badge test")
+
+    def test_badge_copy(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        form_data = {
+            'name': "badge copy test",
+            'xp': 5,
+            'content': "test content",
+            'badge_type': self.test_badge_type.id,
+            'author': self.test_teacher.id
+        }
+
+        response = self.client.post(
+            reverse('badges:badge_copy', args=[self.test_badge.id]),
+            data=form_data
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+
+        # Get the newest object
+        new_badge = Badge.objects.latest('datetime_created')
+        self.assertEqual(new_badge.name, "badge copy test")
+
+    def test_assertion_create_and_delete(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # test: assertion_create()
+        form_data = {
+            'badge': self.test_badge.id,
+            'user': self.test_student1.id 
+        }
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data=form_data
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+
+        new_assertion = BadgeAssertion.objects.latest('timestamp')
+        self.assertEqual(new_assertion.user, self.test_student1)
+        self.assertEqual(new_assertion.badge, self.test_badge)
+
+        # test: assertion_delete()
+        response = self.client.post(
+            reverse('badges:revoke', args=[new_assertion.id]),
+        )
+        self.assertRedirects(response, reverse("profiles:profile_detail", args=[self.test_student1.profile.id]))
+
+        # shouldn't exist anymore now that we deleted it!
+        with self.assertRaises(BadgeAssertion.DoesNotExist):
+            BadgeAssertion.objects.get(id=new_assertion.id)

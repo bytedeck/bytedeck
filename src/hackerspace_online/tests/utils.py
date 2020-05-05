@@ -28,13 +28,13 @@ class ViewTestUtilsMixin():
             expected_url='%s?next=%s' % (reverse('home'), reverse(url_name, *args, **kwargs)),
         )
 
-    def assertRedirectsQuests(self, url_name, *args, **kwargs):
+    def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
         Provide any url and path parameters as args or kwargs.
         """
         self.assertRedirects(
-            response=self.client.get(reverse(url_name, *args, **kwargs)),
+            response=self.client.get(reverse(url_name, *args, **kwargs), follow=follow),
             expected_url=reverse('quest_manager:quests'),
         )
 
