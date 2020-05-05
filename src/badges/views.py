@@ -2,7 +2,6 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.http import Http404
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -125,6 +124,7 @@ def bulk_assertion_create(request, badge_id=None):
 
     if form.is_valid():
         badge = form.cleaned_data['badge']
+        # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
         result_message = "Badge " + str(badge) + " granted to "
@@ -199,16 +199,3 @@ def assertion_delete(request, assertion_id):
 
     template_name = 'badges/assertion_confirm_delete.html'
     return render(request, template_name, {'object': assertion})
-
-
-# not a view!
-def grant_badge(request, badge_id, user_id, granted_by=None):
-    badge = get_object_or_404(Badge, pk=badge_id)
-    user = get_object_or_404(User, pk=user_id)
-    new_assertion = BadgeAssertion.objects.create_assertion(user, badge, granted_by)
-    if new_assertion is None:
-        # print("This achievement is not available, why is it showing up?")
-        raise Http404  # shouldn't get here
-
-    messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-    return True
