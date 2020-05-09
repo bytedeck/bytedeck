@@ -121,5 +121,6 @@ class BlockModelTest(TenantTestCase):
 class RankModelTest(TenantTestCase):
     
     def test_default_object_created(self):
-        """ A data migration should make a default object for this model """
-        self.assertTrue(Rank.objects.filter(title="Default").exists())
+        """ A data migration should make default objects for this model """
+        self.assertTrue(Rank.objects.filter(name="Digital Noob").exists())
+        self.assertEqual(Rank.objects.count(), 13)
