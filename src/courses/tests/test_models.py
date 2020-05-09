@@ -5,7 +5,7 @@ from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester, Block, Rank
+from courses.models import MarkRange, Course, Semester, Block, Rank, Grade
 
 User = get_user_model()
 
@@ -130,5 +130,5 @@ class GradeModelTest(TenantTestCase):
     
     def test_default_object_created(self):
         """ A data migration should make default objects for this model """
-        self.assertTrue(Rank.objects.filter(name="12").exists())
-        self.assertEqual(Rank.objects.count(), 5)
+        self.assertTrue(Grade.objects.filter(name="12").exists())
+        self.assertEqual(Grade.objects.count(), 5)

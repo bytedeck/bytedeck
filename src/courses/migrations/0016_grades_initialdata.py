@@ -5,7 +5,7 @@ from django.db import migrations
 
 # Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
 def load_initial_data(apps, schema_editor):
-    Grade = apps.get_model('name', 'Grade')
+    Grade = apps.get_model('courses', 'Grade')
 
     # add some initial data if none has been created yet
     if not Grade.objects.exists():

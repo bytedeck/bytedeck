@@ -93,88 +93,6 @@
     }
   },
   {
-    "model": "courses.rank",
-    "pk": 1,
-    "fields": {
-      "name": "Digital Noob",
-      "xp": 0,
-      "icon": "",
-      "fa_icon": "fa fa-circle-o"
-    }
-  },
-  {
-    "model": "courses.rank",
-    "pk": 2,
-    "fields": {
-      "name": "Digital Novice",
-      "xp": 60,
-      "icon": "",
-      "fa_icon": "fa fa-angle-up"
-    }
-  },
-  {
-    "model": "courses.rank",
-    "pk": 3,
-    "fields": {
-      "name": "Digital Novice II",
-      "xp": 125,
-      "icon": "",
-      "fa_icon": "fa fa-angle-double-up"
-    }
-  },
-  {
-    "model": "courses.rank",
-    "pk": 4,
-    "fields": {
-      "name": "Digita Amateur",
-      "xp": 185,
-      "icon": "",
-      "fa_icon": "fa fa-forward fa-rotate-270"
-    }
-  },
-  {
-    "model": "courses.grade",
-    "pk": 1,
-    "fields": {
-      "name": "10",
-      "value": 10
-    }
-  },
-  {
-    "model": "courses.grade",
-    "pk": 2,
-    "fields": {
-      "name": "11",
-      "value": 11
-    }
-  },
-  {
-    "model": "courses.grade",
-    "pk": 3,
-    "fields": {
-      "name": "12",
-      "value": 12
-    }
-  },
-  {
-    "model": "courses.grade",
-    "pk": 4,
-    "fields": {
-      "name": "9",
-      "value": 9
-    }
-  },
-  {
-    "model": "courses.semester",
-    "pk": 1,
-    "fields": {
-      "first_day": "2016-09-06",
-      "last_day": "2017-01-20",
-      "active": false,
-      "closed": false
-    }
-  },
-  {
     "model": "courses.datetype",
     "pk": 1,
     "fields": {
@@ -193,44 +111,6 @@
     "pk": 3,
     "fields": {
       "date_type": "Misc"
-    }
-  },
-  {
-    "model": "courses.block",
-    "pk": 1,
-    "fields": {
-      "block": "A",
-      "start_time": "09:00:00",
-      "end_time": "10:00:00",
-      "current_teacher": null
-    }
-  },
-  {
-    "model": "courses.block",
-    "pk": 2,
-    "fields": {
-      "block": "B",
-      "start_time": null,
-      "end_time": null,
-      "current_teacher": null
-    }
-  },
-  {
-    "model": "courses.excludeddate",
-    "pk": 1,
-    "fields": {
-      "semester": 1,
-      "date_type": 1,
-      "date": "2016-12-25"
-    }
-  },
-  {
-    "model": "courses.excludeddate",
-    "pk": 2,
-    "fields": {
-      "semester": 1,
-      "date_type": 1,
-      "date": "2017-01-01"
     }
   },
   {
@@ -321,39 +201,6 @@
     }
   },
   {
-    "model": "badges.badgetype",
-    "pk": 1,
-    "fields": {
-      "name": "Talent",
-      "sort_order": 1,
-      "description": "",
-      "repeatable": true,
-      "fa_icon": "fa-hand-spock-o"
-    }
-  },
-  {
-    "model": "badges.badgetype",
-    "pk": 2,
-    "fields": {
-      "name": "Achievement",
-      "sort_order": 2,
-      "description": "",
-      "repeatable": true,
-      "fa_icon": "fa-trophy"
-    }
-  },
-  {
-    "model": "badges.badgetype",
-    "pk": 3,
-    "fields": {
-      "name": "Award",
-      "sort_order": 3,
-      "description": "",
-      "repeatable": true,
-      "fa_icon": "fa-diamond"
-    }
-  },
-  {
     "model": "badges.badge",
     "pk": 1,
     "fields": {
@@ -379,7 +226,7 @@
       "datetime_last_edit": "2016-07-06T06:01:58.032Z",
       "short_description": "You done did good!",
       "series": null,
-      "badge_type": 3,
+      "badge_type": 2,
       "icon": "",
       "sort_order": null,
       "active": true
@@ -395,7 +242,7 @@
       "datetime_last_edit": "2016-07-06T06:01:59.032Z",
       "short_description": "You found something your teacher asked you to look for... like typos or broken links etc.",
       "series": null,
-      "badge_type": 3,
+      "badge_type": 2,
       "icon": "",
       "sort_order": null,
       "active": true
