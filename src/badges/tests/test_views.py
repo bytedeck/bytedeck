@@ -170,31 +170,26 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         with self.assertRaises(BadgeAssertion.DoesNotExist):
             BadgeAssertion.objects.get(id=new_assertion.id)
 
-    # def test_bulk_assertion_create(self):
-    #     # log in a teacher
-    #     success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-    #     self.assertTrue(success)
+    def test_bulk_assertion_create(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
 
-    #     # compare total granted before to after:
-    #     badge_assertions_before = BadgeAssertion.objects.all().count()
+        # compare total granted before to after:
+        badge_assertions_before = BadgeAssertion.objects.all().count()
 
-    #     user = User.objects.create_user(username='testuser', password='12345')
-    #     user2 = User.objects.create_user(username='testuser2', password='12345')
+        # this form uses students in the active semester, so need to give them a course in the active semester!
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+        baker.make('courses.CourseStudent', user=self.test_student2, semester=self.sem)
 
-    #     # test: assertion_create()
-    #     form_data = {
-    #         'badge': baker.make('badges.Badge'),
-    #         'students': [user.profile, user2.profile]
-    #     }
+        form_data = {
+            'badge': self.test_badge.id,
+            'students': [self.test_student1.profile.id, self.test_student2.profile.id]
+        }
+        response = self.client.post(reverse('badges:bulk_grant'), data=form_data)
 
-    #     response = self.client.post(
-    #         reverse('badges:bulk_grant'),
-    #         data=form_data
-    #     )
-    #     # TODO: Can't get this form to validate in the view... no idea why.
+        self.assertRedirects(response, reverse("badges:list"))
 
-    #     self.assertRedirects(response, reverse("badges:list"))
-
-    #     badge_assertions_after = BadgeAssertion.objects.all().count()
-
-    #     self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
+        # we just bulk granted 2 badges, so there should be two more than before!
+        badge_assertions_after = BadgeAssertion.objects.all().count()
+        self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
