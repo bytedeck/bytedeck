@@ -41,6 +41,14 @@ SHARED_APPS = (
     'tenant',
     'django.contrib.contenttypes',
 
+    # WHY ARE THESE NEEDED IN BOTH SHARED AND TENANT APPS LISTS?
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.flatpages',
+    ###########################################
+
     'django.contrib.sites',
 
     'grappelli',
