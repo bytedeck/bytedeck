@@ -5,7 +5,7 @@ from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester
+from courses.models import MarkRange, Course, Semester, Block
 
 User = get_user_model()
 
@@ -105,3 +105,10 @@ class CourseTestModel(TenantTestCase):
 
     # def test condition_met_as_prerequisite(self):
     #     pass
+
+
+class BlockModelTest(TenantTestCase):
+    
+    def test_default_object_created(self):
+        """ A data migration should make a default block """
+        self.assertTrue(Block.objects.filter(block="Default Block").exists())
