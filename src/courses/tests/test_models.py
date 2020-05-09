@@ -124,3 +124,11 @@ class RankModelTest(TenantTestCase):
         """ A data migration should make default objects for this model """
         self.assertTrue(Rank.objects.filter(name="Digital Noob").exists())
         self.assertEqual(Rank.objects.count(), 13)
+
+
+class GradeModelTest(TenantTestCase):
+    
+    def test_default_object_created(self):
+        """ A data migration should make default objects for this model """
+        self.assertTrue(Rank.objects.filter(name="12").exists())
+        self.assertEqual(Rank.objects.count(), 5)
