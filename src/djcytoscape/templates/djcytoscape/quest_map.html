@@ -6,9 +6,10 @@
         position: relative;
         left: 0px;
         cursor: move;
+        box-shadow: inset 0 0 10px #ccc;
     }
 {% endblock %}
-{% block heading_inner %}{{ scape.name }} Quest Map 
+{% block heading_inner %}{{ scape.name }} Quest Map
 {% if personalized_user %}
     <br><small>of <a href="{% url 'profiles:profile_detail' personalized_user.profile.id %}">{{personalized_user}}</a>, {{ personalized_user.profile}}</small>
 {%endif %}
