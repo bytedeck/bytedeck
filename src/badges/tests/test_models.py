@@ -40,6 +40,11 @@ class BadgeTypeTestModel(TenantTestCase):
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
+    def test_default_badges_created(self):
+        """ A data migration should make default objects for this model """
+        self.assertTrue(BadgeType.objects.filter(name="Talent").exists())
+        self.assertTrue(BadgeType.objects.filter(name="Award").exists())
+
 
 class BadgeSeriesTestModel(TenantTestCase):
     def setUp(self):
