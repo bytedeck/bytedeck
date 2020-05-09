@@ -1,12 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-
 from siteconfig.models import SiteConfig
 
 
@@ -34,7 +32,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
 
-        self.assertRedirectsHome('profiles:profile_list')
+        self.assertRedirectsLogin('profiles:profile_list')
 
     def test_all_profile_page_status_codes_for_students(self):
 

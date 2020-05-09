@@ -1,6 +1,7 @@
+from django.conf import settings
 from django.shortcuts import reverse
-    
-    
+
+
 class ViewTestUtilsMixin():
     """ 
     Utility methods to make cleaner tests for common response assertions.  The base class must
@@ -11,7 +12,7 @@ class ViewTestUtilsMixin():
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the admin login page.
         with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
-        
+
         """
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
@@ -26,6 +27,12 @@ class ViewTestUtilsMixin():
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
             expected_url='%s?next=%s' % (reverse('home'), reverse(url_name, *args, **kwargs)),
+        )
+
+    def assertRedirectsLogin(self, url_name, *args, **kwargs):
+        self.assertRedirects(
+            response=self.client.get(reverse(url_name, *args, **kwargs)),
+            expected_url='%s?next=%s' % (reverse(settings.LOGIN_URL), reverse(url_name, *args, **kwargs))
         )
 
     def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):

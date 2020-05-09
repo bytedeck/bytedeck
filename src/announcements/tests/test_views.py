@@ -5,14 +5,12 @@ from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
-
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 User = get_user_model()
 
@@ -36,10 +34,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         ''' If not logged in then all views should redirect to home page or admin  '''
 
         # go home
-        self.assertRedirectsHome('announcements:list')
-        self.assertRedirectsHome('announcements:list2')
-        self.assertRedirectsHome('announcements:comment', args=[1])
-        self.assertRedirectsHome('announcements:list', args=[1])
+        self.assertRedirectsLogin('announcements:list')
+        self.assertRedirectsLogin('announcements:list2')
+        self.assertRedirectsLogin('announcements:comment', args=[1])
+        self.assertRedirectsLogin('announcements:list', args=[1])
 
         # go admin
         self.assertRedirectsAdmin('announcements:create')

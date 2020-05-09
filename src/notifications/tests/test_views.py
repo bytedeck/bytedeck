@@ -1,21 +1,22 @@
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
-
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
+
 User = get_user_model()
 
 
-class NotificationViewTests(TenantTestCase):
+class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        
+
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
 
@@ -27,31 +28,14 @@ class NotificationViewTests(TenantTestCase):
     def test_all_notification_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
 
-        self.assertRedirects(
-            response=self.client.get(reverse('notifications:list')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:list')),
-        )
-        self.assertRedirects(
-            response=self.client.get(reverse('notifications:list_unread')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:list_unread')),
-        )
-        self.assertRedirects(  # this doesn't make sense.  Should 404
-            response=self.client.get(reverse('notifications:ajax')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:ajax')),
-        )
-        self.assertRedirects( 
-            response=self.client.get(reverse('notifications:read', kwargs={'id': 1})),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:read', kwargs={'id': 1})),
-        )
-        self.assertRedirects(
-            response=self.client.get(reverse('notifications:read_all')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:read_all')),
-        )
-        self.assertRedirects(  # this doesn't make sense.  Should 404
-            response=self.client.get(reverse('notifications:ajax_mark_read')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('notifications:ajax_mark_read')),
-        )
-    
+        self.assertRedirectsLogin('notifications:list')
+        self.assertRedirectsLogin('notifications:list_unread')
+        self.assertRedirectsLogin('notifications:read', kwargs={'id': 1})
+        self.assertRedirectsLogin('notifications:read_all')
+
+        self.assertRedirectsLogin('notifications:ajax')  # this doesn't make sense.  Should 404
+        self.assertRedirectsLogin('notifications:ajax_mark_read')  # this doesn't make sense.  Should 404
+
     def test_all_notification_page_status_codes_for_students(self):
         # log in student1
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -65,7 +49,7 @@ class NotificationViewTests(TenantTestCase):
             response=self.client.get(reverse('notifications:read_all')),
             expected_url=reverse('notifications:list'),
         )
-        
+
         # Inaccessible views:
         self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires AJAX
         self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
@@ -83,7 +67,7 @@ class NotificationViewTests(TenantTestCase):
             response=self.client.get(reverse('notifications:read_all')),
             expected_url=reverse('notifications:list'),
         )
-        
+
         # Inaccessible views:
         self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires POST
         self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
@@ -94,7 +78,7 @@ class NotificationViewTests(TenantTestCase):
         # log in student1
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
-        
+
         notification = baker.make('notifications.Notification', recipient=self.test_student1)
         # make sure it is unread
         self.assertTrue(notification.unread)
