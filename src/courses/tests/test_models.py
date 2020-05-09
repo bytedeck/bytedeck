@@ -5,7 +5,7 @@ from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester, Block
+from courses.models import MarkRange, Course, Semester, Block, Rank
 
 User = get_user_model()
 
@@ -106,9 +106,20 @@ class CourseTestModel(TenantTestCase):
     # def test condition_met_as_prerequisite(self):
     #     pass
 
+    def test_default_object_created(self):
+        """ A data migration should make a default object for this model """
+        self.assertTrue(Course.objects.filter(title="Default").exists())
+
 
 class BlockModelTest(TenantTestCase):
     
     def test_default_object_created(self):
         """ A data migration should make a default block """
-        self.assertTrue(Block.objects.filter(block="Default Block").exists())
+        self.assertTrue(Block.objects.filter(block="Default").exists())
+
+
+class RankModelTest(TenantTestCase):
+    
+    def test_default_object_created(self):
+        """ A data migration should make a default object for this model """
+        self.assertTrue(Rank.objects.filter(title="Default").exists())
