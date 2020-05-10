@@ -1,12 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-
 from siteconfig.models import SiteConfig
 
 
@@ -86,3 +84,39 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+
+    def test_student_marks_button(self):
+        """
+        Student should be able to see marks button when `display_marks_calculation` is True.
+        Otherwise, they should not be able to see it.
+        """
+
+        # Login a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # View profile page
+        s_pk = self.test_student1.profile.pk
+
+        # `display_marks_calculation` is disabled by default. Student should not be able to view it
+        response = self.client.get(reverse('profiles:profile_detail', args=[s_pk]))
+        self.assertNotContains(response, 'View your Mark Calculations')
+
+        config = SiteConfig.get()
+        config.display_marks_calculation = True
+        config.save()
+
+        # Student should be able to view marks calculation
+        response = self.client.get(reverse('profiles:profile_detail', args=[s_pk]))
+        self.assertContains(response, 'View your Mark Calculations')
+
+    def test_student_view_marks_404_if_disabled(self):
+        """
+        Student marks should return 404 if disabled by admin.
+        """
+
+        # Login a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.assert404('courses:my_marks')
