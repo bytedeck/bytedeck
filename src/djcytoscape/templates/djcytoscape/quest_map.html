@@ -1,14 +1,11 @@
 {% extends "djcytoscape/base.html" %}
 {% load static %}
 {% block head_css %}
-    #cy {
-        width: 100%;
-        position: relative;
-        left: 0px;
-        cursor: move;
-    }
+{% block head %}
+  <link rel="stylesheet" href="{% static 'djcytoscape/css/djcytoscape.css' %}">
 {% endblock %}
-{% block heading_inner %}{{ scape.name }} Quest Map 
+{% endblock %}
+{% block heading_inner %}{{ scape.name }} Quest Map
 {% if personalized_user %}
     <br><small>of <a href="{% url 'profiles:profile_detail' personalized_user.profile.id %}">{{personalized_user}}</a>, {{ personalized_user.profile}}</small>
 {%endif %}
