@@ -4,7 +4,6 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
-
 User = get_user_model()
 
 
@@ -121,6 +120,11 @@ class SiteConfig(models.Model):
     approve_oldest_first = models.BooleanField(
         verbose_name="Sort quests awaiting approval with oldest on top", default=False,
         help_text="Check this if you want to have the quest that have been waiting the longed to appear on top of the list."
+    )
+
+    display_marks_calculation = models.BooleanField(
+        verbose_name="Display marks calculation page", default=False,
+        help_text="Check this if you want to let students view their mark calculations."
     )
 
     def get_absolute_url(self):

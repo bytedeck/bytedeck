@@ -1,9 +1,7 @@
-from courses import views
-
 from django.conf.urls import url
-
 from jchart.views import ChartView
 
+from courses import views
 from courses.models import MarkDistributionHistogram
 
 app_name = 'courses'
@@ -14,8 +12,8 @@ urlpatterns = [
     url(r'^add/(?P<user_id>[0-9]+)/$', views.add_course_student, name='add'),
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),
     # DISABLE MARKS
-    # url(r'^marks/$', views.mark_calculations, name='my_marks'),
-    # url(r'^marks/(?P<user_id>[0-9]+)/$', views.mark_calculations, name='marks'),
+    url(r'^marks/$', views.mark_calculations, name='my_marks'),
+    url(r'^marks/(?P<user_id>[0-9]+)/$', views.mark_calculations, name='marks'),
     url(r'^close_semester/$', views.end_active_semester, name='end_active_semester'),
     url(r'^ajax/progress_chart/(?P<user_id>[0-9]+)/$', views.ajax_progress_chart, name='ajax_progress_chart'),
 
