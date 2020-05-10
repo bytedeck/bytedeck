@@ -30,6 +30,10 @@ class ViewTestUtilsMixin():
         )
 
     def assertRedirectsLogin(self, url_name, *args, **kwargs):
+        """
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the login page
+        with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
+        """
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
             expected_url='%s?next=%s' % (reverse(settings.LOGIN_URL), reverse(url_name, *args, **kwargs))
