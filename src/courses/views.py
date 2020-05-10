@@ -5,17 +5,18 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
+from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
+                              redirect, render)
 from django.urls import reverse_lazy
-from django.shortcuts import get_object_or_404, redirect, render, Http404, HttpResponse
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
 
 from siteconfig.models import SiteConfig
-
 # from .forms import ProfileForm
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
-from .models import CourseStudent, Rank, Semester
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+
 from .forms import CourseStudentForm
+from .models import CourseStudent, Rank, Semester
 
 
 # Create your views here.
@@ -23,6 +24,9 @@ from .forms import CourseStudentForm
 @login_required
 def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
+
+    if not SiteConfig.get().display_marks_calculation:
+        raise Http404
 
     # Only allow staff to see other student's mark page
     if user_id is not None and request.user.is_staff:
