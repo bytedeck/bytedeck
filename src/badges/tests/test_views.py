@@ -4,10 +4,9 @@ from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
+from badges.models import Badge, BadgeAssertion, BadgeType
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-
 from siteconfig.models import SiteConfig
-from badges.models import BadgeAssertion, Badge, BadgeType
 
 User = get_user_model()
 
@@ -38,9 +37,10 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         a_pk = self.test_assertion.pk
         s_pk = self.test_student1.pk
 
-        self.assertRedirectsHome('badges:list')
-        self.assertRedirectsHome('badges:badge_detail', args=[b_pk])
-        self.assertRedirectsHome('badges:badge_create')
+        self.assertRedirectsLogin('badges:list')
+        self.assertRedirectsLogin('badges:badge_detail', args=[b_pk])
+        self.assertRedirectsLogin('badges:badge_create')
+
         self.assertRedirectsAdmin('badges:badge_update', args=[b_pk])
         self.assertRedirectsAdmin('badges:badge_copy', args=[b_pk])
         self.assertRedirectsAdmin('badges:badge_delete', args=[b_pk])

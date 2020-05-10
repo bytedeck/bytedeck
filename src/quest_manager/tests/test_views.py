@@ -1,15 +1,16 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from mock import patch
+from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
-from model_bakery import baker
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 
-class QuestViewTests(TenantTestCase):
+class QuestViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -36,10 +37,7 @@ class QuestViewTests(TenantTestCase):
     def test_all_quest_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
 
-        self.assertRedirects(
-            response=self.client.get(reverse('quests:quests')),
-            expected_url='%s?next=%s' % (reverse('home'), reverse('quests:quests')),
-        )
+        self.assertRedirectsLogin('quests:quests')
 
     def test_all_quest_page_status_codes_for_students(self):
         # log in a student

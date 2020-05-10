@@ -286,7 +286,8 @@ SITE_ID = 1
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
-LOGIN_URL = '/'
+# https://stackoverflow.com/questions/44571373/python-3-6-django1-10-login-required-decorator-redirects-to-link-with-missing/44571408#44571408
+LOGIN_URL = 'account_login'
 # ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)

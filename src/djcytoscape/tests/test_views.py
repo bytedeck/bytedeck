@@ -14,7 +14,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        
+
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.test_password = "password"
 
@@ -23,18 +23,18 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
         self.map = baker.make('djcytoscape.CytoScape')
-              
+
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
 
-        self.assertRedirectsHome('djcytoscape:index')
+        self.assertRedirectsLogin('djcytoscape:index')
 
-        self.assertRedirectsHome('djcytoscape:primary')
-        self.assertRedirectsHome('djcytoscape:quest_map', args=[1])
-        self.assertRedirectsHome('djcytoscape:quest_map_personalized', args=[1, 1])
-        self.assertRedirectsHome('djcytoscape:quest_map_interlink', args=[1, 1, 1])
+        self.assertRedirectsLogin('djcytoscape:primary')
+        self.assertRedirectsLogin('djcytoscape:quest_map', args=[1])
+        self.assertRedirectsLogin('djcytoscape:quest_map_personalized', args=[1, 1])
+        self.assertRedirectsLogin('djcytoscape:quest_map_interlink', args=[1, 1, 1])
 
-        self.assertRedirectsHome('djcytoscape:list')
+        self.assertRedirectsLogin('djcytoscape:list')
         self.assertRedirectsAdmin('djcytoscape:regenerate', args=[1])
         self.assertRedirectsAdmin('djcytoscape:regenerate_all')
         self.assertRedirectsAdmin('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})

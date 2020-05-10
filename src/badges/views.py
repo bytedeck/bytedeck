@@ -2,15 +2,16 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import DeleteView, UpdateView
 
 from notifications.signals import notify
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
-from .forms import BadgeForm, BadgeAssertionForm, BulkBadgeAssertionForm
-from .models import Badge, BadgeType, BadgeAssertion
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+
+from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
+from .models import Badge, BadgeAssertion, BadgeType
 
 
 @allow_non_public_view
@@ -61,9 +62,22 @@ class BadgeUpdate(AllowNonPublicViewMixin, UpdateView):
 
 
 @allow_non_public_view
-@staff_member_required(login_url='/')
+@login_required
 def badge_create(request):
+
+    # Using `@staff_member_required(login_url='/accounts/login/')` causes a RedirectCycleErrror.
+    # For example, a student that is already logged in tries to access this page,
+    # They will get redirect to `/accounts/login/?next=/achievements/create/`.
+    # And since they are already logged in, they will be redirected to `/achievements/create/`
+    # Causing again to redirect since they are not a staff.
+
+    # We could use `@staff_member_required(login_url='/')` but this breaks the tests
+    # which requires views to be redirected to /accounts/login
+    if request.user.is_active and not request.user.is_staff:
+        return redirect('quests:quests')
+
     form = BadgeForm(request.POST or None, request.FILES or None)
+
     if form.is_valid():
         form.save()
         return redirect('badges:list')
