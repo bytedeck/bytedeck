@@ -1,13 +1,9 @@
 {% extends "djcytoscape/base.html" %}
 {% load static %}
 {% block head_css %}
-    #cy {
-        width: 100%;
-        position: relative;
-        left: 0px;
-        cursor: move;
-        box-shadow: inset 0 0 10px #ccc;
-    }
+{% block head %}
+  <link rel="stylesheet" href="{% static 'djcytoscape/css/djcytoscape.css' %}">
+{% endblock %}
 {% endblock %}
 {% block heading_inner %}{{ scape.name }} Quest Map
 {% if personalized_user %}
