@@ -28,21 +28,31 @@ class CytoStyleClass(models.Model):
 class CytoStyleSet(models.Model):
     DEFAULT_NAME = "Default"
 
-    DEFAULT_INIT_OPTIONS = "  minZoom: 0.5, \n" \
-                           "  maxZoom: 1.5, \n" \
-                           "  wheelSensitivity: 0.1, \n" \
-                           ""
+    DEFAULT_INIT_OPTIONS = ("minZoom: 0.5, \n" 
+                            "maxZoom: 1.5, \n" 
+                            "wheelSensitivity: 0.1, \n" 
+                            "zoomingEnabled: false, \n" 
+                            "userZoomingEnabled: false, \n"
+                            "autoungrabify: true,\n"
+                            "autounselectify: true,\n"
+                            ""
+                            )
 
     DEFAULT_LAYOUT_OPTIONS = "'nodeSep': 25, \n 'rankSep': 10, \n"
 
     DEFAULT_NODE_STYLES = "'label':         'data(label)', \n" \
                           "'text-valign':   'center', 'text-halign': 'right', \n" \
-                          "'text-margin-x': '-270', \n" \
+                          "'text-margin-x': '-155', \n" \
+                          "'text-wrap': 'wrap',\n" \
+                          "'text-max-width': 150,\n" \
+                          "'background-position-x': 0,\n" \
+                          "'height': 24,\n" \
+                          "'font-size': 12,\n" \
                           "'background-fit':'contain', \n" \
                           "'shape':         'roundrectangle', \n" \
                           "'background-opacity': 0, \n" \
                           "'background-position-x': 0, \n" \
-                          "'width':         300, \n" \
+                          "'width':         180, \n" \
                           "'border-width':  1, \n" \
                           "'padding-right': 5, 'padding-left':5, 'padding-top':5, 'padding-bottom':5, \n" \
                           "'text-events':   'yes'," \
@@ -75,9 +85,49 @@ class CytoStyleSet(models.Model):
                       ('dagre', 'dagre'),
                       )
 
-    JAVASCRIPT_DEFAULT = "$(document).ready(function() { \n" \
-                         "\n" \
-                         "});\n"
+    # TODO: Why is this not just in a .js file?!? 
+    JAVASCRIPT_DEFAULT = """// cursors
+  // links
+    cy.on('mouseover', '[href]', function(){
+        $('#cy').css('cursor', 'pointer');
+        this.addClass('link_hover')
+    });
+
+    cy.on('mouseout', '[href]', function(){
+        $('#cy').css('cursor', 'move');
+        this.removeClass('link_hover')
+    });
+  // none link nodes
+    cy.on('mouseover', '[^href]', function(){
+        $('#cy').css('cursor', 'default');
+    });
+     cy.on('mouseout', '[^href]', function(){
+        $('#cy').css('cursor', 'move');
+    });
+
+
+$(document).ready(function() { 
+  updateBounds();
+  cy.on('ready', function () {
+    updateBounds();
+  });
+  //if they resize the window, resize the diagram
+  $(window).resize(function () {
+    updateBounds();
+  });
+    cy.center();
+    cy.resize();
+
+
+}); // dom ready
+
+var updateBounds = function () {
+    var bounds = cy.elements().boundingBox();
+    $('#cy').css('height', bounds.h + 50);
+    cy.center();
+    cy.resize();
+};
+"""
 
     name = models.CharField(max_length=50)
     init_options = models.TextField(blank=True, null=True, default=DEFAULT_INIT_OPTIONS,
