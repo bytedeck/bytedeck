@@ -18,8 +18,18 @@ User = get_user_model()
 class QuestManagerTest(TenantTestCase):
 
     def setUp(self):
+        # get a list all quests created in data migrations
+        # convert to list for ease of comparison, and also to force
+        #  evaluation before additional quests are created within tests
+        self.initial_quest_list = list(Quest.objects.all())  
+        # print(self.initial_quest_list)
+        self.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
+        # this includes 6 quests, all visible to students, but only one 
+        # available at the start as the rest have prerequisites.
+
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
+        self.maxDiff = None
 
     def test_quest_qs_exclude_hidden(self):
         """QuestQuerySet.datetime_available should return all quests that are not 
@@ -31,17 +41,17 @@ class QuestManagerTest(TenantTestCase):
         quest2_to_hide = baker.make(Quest, name='Quest2-hidden')
 
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
-        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden']
-        # Nothing hidden yet
-        self.assertListEqual(list(qs), expected_result)
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden', 'Quest1-hidden', 'Quest2-hidden'] + self.initial_quest_name_list
+        # Nothing hidden yet (use set so order doesn't matter)
+        self.assertSetEqual(set(qs), set(expected_result))
 
         self.student.profile.hide_quest(quest1_to_hide.id)
         self.student.profile.hide_quest(quest2_to_hide.id)
 
         qs = Quest.objects.order_by('id').exclude_hidden(self.student).values_list('name', flat=True)
-        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden']
+        expected_result = ['Quest-not-hidden', 'Quest-also-not-hidden'] + self.initial_quest_name_list
         # a couple hidden
-        self.assertListEqual(list(qs), expected_result)
+        self.assertSetEqual(set(qs), set(expected_result))
 
     def test_quest_qs_block_if_needed(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
@@ -76,7 +86,10 @@ class QuestManagerTest(TenantTestCase):
         baker.make(Quest, name='Quest-yesterday', date_available=yesterday, time_available=time_later)
 
         qs = Quest.objects.order_by('id').datetime_available().values_list('name', flat=True)
-        self.assertListEqual(list(qs), ['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'])
+        self.assertSetEqual(
+            set(qs), 
+            set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list)
+        )
 
     def test_quest_qs_not_expired(self):
         """
@@ -109,27 +122,28 @@ class QuestManagerTest(TenantTestCase):
 
         qs = Quest.objects.order_by('id').not_expired().values_list('name', flat=True)
         result = ['Quest-never-expired', 'Quest-expired-now', 'Quest-expired-today-midnight', 'Quest-expired-tomorrow']
-        self.assertListEqual(list(qs), result)
+        self.assertSetEqual(set(qs), set(result + self.initial_quest_name_list))
 
     def test_quest_qs_visible(self):
         """QuestQuerySet.visible should return visible for students quests"""
-        baker.make(Quest, name='Quest-visible', visible_to_students=True)
+        # baker.make(Quest, name='Quest-visible', visible_to_students=True)
         baker.make(Quest, name='Quest-invisible', visible_to_students=False)
-        self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
+        # self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
+        self.assertListEqual(list(Quest.objects.all().visible()), self.initial_quest_list)
 
     def test_quest_qs_not_archived(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
         baker.make(Quest, name='Quest-not-archived', archived=False)
         baker.make(Quest, name='Quest-archived', archived=True)
         qs = Quest.objects.all().not_archived().values_list('name', flat=True)
-        self.assertListEqual(list(qs), ['Quest-not-archived'])
+        self.assertSetEqual(set(qs), set(['Quest-not-archived'] + self.initial_quest_name_list))
 
     def test_quest_qs_available_without_course(self):
         """QuestQuerySet.available_without_course should return quests available_outside_course"""
         baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
         baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
-        self.assertListEqual(list(qs), ['Quest-available-without-course'])
+        self.assertListEqual(list(qs), ['Quest-available-without-course', 'Send your teacher a Message'])
 
     def test_quest_qs_editable(self):
         """
@@ -141,7 +155,7 @@ class QuestManagerTest(TenantTestCase):
         student2 = baker.make(User, is_staff=False)
         baker.make(Quest, name='Quest-editable-for-student1', editor=student1)
         baker.make(Quest, name='Quest-editable-for-teacher', editor=teacher)
-        self.assertEqual(Quest.objects.all().editable(teacher).count(), 2)
+        self.assertEqual(Quest.objects.all().editable(teacher).count(), 2 + len(self.initial_quest_list))
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
 
@@ -167,9 +181,10 @@ class QuestManagerTest(TenantTestCase):
         # jump ahead an hour so repeat cooldown is over
         with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
             qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
-        self.assertListEqual(
-            list(qs.values_list('name', flat=True)),
-            ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
+        # compare sets so order doesn't matter
+        self.assertSetEqual(
+            set(qs.values_list('name', flat=True)),
+            set(['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_name_list)
         )
 
     def test_quest_qs_not_completed(self):
@@ -177,9 +192,13 @@ class QuestManagerTest(TenantTestCase):
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_completed(self.student)
-        self.assertListEqual(
-            list(qs.values_list('name', flat=True)),
-            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
+        # compare sets so order doesn't matter
+        self.assertSetEqual(
+            set(qs.values_list('name', flat=True)),
+            set(
+                ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress'] 
+                + self.initial_quest_name_list
+            )
         )
 
     def test_quest_qs_not_in_progress(self):
@@ -187,10 +206,11 @@ class QuestManagerTest(TenantTestCase):
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_in_progress(self.student)
-        self.assertListEqual(
-            list(qs.values_list('name', flat=True)),
-            ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
-             'Quest-1hr-cooldown']  # noqa
+        # compare sets so order doesn't matter
+        self.assertSetEqual(
+            set(qs.values_list('name', flat=True)),
+            set(['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
+                 'Quest-1hr-cooldown'] + self.initial_quest_name_list)
         )
 
     def test_quest_manager_get_available(self):
@@ -205,7 +225,6 @@ class QuestManagerTest(TenantTestCase):
         7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
         """
         active_semester = self.make_test_quests_and_submissions_stack()
-        # with patch('quest_manager.models.SiteConfig') as cfg:
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.get_available(self.student)
         self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])
@@ -221,7 +240,7 @@ class QuestManagerTest(TenantTestCase):
         # complete the blocking quest to make others available
         blocking_sub.mark_completed()
         qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started'])
+        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'])
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
