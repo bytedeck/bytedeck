@@ -18,6 +18,13 @@ User = get_user_model()
 class QuestManagerTest(TenantTestCase):
 
     def setUp(self):
+        # get a list all quests created in data migrations
+        # convert to list for ease of comparison, and also to force
+        #  evaluation before additional quests are created within tests
+        self.initial_quest_list = list(Quest.objects.all())  
+        # this includes 6 quests, all visible to students, but only one 
+        # available at the start as the rest have prerequisites.
+
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
 
@@ -113,9 +120,10 @@ class QuestManagerTest(TenantTestCase):
 
     def test_quest_qs_visible(self):
         """QuestQuerySet.visible should return visible for students quests"""
-        baker.make(Quest, name='Quest-visible', visible_to_students=True)
+        # baker.make(Quest, name='Quest-visible', visible_to_students=True)
         baker.make(Quest, name='Quest-invisible', visible_to_students=False)
-        self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
+        # self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
+        self.assertListEqual(list(Quest.objects.all().visible()), self.initial_quest_list)
 
     def test_quest_qs_not_archived(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
@@ -169,7 +177,7 @@ class QuestManagerTest(TenantTestCase):
             qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
         self.assertListEqual(
             list(qs.values_list('name', flat=True)),
-            ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
+            ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_list
         )
 
     def test_quest_qs_not_completed(self):
@@ -188,7 +196,7 @@ class QuestManagerTest(TenantTestCase):
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_in_progress(self.student)
         self.assertListEqual(
-            list(qs.values_list('name', flat=True)),
+            list(qs.values_list('name', flat=True)) + self.initial_quest_list,
             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
              'Quest-1hr-cooldown']  # noqa
         )
