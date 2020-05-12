@@ -65,3 +65,4 @@ class CytoScapeModelTest(TenantTestCase):
     def test_generate_map(self):
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
+        self.assertEqual(CytoScape.objects.count(), 2)
