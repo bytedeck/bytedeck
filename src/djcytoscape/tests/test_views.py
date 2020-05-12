@@ -7,6 +7,8 @@ from tenant_schemas.test.client import TenantClient
 # from siteconfig.models import SiteConfig
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
+from djcytoscape.models import CytoScape
+
 User = get_user_model()
 
 
@@ -82,3 +84,23 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # self.assert200('djcytoscape:regenerate_all')
         # self.assert200('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
         # self.assert200('djcytoscape:generate_unseeded')
+
+
+class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def test_initial_map_generated_on_first_view(self):
+        # shouldn't be any maps from the start
+        self.assertFalse(CytoScape.objects.exists())
+
+        # log in anoyone
+        self.client = TenantClient(self.tenant)
+        anyone = User.objects.create_user('anyone', password="password")
+        success = self.client.login(username=anyone.username, password="password")
+        self.assertTrue(success)
+
+        # Access the primary map view    
+        self.assert200('djcytoscape:primary')
+
+        # Should have generated the "Main" map
+        self.assertEqual(CytoScape.objects.count(), 1)
+        self.assertTrue(CytoScape.objects.filter(name="Main").exists())

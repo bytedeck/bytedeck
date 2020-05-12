@@ -92,8 +92,10 @@ If everything has worked so far, you should now be able to create your own hacke
 4. Now you should be in your own Hackerspace site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
-### Installing some initial Sample Data
-The empty website is pretty boring, and kind of hard to get working because there is no data.  There is some initial sample data in the "tenant_specific_data.json" file you should import into your site.
+### TODO: Installing more Sample Data <-- NOT SETUP YET
+New tenants will come with some basic initial data already installed (via data migrations).  But if you want masses of data to simulate a more realistic site in production.... we need to make some so you can install it!
+
+Once we DO make it, this is how you'd install (leaving here so I don't forget =)
 
 Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
 
@@ -113,6 +115,8 @@ You can run tests either locally, or through the web container:
 `./src/manage.py test src && flake8 src`
 2. Or run via the web container (assuming it's running. If not, change `exec` to `run`)
 `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
+3. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:  
+`./src/manage.py test src --parallel --failfast && flake8 src`
 
 ### Advanced: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)

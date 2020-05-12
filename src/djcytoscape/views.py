@@ -13,7 +13,7 @@ from django.views.generic.edit import UpdateView, DeleteView
 from django.urls import reverse_lazy
 
 from .models import CytoScape
-from quest_manager.models import QuestSubmission
+from quest_manager.models import QuestSubmission, Quest
 from djcytoscape.forms import GenerateQuestMapForm
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 
@@ -115,6 +115,12 @@ def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
 @allow_non_public_view
 @login_required
 def primary(request):
+    # Check if a map has been created, if not, generate it from the default Welcome quest
+    # the Welcome quests should have been created via data migration when the tenant was created
+    if not CytoScape.objects.exists() and Quest.objects.filter(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1').exists():
+        welcome_quest = Quest.objects.get(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1')
+        CytoScape.generate_map(welcome_quest, 'Main')
+    
     try:
         scape = CytoScape.objects.get(is_the_primary_scape=True)
         return quest_map(request, scape.id)
