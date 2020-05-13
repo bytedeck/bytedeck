@@ -1,25 +1,22 @@
-from datetime import timedelta, date, datetime
+from datetime import date, datetime, timedelta
 
 import numpy
-
+from colorful.fields import RGBColorField
 from django.conf import settings
-from django.core.validators import validate_comma_separated_integer_list
 from django.contrib.auth.models import User
+from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
-
 from jchart import Chart
 from jchart.config import DataSet, rgba
 from workdays import networkdays, workday
-from colorful.fields import RGBColorField
-
-from siteconfig.models import SiteConfig
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
+from siteconfig.models import SiteConfig
 
 
 class MarkRangeManager(models.Manager):
@@ -176,11 +173,11 @@ class SemesterManager(models.Manager):
 
         # This semester has already been closed
         if active_sem.closed:
-            return -1
+            return Semester.CLOSED
 
         # There are still quests awaiting approval, can't close!
         if QuestSubmission.objects.all_awaiting_approval():
-            return -2
+            return Semester.QUEST_AWAITING_APPROVAL
 
         # need to calculate all user XP and store in their Course
         CourseStudent.objects.calc_semester_grades(active_sem)
@@ -198,6 +195,10 @@ def default_end_date():
 
 
 class Semester(models.Model):
+
+    CLOSED = -1
+    QUEST_AWAITING_APPROVAL = -2
+
     first_day = models.DateField(blank=True, null=True, default=date.today)
     last_day = models.DateField(blank=True, null=True, default=default_end_date)
     active = models.BooleanField(default=False)
