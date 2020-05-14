@@ -114,15 +114,16 @@ def end_active_semester(request):
         return HttpResponse(status=401)
 
     sem = Semester.objects.complete_active_semester()
-    if sem is -1:
-        messages.warning(request,
-                         "Semester is already closed, no action taken.")
-    if sem is -2:
-        messages.warning(request,
-                         "There are still quests awaiting approval. Can't close the Semester \
-                         until they are approved or returned")
-    else:
-        messages.success(request, "Semester " + str(sem) + " has been closed.")
+    semester_warnings = {
+        Semester.CLOSED: 'Semester is already closed, no action taken.',
+        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester \
+             until they are approved or returned",
+        'success': 'Semester {sem} has been closed.'.format(sem=sem),
+    }
+
+    messages.warning(
+        request,
+        semester_warnings.get(sem, semester_warnings['success']))
 
     return redirect('config')
 
