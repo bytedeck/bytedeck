@@ -1,8 +1,11 @@
 import json
 import uuid
 
+from badges.models import BadgeAssertion
+from comments.models import Comment, Document
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -11,9 +14,6 @@ from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
-
-from badges.models import BadgeAssertion
-from comments.models import Comment, Document
 from notifications.signals import notify
 from prerequisites.models import Prereq
 from prerequisites.tasks import update_quest_conditions_for_user
@@ -23,6 +23,8 @@ from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
                     SubmissionQuickReplyForm)
 from .models import Quest, QuestSubmission
+
+User = get_user_model()
 
 
 def is_staff_or_TA(user):
@@ -727,9 +729,17 @@ def complete(request, submission_id):
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
                     affected_users = [submission.quest.specific_teacher_to_notify, ]
                 else:
+                    main_teacher = request.user.coursestudent_set.first().block.current_teacher
+                    affected_users = []
+
                     # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
                     if form.cleaned_data.get('comment_text'):
-                        affected_users = [request.user.coursestudent_set.first().block.current_teacher]
+                        if not main_teacher:
+                            staffs = User.objects.filter(is_staff=True)
+                            for staff in staffs:
+                                affected_users.append(staff)
+                        else:
+                            affected_users.append(main_teacher)
 
                 submission.mark_completed()
                 if not submission.quest.verification_required:
