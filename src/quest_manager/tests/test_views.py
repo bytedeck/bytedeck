@@ -9,15 +9,16 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
+User = get_user_model()
 
-class QuestViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        User = get_user_model()
         self.sem = SiteConfig.get().active_semester
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -370,3 +371,19 @@ class SubmissionViewTests(TenantTestCase):
 
         sub.refresh_from_db()
         self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+
+
+class QuesCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Unit Tests for:
+
+        class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView):
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+    #     self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+    def test_teacher_posting_create_quest_form(self):
+        # simulate a logged in teacher
+        self.client.force_login(self.test_teacher)
