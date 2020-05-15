@@ -35,7 +35,6 @@ urlpatterns = [
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
-    url(r'^list/submission/(?P<submission_id>[0-9]+)/$', views.quest_list, name='submission_active'),
     url(r'^available/$', views.quest_list, name='quests'),
     url(r'^available/$', views.quest_list, name='available'),
     url(r'^available2/$', views.quest_list2, name='available2'),

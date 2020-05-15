@@ -126,13 +126,13 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, UpdateView):
 
 @allow_non_public_view
 @login_required
-def quest_list2(request, quest_id=None, submission_id=None):
-    return quest_list(request, quest_id, submission_id, template="quest_manager/quests2.html")
+def quest_list2(request, quest_id=None):
+    return quest_list(request, quest_id, template="quest_manager/quests2.html")
 
 
 @allow_non_public_view
 @login_required
-def quest_list(request, quest_id=None, submission_id=None, template="quest_manager/quests.html"):
+def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
@@ -147,24 +147,12 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
     remove_hidden = True
 
     active_quest_id = 0
-    active_submission_id = 0
 
     # Figure out what tab we want.
     if quest_id is not None:
         # if a quest_id was provided, got to the Available tab
         active_quest_id = int(quest_id)
         available_tab_active = True
-    elif submission_id is not None:
-        # if sub_id was provided, figure out which tab and go there
-        # this isn't active
-        active_submission_id = int(submission_id)
-        active_sub = get_object_or_404(QuestSubmission, pk=submission_id)
-        if active_sub in in_progress_submissions:
-            in_progress_tab_active = True
-        elif active_sub in completed_submissions:
-            completed_tab_active = True
-        else:
-            raise Http404("Couldn't find this Submission. Sorry!")
     # otherwise look at the path
     elif '/inprogress/' in request.path_info:
         in_progress_tab_active = True
@@ -227,7 +215,6 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
         "past_submissions": past_submissions,
         # "num_completed": num_completed,
         "active_q_id": active_quest_id,
-        "active_id": active_submission_id,
         "available_tab_active": available_tab_active,
         "inprogress_tab_active": in_progress_tab_active,
         "completed_tab_active": completed_tab_active,

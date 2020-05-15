@@ -397,7 +397,7 @@ class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
             'time_available': "14:30:59",
         }
 
-    def test_teacher(self):
+    def test_teacher_can_create_and_delete_quests(self):
         # simulate a logged in teacher
         self.client.force_login(self.test_teacher)
 
@@ -532,3 +532,100 @@ class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+        # TODO
+        # TAs should not be able to make a quest visible_to_students
+        # When a quest is made visible_to_students by a teacher, the editor should be removed
+
+
+class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
+
+        def quest_list(request, quest_id=None, submission_id=None, template="quest_manager/quests.html"):
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password="password")
+
+        self.quest1 = baker.make(Quest)
+    
+    def test_quest_id_provided_to_view(self):
+        """
+        This test handles the view when accessed via:
+        url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'
+
+        ... which is actually never used anywhere!
+
+        """
+
+        self.client.force_login(self.test_student)
+
+        # access the view
+        response = self.client.get(reverse('quests:quest_active', args=[self.quest1.id]))
+
+        # should be on the available tab, since this quest is available (quest defaults make them available)
+        self.assertTrue(response.context['available_tab_active'])
+        self.assertEqual(response.context['active_q_id'], self.quest1.id)
+
+        # TODO: test the actual content properly with selenium?
+        self.assertContains(response, 'id="available"')
+
+        # quest isn't in there yet because they haven't joined a course
+        # it should also be selected and the accordian expanded, but test that stuff with selenium?
+        self.assertNotContains(response, f'id="heading-quest-{self.quest1.id}')
+        self.assertContains(response, 'Join a Course')
+
+        # put the student in a course in the active semester
+        baker.make('courses.CourseStudent', user=self.test_student, semester=SiteConfig.get().active_semester)
+
+        # access the view again
+        response = self.client.get(reverse('quests:quest_active', args=[self.quest1.id]))
+        # should now see the quest
+        self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
+
+    def test_student_sees_quests_available_outside_course(self):
+        self.client.force_login(self.test_student)
+        quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
+        response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))  
+        self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')      
+
+    def test_show_hidden(self):
+        """ Test of:
+        url(r'^available/all/$', views.quest_list, name='available_all'),
+        """
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('quests:available'))
+        # no hidden quests yet, so button should not appear
+        self.assertNotContains(response, 'Show Hidden Quests')
+
+        # hide a quest and try again
+        self.test_student.profile.hide_quest(self.quest1.id)
+        self.assertEqual(self.test_student.profile.hidden_quests, str(self.quest1.id))
+
+        # button appears if:
+        # {% if available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
+
+        response = self.client.get(reverse('quests:available'))
+        self.assertEqual(response.context['available_tab_active'], True)
+        self.assertEqual(response.context['remove_hidden'], True)
+
+        # Still not there though, because student doesn't have an active course
+        self.assertNotContains(response, 'Show Hidden Quests')
+
+        # put the student in a course in the active semester
+        baker.make('courses.CourseStudent', user=self.test_student, semester=SiteConfig.get().active_semester)
+
+        # button should be visible now
+        response = self.client.get(reverse('quests:available'))
+        self.assertContains(response, 'Show Hidden Quests')
+
+        # and the quest shouldn't appear on the page:
+        self.assertNotContains(response, f'id="heading-quest-{self.quest1.id}')
+
+        # but it should appear when we view all quests
+        response = self.client.get(reverse('quests:available_all'))
+        self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
+        # and no button when already viewing hidden quests
+        self.assertNotContains(response, 'Show Hidden Quests')
