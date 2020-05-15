@@ -373,17 +373,113 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
 
 
-class QuesCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestCreateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Unit Tests for:
 
-        class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView):
+        class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
+        class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView)
     """
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-    #     self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        self.test_student = User.objects.create_user('test_student', password="password")
 
-    def test_teacher_posting_create_quest_form(self):
+    def test_teacher(self):
         # simulate a logged in teacher
         self.client.force_login(self.test_teacher)
+
+        # get some default form data
+        response = self.client.get(reverse('quests:quest_create'))
+        self.assertEqual(response.status_code, 200)
+
+        new_test_name = "Test Quest Creation"
+        form_data = {
+            'name': new_test_name,  # only blank required field
+            # these fields are required but they have defaults
+            'xp': 0,
+            'max_repeats': 0,
+            'hours_between_repeats': 0, 
+            'sort_order': 0,
+            'date_available': "2006-10-25",
+            'time_available': "14:30:59",
+        }
+
+        response = self.client.post(
+            reverse('quests:quest_create'),
+            data=form_data
+        )
+
+        # Get the newest Quest
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertEqual(new_quest.name, new_test_name)
+        # if successful, should redirect to the new quest
+        self.assertRedirects(
+            response, 
+            new_quest.get_absolute_url()
+        )
+
+        # now let's delete
+        response = self.client.post(
+            reverse('quests:quest_delete', args=[new_quest.id]),
+        )
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        # shouldn't exist anymore now that we deleted it!
+        with self.assertRaises(Quest.DoesNotExist):
+            Quest.objects.get(id=new_quest.id)
+
+    def test_TA_can_create_draft_quests_and_delete_own(self):
+        # simulate a logged in TA (teaching assistant = a student with extra permissions)
+        test_ta = User.objects.create_user('test_ta')
+        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
+        test_ta.profile.save()
+        self.client.force_login(test_ta)
+
+        # Can access the Create view
+        response = self.client.get(reverse('quests:quest_create'))
+        self.assertEqual(response.status_code, 200)
+
+        # Post the form view to create a new quest
+
+        # Confirm the quest is a draft
+
+        # They can delete their own quest
+
+        # But they can't delete other quests
+
+        # new_test_name = "Test Quest Creation"
+        # form_data = {
+        #     'name': new_test_name,  # only blank required field
+        #     # these fields are required but they have defaults
+        #     'xp': 0,
+        #     'max_repeats': 0,
+        #     'hours_between_repeats': 0, 
+        #     'sort_order': 0,
+        #     'date_available': "2006-10-25",
+        #     'time_available': "14:30:59",
+        # }
+
+        # response = self.client.post(
+        #     reverse('quests:quest_create'),
+        #     data=form_data
+        # )
+
+        # # Get the newest Quest
+        # new_quest = Quest.objects.latest('datetime_created')
+        # self.assertEqual(new_quest.name, new_test_name)
+        # # if successful, should redirect to the new quest
+        # self.assertRedirects(
+        #     response, 
+        #     new_quest.get_absolute_url()
+        # )
+
+        # # now let's delete
+        # response = self.client.post(
+        #     reverse('quests:quest_delete', args=[new_quest.id]),
+        # )
+        # self.assertRedirects(response, reverse('quests:quests'))
+
+        # # shouldn't exist anymore now that we deleted it!
+        # with self.assertRaises(Quest.DoesNotExist):
+        #     Quest.objects.get(id=new_quest.id)
