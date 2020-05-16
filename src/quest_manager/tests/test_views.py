@@ -629,3 +629,49 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
+
+
+class AjaxQuestInfoViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """Tests for:
+    def ajax_quest_info(request, quest_id=None):
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.client.force_login(self.test_student)
+        self.quest = baker.make(Quest)
+        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+
+    def test_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        self.assert404('quests:ajax_quest_info', args=[self.quest.id])
+
+    def test_non_ajax_post_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_returns_json(self):
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        from django.http import JsonResponse
+        self.assertEqual(type(response), JsonResponse)
+
+        # Same without a quest ID:
+        response = self.client.post(
+            reverse('quests:ajax_quest_all'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        from django.http import JsonResponse
+        self.assertEqual(type(response), JsonResponse)
