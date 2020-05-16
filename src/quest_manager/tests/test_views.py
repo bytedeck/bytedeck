@@ -631,9 +631,15 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotContains(response, 'Show Hidden Quests')
 
 
-class AjaxQuestInfoViewTest(ViewTestUtilsMixin, TenantTestCase):
+class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
     """Tests for:
-    def ajax_quest_info(request, quest_id=None):
+    def ajax_quest_info(request, quest_id=None)
+
+    via
+
+    url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
+    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
+    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
     """
 
     def setUp(self):
@@ -675,3 +681,162 @@ class AjaxQuestInfoViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         from django.http import JsonResponse
         self.assertEqual(type(response), JsonResponse)
+
+
+class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
+    """Tests for:
+    def ajax_approval_info(request, submission_id=None)
+
+    via
+
+    url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
+    url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.client.force_login(self.test_student)
+        self.quest = baker.make(Quest)
+        self.submission = baker.make(QuestSubmission)
+        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+
+    def test_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        self.assert404('quests:ajax_approval_info', args=[self.submission.id])
+
+    def test_non_ajax_post_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_returns_json(self):
+        response = self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        from django.http import JsonResponse
+        self.assertEqual(type(response), JsonResponse)
+
+        # includes the submission in context as s
+        self.assertEqual(response.context['s'], self.submission)
+
+        # Without a submission ID fails, 404:
+        response = self.client.post(
+            reverse('quests:ajax_approval_root'),  # what the heck is this used for?!
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
+    """Tests for:
+    def ajax_submission_info(request, submission_id=None)
+
+    via
+
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
+        name='ajax_info_completed'),
+    url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.client.force_login(self.test_student)
+        self.quest = baker.make(Quest)
+        self.submission = baker.make(QuestSubmission, user=self.test_student)
+        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+
+    def test_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        self.assert404('quests:ajax_info_in_progress', args=[self.submission.id])
+
+    def test_non_ajax_post_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_info_in_progress(self):
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        from django.http import JsonResponse
+        self.assertEqual(type(response), JsonResponse)
+
+        # Check context variables
+        self.assertEqual(response.context['s'], self.submission)
+        self.assertEqual(response.context['completed'], False)
+        self.assertEqual(response.context['past'], False)
+
+        # Without a submission ID fails, 404:
+        response = self.client.post(
+            reverse('quests:ajax_submission_root'),  # what the heck is this used for?!
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_info_completed(self):
+        """ url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
+        name='ajax_info_completed')
+        """
+        response = self.client.post(
+            reverse('quests:ajax_info_completed', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        # Submission is NOT complete, so doesn't find it.
+        # ? Is it a problem if it DOES find it?  If not, we don't need to test that possibility
+        self.assertEqual(response.status_code, 404)
+
+        # complete the submission
+        self.submission.mark_completed()
+        # Also needs to be current semester submission
+        self.submission.semester = SiteConfig.get().active_semester
+        self.submission.save()
+        response = self.client.post(
+            reverse('quests:ajax_info_completed', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Check context variables
+        self.assertEqual(response.context['s'], self.submission)
+        self.assertEqual(response.context['completed'], True)
+        self.assertEqual(response.context['past'], False)
+
+    def test_ajax_info_past(self):
+        """ Completed and in a past semester
+        
+        url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past')
+        """
+        self.submission.mark_completed()
+        response = self.client.post(
+            reverse('quests:ajax_info_past', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        # Submission is NOT in current semester (cus setUp doesn't put it there)
+        self.assertEqual(response.status_code, 200)        
+
+        # Check context variables
+        self.assertEqual(response.context['s'], self.submission)
+        self.assertEqual(response.context['completed'], False)
+        self.assertEqual(response.context['past'], True)
