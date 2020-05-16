@@ -370,7 +370,7 @@ def detail(request, quest_id):
         submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, active_semester_only=False)
         if submissions:
             sub = submissions.latest('time_approved')
-            return submission(request, sub.id)
+            return redirect(sub)
         else:
             # No submission either, so display quest flagged as unavailable
             available = False

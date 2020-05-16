@@ -854,9 +854,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.test_student = User.objects.create_user('test_student', password="password")
-
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.quest = baker.make(Quest, name="Test Quest")
 
     def test_teacher_can_copy_quests(self):
@@ -869,7 +868,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
         self.assertEqual(get_response.status_code, 200)
 
-        # Get the data from the form
+        # Get the data from the form  (initial visit to the page)
         form_data = get_response.context['form'].initial
         
         # prep data so we can send back with the POST request =)
@@ -893,116 +892,108 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(new_quest.prereqs().count(), 1)
         self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
 
-    # def test_TA_can_create_draft_quests_and_delete_own(self):
-    #     # simulate a logged in TA (teaching assistant = a student with extra permissions)
-    #     test_ta = User.objects.create_user('test_ta')
-    #     test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-    #     test_ta.profile.save()
-    #     self.client.force_login(test_ta)
+    def test_TA_can_create_draft_quests_and_delete_own(self):
+        # simulate a logged in TA (teaching assistant = a student with extra permissions)
+        test_ta = User.objects.create_user('test_ta')
+        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
+        test_ta.profile.save()
+        self.client.force_login(test_ta)
 
-    #     # Can access the Create view
-    #     self.assert200('quests:quest_create')
+        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
+        self.assertEqual(get_response.status_code, 200)
 
-    #     # Post the form view to create a new quest
-    #     response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        # Get the data from the form (initial visit to the page)
+        form_data = get_response.context['form'].initial
+        
+        # prep data so we can send back with the POST request =)
+        # Replace `None` with empty string
+        form_data = {k: "" if v is None else v for (k, v) in form_data.items()}
+        # other fields can't handle
+        form_data['icon'] = ""
 
-    #     # Confirm Quest object was created
-    #     new_quest = Quest.objects.latest('datetime_created')
-    #     self.assertEqual(new_quest.name, "Test Quest")
+        # Also, TA's should not be able to set visible_to_students, but it is by default
+        # just make sure it is visible, and then check again after form is posted
+        self.assertTrue(form_data['visible_to_students'])
 
-    #     # Should redirect to the new quest:
-    #     self.assertRedirects(response, new_quest.get_absolute_url())
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=form_data
+        )
 
-    #     # Confirm the quest is a draft and not visible to students
-    #     self.assertFalse(new_quest.visible_to_students)
-    #     # also they should be the quest's editor
-    #     self.assertEqual(new_quest.editor, test_ta)
+        # Get the newest Quest
+        new_quest = Quest.objects.latest('datetime_created')
 
-    #     # They can delete their own quests
-    #     response = self.client.post(reverse('quests:quest_delete', args=[new_quest.id]))
-    #     self.assertRedirects(response, reverse('quests:quests'))
+        # For TAs only, quest should be forced to not visible to students
+        self.assertFalse(new_quest.visible_to_students)
+        # and the TA should have been set as the editor
+        self.assertEqual(new_quest.editor, test_ta)
 
-    #     # shouldn't exist anymore now that we deleted it!
-    #     with self.assertRaises(Quest.DoesNotExist):
-    #         Quest.objects.get(id=new_quest.id)
+        self.assertEqual(new_quest.name, "Test Quest - COPY")
+        # if successful, should redirect to the new quest
+        self.assertRedirects(response, new_quest.get_absolute_url())
 
-    #     # But they can't delete other quests, permission denied
-    #     other_quest = baker.make(Quest)
-    #     response = self.client.post(reverse('quests:quest_delete', args=[other_quest.id]))
-    #     self.assertEqual(response.status_code, 403)
+        # Copied quests should set the original as a pre-requisite
+        self.assertEqual(new_quest.prereqs().count(), 1)
+        self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
 
-    # def test_teacher_can_update_quests(self):
-    #     # simulate a logged in teacher
-    #     self.client.force_login(self.test_teacher)
 
-    #     # make a quest for us to update, use the form data so easier to track what we're updating
-    #     # and so we have access to all the other fields we need to post
-    #     quest_to_update = Quest.objects.create(**self.minimal_valid_form_data)
+class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
 
-    #     # Can't access Update view for a quest in which they aren't the editor
-    #     self.assert200('quests:quest_update', kwargs={'pk': quest_to_update.pk})
+            def detail(request, quest_id):
 
-    #     # Change the name of the quest, in the form data
-    #     updated_quest_data = self.minimal_valid_form_data
-    #     updated_quest_data['name'] = "Updated Name"
+            via
 
-    #     # Can post form and save updates
-    #     response = self.client.post(
-    #         reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}),
-    #         data=updated_quest_data
-    #     )
+            url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
+    """
 
-    #     # Should redirect to the edited quest:
-    #     self.assertRedirects(response, quest_to_update.get_absolute_url())
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.client.force_login(self.test_student)
 
-    #     # Confrim quest was updated
-    #     quest_to_update.refresh_from_db()
-    #     self.assertEqual(quest_to_update.name, "Updated Name")
+        self.quest = baker.make(Quest, name="Test Quest")
 
-    # def test_ta_can_update_their_own_quests(self):
-    #     # simulate a logged in TA (teaching assistant = a student with extra permissions)
-    #     test_ta = User.objects.create_user('test_ta')
-    #     test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-    #     test_ta.profile.save()
-    #     self.client.force_login(test_ta)
+    def test_quest_is_available(self):
+        with patch('quest_manager.models.Quest.is_available', return_value=True):
+            response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['available'])
 
-    #     # make a quest for us to update, use the form data so easier to track what we're updating
-    #     # and so we have access to all the other fields we need to post
-    #     quest_to_update = Quest.objects.create(**self.minimal_valid_form_data)
+    def test_quest_is_editable(self):
+        with patch('quest_manager.models.Quest.is_editable', return_value=True):
+            response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['available'])
 
-    #     # Can't access Update view for a quest in which they aren't the editor
-    #     self.assert403('quests:quest_update', kwargs={'pk': quest_to_update.pk})
+    def test_quest_is_not_available_nor_editable(self):
+        """ Should only display a preview version of the quest
+        """
 
-    #     # make them the editor so they can update
-    #     quest_to_update.editor = test_ta
-    #     quest_to_update.save()
+        # Quest won't be editable by a student by default, so no need to patch that
+        with patch('quest_manager.models.Quest.is_available', return_value=False):
+            response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
 
-    #     # Still can't access Update view becuase the quest is visible_to_students
-    #     # Don't want TA's editing "live" quests
-    #     self.assert403('quests:quest_update', kwargs={'pk': quest_to_update.pk})
+        # they don't have a submission in progress, so display a restricted version
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['available'])
 
-    #     quest_to_update.visible_to_students = False
-    #     quest_to_update.save()
+        self.assertContains(response, "Quest Preview")  # Should be something on the page indicating it's a preview
+        self.assertNotContains(response, "Start Quest")  # Definitely no "Start Quest" button
 
-    #     self.assert200('quests:quest_update', kwargs={'pk': quest_to_update.pk})
+    def test_quest_is_not_available_nor_editable_but_submission_exists(self):
+        """ If they have a submission, it should redirect to that, 
+        otherwise only display a (preview) version of the quest
+        """
 
-    #     # Change the name of the quest, in the form data
-    #     updated_quest_data = self.minimal_valid_form_data
-    #     updated_quest_data['name'] = "Updated Name"
+        # create a submission for them.  Doesn't have to be current semester
+        sub = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
 
-    #     # Can post form and save updates
-    #     response = self.client.post(
-    #         reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}),
-    #         data=updated_quest_data
-    #     )
+        # Quest won't be editable by a student by default, so no need to patch that
+        with patch('quest_manager.models.Quest.is_available', return_value=False):
+            response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
 
-    #     # Should redirect to the edited quest:
-    #     self.assertRedirects(response, quest_to_update.get_absolute_url())
-
-    #     # Confrim quest was updated
-    #     quest_to_update.refresh_from_db()
-    #     self.assertEqual(quest_to_update.name, "Updated Name")
-
-    #     # TODO
-    #     # TAs should not be able to make a quest visible_to_students
-    #     # When a quest is made visible_to_students by a teacher, the editor should be removed
+        # Should redirect them to the submission's page
+        self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
