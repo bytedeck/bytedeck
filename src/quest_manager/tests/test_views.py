@@ -997,3 +997,64 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
+
+
+class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
+
+            def approve(request, submission_id):
+
+            via
+
+            url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.client.force_login(self.test_teacher)
+
+        self.quest = baker.make(Quest, name="Test Quest")
+        self.sub = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
+
+    def test_get_404(self):
+        """ This view is only accessible via POST """
+        self.assert404('quests:approve', args=[self.sub.id])
+
+    def test_approve_with_comment_only_quick_reply_form(self):
+        comment_text = "Lorum Ipsum"
+        quick_reply_form_data = {
+            'comment_text': comment_text,
+            'comment_button': True
+        }
+
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]), 
+            data=quick_reply_form_data
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+    def test_approve_with_badge_quick_reply_form(self):
+        pass
+
+    def test_approve_with_comment_submission_form(self):
+        pass
+
+    def test_approve_with_multiple_badges_submission_form(self):
+        pass
+
+    def test_approve_with_files_submission_form(self):
+        pass
+    
+    def test_comment_button(self):
+        pass
+
+    def test_return_button(self):
+        pass
+
+        # with patch('quest_manager.models.Quest.is_available', return_value=True):
+        #     response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        
+        # self.assertEqual(response.status_code, 200)
+        # self.assertTrue(response.context['available'])

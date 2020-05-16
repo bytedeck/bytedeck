@@ -481,11 +481,14 @@ def approve(request, submission_id):
                 action = comment_new
 
             affected_users = [submission.user, ]
-            main_teacher = submission.user.coursestudent_set.first().block.current_teacher
-
-            # Only notify main teacher if the user who commented is another teacher
-            if 'comment_button' in request.POST and request.user != main_teacher:
-                affected_users.append(main_teacher)
+            
+            # if the staff member approving/commenting/retruning the submission isn't 
+            # one of the student's teachers then notify the student's teachers too
+            # If they have no teachers (e.g. this quest is available outside of a course
+            # and the student is not in a course) then nothign will be appended anyway
+            teachers_list = list(submission.user.profile.current_teachers())
+            if request.user not in teachers_list:
+                affected_users.extend(teachers_list)
 
             notify.send(
                 request.user,
