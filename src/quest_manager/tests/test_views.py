@@ -1026,6 +1026,203 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         comment_text = "Lorum Ipsum"
         quick_reply_form_data = {
             'comment_text': comment_text,
+            'approve_button': True
+        }
+
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]), 
+            data=quick_reply_form_data
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # This submission should now be approved
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_approved)
+
+        # And the submission should have a comment
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, comment_text)
+
+        # And the student should have a notification
+        from notifications.models import Notification
+        # get_user_target is a weird method, should probably be refactored or better documented...
+        notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
+        self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
+
+        # And the approver should have gotten a django success message
+        # Why doesn't this work?
+        # https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages
+        # messages = list(response.context['messages'])
+        # self.assertEqual(len(messages), 1)
+        # self.assertEqual(messages[0].tags, 'success')
+
+    def test_approve_with_badge_quick_reply_form(self):
+        """ Test that the badge is granted """
+        test_badge = baker.make('badges.Badge')
+        comment_text = "Lorum Ipsum"
+        quick_reply_form_data = {
+            'comment_text': comment_text,
+            'approve_button': True,
+            'award': test_badge.id  # Note single award only for quick reply form
+        }
+
+        # Before, user has earned no badges
+        badges_earned = self.test_student.badgeassertion_set.filter(badge=test_badge)
+        self.assertEqual(badges_earned.count(), 0)
+
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]), 
+            data=quick_reply_form_data
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # check that badge was awarded
+        badges_earned = self.test_student.badgeassertion_set.filter(badge=test_badge)
+        self.assertEqual(badges_earned.count(), 1)
+
+    def test_approve_other_teachers_student(self):
+        """ When a teacher approves/rejects/comments on another teacher's student
+        The student's actual teacher(s) should get notified
+        
+        self.test_teacher is logged in and approving submission in this test, 
+        so create another user as the current teacher
+        """
+        current_teacher = baker.make(User, is_staff=True)
+        
+        # ? Can't figure out how to mock this... so I guess need to actually setup the data structures
+        # with patch('quest_manager.views.QuestSubmission.user.profile.get_current_teacher_list', return_value=[current_teacher]):
+        # with patch('quest_manager.views.Profile.get_current_teacher_list', return_value=[current_teacher]):
+        # with patch('profile_manager.models.Profile.get_current_teacher_list', return_value=[current_teacher]):
+        # with patch('quest_manager.models.QuestSubmission.user.profile.get_current_teacher_list', return_value=[current_teacher]):
+        # with patch('profile_manager.models.CourseStudent.objects.get_current_teacher_list', return_value=[current_teacher]):
+        #     response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+
+        # # ! Gotta put student in a course with another teacher until I can figure out how to mock it.  failed attempts above.
+        # test_block = baker.make('courses.Block', teacher=current_teacher)
+        # baker.make('courses.StudentCourse', user=self.test_user, block=test_block)
+
+        # response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+
+        comment_text = "Lorum Ipsum"
+        quick_reply_form_data = {
+            'comment_text': comment_text,
+            'approve_button': True
+        }
+
+        # self.test_teacher is logged in in setUp()
+        with patch('profile_manager.models.CourseStudent.objects.get_current_teacher_list', return_value=[current_teacher.id]):
+            response = self.client.post(
+                reverse('quests:approve', args=[self.sub.id]), 
+                data=quick_reply_form_data
+            )
+            self.assertRedirects(response, reverse('quests:approvals'))
+
+        # The student AND current_teacher should have a notification
+        from notifications.models import Notification
+        # get_user_target is a weird method, should probably be refactored or better documented...
+        notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
+        self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
+        # The student's current teacher also gets a notification
+        notification_for_sub = Notification.objects.get_user_target(current_teacher, self.sub)
+        self.assertTrue(notification_for_sub)
+
+    def test_approve_without_comment(self):
+        """ If no comment is provided when approving a quest, then the default approval comment from SiteConfig should be used"""
+        quick_reply_form_data = {'comment_text': "", 'approve_button': True}
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data=quick_reply_form_data)
+
+        # Submission should now have a comment with the default approved comment text
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, SiteConfig.get().blank_approval_text)
+
+    def test_approve_with_mutiple_badges_staff_submission_form(self):
+        """ Test that multiple badges can be granted from the SubmissionFormStaff form"""
+        test_badge1 = baker.make('badges.Badge')
+        test_badge2 = baker.make('badges.Badge')
+        comment_text = "Lorum Ipsum"
+        staff_form_data = {
+            'approve_button': True,
+            'comment_text': comment_text,
+            'awards': [test_badge1.pk, test_badge2.pk]  # This is what triggers the logic to look for the other form.... bad!?
+        }
+
+        # no badges yet
+        badges_earned = self.test_student.badgeassertion_set.all()
+        self.assertEqual(badges_earned.count(), 0)
+
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]), 
+            data=staff_form_data
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # check that two badges were awarded
+        badges_earned = self.test_student.badgeassertion_set.all()
+        self.assertEqual(badges_earned.count(), 2)
+
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_approved)
+
+        # And the submission should have a comment
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertIn(comment_text, comments.first().text)
+        # Also there should be a note in the comment about each badge awarded:
+        self.assertIn(test_badge1.name, comments.first().text)
+        self.assertIn(test_badge2.name, comments.first().text)
+
+        # And the student should have a notification
+        from notifications.models import Notification
+        # get_user_target is a weird method, should probably be refactored or better documented...
+        notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
+        self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
+
+    def test_approve_with_files_submission_form(self):
+        """ Files can be uploaded and attached to comments when approving/commenting/rejecting quests
+        and a link to the file is included in the comment.
+        """
+        # create a file for testing
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        # give it a unique name for easier testing, otherwise when re-testing, 
+        # the name will be appended with stuff because the file already exists
+        import uuid
+        test_filename1 = str(uuid.uuid1().hex) + ".txt"
+        test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
+        test_filename2 = str(uuid.uuid1().hex) + ".txt"
+        test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+        staff_form_data = {
+            'approve_button': True,
+            'attachments': [test_file1, test_file2]
+        }
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            staff_form_data,
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # make sure the files exist
+        from comments.models import Comment
+        comment = Comment.objects.all_with_target_object(self.sub).first()
+        self.assertTrue(comment)  # not empty or None etc
+        comment_files_qs = comment.document_set.all()
+        self.assertEqual(comment_files_qs.count(), 2)
+
+        # make sure they are the correct 
+        comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
+        import os
+        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_filename1)
+        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_filename2)
+    
+    def test_comment_button(self):
+        """ The comment button should only leave a comment and not change the status of the submission """
+        comment_text = "Lorum Ipsum"
+        quick_reply_form_data = {
+            'comment_text': comment_text,
             'comment_button': True
         }
 
@@ -1035,26 +1232,49 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertRedirects(response, reverse('quests:approvals'))
 
-    def test_approve_with_badge_quick_reply_form(self):
-        pass
+        # This submission should NOT be approved because it was only commented on, not approved
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_approved)
 
-    def test_approve_with_comment_submission_form(self):
-        pass
+        # And the submission should have a comment
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, comment_text)
 
-    def test_approve_with_multiple_badges_submission_form(self):
-        pass
-
-    def test_approve_with_files_submission_form(self):
-        pass
-    
-    def test_comment_button(self):
-        pass
+        # And the student should have a notification
+        from notifications.models import Notification
+        # get_user_target is a weird method, should probably be refactored or better documented...
+        notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
+        self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
 
     def test_return_button(self):
-        pass
+        """ The return button should mark the submission as returned """
+        comment_text = "Lorum Ipsum"
+        form_data = {'comment_text': comment_text, 'return_button': True}
 
-        # with patch('quest_manager.models.Quest.is_available', return_value=True):
-        #     response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # This submission should be marked as returned
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_returned)
+
+    def test_no_comment_return_button(self):
+        """ When a submission is returned without comment, the SiteConfig's blank_return_text should be inserted """
         
-        # self.assertEqual(response.status_code, 200)
-        # self.assertTrue(response.context['available'])
+        form_data = {'comment_text': "", 'return_button': True}
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, SiteConfig.get().blank_return_text)
+
+    def test_non_existant_submit_button(self):
+        """Can this even happen?  Somehow the form was submitted with a button that doesn't exist"""
+        form_data = {'non_existant_submit_button': True}
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertEqual(response.status_code, 404)

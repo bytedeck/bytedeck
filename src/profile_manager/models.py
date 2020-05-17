@@ -268,6 +268,7 @@ class Profile(models.Model):
         else:
             return None
 
+    # TODO: Is this used anywhere?  Seems to return the wrong data.  Also, duplicates current_teachers() method
     def teachers(self):
         teachers = self.current_courses().values_list('block__current_teacher', flat=True)
         return teachers
