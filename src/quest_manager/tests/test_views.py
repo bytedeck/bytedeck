@@ -1,3 +1,15 @@
+"""
+TEST ORGANIZATION
+
+Each function/class-based-view has its own test class.
+
+Within each test class, each use-case of the view has its own test method
+
+The quick tests at the beginning can probably be removed once the full test suit is created,
+or they could be moved into a `test_urls.py` module.
+
+"""
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from mock import patch
@@ -66,11 +78,11 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
 
@@ -86,30 +98,11 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        s_pk = self.test_student1.profile.pk
-        # s2_pk = self.test_student2.pk
-
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
 
-        self.assertEqual(self.client.get(reverse('profiles:profile_detail', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_update', args=[s_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:profile_list_current')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
-
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
-    #
-    # def test_profile_recalculate_xp_status_codes(self):
-    #     """Need to test this view with students in an active course"""
-    #     sem = baker.make(Semester)
-    #     # since there's only one semester, it should be by default the active_semester (pk=1)
-    #     self.assertEqual(sem.pk, djconfig.config.hs_active_semester)
-    #     self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
     def test_start(self):
         # log in a student from setUp
@@ -1278,3 +1271,127 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         form_data = {'non_existant_submit_button': True}
         response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
         self.assertEqual(response.status_code, 404)
+
+
+class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
+
+            def approvals(request, quest_id=None):
+
+            via
+
+            url(r'^approvals/$', views.approvals, name='approvals'),
+            url(r'^approvals/submitted/$', views.approvals, name='submitted'),
+            url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
+            url(r'^approvals/returned/$', views.approvals, name='returned'),
+            url(r'^approvals/approved/$', views.approvals, name='approved'),
+            url(r'^approvals/skipped/$', views.approvals, name='skipped'),
+            # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
+            # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'), # Not used
+            url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
+            url(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
+            # url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'), # Not used
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        # A teacher with a student (connected by the Block in the CourseStudent)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.current_teacher = User.objects.create_user('test_current_teacher', password="password", is_staff=True)
+        # current_teacher_block = baker.make('courses.Block', current_teacher=self.current_teacher)
+        # baker.make('courses.CourseStudent', block=current_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
+
+        self.client.force_login(self.current_teacher)
+
+        # Don't need these, just patch where needed
+        # A different student with a different teacher (in a different Block)
+        # self.test_student_of_other_teacher = User.objects.create_user('test_student_of_other_teacher', password="password")
+        # self.other_teacher = User.objects.create_user('test_other_teacher', password="password", is_staff=True)
+        # other_teacher_block = baker.make('courses.Block', current_teacher=self.other_teacher)
+        # baker.make('courses.CourseStudent', block=other_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
+
+        self.quest = baker.make(Quest, name="Test Quest")
+        self.sub = baker.make(QuestSubmission, quest=self.quest)
+
+    def test_submitted(self):
+        """ Completed quests awaiting approval for current teacher (teachers are connected by Block) 
+        A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions 
+        appear here
+        """
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:submitted'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        self.assertTrue(response.context['submitted_tab_active'])  # ? Is this used anymore?
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][0]['active'])
+        self.assertTrue(response.context['current_teacher_only'])
+        self.assertIsNone(response.context['quest'])
+        self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:submitted'))
+
+    def test_submitted_all(self):
+        """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block) 
+        """
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:submitted_all'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][0]['active'])
+        self.assertFalse(response.context['current_teacher_only'])
+        self.assertIsNone(response.context['quest'])
+        self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:submitted'))
+
+    def test_returned(self):
+        """ Completed quests for current teacher that have been returned to the student. """
+        with patch('quest_manager.views.QuestSubmission.objects.all_returned', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:returned'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][1]['active'])
+        self.assertTrue(response.context['current_teacher_only'])
+        self.assertIsNone(response.context['quest'])
+        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:returned'))
+
+    def test_approved(self):
+        """ Completed quests (submissions) that have been approved by a teacher """
+
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:approved'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][2]['active'])
+        self.assertTrue(response.context['current_teacher_only'])
+        self.assertIsNone(response.context['quest'])
+        self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_skipped(self):
+        with patch('quest_manager.views.QuestSubmission.objects.all_skipped', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:skipped'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][3]['active'])
+        self.assertTrue(response.context['current_teacher_only'])
+        self.assertIsNone(response.context['quest'])
+        self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:skipped'))
+
+    def test_approved_for_quest(self):
+        """ Approved submissions of only this specific quest, regardless of teacher """
+
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:approved_for_quest', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.sub))
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        self.assertTrue(response.context['tab_list'][2]['active'])
+        self.assertTrue(response.context['current_teacher_only'])
+        self.assertEqual(response.context['quest'], self.quest)
+        self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_approved_for_quest_all(self):
+        """ Approved submissions of only this specific quest, regardless of teacher """
+        pass
