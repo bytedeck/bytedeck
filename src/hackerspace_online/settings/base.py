@@ -49,6 +49,14 @@ SHARED_APPS = (
     'django.contrib.flatpages',
     ###########################################
 
+    # tenant beat is not supported, have to do it manually with:
+    # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
+    # or
+    # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
+    # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
+    'django_celery_beat',
+
+
     'django.contrib.sites',
 
     'grappelli',
