@@ -4,6 +4,23 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.3.0] 2020-05-20
+* Add lastlogin date/time to student profile
+* Asynchronously recalculate after auto-approved quests  (this prevents a large browser delay after submitting an auto-approved quest, with the trade-off that new quests areen't immediately available and will require students to refresh after a few moments)
+* Quest map canvas shadow added to define bounds
+* [teachers] Notify student's teacher if a non-strudent
+* [teachers] Send notification to teacher when comment left on autoapproved quest
+* [teachers] Marks Calculations page can be toggled via Site Configuration setting
+* [bugfix] Notification does not jump to comment [#471](https://github.com/timberline-secondary/hackerspace/issues/471)
+* [bugfix] Summernote widget styling bug [#485](https://github.com/timberline-secondary/hackerspace/issues/485)
+* [bugfix] Students can drop quests even if they are set as not visible [#483](https://github.com/timberline-secondary/hackerspace/issues/483)
+* [bugfix] Button styling bug [#330](https://github.com/timberline-secondary/hackerspace/issues/330)
+* [dev] Many tests added and docker cleanup
+* [dev] New tenants come with default data
+* [dev] Upgrade project to Python 3.7
+
+
 ### [1.2.1] 2020-04-24
 * Clean up menu items and profile options
 * Last login date added to student list for teachers
