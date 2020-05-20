@@ -5,3 +5,4 @@ omit =
    */tests/*
    tests.py
    */test*.py
+   production.py

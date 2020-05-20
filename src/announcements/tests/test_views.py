@@ -4,18 +4,18 @@ from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
-from model_mommy import mommy
+from model_bakery import baker
+from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
-
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(TenantTestCase):
+class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
@@ -25,37 +25,19 @@ class AnnouncementViewTests(TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
-        self.test_announcement = mommy.make(Announcement, draft=False)
+        self.test_announcement = baker.make(Announcement, draft=False)
         self.ann_pk = self.test_announcement.pk
-
-    def assertRedirectsHome(self, url_name, args=None):
-        self.assertRedirects(
-            response=self.client.get(reverse(url_name, args=args)),
-            expected_url='%s?next=%s' % (reverse('home'), reverse(url_name, args=args)),
-        )
-
-    def assertRedirectsAdmin(self, url_name, args=None):
-        self.assertRedirects(
-            response=self.client.get(reverse(url_name, args=args)),
-            expected_url='{}?next={}'.format('/admin/login/', reverse(url_name, args=args)),
-        )
-
-    def assert200(self, url_name, args=None):
-        self.assertEqual(
-            self.client.get(reverse(url_name, args=args)).status_code,
-            200
-        )
 
     def test_all_announcement_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin  '''
 
         # go home
-        self.assertRedirectsHome('announcements:list')
-        self.assertRedirectsHome('announcements:list2')
-        self.assertRedirectsHome('announcements:comment', args=[1])
-        self.assertRedirectsHome('announcements:list', args=[1])
+        self.assertRedirectsLogin('announcements:list')
+        self.assertRedirectsLogin('announcements:list2')
+        self.assertRedirectsLogin('announcements:comment', args=[1])
+        self.assertRedirectsLogin('announcements:list', args=[1])
 
         # go admin
         self.assertRedirectsAdmin('announcements:create')
@@ -102,9 +84,9 @@ class AnnouncementViewTests(TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        self.assertEqual(self.client.get(reverse('announcements:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('announcements:list2')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('announcements:list', args=[self.ann_pk])).status_code, 200)
+        self.assert200('announcements:list')
+        self.assert200('announcements:list2')
+        self.assert200('announcements:list', args=[self.ann_pk])
 
         # Announcement from setup() should appear in the list
         self.assertContains(self.client.get(reverse('announcements:list')), self.test_announcement.title)
@@ -130,7 +112,7 @@ class AnnouncementViewTests(TenantTestCase):
         )
 
     def test_draft_announcement(self):
-        draft_announcement = mommy.make(Announcement)  # default is draft
+        draft_announcement = baker.make(Announcement)  # default is draft
         self.assertTrue(draft_announcement.draft)
 
         # log in a student
@@ -149,7 +131,7 @@ class AnnouncementViewTests(TenantTestCase):
 
     # @patch('announcements.views.publish_announcement.apply_async')
     def test_publish_announcement(self):
-        draft_announcement = mommy.make(Announcement)
+        draft_announcement = baker.make(Announcement)
 
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -174,10 +156,73 @@ class AnnouncementViewTests(TenantTestCase):
         self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
 
     def test_create_announcement_from_past_date_auto_publish(self):
-        draft_announcement = mommy.make(
+        draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
             auto_publish=True,
         )
         form = AnnouncementForm(data=model_to_dict(draft_announcement))
         self.assertFalse(form.is_valid())
+
+    def test_comment_on_announcement_by_student(self):
+        # log in a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        form_data = {
+            'comment_text': "test comment",
+        }
+        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
+        self.assertEqual(response.status_code, 404)  # invalid submit button
+
+        # make sure it was submitted with the 'comment_button'
+        form_data['comment_button'] = True
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]), 
+            data=form_data
+        )
+
+        # Empty comment strings should be replaced with blank string or we get an error 
+        # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
+        # Old code not relevant any more?
+        # form_data['comment_text'] = None
+        # response = self.client.post(
+        #     reverse('announcements:comment', args=[self.test_announcement.id]), 
+        #     data=form_data
+        # )
+        # self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+    def test_copy_announcement(self):
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # hit the view as a get request first, to load a copy of the announcement in the form
+        response = self.client.get(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Don't know how to get the form data from the get request...
+        # https://stackoverflow.com/questions/61532873/how-to-plug-the-reponse-of-a-django-view-get-request-into-the-same-view-as-a-pos
+
+        # So, instead we'll manually create valid form data for post request:
+        form_data = {
+            'title': "Copy test",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59"  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
+        }
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data
+        )
+
+        # Get the newest announcement
+        new_ann = Announcement.objects.latest('datetime_created')
+        self.assertEqual(new_ann.title, "Copy test")
+        # if successful, should redirect to the new announcement
+        self.assertRedirects(
+            response, 
+            new_ann.get_absolute_url()
+        )

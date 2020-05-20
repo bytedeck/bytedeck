@@ -24,7 +24,7 @@ class BadgeAssertionForm(forms.ModelForm):
         super(BadgeAssertionForm, self).__init__(*args, **kwargs)
 
         self.fields['user'].queryset = User.objects.order_by('profile__first_name', 'username')
-        # It appears that sometimes a profile does not exists causing this to fail and the user field to not appear
+        # It appears that sometimes a profile does not exist causing this to fail and the user field to not appear
         self.fields['user'].label_from_instance = lambda obj: "%s (%s)" % (
             obj.profile if hasattr(obj, 'profile') else obj.username, obj.username)
 

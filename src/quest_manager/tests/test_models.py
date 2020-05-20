@@ -4,8 +4,8 @@ from datetime import timedelta
 from django.utils.timezone import localtime
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
-from model_mommy.recipe import Recipe
+from model_bakery import baker
+from model_bakery.recipe import Recipe
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
@@ -18,7 +18,7 @@ from courses.models import Semester
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
-        self.category = mommy.make(Category)
+        self.category = baker.make(Category)
 
     def test_badge_type_creation(self):
         self.assertIsInstance(self.category, Category)
@@ -27,7 +27,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
 class CommonDataTestModel(TenantTestCase):
     def setUp(self):
-        self.common_data = mommy.make(CommonData)
+        self.common_data = baker.make(CommonData)
 
     def test_badge_series_creation(self):
         self.assertIsInstance(self.common_data, CommonData)
@@ -38,7 +38,7 @@ class QuestTestModel(TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.quest = mommy.make(Quest)
+        self.quest = baker.make(Quest)
 
     def test_badge_creation(self):
         self.assertIsInstance(self.quest, Quest)
@@ -102,14 +102,14 @@ class QuestTestModel(TenantTestCase):
         def test_is_repeat_available(self, user):"""
 
         User = get_user_model()
-        mommy.make(User, is_staff=True)  # need a teacher or student creation will fail.
-        student = mommy.make(User)
-        quest_not_repeatable = mommy.make(Quest, name="quest-not-repeatable")
-        quest_infinite_repeat = mommy.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
-        quest_repeat_1hr = mommy.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
-        quest_semester_repeat = mommy.make(Quest, name="quest-semester-repeatable", max_repeats=1, 
+        baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
+        student = baker.make(User)
+        quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
+        quest_infinite_repeat = baker.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
+        quest_repeat_1hr = baker.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
+        quest_semester_repeat = baker.make(Quest, name="quest-semester-repeatable", max_repeats=1, 
                                            repeat_per_semester=True)
-        quest_semester = mommy.make(Quest, name="quest-semester", max_repeats=0, repeat_per_semester=True)
+        quest_semester = baker.make(Quest, name="quest-semester", max_repeats=0, repeat_per_semester=True)
 
         # TESTS WITH NOT REPEATABLE QUEST
         sub_not_repeatable = QuestSubmission.objects.create_submission(student, quest_not_repeatable)
@@ -168,7 +168,7 @@ class QuestTestModel(TenantTestCase):
         self.assertFalse(quest_semester.is_repeat_available(student))
 
         # change semesters and the quest should appear
-        new_active_sem = mommy.make(Semester, active=True)
+        new_active_sem = baker.make(Semester, active=True)
         SiteConfig.get().set_active_semester(new_active_sem.id)
         self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
@@ -202,10 +202,10 @@ class SubmissionTestModel(TenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         User = get_user_model()
-        self.semester = mommy.make(Semester)
+        self.semester = baker.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
-        self.submission = mommy.make(QuestSubmission, quest__name="Test")
+        self.student = baker.make(User)
+        self.submission = baker.make(QuestSubmission, quest__name="Test")
         # self.badge = Recipe(Badge, xp=20).make()
 
         # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
@@ -219,13 +219,13 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_without_quest(self):
         # creating a submission without a quest, null=True so no Quest created.
-        sub = mommy.make(QuestSubmission)
+        sub = baker.make(QuestSubmission)
         self.assertIsNone(sub.quest)
         self.assertIsNotNone(str(sub))
 
     def test_submission_mark_completed(self):
         draft_text = "Draft words"
-        sub = mommy.make(QuestSubmission, draft_text=draft_text)
+        sub = baker.make(QuestSubmission, draft_text=draft_text)
         self.assertFalse(sub.is_completed)
         self.assertEqual(sub.draft_text, draft_text)
         sub.mark_completed()
@@ -235,8 +235,8 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_get_previous(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
-        repeat_quest = mommy.make(Quest, name="repeatable-quest", max_repeats=-1)
-        first_sub = mommy.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
+        repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
+        first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
         self.assertIsNone(first_sub.get_previous())
         # need to complete so can make another
         first_sub.mark_completed()

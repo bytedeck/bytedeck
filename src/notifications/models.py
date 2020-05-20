@@ -81,6 +81,7 @@ class NotificationManager(models.Manager):
 
     def get_user_target(self, user, target):
         # should only have one element?
+        # ? Why only one?  Could have several?
         return self.get_queryset().get_user(user).get_object_target(target).first()
 
     def get_user_target_unread(self, user, target):
@@ -123,6 +124,10 @@ class Notification(models.Model):
     def __str__(self):
         try:
             target_url = self.target_object.get_absolute_url()
+
+            # Is this the right place to do this?
+            if 'commented on' in self.verb:
+                target_url += '#comment-{}'.format(self.action_object_id)
         except AttributeError:
             target_url = None
 

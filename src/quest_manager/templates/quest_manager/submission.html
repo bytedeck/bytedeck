@@ -71,16 +71,18 @@
             {% include "quest_manager/buttons_approvals.html" %}
           {% endwith %}
         {% else %}
-          <a id='save-draft-btn' class='btn btn-default'>
-            <span id="draft-text">Save Draft</span>
-            <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
-            <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
-          </a>
-          {% if submission.is_approved %}
-            <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
-          {% else %}
-            <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Completion' />
-            <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+          {% if submission.quest.visible_to_students %}
+            <a id='save-draft-btn' class='btn btn-default'>
+              <span id="draft-text">Save Draft</span>
+              <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
+              <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
+            </a>
+            {% if submission.is_approved %}
+              <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
+            {% else %}
+              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Completion' />
+              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+            {% endif %}
           {% endif %}
         {% endif %}
         </div>
@@ -144,7 +146,7 @@
                 $.ajax({
                     url : "{% url 'quests:ajax_save_draft' %}",
                     type : "POST", // http method
-                    data : { 
+                    data : {
                       csrfmiddlewaretoken: "{{ csrf_token }}",
                       comment: draftComment,
                       submission_id: {{ submission.id }}
@@ -165,7 +167,7 @@
                 });
             }
 
-        }  
+        }
 
         function hide_check_show_text() {
           // after success, animate a check mark, then put text back

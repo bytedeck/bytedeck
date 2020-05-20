@@ -41,6 +41,22 @@ SHARED_APPS = (
     'tenant',
     'django.contrib.contenttypes',
 
+    # WHY ARE THESE NEEDED IN BOTH SHARED AND TENANT APPS LISTS?
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.flatpages',
+    ###########################################
+
+    # tenant beat is not supported, have to do it manually with:
+    # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
+    # or
+    # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
+    # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
+    'django_celery_beat',
+
+
     'django.contrib.sites',
 
     'grappelli',
@@ -71,7 +87,9 @@ TENANT_APPS = (
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
-    # placing here instead of shared means...?
+    # or
+    # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
+    # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
     'attachments',
@@ -278,7 +296,8 @@ SITE_ID = 1
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
-LOGIN_URL = '/'
+# https://stackoverflow.com/questions/44571373/python-3-6-django1-10-login-required-decorator-redirects-to-link-with-missing/44571408#44571408
+LOGIN_URL = 'account_login'
 # ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
@@ -394,6 +413,7 @@ SUMMERNOTE_CONFIG = {
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
+        os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js_for_inplace': (

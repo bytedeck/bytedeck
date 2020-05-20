@@ -1,4 +1,4 @@
-FROM python:3.5-slim
+FROM python:3.7-slim
 
 #### For development within the container in VS Code ##
 # https://code.visualstudio.com/docs/remote/containers
@@ -27,12 +27,20 @@ RUN apt-get install -y libicu[0-9][0-9]
 RUN apt-get install -y build-essential
 RUN pip install uwsgi
 
+
+# Install python requirements
+# Docker only rebuilds when there are changes to these files
+# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
+COPY ./requirements-production.txt requirements-production.txt
+COPY ./requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+
 ######################################################
 
-# Set environment variables 
+# Set environment variables
 
 # Don't create .pyc files (why don't we want these?)
-ENV PYTHONDONTWRITEBYTECODE 1  
+ENV PYTHONDONTWRITEBYTECODE 1
 # Prevent docker from buffering console output
 ENV PYTHONUNBUFFERED 1
 
@@ -41,15 +49,8 @@ ENV POSTGRES_HOST "db"
 ENV REDIS_HOST "redis"
 
 # Set working directory for subsequent RUN ADD COPY CMD instructions
-RUN mkdir /app
-WORKDIR /app
-
-# copy the entire project into the app directory.
-# should we just copy over the code in src/ and requirements.txt?
 COPY . /app/
-
-# Install our dependancies (currently installing on the base image, not in venv)
-RUN pip install -r requirements.txt
+WORKDIR /app/
 
 # The port
 EXPOSE 8000

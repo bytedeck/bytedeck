@@ -1,8 +1,11 @@
 import json
 import uuid
 
+from badges.models import BadgeAssertion
+from comments.models import Comment, Document
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -11,9 +14,6 @@ from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
-
-from badges.models import BadgeAssertion
-from comments.models import Comment, Document
 from notifications.signals import notify
 from prerequisites.models import Prereq
 from prerequisites.tasks import update_quest_conditions_for_user
@@ -23,6 +23,8 @@ from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
                     SubmissionQuickReplyForm)
 from .models import Quest, QuestSubmission
+
+User = get_user_model()
 
 
 def is_staff_or_TA(user):
@@ -124,13 +126,13 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, UpdateView):
 
 @allow_non_public_view
 @login_required
-def quest_list2(request, quest_id=None, submission_id=None):
-    return quest_list(request, quest_id, submission_id, template="quest_manager/quests2.html")
+def quest_list2(request, quest_id=None):
+    return quest_list(request, quest_id, template="quest_manager/quests2.html")
 
 
 @allow_non_public_view
 @login_required
-def quest_list(request, quest_id=None, submission_id=None, template="quest_manager/quests.html"):
+def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
@@ -145,24 +147,12 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
     remove_hidden = True
 
     active_quest_id = 0
-    active_submission_id = 0
 
     # Figure out what tab we want.
     if quest_id is not None:
         # if a quest_id was provided, got to the Available tab
         active_quest_id = int(quest_id)
         available_tab_active = True
-    elif submission_id is not None:
-        # if sub_id was provided, figure out which tab and go there
-        # this isn't active
-        active_submission_id = int(submission_id)
-        active_sub = get_object_or_404(QuestSubmission, pk=submission_id)
-        if active_sub in in_progress_submissions:
-            in_progress_tab_active = True
-        elif active_sub in completed_submissions:
-            completed_tab_active = True
-        else:
-            raise Http404("Couldn't find this Submission. Sorry!")
     # otherwise look at the path
     elif '/inprogress/' in request.path_info:
         in_progress_tab_active = True
@@ -225,7 +215,6 @@ def quest_list(request, quest_id=None, submission_id=None, template="quest_manag
         "past_submissions": past_submissions,
         # "num_completed": num_completed,
         "active_q_id": active_quest_id,
-        "active_id": active_submission_id,
         "available_tab_active": available_tab_active,
         "inprogress_tab_active": in_progress_tab_active,
         "completed_tab_active": completed_tab_active,
@@ -381,7 +370,7 @@ def detail(request, quest_id):
         submissions = QuestSubmission.objects.all_for_user_quest(request.user, q, active_semester_only=False)
         if submissions:
             sub = submissions.latest('time_approved')
-            return submission(request, sub.id)
+            return redirect(sub)
         else:
             # No submission either, so display quest flagged as unavailable
             available = False
@@ -492,6 +481,15 @@ def approve(request, submission_id):
                 action = comment_new
 
             affected_users = [submission.user, ]
+            
+            # if the staff member approving/commenting/retruning the submission isn't 
+            # one of the student's teachers then notify the student's teachers too
+            # If they have no teachers (e.g. this quest is available outside of a course
+            # and the student is not in a course) then nothign will be appended anyway
+            teachers_list = list(submission.user.profile.current_teachers())
+            if request.user not in teachers_list:
+                affected_users.extend(teachers_list)
+
             notify.send(
                 request.user,
                 action=action,
@@ -704,10 +702,15 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb = "completed"
+                affected_users = None
+
                 if submission.quest.verification_required:
                     note_verb += ", awaiting approval."
                 else:
                     note_verb += " and automatically approved."
+                    note_verb += " Please give me a moment to calculate what new quests this should make available to you."
+                    note_verb += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
+                    note_verb = note_verb.format(deck_ai=SiteConfig.get().deck_ai)
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
 
@@ -716,12 +719,23 @@ def complete(request, submission_id):
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
                     affected_users = [submission.quest.specific_teacher_to_notify, ]
                 else:
-                    affected_users = None
+                    main_teacher = request.user.coursestudent_set.first().block.current_teacher
+                    affected_users = []
+
+                    # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
+                    if form.cleaned_data.get('comment_text'):
+                        if not main_teacher:
+                            staffs = User.objects.filter(is_staff=True)
+                            for staff in staffs:
+                                affected_users.append(staff)
+                        else:
+                            affected_users.append(main_teacher)
+
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
                     # Immediate/synchronous recalculation of available quests:
-                    update_quest_conditions_for_user.apply(args=[request.user.id])
+                    update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
@@ -909,7 +923,15 @@ def ajax_save_draft(request):
 @allow_non_public_view
 @login_required
 def drop(request, submission_id):
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    # Submission should only be droppable when quest is still not approved
+    try:
+        sub = QuestSubmission.objects.get(pk=submission_id, is_approved=False)
+    except QuestSubmission.DoesNotExist:
+        sub = get_object_or_404(
+            QuestSubmission.objects.all_completed(request.user).filter(is_approved=False),
+            pk=submission_id
+        )
+
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
@@ -924,7 +946,13 @@ def drop(request, submission_id):
 @login_required
 def submission(request, submission_id=None, quest_id=None):
     # sub = QuestSubmission.objects.get(id = submission_id)
-    sub = get_object_or_404(QuestSubmission, pk=submission_id)
+    try:
+        sub = QuestSubmission.objects.get(pk=submission_id)
+    except QuestSubmission.DoesNotExist:
+        # Student might have completed the submission and suddenly quest became unavailable
+        # So, we'll take a look at their completed quests instead
+        sub = get_object_or_404(QuestSubmission.objects.all_completed(request.user), pk=submission_id)
+
     if sub.user != request.user and not request.user.is_staff:
         return redirect('quests:quests')
 

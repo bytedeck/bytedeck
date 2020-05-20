@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
+from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 
 from siteconfig.models import SiteConfig
@@ -15,12 +15,12 @@ class AnnouncementTasksTests(TenantTestCase):
     """ Run tasks asyncronously with apply() """
 
     def setUp(self):
-        self.announcement = mommy.make(Announcement)
+        self.announcement = baker.make(Announcement)
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         self.test_student1 = User.objects.create_user('test_student')
-        self.test_student2 = mommy.make(User)
+        self.test_student2 = baker.make(User)
 
         self.ai_user, _ = User.objects.get_or_create(
             pk=SiteConfig.get().deck_ai.pk,

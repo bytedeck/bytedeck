@@ -3,7 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from django_celery_beat.models import PeriodicTask
 
-from model_mommy import mommy
+from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 
 from announcements.models import Announcement
@@ -14,13 +14,13 @@ User = get_user_model()
 class AnnouncementsSignalsTest(TenantTestCase):
 
     def setUp(self):
-        self.teacher = mommy.make(User, username='teacher', is_staff=True)
-        self.student = mommy.make(User, username='student', is_staff=False)
+        self.teacher = baker.make(User, username='teacher', is_staff=True)
+        self.student = baker.make(User, username='student', is_staff=False)
 
     def test_save_announcement_signal(self):
         """ test that after a model is saved that a celery-beat tasks exists to publish it if conditions are correct
         """
-        announcement = mommy.make(Announcement)
+        announcement = baker.make(Announcement)
 
         # by default announcements are drafts, so no periodic task for it should exist
         # announcement publishing tasks should have the ID in the name somewhere

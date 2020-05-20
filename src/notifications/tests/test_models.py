@@ -1,20 +1,20 @@
 from django.contrib.auth import get_user_model
 
-from model_mommy import mommy
-from model_mommy.recipe import Recipe
+from model_bakery import baker
+from model_bakery.recipe import Recipe
 from tenant_schemas.test.cases import TenantTestCase
 
-from notifications.models import Notification
+from notifications.models import Notification, new_notification
 
 
-class NotificationTestModel(TenantTestCase):
+class NotificationModelTest(TenantTestCase):
 
     def setUp(self):
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
-        self.notification = mommy.make(Notification)
-        # self.assertion = mommy.make(BadgeAssertion)
+        self.student = baker.make(User)
+        self.notification = baker.make(Notification)
+        # self.assertion = baker.make(BadgeAssertion)
         # self.badge = Recipe(Badge, xp=20).make()
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
 
@@ -22,75 +22,41 @@ class NotificationTestModel(TenantTestCase):
         self.assertIsInstance(self.notification, Notification)
         self.assertIsNotNone(str(self.notification))
 
-        # print(str(self.notification))
-    #
-    # def test_badge_assertion_url(self):
-    #     self.assertEqual(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
-    #
-    # def test_badge_assertion_count(self):
-    #     num = randint(1, 9)
-    #     for _ in range(num):
-    #         badge_assertion = BadgeAssertion.objects.create_assertion(
-    #             self.student,
-    #             self.badge
-    #         )
-    #         # Why doesn't below work?
-    #         #badge_assertion = self.badge_assertion_recipe.make()
-    #     count = badge_assertion.count()
-    #     # print(num, count)
-    #     self.assertEqual(num, count)
-    #
-    # def test_badge_assertion_count_bootstrap_badge(self):
-    #     """Returns empty string if count < 2, else returns proper count"""
-    #     badge_assertion = mommy.make(BadgeAssertion)
-    #     self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
-    #
-    #     num = randint(1, 9)
-    #     for _ in range(num):
-    #         badge_assertion = BadgeAssertion.objects.create_assertion(
-    #             self.student,
-    #             self.badge
-    #         )
-    #         # Why doesn't below work?
-    #         #badge_assertion = self.badge_assertion_recipe.make()
-    #     count = badge_assertion.count_bootstrap_badge()
-    #     # print(num, count)
-    #     self.assertEqual(num, count)
-    #
-    # def test_badge_assertion_get_duplicate_assertions(self):
-    #     num = randint(1, 9)
-    #     values = []
-    #     for _ in range(num):
-    #         badge_assertion = self.badge_assertion_recipe.make()
-    #         values.append(repr(badge_assertion))
-    #
-    #     qs = badge_assertion.get_duplicate_assertions()
-    #     self.assertQuerysetEqual(list(qs), values,)
-    #
-    # def test_badge_assertion_manager_create_assertion(self):
-    #     new_assertion = BadgeAssertion.objects.create_assertion(
-    #         self.student,
-    #         mommy.make(Badge)
-    #     )
-    #     self.assertIsInstance(new_assertion, BadgeAssertion)
-    #
-    # def test_badge_assertion_manager_xp_to_date(self):
-    #     xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
-    #     self.assertEqual(xp, 0)
-    #
-    #     # give them a badge assertion and make sure the XP works
-    #     BadgeAssertion.objects.create_assertion(
-    #         self.student,
-    #         self.badge
-    #     )
-    #     xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
-    #     self.assertEqual(xp, self.badge.xp)
-    #
-    # def test_badge_assertion_manager_get_by_type_for_user(self):
-    #     badge_list_by_type = BadgeAssertion.objects.get_by_type_for_user(self.student)
-    #     self.assertIsInstance(badge_list_by_type, list)
-    #     # TODO need to test this properly
-    #
-    # def test_badge_assertion_manager_check_for_new_assertions(self):
-    #     BadgeAssertion.objects.check_for_new_assertions(self.student)
-    #     # TODO need to test this properly
+    def test_mark_read(self):
+        notification = baker.make(Notification)
+        self.assertTrue(notification.unread)
+        notification.mark_read()
+        self.assertFalse(notification.unread)
+
+    def test_new_notification(self):
+        """
+        def new_notification(sender, **kwargs):
+        Creates notification when a signal is sent with notify.send(sender, **kwargs)
+        :param sender: the object (any Model) initiating/causing the notification
+        :param kwargs:
+            target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
+            action (any Model): Not sure... not used I assume.
+            recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
+            affected_users (list of Users): everyone who should receive the notification
+            verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
+            icon (html string): e.g.:
+                "<span class='fa-stack'>" + \
+                "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
+                "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+                "</span>"
+        :return:
+        """
+
+        # make sure the student doesn't have any notifications yet
+        notes_before = self.student.notifications.all()
+        self.assertEqual(notes_before.count(), 0)
+
+        kwargs = {
+            'recipient': self.student,
+            'verb': 'tested'
+        }
+        new_notification(self.teacher, **kwargs)
+
+        # now the student should have one if it worked.
+        notes_after = self.student.notifications.all()
+        self.assertEqual(notes_after.count(), 1)

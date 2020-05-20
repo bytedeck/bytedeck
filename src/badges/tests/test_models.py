@@ -1,8 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_mommy import mommy
-from model_mommy.recipe import Recipe
+from model_bakery import baker
+from model_bakery.recipe import Recipe
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
@@ -14,16 +14,16 @@ User = get_user_model()
 
 class BadgeRarityTestModel(TenantTestCase):
     def setUp(self):
-        self.common = mommy.make(BadgeRarity)
+        self.common = baker.make(BadgeRarity)
 
     def test_badge_rarity_creation(self):
         self.assertIsInstance(self.common, BadgeRarity)
         self.assertEqual(str(self.common), self.common.name)
 
     def test_get_rarity(self):
-        self.common = mommy.make(BadgeRarity, percentile=100.0)
-        self.rare = mommy.make(BadgeRarity, percentile=50.0)
-        self.ultrarare = mommy.make(BadgeRarity, percentile=1.0)
+        self.common = baker.make(BadgeRarity, percentile=100.0)
+        self.rare = baker.make(BadgeRarity, percentile=50.0)
+        self.ultrarare = baker.make(BadgeRarity, percentile=1.0)
 
         self.assertEqual(BadgeRarity.objects.get_rarity(0.5), self.ultrarare)
         self.assertEqual(BadgeRarity.objects.get_rarity(49.0), self.rare)
@@ -34,16 +34,21 @@ class BadgeRarityTestModel(TenantTestCase):
 
 class BadgeTypeTestModel(TenantTestCase):
     def setUp(self):
-        self.badge_type = mommy.make(BadgeType)
+        self.badge_type = baker.make(BadgeType)
 
     def test_badge_type_creation(self):
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
+    def test_default_badges_created(self):
+        """ A data migration should make default objects for this model """
+        self.assertTrue(BadgeType.objects.filter(name="Talent").exists())
+        self.assertTrue(BadgeType.objects.filter(name="Award").exists())
+
 
 class BadgeSeriesTestModel(TenantTestCase):
     def setUp(self):
-        self.badge_series = mommy.make(BadgeSeries)
+        self.badge_series = baker.make(BadgeSeries)
 
     def test_badge_series_creation(self):
         self.assertIsInstance(self.badge_series, BadgeSeries)
@@ -54,7 +59,7 @@ class BadgeTestModel(TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.badge = mommy.make(Badge)
+        self.badge = baker.make(Badge)
 
     def test_badge_creation(self):
         self.assertIsInstance(self.badge, Badge)
@@ -66,6 +71,13 @@ class BadgeTestModel(TenantTestCase):
     def test_badge_url(self):
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
+    def test_default_badge_data(self):
+        """ Data migration should create 4 badges """
+        self.assertTrue(Badge.objects.filter(name="Penny").exists())
+        self.assertTrue(Badge.objects.filter(name="Nickel").exists())
+        self.assertTrue(Badge.objects.filter(name="Dime").exists())
+        self.assertTrue(Badge.objects.filter(name="ByteDeck Proficiency").exists())
+
 
 class BadgeAssertionTestManager(TenantTestCase):
 
@@ -74,18 +86,18 @@ class BadgeAssertionTestManager(TenantTestCase):
         self.sem = SiteConfig.get().active_semester
 
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
-        # self.assertion = mommy.make(BadgeAssertion, semester=self.sem)
+        self.student = baker.make(User)
+        # self.assertion = baker.make(BadgeAssertion, semester=self.sem)
         # self.badge = Recipe(Badge, xp=20).make()
 
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
 
     def test_all_for_user_distinct(self):
-        badge = mommy.make(Badge)
+        badge = baker.make(Badge)
 
         # give the student two of the badge
-        badge_assertion = mommy.make(BadgeAssertion, user=self.student, badge=badge)
-        mommy.make(BadgeAssertion, user=self.student, badge=badge)
+        badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge)
+        baker.make(BadgeAssertion, user=self.student, badge=badge)
 
         # this should only return the first one
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
@@ -100,8 +112,8 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.sem = SiteConfig.get().active_semester
 
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = mommy.make(User)
-        self.assertion = mommy.make(BadgeAssertion, semester=self.sem)
+        self.student = baker.make(User)
+        self.assertion = baker.make(BadgeAssertion, semester=self.sem)
         self.badge = Recipe(Badge, xp=20).make()
 
         self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
@@ -130,7 +142,7 @@ class BadgeAssertionTestModel(TenantTestCase):
 
     def test_badge_assertion_count_bootstrap_badge(self):
         """Returns empty string if count < 2, else returns proper count"""
-        badge_assertion = mommy.make(BadgeAssertion, semester=self.sem)
+        badge_assertion = baker.make(BadgeAssertion, semester=self.sem)
         self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
 
         num = 4
@@ -161,7 +173,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         # no semester
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
-            mommy.make(Badge),
+            baker.make(Badge),
             self.teacher
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
@@ -169,7 +181,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         # no teacher
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
-            mommy.make(Badge),
+            baker.make(Badge),
         )
         self.assertIsInstance(new_assertion, BadgeAssertion) 
 
@@ -193,20 +205,20 @@ class BadgeAssertionTestModel(TenantTestCase):
 
     def test_badge_assertion_manager_check_for_new_assertions(self):
         BadgeAssertion.objects.check_for_new_assertions(self.student)
-        # TODO need to test this properly
+        # TODO need to tefrom django.contrib.auth import get_user_model
 
     def test_fraction_of_active_users_granted_this(self):
         num_students_with_badge = 3
 
-        students_with_badge = mommy.make(User, _quantity=num_students_with_badge)
+        students_with_badge = baker.make(User, _quantity=num_students_with_badge)
         self.assertEqual(len(students_with_badge), num_students_with_badge)
 
         total_students = User.objects.filter(is_active=True).count()
 
-        badge = mommy.make(Badge)
+        badge = baker.make(Badge)
 
         for student in students_with_badge:
-            mommy.make(BadgeAssertion, user=student, badge=badge)
+            baker.make(BadgeAssertion, user=student, badge=badge)
 
         fraction = badge.fraction_of_active_users_granted_this()
         self.assertEqual(fraction, num_students_with_badge / total_students)

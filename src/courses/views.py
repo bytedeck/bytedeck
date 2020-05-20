@@ -5,17 +5,18 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
+from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
+                              redirect, render)
 from django.urls import reverse_lazy
-from django.shortcuts import get_object_or_404, redirect, render, Http404, HttpResponse
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
 
 from siteconfig.models import SiteConfig
-
 # from .forms import ProfileForm
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
-from .models import CourseStudent, Rank, Semester
+from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+
 from .forms import CourseStudentForm
+from .models import CourseStudent, Rank, Semester
 
 
 # Create your views here.
@@ -23,6 +24,9 @@ from .forms import CourseStudentForm
 @login_required
 def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
+
+    if not SiteConfig.get().display_marks_calculation:
+        raise Http404
 
     # Only allow staff to see other student's mark page
     if user_id is not None and request.user.is_staff:
@@ -110,15 +114,16 @@ def end_active_semester(request):
         return HttpResponse(status=401)
 
     sem = Semester.objects.complete_active_semester()
-    if sem is -1:
-        messages.warning(request,
-                         "Semester is already closed, no action taken.")
-    if sem is -2:
-        messages.warning(request,
-                         "There are still quests awaiting approval. Can't close the Semester \
-                         until they are approved or returned")
-    else:
-        messages.success(request, "Semester " + str(sem) + " has been closed.")
+    semester_warnings = {
+        Semester.CLOSED: 'Semester is already closed, no action taken.',
+        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester \
+             until they are approved or returned",
+        'success': 'Semester {sem} has been closed.'.format(sem=sem),
+    }
+
+    messages.warning(
+        request,
+        semester_warnings.get(sem, semester_warnings['success']))
 
     return redirect('config')
 
