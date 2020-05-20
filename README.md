@@ -61,8 +61,8 @@ This will create your docker containers and initialize the database by running m
 `cd ~/Developer/hackerspace`
 3. Build the containers (db, redis, celery, and celery-beat):  
 `docker-compose build`
-4. Start the postgres database container (db)
-`docker-compose up db`
+4. Start the postgres database container (db) in the background/daemonized (-d)  
+`docker-compose up -d db`
 5. For development, let's run the django app in a vertiual environment instead of using the web container:
    1. Create a python virtual environment (we'll put ours in a venv directory):   
    `virtualenv venv --python=python3.7`
@@ -72,18 +72,22 @@ This will create your docker containers and initialize the database by running m
    `pip install -r requirements.txt`
    3. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):  
    `./src/manage.py migrate_schemas --shared`
-   4. Run the app with:  
+   4. Run the app ot make sure you don't get any errors yet, with:  
    `./src/manage.py runserver`
-6. Now that we've migrated, run a setup script to create the public tenant and a superuser, this will run through the web container:
+6. Now that we've migrated, run a setup script to create the public tenant and a superuser, this will run through the web container:  
 `bash init_public_schema.sh`
 7. You should now get a 404 page (until we create a lnading page) at http://localhost:8000
 8. But you should be able to log in to the admin site!  http://localhost:8000/admin/
    - user: admin
    - password: hellonepal
+9. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up):   
+`docker-compose up celery celery-beat` 
+10. To view errors in the containers when they are running in the background, you can use `docker-compose logs`
 
 ### Creating a Tenant
 If everything has worked so far, you should now be able to create your own hackerspace website as a new tenant:
 
+0. If the server isn't already running, run it with: `./src/manage.py runserver` (and ignore the link it tells you to access the page)
 1. Go to django admin at http://localhost:8000/admin/ (this is known as the Public tenant, it's where we can control all the other sites or tenants)
 2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
