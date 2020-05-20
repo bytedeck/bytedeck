@@ -122,7 +122,8 @@ You can run tests either locally, or through the web container:
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
 1. Run the pg-admin container:  
 `docker-compose up pg-admin`
-2. Log in with:
+2. Log in:
+   - url: [localhost:8080](http://localhost:8080)
    - email: admin@admin.com
    - password: password
 3. Click "Add New Server"
@@ -131,7 +132,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
    - Host name/address: db
    - Port: 5432
    - Maintenance database: postgres
-   - Username: admin
+   - Username: postgres
    - Password: hellonepal
 6. Hit Save
 7. At the top left expand the Servers tree to find the database, and explore!

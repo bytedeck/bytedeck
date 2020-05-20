@@ -17,7 +17,7 @@ services:
                       python manage.py migrate_schemas && 
                       python manage.py runserver 0.0.0.0:8000"   # no need for uwsgi in development, this is easier
 
-  db-admin:
+  pg-admin:
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com

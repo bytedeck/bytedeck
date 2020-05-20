@@ -79,7 +79,9 @@ TENANT_APPS = (
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
-    # placing here instead of shared means...?
+    # or
+    # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
+    # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
     'attachments',
