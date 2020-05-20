@@ -219,7 +219,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
 
-                'siteconfig.context_processors.config',
+                'hackerspace_online.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },
