@@ -92,7 +92,6 @@ TENANT_APPS = (
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
-    'attachments',
     'hackerspace_online',
     'django_summernote',
 
@@ -167,9 +166,6 @@ INSTALLED_APPS = (
 
     # https://github.com/charettes/django-colorful
     'colorful',
-
-    # django-attachments
-    'attachments',
 
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
