@@ -140,7 +140,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(models.Model, IsAPrereqMixin, HasPrereqsMixin):
+class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)

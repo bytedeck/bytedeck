@@ -186,7 +186,7 @@ class PrereqManager(models.Manager):
         return False
 
 
-class Prereq(models.Model, IsAPrereqMixin):
+class Prereq(IsAPrereqMixin, models.Model):
     """
     A Prereq object indicates some conditions (prerequisites) that must be met before gaining access to something else.
 
