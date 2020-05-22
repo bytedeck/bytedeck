@@ -11,3 +11,9 @@ class SiteConfigUpdate(SuccessMessageMixin, UpdateView):
     model = SiteConfig
     fields = '__all__'
     success_message = 'Settings updated successfully!'
+
+
+class SiteConfigUpdateOwn(SiteConfigUpdate):
+
+    def get_object(self):
+        return SiteConfig.get()
