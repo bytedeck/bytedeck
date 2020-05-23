@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db import connection
 from django.contrib.sites.models import Site
 
@@ -45,7 +45,12 @@ class TenantAdminForm(forms.ModelForm):
             # if the schema already exists, then can't change the name
             raise forms.ValidationError("The name cannot be changed after the tenant is created")
         else:
-            return name
+            # TODO
+            # finally, check that there isn't a schema on the db that doesn't have a tenant object
+            # and thus doesn't care about name validation/uniqueness.
+            pass
+        
+        return name
 
 
 def get_schema_name(tenant_name):
@@ -65,6 +70,18 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
         
         obj.save()
+
+    def delete_model(self, request, obj):
+        messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
+            and the schema deleted from the db via psql: `DROP SCHEMA scnema_name CASCADE;`. \
+            ignore the success message =D')
+
+        # don't delete
+        return
+
+    def has_delete_permission(self, request, obj=None):
+        # Disable delete button and admin action
+        return False
 
 
 admin.site.register(Tenant, TenantAdmin)
