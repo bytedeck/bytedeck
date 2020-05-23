@@ -9,6 +9,18 @@ def check_tenant_name(name):
     """ A tenant's name is used for both the schema_name and as the subdomain in the 
     tenant's domain_url field, so {name} it must be valid for a schema and a url.
     """
+    if not re.match(re.compile(r'^[a-z]'), name):
+        raise ValidationError("The name must begin with a lower-case letter.")
+
+    if re.search(re.compile(r'[A-Z]'), name):
+        raise ValidationError("The name cannot contain capital letters.")
+
+    if re.search(re.compile(r'-$'), name):
+        raise ValidationError("The name cannot end in a dash.")
+
+    if re.search(re.compile(r'--'), name):
+        raise ValidationError("The name cannot have two consecutive dashes.")
+
     if not re.match(re.compile(r'^([a-z][a-z0-9]*(\-?[a-z0-9]+)*)$'), name):
         raise ValidationError("Invalid string used for the tenant name.")
 
