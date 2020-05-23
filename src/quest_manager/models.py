@@ -300,7 +300,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(XPItem, IsAPrereqMixin, HasPrereqsMixin):
+class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \

@@ -92,7 +92,6 @@ TENANT_APPS = (
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
-    'attachments',
     'hackerspace_online',
     'django_summernote',
 
@@ -168,9 +167,6 @@ INSTALLED_APPS = (
     # https://github.com/charettes/django-colorful
     'colorful',
 
-    # django-attachments
-    'attachments',
-
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
@@ -219,7 +215,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
 
-                'siteconfig.context_processors.config',
+                'hackerspace_online.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },

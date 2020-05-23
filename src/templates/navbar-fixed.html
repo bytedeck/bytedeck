@@ -141,7 +141,7 @@
                     <ul class="dropdown-menu">
                         <!-- <li class="dropdown-header">Content</li> -->
                         <li><a href="{% url 'quests:flagged' %}">Flagged Submissions</a></li>
-                        <li><a href="/config/{{ config.id }}">Site Configuration</a></li>
+                        <li><a href="{% url 'config:site_config_update_own' %}">Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Database</li>
                         <li><a href="/admin">Django Admin</a></li>

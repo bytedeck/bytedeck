@@ -47,7 +47,7 @@ urlpatterns += [
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
-    url(r'^config/', include('siteconfig.urls')),
+    url(r'^config/', include('siteconfig.urls', namespace='config')),
 
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),

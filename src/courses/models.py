@@ -94,7 +94,7 @@ class RankManager(models.Manager):
         return self.get_queryset().get_ranks_gt(user_xp).first()
 
 
-class Rank(models.Model, IsAPrereqMixin):
+class Rank(IsAPrereqMixin, models.Model):
     name = models.CharField(max_length=50, unique=False, null=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
@@ -129,7 +129,7 @@ class Rank(models.Model, IsAPrereqMixin):
         return CytoScape.objects.get_map_for_init(self)
 
 
-class Grade(models.Model, IsAPrereqMixin):
+class Grade(IsAPrereqMixin, models.Model):
     name = models.CharField(max_length=20, unique=True)
     value = models.PositiveIntegerField(unique=True)
 
@@ -340,11 +340,6 @@ class Course(models.Model, ):
 
     class Meta:
         ordering = ["title"]
-
-    # # required for prereq mixin (grapelli lookup) since no name field already.
-    # @property
-    # def name(self):
-    #     return self.title
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one

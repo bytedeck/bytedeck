@@ -5,7 +5,7 @@
     "fields": {
       "domain_url": "localhost",
       "schema_name": "public",
-      "name": "Public test",
+      "name": "public",
       "desc": "",
       "created_on": "2020-03-27"
     }
