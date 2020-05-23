@@ -95,3 +95,9 @@ class TenantAdminFormTest(TenantTestCase):
         """ test tenant already exists as a part of the TenantTestCase """
         form = TenantAdminForm({"name": "test"})
         self.assertTrue(form.is_valid())
+
+    def test_cant_change_existing_name(self):
+        # test tenant already exists and is connected in TenantTestCase
+        form = TenantAdminForm({"name": "nottest"})
+        form.instance = Tenant.get()  # test tenant with schema 'test'
+        self.assertFalse(form.is_valid())
