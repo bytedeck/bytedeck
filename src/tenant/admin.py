@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.db import connection
 from django.contrib.sites.models import Site
@@ -29,9 +30,25 @@ class NonPublicSchemaOnlyAdminAccessMixin:
         return connection.schema_name != get_public_schema_name()
 
 
+class TenantAdminForm(forms.ModelForm):
+
+    class Meta:
+        model = Tenant
+        fields = ['name']
+
+    def clean_name(self):
+
+        name = self.cleaned_data["name"]
+        # has already validated the model field at this point
+        if name == "public":
+            raise forms.ValidationError("The public tenant is restricted and cannot be edited")
+        else:
+            return name
+
+
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
-    exclude = ('domain_url', 'schema_name')
+    form = TenantAdminForm
 
     def save_model(self, request, obj, form, change):
         if obj.name.lower() == "public":

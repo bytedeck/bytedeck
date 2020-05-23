@@ -7,7 +7,7 @@ from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.utils import tenant_context
 
 from tenant.models import Tenant
-from tenant.admin import TenantAdmin
+from tenant.admin import TenantAdmin, TenantAdminForm
 
 
 class NonPublicTenantAdminTest(TenantTestCase):
@@ -31,9 +31,8 @@ class NonPublicTenantAdminTest(TenantTestCase):
 
 
 class PublicTenantTestAdminPublic(TenantTestCase):
-    """ For testing the `public` tenant. Use normal TestCase base class because we want to 
-    test outside of the  tenant architecture
-    """
+    """TenantTestCase comes with a tenant: tenant.test.com"""
+
     ###############################################################################
     # Not sure why this doesn't work, but seems like TenantTestCase is 
     # stops using the test databse and is looking for the real databse? or something...
@@ -50,32 +49,49 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     #     self.assertEqual(self.public_tenant.domain_url, "localhost")
     #################################################################################
 
-    def test_public_tenant_admin_save_model(self):
-        # create the public schema first:
-        public_tenant = Tenant(
+    def setUp(self):
+        # create the public schema
+        self.public_tenant = Tenant(
             domain_url='localhost',
             schema_name='public',
             name='public'
         )
+        self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
-        tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
+    def test_public_tenant_admin_save_model(self):
 
-        with tenant_context(public_tenant):
-            non_public_tenant = Tenant(name="Non-Public")
+        with tenant_context(self.public_tenant):
+            non_public_tenant = Tenant(name="Non-Public")  # Not a valid name, but not validated in this test
             # public tenant should be able to create new tenant/schemas
-            tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
+            self.tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
             self.assertIsInstance(non_public_tenant, Tenant)
             # schema names should be all lower case and dashes converted to underscores
             self.assertEqual(non_public_tenant.schema_name, "non_public")
 
         # oddly, seems to switch connections to the newly created "non_public" schema
         # so need to set context back to public to test more stuff
-        with tenant_context(public_tenant):
+        with tenant_context(self.public_tenant):
             # tenant names with spaces should be rejected:
             with self.assertRaises(ValidationError):
                 non_public_tenant_bad_name = Tenant(name="Non Public")
-                tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
+                self.tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
             # also other alpha-numeric characters except dashes and underscores
             with self.assertRaises(ValidationError):
                 non_public_tenant_bad_name = Tenant(name="Non*Public")
-                tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
+                self.tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
+
+
+class TenantAdminFormTest(TenantTestCase):
+
+    def test_public_tenant_not_editable(self):
+        form = TenantAdminForm({"name": "public"})
+        self.assertFalse(form.is_valid())
+
+    def test_new_non_public_tenant_valid(self):
+        form = TenantAdminForm({"name": "non-public"})
+        self.assertTrue(form.is_valid())
+
+    def test_existing_non_public_tenant_valid(self):
+        """ test tenant already exists as a part of the TenantTestCase """
+        form = TenantAdminForm({"name": "test"})
+        self.assertTrue(form.is_valid())
