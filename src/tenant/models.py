@@ -6,13 +6,22 @@ from tenant_schemas.models import TenantMixin
 
 
 def check_tenant_name(name):
-    if not re.match(re.compile(r'^([a-zA-Z][a-zA-Z0-9]*(\-?[a-zA-Z0-9]+)*){,62}$'), name):
+    """ A tenant's name is used for both the schema_name and as the subdomain in the 
+    tenant's domain_url field, so {name} it must be valid for a schema and a url.
+    """
+    if not re.match(re.compile(r'^([a-z][a-z0-9]*(\-?[a-z0-9]+)*)$'), name):
         raise ValidationError("Invalid string used for the tenant name.")
 
 
 class Tenant(TenantMixin):
     # tenant = Tenant(domain_url='test.localhost', schema_name='test', name='Test')
-    name = models.CharField(max_length=100, unique=True, validators=[check_tenant_name])
+    name = models.CharField(
+        max_length=62,  # max length of a postgres schema name is 62
+        unique=True, 
+        validators=[check_tenant_name],
+        help_text="The name may only include lowercase letters, numbers, and dashes. \
+        It must start with a letter, and may not end in a dash, nor include consecutive dashes"
+    )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
 

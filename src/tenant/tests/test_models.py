@@ -1,13 +1,15 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase
 
 from tenant_schemas.test.cases import TenantTestCase
 
-from tenant.models import Tenant
+from tenant.models import Tenant, check_tenant_name
 
 User = get_user_model()
 
 
-class TenantTestModel(TenantTestCase):
+class TenantModelTest(TenantTestCase):
 
     def setUp(self):
         # TenantTestCase comes with a `self.tenant` already, but let make another so we can test development
@@ -35,3 +37,39 @@ class TenantTestModel(TenantTestCase):
     def test_tenant_get_root_url(self):
         self.assertEqual(self.tenant.get_root_url(), "https://tenant.test.com")
         self.assertEqual(self.tenant_localhost.get_root_url(), "http://my-dev-schema.localhost:8000")
+
+
+class CheckTenantNameTest(SimpleTestCase):
+    """ A tenant's name is used for both the schema_name and as the subdomain in the 
+    tenant's domain_url field, so {name} it must be valid for a schema and a url.
+    """
+
+    def test_underscore_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, 'tenant_name_with_underscores')
+
+    def test_special_chars_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, 'tenant@')
+
+    def test_number_start_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, '9tenant')      
+
+    def test_uppercase_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, 'Tenant')     
+
+    def test_start_dash_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, '-tenant')  
+    
+    def test_end_dash_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, 'tenant-')  
+
+    def test_multidash_invalid(self):
+        self.assertRaises(ValidationError, check_tenant_name, 'ten--ant')  
+    
+    def test_mid_dash_valid(self):
+        check_tenant_name('ten-ant')  
+
+    def test_multi_mid_dash_valid(self):
+        check_tenant_name('ten-an-t')
+
+    def test_mid_number_valid(self):
+        check_tenant_name('t3nan4') 
