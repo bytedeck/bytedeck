@@ -129,7 +129,7 @@ class SiteConfig(models.Model):
 
     def get_absolute_url(self):
         from django.urls import reverse
-        return reverse('site_config_update', args=[str(self.id)])
+        return reverse('config:site_config_update_own')
 
     def get_site_logo_url(self):
         if self.site_logo and hasattr(self.site_logo, 'url'):
