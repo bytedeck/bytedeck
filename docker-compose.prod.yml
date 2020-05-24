@@ -14,7 +14,7 @@ services:
   web:
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&
-                      python manage.py migrate_schemas && 
+                      python manage.py migrate_schemas --executor=parallel && 
                       python manage.py collectstatic --noinput &&
                       uwsgi --socket 0.0.0.0:8000 --wsgi-file hackerspace_online/wsgi.py --master --processes 4 --threads 2"
     volumes: 
