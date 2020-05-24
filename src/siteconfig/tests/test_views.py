@@ -31,3 +31,10 @@ class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
         self.assert200('config:site_config_update_own')
+
+    def test_SiteConfigUpdate(self):
+        # requires staff member
+        self.assertRedirectsAdmin('config:site_config_update', args=[self.config.get().id])
+
+        self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
+        self.assert200('config:site_config_update', args=[self.config.get().id])

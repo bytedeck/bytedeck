@@ -1,4 +1,5 @@
 from django.templatetags.static import static
+from django.urls import reverse
 
 from tenant_schemas.test.cases import TenantTestCase
 from model_bakery import baker
@@ -31,8 +32,7 @@ class SiteConfigModelTest(TenantTestCase):
 
     def test_get_absolute_url(self):
         """ Provides url to the update form """
-        # self.assertEqual(reverse('site_config_update'), self.config.get_absolute_url())
-        pass
+        self.assertEqual(reverse('config:site_config_update_own'), self.config.get_absolute_url())
 
     def test_get_site_logo(self):
         """ Returns a default logo """
