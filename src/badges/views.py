@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -94,6 +96,7 @@ def badge_create(request):
 def badge_copy(request, badge_id):
     new_badge = get_object_or_404(Badge, pk=badge_id)
     new_badge.pk = None  # autogen a new primary key (quest_id by default)
+    new_badge.import_id = uuid.uuid4()
     new_badge.name = "Copy of " + new_badge.name
 
     form = BadgeForm(request.POST or None, instance=new_badge)

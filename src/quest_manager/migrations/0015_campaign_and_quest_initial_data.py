@@ -27,6 +27,7 @@ def load_initial_data(apps, schema_editor):
             instructor_notes="<p>This is your teacher cheat sheet - anything that would help you decide whether to approve or return a quest. This quest is automatically approved, so you wouldn't need any notes here, but you will probably find this section useful in future quests.</p>",
             import_id="bee53060-c332-4f75-85e1-6a8f9503ebe1",
             hideable=False,
+            
         )
 
 
