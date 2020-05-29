@@ -26,7 +26,8 @@ def load_initial_data(apps, schema_editor):
             short_description="<p>You have demonstrated your proficiency with this online platform. I hope you enjoy using it for this course!</p>",
             badge_type=badge_type,
             sort_order=10,
-            active=True
+            active=True,
+            import_id='fa3b0518-cf9c-443c-8fe4-f4a887b495a7'
         )
 
     # now add some Award type badges
@@ -44,7 +45,8 @@ def load_initial_data(apps, schema_editor):
                 badge_type=badge_type,
                 icon="icons/badges/Penny_jxri7my.png",
                 sort_order=10,
-                active=True
+                active=True,
+                import_id='033afa34-bd34-4252-80f1-6542a4055f7e'
             ),
             Badge(
                 name="Nickel",
@@ -53,7 +55,8 @@ def load_initial_data(apps, schema_editor):
                 badge_type=badge_type,
                 icon="icons/badges/Nickel_tbGmjLc.png",
                 sort_order=20,
-                active=True
+                active=True,
+                import_id='82da2a3a-fb21-4d61-b997-b22978699a51'
             ),
             Badge(
                 name="Dime",
@@ -62,7 +65,8 @@ def load_initial_data(apps, schema_editor):
                 badge_type=badge_type,
                 icon="icons/badges/dime_9kO69sh.png",
                 sort_order=30,
-                active=True
+                active=True,
+                import_id='bb12b3d1-ce6e-40e3-a411-f43aadfe571a'
             ),
         ])
 
