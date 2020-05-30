@@ -37,7 +37,7 @@
 <!-- config.favicon: {{ config.favicon }} -->
 <link rel="apple-touch-icon" sizes="57x57" href="{% static 'icon/apple-icon-57x57.png' %}">
 
-{% if config.favicon %}
+{% if config.get_favicon_url %}
 <link rel="icon" href="{{ config.get_favicon_url }}">
 {% else %}
 <link rel="apple-touch-icon" sizes="57x57" href="{% static 'icon/apple-icon-57x57.png' %}">
