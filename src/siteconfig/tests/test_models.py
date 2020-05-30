@@ -43,14 +43,14 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertEqual(self.config.get_default_icon_url(), static('img/default_icon.png'))
 
     def test_get_favicon_url(self):
-        """ Returns default favicon """
-        self.assertEqual(self.config.get_favicon_url(), static('icon/favicon.ico'))
+        """ Returns None if no favicon set """
+        self.assertEqual(self.config.get_favicon_url(), None)
 
     def test_get_banner_image_url(self):
-        self.assertEqual(self.config.get_banner_image_url(), static('img/banner.svg'))
+        self.assertEqual(self.config.get_banner_image_url(), static('img/banner.png'))
 
     def test_get_banner_image_dark_url(self):
-        self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner_slate.svg'))
+        self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner.png'))
 
     def test_set_active_semester(self):
         # make sure default active semester is created first
