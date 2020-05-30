@@ -51,7 +51,7 @@ class SiteConfig(models.Model):
 
     banner_image = models.ImageField(
         verbose_name="Banner Image", null=True, blank=True,
-        help_text="The banner will be displayed on your landing page and in a smaller format at the top left of the site (ideally 1140px wide)"
+        help_text="The banner will be displayed on your landing page and in a smaller format at the top left of the site (up to 1140px wide)"
     )
 
     banner_image_dark = models.ImageField(
@@ -155,7 +155,7 @@ class SiteConfig(models.Model):
         if self.banner_image and hasattr(self.banner_image, 'url'):
             return self.banner_image.url
         else:
-            return static('img/banner.svg')
+            return static('img/banner.png')
 
     def get_banner_image_dark_url(self):
         if self.banner_image_dark and hasattr(self.banner_image_dark, 'url'):
@@ -163,7 +163,7 @@ class SiteConfig(models.Model):
         elif self.banner_image and hasattr(self.banner_image, 'url'):
             return self.banner_image.url
         else:
-            return static('img/banner.svg')
+            return static('img/banner.png')
 
     def set_active_semester(self, semester):
         from courses.models import Semester  # import here to prevent ciruclar imports
