@@ -328,6 +328,9 @@ class SubmissionViewTests(TenantTestCase):
         # TODO self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         pass
 
+    def test_quest_completion_notifications(self):
+        pass
+
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
         # log in a student
