@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.conf import settings
 from django.shortcuts import reverse
 
@@ -78,3 +79,38 @@ class ViewTestUtilsMixin():
             self.client.get(reverse(url_name, *args, **kwargs)).status_code,
             403
         )
+
+    def get_message_list(self, response):
+        """ Django messages missing from context of redirected views, so get another way
+        https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages
+        https://docs.djangoproject.com/en/3.0/ref/contrib/messages/
+        """
+        return list(response.wsgi_request._messages)
+
+    def assertSuccessMessage(self, response):
+        """ Assert that a response, including redirects, provides a single success message
+        """
+        message_list = self.get_message_list(response)
+        self.assertEqual(len(message_list), 1)
+        self.assertEqual(message_list[0].level, messages.SUCCESS)
+
+    def assertWarningMessage(self, response):
+        """ Assert that a response, including redirects, provides a single warning message
+        """
+        message_list = self.get_message_list(response)
+        self.assertEqual(len(message_list), 1)
+        self.assertEqual(message_list[0].level, messages.WARNING)
+
+    def assertErrorMessage(self, response):
+        """ Assert that a response, including redirects, provides a single error message
+        """
+        message_list = self.get_message_list(response)
+        self.assertEqual(len(message_list), 1)
+        self.assertEqual(message_list[0].level, messages.ERROR)
+
+    def assertInfoMessage(self, response):
+        """ Assert that a response, including redirects, provides a single info message
+        """
+        message_list = self.get_message_list(response)
+        self.assertEqual(len(message_list), 1)
+        self.assertEqual(message_list[0].level, messages.INFO)

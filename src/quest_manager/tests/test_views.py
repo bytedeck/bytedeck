@@ -19,6 +19,7 @@ from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from quest_manager.models import Quest, QuestSubmission
+from notifications.models import Notification
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -376,33 +377,100 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest)
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
 
+    def post_complete(self, submission_comment="test comment", teachers_id_list=None):
+        """ Convenience method for posting the complete() view.  
+        If teachers_list is not provided, [self.test_teacher.id] is used.
+        """
+        if not teachers_id_list:
+            teachers_id_list = [self.test_teacher.id]
+        with patch('profile_manager.models.Profile.current_teachers', return_value=teachers_id_list):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]), 
+                data={'comment_text': submission_comment, 'complete': True}
+            )
+        return response
+
     def test_submit(self):
-        """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button """
-        # response = self.client.post(
-        #     reverse('quests:complete', args=[self.sub.id]), 
-        #     data={
-        #         'comment_text': "test comment",
-        #         'complete': True,
-        #     }
-        # )
-        # self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
+        Are redirected to their available quests page, submission is marked completed and has a completion time
+        """
+        response = self.post_complete()
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+        self.assertSuccessMessage(response)
+
+    def test_no_comment_verification_not_required(self):
+        """ When a quest is automatically approved, it does not require a comment
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment="")
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+        self.assertSuccessMessage(response)
+
+    def test_no_comment_but_verification_required(self):
+        """ When a quest requires teacher's approval, it means they must include either files or a comment
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment="")
+
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+        self.assertErrorMessage(response)
+
+    def test_quest_not_available(self):
+        """ If a quest is not available to a student, they should not be able to complete it """
+
+        # # Easy way to make unavailable, should probably patch the available quests lists instead though...
+        # self.quest.visibel_to_student = False
+        # self.quest.save()
+
+        # response = self.post_complete(comment="")
+        # # Should redirect back to the submission with error message
+        # self.assertEqual(response.status_code, 404)
         pass
 
-    def test_submit_with_no_comment(self):
+    def test_teacher_notified(self):
+        """ Teacher should not be notified when their student complete's a quest, because it
+        will appear in there approvals tab anyway, so redundant
+        """
         pass
 
-    def test_submit_quest_not_available(self):
+    def test_teacher_notified_of_comment_when_verification_not_required(self):
+        """ Teacher SHOULD be notified when their student complete's a quest if:
+        1. it has a comment, AND
+        2. it does not require verification
+        Otherwise teacher will never see the comment
+        """
         pass
 
-    def test_submit_verification_required(self):
+    def test_specific_teacher_notified(self):
+        """ If a quest has a specific teacher linked to it, they should be notified of completions if
+        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
+        appear in their "Approvals" tab anyway and notification is redundant)
+        """
         pass
 
-    def test_submit_comment(self):
+    def test_comment_appears_on_page(self):
+        pass
+    
+    def submission_moves_to_completed_tab(self):
         pass
 
 
 class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
-    """ Unit Tests for:
+    """ Tests for:
 
         class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
         class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView)
@@ -1074,7 +1142,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1148,7 +1215,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
             self.assertRedirects(response, reverse('quests:approvals'))
 
         # The student AND current_teacher should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1205,7 +1271,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn(test_badge2.name, comments.first().text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1271,7 +1336,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
