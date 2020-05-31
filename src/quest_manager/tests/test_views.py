@@ -317,20 +317,6 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
-    def test_student_quest_completion(self):
-        # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-
-        # self.assertRedirects(
-        #     response=self.client.post(reverse('quests:complete', args=[self.sub1.id])),
-        #     expected_url=reverse('quests:quests'),
-        # )
-
-        # TODO self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
-        pass
-
-    def test_quest_completion_notifications(self):
-        pass
-
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
         # log in a student
@@ -367,6 +353,52 @@ class SubmissionViewTests(TenantTestCase):
 
         sub.refresh_from_db()
         self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+
+
+class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for view.py :
+
+        def complete(request, submission_id)
+
+        via urls.py
+
+        url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
+
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        # log in the student for all tests here
+        self.client.force_login(self.test_student)
+
+        self.quest = baker.make(Quest)
+        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
+
+    def test_submit(self):
+        """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button """
+        # response = self.client.post(
+        #     reverse('quests:complete', args=[self.sub.id]), 
+        #     data={
+        #         'comment_text': "test comment",
+        #         'complete': True,
+        #     }
+        # )
+        # self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        pass
+
+    def test_submit_with_no_comment(self):
+        pass
+
+    def test_submit_quest_not_available(self):
+        pass
+
+    def test_submit_verification_required(self):
+        pass
+
+    def test_submit_comment(self):
+        pass
 
 
 class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
