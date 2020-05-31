@@ -702,7 +702,7 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb = "completed"
-                affected_users = None
+                affected_users = []
 
                 if submission.quest.verification_required:
                     note_verb += ", awaiting approval."
@@ -714,27 +714,22 @@ def complete(request, submission_id):
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
 
-                # Notify teacher if they are specific to quest but are not the student's teacher
+                # Notify teacher if they are specific to quest but are not the student's current teacher
+                # current teacher doesn't need the notification because they'll see it in their approvals tabs already
                 if submission.quest.specific_teacher_to_notify \
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
-                    affected_users = [submission.quest.specific_teacher_to_notify, ]
-                else:
-                    main_teacher = request.user.coursestudent_set.first().block.current_teacher
-                    affected_users = []
+                    affected_users.append(submission.quest.specific_teacher_to_notify)
 
-                    # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
-                    if form.cleaned_data.get('comment_text'):
-                        if not main_teacher:
-                            staffs = User.objects.filter(is_staff=True)
-                            for staff in staffs:
-                                affected_users.append(staff)
-                        else:
-                            affected_users.append(main_teacher)
+                # Send notification to current teachers when a comment is left on an auto-approved quest
+                # since these quests don't appear in the approvals tab, teacher would never know about the comment.
+                if form.cleaned_data.get('comment_text') and not submission.quest.verification_required:
+                    affected_users.extend(request.user.profile.current_teachers())
 
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
                     # Immediate/synchronous recalculation of available quests:
+                    # NOW ASYNCH TO PREVENT HUGE DELAYS!
                     update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
