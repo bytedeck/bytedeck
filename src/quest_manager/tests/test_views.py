@@ -25,6 +25,20 @@ from siteconfig.models import SiteConfig
 User = get_user_model()
 
 
+def create_two_test_files():
+    """ returns a list of files for testing form views """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    # give it a unique name for easier testing, otherwise when re-testing, 
+    # the name will be appended with stuff because the file already exists
+    import uuid
+    test_filename1 = str(uuid.uuid1().hex) + ".txt"
+    test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
+    test_filename2 = str(uuid.uuid1().hex) + ".txt"
+    test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+
+    return [test_file1, test_file2]
+
+
 class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data
@@ -604,7 +618,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
     
-    def test_comment_button__specific_teacher_to_notify_other_teacher(self):
+    def test_comment_button_specific_teacher_to_notify_other_teacher(self):
         """ If comment is left on an already completed quest that has a specific teacher linked to it, 
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
         """
@@ -620,6 +634,64 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # and notify actual teacher of student:
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
+
+    def test_notification_when_teacher_comments(self):
+        """ When a teacher comments on submission and student gets notified
+        """
+        # log in a teacher to comment on the submission
+        self.client.force_login(self.test_teacher)
+        self.post_complete(button="comment")
+
+        # Teacher shouldn't get a nofication if they are the ones leaving a comment
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+
+        # Student is notified
+        notifications = Notification.objects.all_for_user_target(self.test_student, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button_files_in_form(self):
+        """ Files can be uploaded and attached to comments when completing or commenting on quests
+        and a link to the file is included in the comment.
+        """
+        test_files = create_two_test_files()
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]), 
+                data={'comment': True, 'attachments': test_files}
+            )
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        # make sure the files exist
+        from comments.models import Comment
+        comment = Comment.objects.all_with_target_object(self.sub).first()
+        self.assertTrue(comment)  # not empty or None etc
+        comment_files_qs = comment.document_set.all()
+        self.assertEqual(comment_files_qs.count(), 2)
+
+        # make sure they are the correct 
+        comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
+        import os
+        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
+        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
+
+    def test_unrecognized_submit_button(self):
+        """ Unrecognized form submit button should 404.  
+        In some views Summernote was causing problems by submitting the form via ajax """
+        response = self.post_complete(button="non_existant_button")
+        self.assertEqual(response.status_code, 404)
+
+    def test_invalid_submission_form(self):
+        """ I don't think thie form CAN be invalid... how? None of the fields are required. """
+        # with patch('profile_manager.models.Profile.current_teachers', return_value=self.test_teacher):
+        #     response = self.client.post(
+        #         reverse('quests:complete', args=[self.sub.id]), 
+        #         data={}
+        #     )
+        # # bad form, just rerender
+        # self.assertEqual(response.status_code, 200)
+        pass
 
 
 class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -1432,18 +1504,19 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         """ Files can be uploaded and attached to comments when approving/commenting/rejecting quests
         and a link to the file is included in the comment.
         """
-        # create a file for testing
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        # give it a unique name for easier testing, otherwise when re-testing, 
-        # the name will be appended with stuff because the file already exists
-        import uuid
-        test_filename1 = str(uuid.uuid1().hex) + ".txt"
-        test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
-        test_filename2 = str(uuid.uuid1().hex) + ".txt"
-        test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+        # # create a file for testing
+        # from django.core.files.uploadedfile import SimpleUploadedFile
+        # # give it a unique name for easier testing, otherwise when re-testing, 
+        # # the name will be appended with stuff because the file already exists
+        # import uuid
+        # test_filename1 = str(uuid.uuid1().hex) + ".txt"
+        # test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
+        # test_filename2 = str(uuid.uuid1().hex) + ".txt"
+        # test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+        test_files = create_two_test_files()
         staff_form_data = {
             'approve_button': True,
-            'attachments': [test_file1, test_file2]
+            'attachments': test_files
         }
         response = self.client.post(
             reverse('quests:approve', args=[self.sub.id]),
@@ -1461,8 +1534,8 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         # make sure they are the correct 
         comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
         import os
-        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_filename1)
-        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_filename2)
+        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
+        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
     
     def test_comment_button(self):
         """ The comment button should only leave a comment and not change the status of the submission """
