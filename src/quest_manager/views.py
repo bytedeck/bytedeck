@@ -702,15 +702,17 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb = "completed"
+                msg_text = "Quest completed"
                 affected_users = []
 
                 if submission.quest.verification_required:
-                    note_verb += ", awaiting approval."
+                    msg_text += ", awaiting approval."
                 else:
-                    note_verb += " and automatically approved."
-                    note_verb += " Please give me a moment to calculate what new quests this should make available to you."
-                    note_verb += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-                    note_verb = note_verb.format(deck_ai=SiteConfig.get().deck_ai)
+                    note_verb += " (auto-approved quest)"
+                    msg_text += " and automatically approved."
+                    msg_text += " Please give me a moment to calculate what new quests this should make available to you."
+                    msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
+                    msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
 
@@ -734,6 +736,7 @@ def complete(request, submission_id):
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
+                msg_text = "Quest commented on."
                 icon = "<span class='fa-stack'>" + \
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
@@ -761,7 +764,7 @@ def complete(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
-            messages.success(request, ("Quest " + note_verb))
+            messages.success(request, msg_text)
             return redirect("quests:quests")
         else:
             context = {
