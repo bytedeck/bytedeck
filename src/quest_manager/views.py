@@ -686,8 +686,12 @@ def complete(request, submission_id):
                                    "Please read the Submission Instructions more carefully.  "
                                    "You are expected to attach something or comment to complete this quest!")
                     return redirect(origin_path)
+                elif 'comment' in request.POST and not request.FILES:
+                    messages.error(request, "Please leave a comment.")
+                    return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
+
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,

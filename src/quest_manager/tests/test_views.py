@@ -390,16 +390,22 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
             )
         return response
 
-    def test_submit(self):
+    def test_complete(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
         Are redirected to their available quests page, submission is marked completed and has a completion time
         """
-        response = self.post_complete()
+        comment = "test submission comment"
+        response = self.post_complete(submission_comment=comment)
         self.assertRedirects(response, expected_url=reverse('quests:quests'))
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_completed)
 
         self.assertSuccessMessage(response)
+
+        # make sure the comment was created
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments[0].text, comment)
 
     def test_no_comment_verification_not_required(self):
         """ When a quest is automatically approved, it does not require a comment
@@ -465,7 +471,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.post_complete()
 
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
-        print(notifications)
         self.assertEqual(notifications.count(), 1)
 
     def test_notifications_no_comment_when_verification_not_required(self):
@@ -510,11 +515,111 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
-    def test_comment_appears_on_page(self):
-        pass
+    def test_comment_completed(self):
+        """ Students can comment on already completed quests.
+        """
+        comment = "test submission comment"
+        response = self.post_complete(button="comment", submission_comment=comment)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        self.assertSuccessMessage(response)
+        # make sure the comment was created
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments[0].text, comment)
+
+    def test_comment_button_no_comment_verification_not_required(self):
+        """ When commenting on an already completed quest, needs to actually comment with something
+        whether or not verification was required originally
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        response = self.post_complete(button="comment", submission_comment="")
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.assertErrorMessage(response)
+
+    def test_comment_button_no_comment_but_verification_required(self):
+        """ When commenting on an already completed quest, needs to actually comment with something
+        whether or not verification was required originally
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(button="comment", submission_comment="")
+
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+        self.assertErrorMessage(response)
+
+    # def test_quest_not_available(self):
+    #     """ If a quest is not available to a student, they should not be able to complete it """
+    #     # TODO
+    #     # # Easy way to make unavailable, should probably patch the available quests lists instead though...
+    #     # self.quest.visibel_to_student = False
+    #     # self.quest.save()
+
+    #     # response = self.post_complete(button="comment", comment="")
+    #     # # Should redirect back to the submission with error message
+    #     # self.assertEqual(response.status_code, 404)
+    #     pass
+
+    def test_comment_button_notifications_own_student(self):
+        """ Teacher should be notified when their student comments on an already complete's a quest
+        """
+        self.sub.quest.verification_required = True  # default anyway, but make it explicit
+        self.sub.quest.save()
+
+        self.post_complete(button="comment")
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button__notifications_comment_when_verification_not_required(self):
+        """ Teacher SHOULD always be notified on comments on already completed quests, 
+        even if verification was not required originally
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(button="comment")
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button_specific_teacher_to_notify_own_teacher(self):
+        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        both of them should be notified of the comment (the specific teacher, and the normal teacher)
+
+        In this case, they are the same teacher, so don't send two notifications!
+        """
+        self.sub.quest.specific_teacher_to_notify = self.test_teacher
+        self.sub.quest.save()
+
+        self.post_complete(button="comment", teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
     
-    def test_submission_moves_to_completed_tab(self):
-        pass
+    def test_comment_button__specific_teacher_to_notify_other_teacher(self):
+        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        both of them should be notified of the comment (the specific teacher, and the normal teacher)
+        """
+        special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
+        self.sub.quest.specific_teacher_to_notify = special_teacher
+        self.sub.quest.save()
+
+        self.post_complete(button="comment", teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(special_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+        # and notify actual teacher of student:
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
 
 
 class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
