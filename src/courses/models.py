@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-from workdays import networkdays, workday
+# from workdays import networkdays, workday
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -230,14 +230,18 @@ class Semester(models.Model):
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
-        excluding weekends and ExcludedDates) '''
+        excluding weekends and ExcludedDates). '''
 
         excluded_days = self.excluded_days()
         if upto_today and date.today() < self.last_day:
             last_day = date.today()
         else:
             last_day = self.last_day
-        return networkdays(self.first_day, last_day, excluded_days)
+        # return networkdays(self.first_day, last_day, excluded_days)
+        count = numpy.busday_count(self.first_day, last_day, holidays=excluded_days)
+        if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here. 
+            count += 1 
+        return count
 
     def excluded_days(self):
         return self.excludeddate_set.all().values_list('date', flat=True)
@@ -266,10 +270,13 @@ class Semester(models.Model):
         return self.last_day
 
     def get_date(self, fraction_complete):
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        after a fraction of the semester is over """
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
-        return workday(self.first_day, days_to_fraction, excluded_days)
+        date_after_fraction = numpy.busday_offset(self.first_day, days_to_fraction, roll='backward', holidays=excluded_days)
+        return date_after_fraction
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
         excluded_days = self.excluded_days()

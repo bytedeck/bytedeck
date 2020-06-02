@@ -5,7 +5,7 @@ from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester, Block, Rank, Grade
+from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate
 
 User = get_user_model()
 
@@ -53,12 +53,12 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
 
 
-class SemesterTestModel(TenantTestCase):
+class SemesterModelTest(TenantTestCase):
 
     def setUp(self):
-        self.semester_start = date(2020, 9, 8)
-        self.semester_end = date(2021, 1, 22)
-        self.today_fake = date(2020, 10, 20)  # some date in the semester
+        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        self.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
         self.semester = baker.make(Semester,
                                    first_day=self.semester_start,
                                    last_day=self.semester_end
@@ -91,7 +91,65 @@ class SemesterTestModel(TenantTestCase):
         with freeze_time(self.semester_end, tz_offset=0):
             self.assertTrue(self.semester.is_open())
 
-        # Timezone problems?    
+        # Timezone problems?   
+
+    def test_num_days(self):
+        """The number of classes in the semester, from start to end date excluding weekends and excluded dates
+        """
+        # no excluded dates yet, so 21 weekdays in Sep 2019 (see setup)
+        self.assertEqual(self.semester.num_days(), 21)
+
+        # add some excluded dates
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 2))  # Mon
+        self.assertEqual(self.semester.num_days(), 20)
+
+        # Future dates should only go up to end.
+        with freeze_time(date(2019, 10, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 20)
+
+    def test_num_days_upto_today(self):
+        """The number of classes in the semester SO FAR up to today
+        """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 10)
+
+        # Future dates should only go up to end.
+        with freeze_time(date(2019, 10, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 21)
+
+    def test_excluded_days(self):
+        """ returns a list of dates excluded for this semester (holidays and other non-instructional days) """
+        # add some excluded dates
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 2))  # Mon
+
+        dates = self.semester.excluded_days()
+        self.assertListEqual(list(dates), [date(2019, 9, 1), date(2019, 9, 2)])
+
+    def test_days_so_far(self):
+        self.assertEqual(self.semester.days_so_far(), self.semester.num_days(upto_today=True))
+
+    def test_fraction_complete(self):
+        """ how far through the semester as a fraction """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            # 10 days so far (excluding weekends) / 21 days total
+            fraction_complete = self.semester.fraction_complete()
+            self.assertAlmostEqual(fraction_complete, 10 / 21)
+
+    def test_percent_complete(self):
+        """ how far through the semester as a percent """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            # 10 days so far (excluding weekends) / 21 days total * 100
+            percent_complete = self.semester.percent_complete()
+            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)   
+    
+    def test_get_date(self):
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        after a fraction of the semester is over """
+        self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
+        self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
+        self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
 
 
 class CourseTestModel(TenantTestCase):
