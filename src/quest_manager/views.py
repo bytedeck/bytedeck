@@ -686,8 +686,12 @@ def complete(request, submission_id):
                                    "Please read the Submission Instructions more carefully.  "
                                    "You are expected to attach something or comment to complete this quest!")
                     return redirect(origin_path)
+                elif 'comment' in request.POST and not request.FILES:
+                    messages.error(request, "Please leave a comment.")
+                    return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
+
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
@@ -702,43 +706,41 @@ def complete(request, submission_id):
 
             if 'complete' in request.POST:
                 note_verb = "completed"
-                affected_users = None
+                msg_text = "Quest completed"
+                affected_users = []
 
                 if submission.quest.verification_required:
-                    note_verb += ", awaiting approval."
+                    msg_text += ", awaiting approval."
                 else:
-                    note_verb += " and automatically approved."
-                    note_verb += " Please give me a moment to calculate what new quests this should make available to you."
-                    note_verb += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-                    note_verb = note_verb.format(deck_ai=SiteConfig.get().deck_ai)
+                    note_verb += " (auto-approved quest)"
+                    msg_text += " and automatically approved."
+                    msg_text += " Please give me a moment to calculate what new quests this should make available to you."
+                    msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
+                    msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
 
                 icon = "<i class='fa fa-shield fa-lg'></i>"
 
-                # Notify teacher if they are specific to quest but are not the student's teacher
+                # Notify teacher if they are specific to quest but are not the student's current teacher
+                # current teacher doesn't need the notification because they'll see it in their approvals tabs already
                 if submission.quest.specific_teacher_to_notify \
                         and submission.quest.specific_teacher_to_notify not in request.user.profile.current_teachers():
-                    affected_users = [submission.quest.specific_teacher_to_notify, ]
-                else:
-                    main_teacher = request.user.coursestudent_set.first().block.current_teacher
-                    affected_users = []
+                    affected_users.append(submission.quest.specific_teacher_to_notify)
 
-                    # Send notification to current teacher when a quest is auto-approved. Don't send when there are no comments
-                    if form.cleaned_data.get('comment_text'):
-                        if not main_teacher:
-                            staffs = User.objects.filter(is_staff=True)
-                            for staff in staffs:
-                                affected_users.append(staff)
-                        else:
-                            affected_users.append(main_teacher)
+                # Send notification to current teachers when a comment is left on an auto-approved quest
+                # since these quests don't appear in the approvals tab, teacher would never know about the comment.
+                if form.cleaned_data.get('comment_text') and not submission.quest.verification_required:
+                    affected_users.extend(request.user.profile.current_teachers())
 
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
                     # Immediate/synchronous recalculation of available quests:
+                    # NOW ASYNCH TO PREVENT HUGE DELAYS!
                     update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
+                msg_text = "Quest commented on."
                 icon = "<span class='fa-stack'>" + \
                        "<i class='fa fa-shield fa-stack-1x'></i>" + \
                        "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
@@ -766,7 +768,7 @@ def complete(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
-            messages.success(request, ("Quest " + note_verb))
+            messages.success(request, msg_text)
             return redirect("quests:quests")
         else:
             context = {

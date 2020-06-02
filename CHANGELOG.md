@@ -4,6 +4,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.4.0] 2020-06-01
+* [teachers] Badges now have an import ID and can be updated by export/import
+* [dev] Default graphics updated to ByteDeck
+* Bugfixes: 
+  - [#532](https://github.com/timberline-secondary/hackerspace/issues/532)
+  - [#529](https://github.com/timberline-secondary/hackerspace/issues/529)
+  - [#525](https://github.com/timberline-secondary/hackerspace/issues/525)
+  - [#522](https://github.com/timberline-secondary/hackerspace/issues/522)
+  - [#518](https://github.com/timberline-secondary/hackerspace/issues/518)
+
+
 ### [1.3.1] 2020-05-23
 * Bugfixes: 
   - [#508](https://github.com/timberline-secondary/hackerspace/issues/508)

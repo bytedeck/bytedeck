@@ -19,9 +19,24 @@ from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from quest_manager.models import Quest, QuestSubmission
+from notifications.models import Notification
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
+
+
+def create_two_test_files():
+    """ returns a list of files for testing form views """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    # give it a unique name for easier testing, otherwise when re-testing, 
+    # the name will be appended with stuff because the file already exists
+    import uuid
+    test_filename1 = str(uuid.uuid1().hex) + ".txt"
+    test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
+    test_filename2 = str(uuid.uuid1().hex) + ".txt"
+    test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+
+    return [test_file1, test_file2]
 
 
 class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
@@ -317,17 +332,6 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
-    def test_student_quest_completion(self):
-        # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-
-        # self.assertRedirects(
-        #     response=self.client.post(reverse('quests:complete', args=[self.sub1.id])),
-        #     expected_url=reverse('quests:quests'),
-        # )
-
-        # TODO self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
-        pass
-
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
         # log in a student
@@ -366,8 +370,332 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
 
 
+class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for view.py :
+
+        def complete(request, submission_id)
+
+        via urls.py
+
+        url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
+
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        # log in the student for all tests here
+        self.client.force_login(self.test_student)
+
+        self.quest = baker.make(Quest)
+        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
+
+    def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
+        """ Convenience method for posting the complete() view.  
+        If teachers_list is not provided, [self.test_teacher] is used.
+        """
+        if not teachers_list:
+            teachers_list = [self.test_teacher]
+        with patch('profile_manager.models.Profile.current_teachers', return_value=teachers_list):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]), 
+                data={'comment_text': submission_comment, button: True}
+            )
+        return response
+
+    def test_complete(self):
+        """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
+        Are redirected to their available quests page, submission is marked completed and has a completion time
+        """
+        comment = "test submission comment"
+        response = self.post_complete(submission_comment=comment)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+        self.assertSuccessMessage(response)
+
+        # make sure the comment was created
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments[0].text, comment)
+
+    def test_no_comment_verification_not_required(self):
+        """ When a quest is automatically approved, it does not require a comment
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment="")
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+        self.assertSuccessMessage(response)
+
+    def test_no_comment_but_verification_required(self):
+        """ When a quest requires teacher's approval, it means they must include either files or a comment
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment="")
+
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+        self.assertErrorMessage(response)
+
+    def test_quest_not_available(self):
+        """ If a quest is not available to a student, they should not be able to complete it """
+        # TODO
+        # # Easy way to make unavailable, should probably patch the available quests lists instead though...
+        # self.quest.visibel_to_student = False
+        # self.quest.save()
+
+        # response = self.post_complete(comment="")
+        # # Should redirect back to the submission with error message
+        # self.assertEqual(response.status_code, 404)
+        pass
+
+    def test_notifications_own_student(self):
+        """ Teacher should NOT be notified when their student complete's a quest, because it
+        will appear in there approvals tab anyway, so redundant
+        """
+        self.sub.quest.verification_required = True  # default anyway, but make it explicit
+        self.sub.quest.save()
+
+        self.post_complete()
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+
+    def test_notifications_comment_when_verification_not_required(self):
+        """ Teacher SHOULD be notified when their student complete's a quest if:
+        1. it has a comment, AND
+        2. it does not require verification
+        Otherwise teacher would not notice the comment
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete()
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_notifications_no_comment_when_verification_not_required(self):
+        """ Teacher should NOT be notified when there is no comment and it's auto-approved (verification_required=False):
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(submission_comment="")
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+
+    def test_specific_teacher_to_notify_own_teacher(self):
+        """ If a quest has a specific teacher linked to it, they should be notified of completions if
+        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
+        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        self.sub.quest.specific_teacher_to_notify = self.test_teacher
+        self.sub.quest.save()
+
+        self.post_complete(teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+    
+    def test_specific_teacher_to_notify_other_teacher(self):
+        """ If a quest has a specific teacher linked to it, they should be notified of completions if
+        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
+        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
+        self.sub.quest.specific_teacher_to_notify = special_teacher
+        self.sub.quest.save()
+
+        self.post_complete(teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(special_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+        # and still no notification needed for actual teacher of student:
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+
+    def test_comment_completed(self):
+        """ Students can comment on already completed quests.
+        """
+        comment = "test submission comment"
+        response = self.post_complete(button="comment", submission_comment=comment)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        self.assertSuccessMessage(response)
+        # make sure the comment was created
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments[0].text, comment)
+
+    def test_comment_button_no_comment_verification_not_required(self):
+        """ When commenting on an already completed quest, needs to actually comment with something
+        whether or not verification was required originally
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        response = self.post_complete(button="comment", submission_comment="")
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.assertErrorMessage(response)
+
+    def test_comment_button_no_comment_but_verification_required(self):
+        """ When commenting on an already completed quest, needs to actually comment with something
+        whether or not verification was required originally
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(button="comment", submission_comment="")
+
+        # Should redirect back to the submission with error message
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+        self.assertErrorMessage(response)
+
+    # def test_quest_not_available(self):
+    #     """ If a quest is not available to a student, they should not be able to complete it """
+    #     # TODO
+    #     # # Easy way to make unavailable, should probably patch the available quests lists instead though...
+    #     # self.quest.visibel_to_student = False
+    #     # self.quest.save()
+
+    #     # response = self.post_complete(button="comment", comment="")
+    #     # # Should redirect back to the submission with error message
+    #     # self.assertEqual(response.status_code, 404)
+    #     pass
+
+    def test_comment_button_notifications_own_student(self):
+        """ Teacher should be notified when their student comments on an already complete's a quest
+        """
+        self.sub.quest.verification_required = True  # default anyway, but make it explicit
+        self.sub.quest.save()
+
+        self.post_complete(button="comment")
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button__notifications_comment_when_verification_not_required(self):
+        """ Teacher SHOULD always be notified on comments on already completed quests, 
+        even if verification was not required originally
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(button="comment")
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button_specific_teacher_to_notify_own_teacher(self):
+        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        both of them should be notified of the comment (the specific teacher, and the normal teacher)
+
+        In this case, they are the same teacher, so don't send two notifications!
+        """
+        self.sub.quest.specific_teacher_to_notify = self.test_teacher
+        self.sub.quest.save()
+
+        self.post_complete(button="comment", teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+    
+    def test_comment_button_specific_teacher_to_notify_other_teacher(self):
+        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        both of them should be notified of the comment (the specific teacher, and the normal teacher)
+        """
+        special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
+        self.sub.quest.specific_teacher_to_notify = special_teacher
+        self.sub.quest.save()
+
+        self.post_complete(button="comment", teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
+
+        notifications = Notification.objects.all_for_user_target(special_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+        # and notify actual teacher of student:
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_notification_when_teacher_comments(self):
+        """ When a teacher comments on submission and student gets notified
+        """
+        # log in a teacher to comment on the submission
+        self.client.force_login(self.test_teacher)
+        self.post_complete(button="comment")
+
+        # Teacher shouldn't get a nofication if they are the ones leaving a comment
+        notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+        self.assertEqual(notifications.count(), 0)
+
+        # Student is notified
+        notifications = Notification.objects.all_for_user_target(self.test_student, self.sub)
+        self.assertEqual(notifications.count(), 1)
+
+    def test_comment_button_files_in_form(self):
+        """ Files can be uploaded and attached to comments when completing or commenting on quests
+        and a link to the file is included in the comment.
+        """
+        test_files = create_two_test_files()
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]), 
+                data={'comment': True, 'attachments': test_files}
+            )
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        # make sure the files exist
+        from comments.models import Comment
+        comment = Comment.objects.all_with_target_object(self.sub).first()
+        self.assertTrue(comment)  # not empty or None etc
+        comment_files_qs = comment.document_set.all()
+        self.assertEqual(comment_files_qs.count(), 2)
+
+        # make sure they are the correct 
+        comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
+        import os
+        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
+        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
+
+    def test_unrecognized_submit_button(self):
+        """ Unrecognized form submit button should 404.  
+        In some views Summernote was causing problems by submitting the form via ajax """
+        response = self.post_complete(button="non_existant_button")
+        self.assertEqual(response.status_code, 404)
+
+    def test_invalid_submission_form(self):
+        """ I don't think thie form CAN be invalid... how? None of the fields are required. """
+        # with patch('profile_manager.models.Profile.current_teachers', return_value=self.test_teacher):
+        #     response = self.client.post(
+        #         reverse('quests:complete', args=[self.sub.id]), 
+        #         data={}
+        #     )
+        # # bad form, just rerender
+        # self.assertEqual(response.status_code, 200)
+        pass
+
+
 class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
-    """ Unit Tests for:
+    """ Tests for:
 
         class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
         class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView)
@@ -1039,7 +1367,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1113,7 +1440,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
             self.assertRedirects(response, reverse('quests:approvals'))
 
         # The student AND current_teacher should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1170,7 +1496,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn(test_badge2.name, comments.first().text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
@@ -1179,18 +1504,19 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         """ Files can be uploaded and attached to comments when approving/commenting/rejecting quests
         and a link to the file is included in the comment.
         """
-        # create a file for testing
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        # give it a unique name for easier testing, otherwise when re-testing, 
-        # the name will be appended with stuff because the file already exists
-        import uuid
-        test_filename1 = str(uuid.uuid1().hex) + ".txt"
-        test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
-        test_filename2 = str(uuid.uuid1().hex) + ".txt"
-        test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+        # # create a file for testing
+        # from django.core.files.uploadedfile import SimpleUploadedFile
+        # # give it a unique name for easier testing, otherwise when re-testing, 
+        # # the name will be appended with stuff because the file already exists
+        # import uuid
+        # test_filename1 = str(uuid.uuid1().hex) + ".txt"
+        # test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
+        # test_filename2 = str(uuid.uuid1().hex) + ".txt"
+        # test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
+        test_files = create_two_test_files()
         staff_form_data = {
             'approve_button': True,
-            'attachments': [test_file1, test_file2]
+            'attachments': test_files
         }
         response = self.client.post(
             reverse('quests:approve', args=[self.sub.id]),
@@ -1208,8 +1534,8 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         # make sure they are the correct 
         comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
         import os
-        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_filename1)
-        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_filename2)
+        self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
+        self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
     
     def test_comment_button(self):
         """ The comment button should only leave a comment and not change the status of the submission """
@@ -1236,7 +1562,6 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
-        from notifications.models import Notification
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc

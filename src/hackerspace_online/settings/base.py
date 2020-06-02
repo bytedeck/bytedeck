@@ -49,6 +49,10 @@ SHARED_APPS = (
     'django.contrib.flatpages',
     ###########################################
 
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
     # or

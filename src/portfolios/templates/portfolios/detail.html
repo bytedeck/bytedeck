@@ -31,7 +31,7 @@
             </div>
             <div class="panel-body">
                 Sharing your portfolio publicy means a link to your portfolio will appear in our
-                <a href="{% url 'portfolios:public_list' %}">public list of student portfolios</a>, available to anyone who finds the Hackerspace site.
+                <a href="{% url 'portfolios:public_list' %}">public list of student portfolios</a>, available to anyone who finds the {{ config.site_name_short}} site.
                   <a href="{% url 'portfolios:edit' p.pk %}">Edit</a> your portfolio to change this setting.
             </div>
         </div>

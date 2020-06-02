@@ -84,6 +84,9 @@ class NotificationManager(models.Manager):
         # ? Why only one?  Could have several?
         return self.get_queryset().get_user(user).get_object_target(target).first()
 
+    def all_for_user_target(self, user, target):
+        return self.get_queryset().get_user(user).get_object_target(target)
+
     def get_user_target_unread(self, user, target):
         # should be only one, first will convert from queryset to notification
         notification = self.get_queryset().get_user(user).get_object_target(target).first()

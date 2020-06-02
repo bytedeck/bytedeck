@@ -49,14 +49,9 @@ class SiteConfig(models.Model):
         help_text="Students will need this to sign up to your deck.  You can set it to any string of characters you like."
     )   
 
-    site_logo = models.ImageField(
-        verbose_name="Site Logo", null=True, blank=True, 
-        help_text="This will be displayed at the top left of your site's header (ideally 256x256 px)."
-    )
-
     banner_image = models.ImageField(
         verbose_name="Banner Image", null=True, blank=True,
-        help_text="The banner will be displayed on your landing page and in a smaller format at the top left of the site (ideally 1140px wide)"
+        help_text="The banner will be displayed on your landing page and in a smaller format at the top left of the site (up to 1140px wide)"
     )
 
     banner_image_dark = models.ImageField(
@@ -64,15 +59,20 @@ class SiteConfig(models.Model):
         help_text="An optional, alternate banner to be used with the dark theme."
     )
 
+    site_logo = models.ImageField(
+        verbose_name="Site Logo", null=True, blank=True, 
+        help_text="This will be displayed at the top left of your site's header (ideally 64x64 px)."
+    )
+
     default_icon = models.ImageField(
         verbose_name="Default Icon", null=True, blank=True, 
-        help_text="This becomes the default icon for quests and badges and other places where icons are used (ideally 256x256 px)."
+        help_text="This becomes the default icon for quests and badges and other places where icons are used (ideally 64x64 px)."
                   "If no icon is provided, it will fall back on the site logo (so you can leave this blank if you want to use your logo)"
     )
 
     favicon = models.ImageField(
         verbose_name="Favicon", null=True, blank=True,
-        help_text="The image used in browser tabs (ideally 16x16 px). It will fall back to your site logo if a seperate favicon is not provided."
+        help_text="The image used in browser tabs (ideally 32x32 px). It will fall back to your site logo if a seperate favicon is not provided."
     )
 
     submission_quick_text = models.CharField(
@@ -149,13 +149,13 @@ class SiteConfig(models.Model):
         elif self.site_logo and hasattr(self.site_logo, 'url'):
             return self.site_logo.url
         else:
-            return static('icon/favicon.ico')
+            return None
 
     def get_banner_image_url(self):
         if self.banner_image and hasattr(self.banner_image, 'url'):
             return self.banner_image.url
         else:
-            return static('img/banner.svg')
+            return static('img/banner.png')
 
     def get_banner_image_dark_url(self):
         if self.banner_image_dark and hasattr(self.banner_image_dark, 'url'):
@@ -163,7 +163,7 @@ class SiteConfig(models.Model):
         elif self.banner_image and hasattr(self.banner_image, 'url'):
             return self.banner_image.url
         else:
-            return static('img/banner_slate.svg')
+            return static('img/banner.png')
 
     def set_active_semester(self, semester):
         from courses.models import Semester  # import here to prevent ciruclar imports

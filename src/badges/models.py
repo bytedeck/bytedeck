@@ -1,3 +1,4 @@
+import uuid
 from collections import defaultdict
 
 from django.conf import settings
@@ -151,6 +152,13 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True)  # needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
+
+    import_id = models.UUIDField(
+        default=uuid.uuid4, unique=True,
+        help_text="Only edit this if you want to link to a badge in another system so that "
+                  "when importing from that other system, it will update this badge too. "
+                  "Otherwise do not edit this or it will break existing links!"
+    )
     # hours_between_repeats = models.PositiveIntegerField(default = 0)
     # date_available = models.DateField(default=timezone.now())
     # time_available = models.TimeField(default=time().min) # midnight

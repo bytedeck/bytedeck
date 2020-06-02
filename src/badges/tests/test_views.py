@@ -1,3 +1,4 @@
+import uuid
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from model_bakery import baker
@@ -103,7 +104,8 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
             'xp': 5,
             'content': "test content",
             'badge_type': self.test_badge_type.id,
-            'author': self.test_teacher.id
+            'author': self.test_teacher.id,
+            'import_id': uuid.uuid4()
         }
 
         response = self.client.post(
@@ -126,7 +128,8 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
             'xp': 5,
             'content': "test content",
             'badge_type': self.test_badge_type.id,
-            'author': self.test_teacher.id
+            'author': self.test_teacher.id,
+            'import_id': uuid.uuid4()
         }
 
         response = self.client.post(

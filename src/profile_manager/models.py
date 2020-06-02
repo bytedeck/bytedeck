@@ -126,7 +126,7 @@ class Profile(models.Model):
     custom_stylesheet = RestrictedFileField(null=True, blank=True, upload_to=user_directory_path,
                                             content_types=['text/css', 'text/plain'],
                                             max_upload_size=512000,
-                                            help_text='ADVANCED: A CSS file to customize the Hackerspace.  You can use  \
+                                            help_text='ADVANCED: A CSS file to customize this site!  You can use  \
                                                    this to tweak something, or create a completely new theme.')
 
     objects = ProfileManager()
