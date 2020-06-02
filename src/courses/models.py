@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-from workdays import networkdays, workday
+from workdays import workday
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
