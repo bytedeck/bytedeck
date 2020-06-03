@@ -54,6 +54,16 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
 
 
+class SemesterModelManagerTest(TenantTestCase):
+    def setUp(self):
+        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
+    
+    def test_get_current(self):
+        print(Semester.objects.get_current())
+
+
 class SemesterModelTest(TenantTestCase):
 
     def setUp(self):
