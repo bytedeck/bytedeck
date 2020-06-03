@@ -306,13 +306,6 @@ class Semester(models.Model):
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
-    def get_student_mark_list(self, students_only=False):
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
-        mark_list = []
-        for student in students:
-            mark_list.append(student.profile.mark())
-        return mark_list
-
 
 class DateType(models.Model):
     date_type = models.CharField(max_length=50, unique=True)
