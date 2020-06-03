@@ -157,14 +157,14 @@ class SemesterManager(models.Manager):
         else:
             return SiteConfig.get().active_semester
 
-    def set_active(self, active_sem_id):
-        sems = self.get_queryset()
-        for sem in sems:
-            if sem.id == active_sem_id:
-                sem.active = True
-            else:
-                sem.active = False
-            sem.save()
+    def set_active(self, sem_id):
+        # Set all to active = False
+        self.get_queryset().update(active=False)  # note thisdoes not fire post_save/update signals
+
+        # Then set only this one to active=True
+        sem = self.get_queryset().get(id=sem_id)
+        sem.active = True
+        sem.save()
 
     def complete_active_semester(self):
 
@@ -339,7 +339,7 @@ class ExcludedDate(models.Model):
         return self.date.strftime("%d-%b-%Y")
 
 
-class Course(models.Model, ):
+class Course(IsAPrereqMixin, models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     xp_for_100_percent = models.PositiveIntegerField(default=1000)
@@ -493,7 +493,7 @@ class CourseStudent(models.Model):
     def xp_per_day_ave(self):
         days = self.semester.days_so_far()
         if days > 0:
-            return self.user.profile.xp_cached / self.semester.days_so_far()
+            return self.user.profile.xp_cached / days
         else:
             return 0
 

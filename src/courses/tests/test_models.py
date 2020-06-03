@@ -1,12 +1,16 @@
+from mock import patch
+
 from datetime import datetime, timedelta, date
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.shortcuts import reverse
 
 from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate
+from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate, CourseStudent
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -61,7 +65,28 @@ class SemesterModelManagerTest(TenantTestCase):
         self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
     
     def test_get_current(self):
-        print(Semester.objects.get_current())
+        """ Get's the current semester as defined by SiteConfig """
+        self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
+
+    def test_get_current_as_queryset(self):
+        """ Get's the current semester object in a quesryset  """
+        self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [repr(SiteConfig.get().active_semester)])
+
+    def test_set_active(self):
+        """ Only one active semester, so should also set all others to active=False  """
+        current_sem = SiteConfig.get().active_semester
+        self.assertTrue(current_sem.active)
+        Semester.objects.set_active(self.semester1.id)
+        self.semester1.refresh_from_db()
+        self.assertTrue(self.semester1.active)
+        # previous active semester is now not
+        current_sem.refresh_from_db()
+        self.assertFalse(current_sem.active)
+
+    def test_complete_active_semester(self):
+        """ set current semester to closed and do lots of stuff..  """
+        # TODO
+        pass
 
 
 class SemesterModelTest(TenantTestCase):
@@ -186,21 +211,73 @@ class SemesterModelTest(TenantTestCase):
         self.assertEqual(dt, expected)
 
 
-class CourseTestModel(TenantTestCase):
+class CourseModelTest(TenantTestCase):
 
     def setUp(self):
         self.course = baker.make(Course)
 
-    def test_semester_creation(self):
+    def test_course_creation(self):
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
-    # def test condition_met_as_prerequisite(self):
-    #     pass
+    def test_condition_met_as_prerequisite(self):
+        """ If the user is CURRENTLY registered in this course, then condition is met """
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=self.course)
+        self.assertFalse(self.course.condition_met_as_prerequisite(student, 1))
+
+        baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
+        self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
     def test_default_object_created(self):
         """ A data migration should make a default object for this model """
         self.assertTrue(Course.objects.filter(title="Default").exists())
+
+
+class CourseStudentModelTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User)
+        self.course = baker.make(Course)
+        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+
+    def test_course_student_creation(self):
+        self.assertIsInstance(self.course_student, CourseStudent)
+        # self.assertEqual(str(self.course), self.course.title)
+
+    def test_course_student_get_absolute_url(self):
+        self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_calc_mark(self, fraction_complete):
+        fraction_complete.return_value = 0.5
+        course = baker.make(Course, xp_for_100_percent=100)
+        course_student = baker.make(CourseStudent, user=self.student, course=course, semester=SiteConfig.get().active_semester)
+        mark = course_student.calc_mark(50)
+        self.assertEqual(mark, 100)
+        mark = course_student.calc_mark(10)
+        self.assertEqual(mark, 20)
+        mark = course_student.calc_mark(0)
+        self.assertEqual(mark, 0)
+
+        fraction_complete.return_value = 1.0
+        mark = course_student.calc_mark(100)
+        self.assertEqual(mark, 100)
+        mark = course_student.calc_mark(50)
+        self.assertEqual(mark, 50)
+
+    @patch('courses.models.Semester.days_so_far')
+    def test_xp_per_day_ave(self, days_so_far):
+
+        self.student.profile.xp_cached = 120
+        self.student.profile.save()
+        days_so_far.return_value = 10
+        xp_per_day = self.course_student.xp_per_day_ave()
+        self.assertEqual(xp_per_day, 12)
+
+        days_so_far.return_value = 0
+        xp_per_day = self.course_student.xp_per_day_ave()
+        self.assertEqual(xp_per_day, 0)
 
 
 class BlockModelTest(TenantTestCase):
