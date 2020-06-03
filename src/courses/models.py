@@ -12,7 +12,6 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-from workdays import workday
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -237,7 +236,6 @@ class Semester(models.Model):
             last_day = date.today()
         else:
             last_day = self.last_day
-        # return networkdays(self.first_day, last_day, excluded_days)
         count = numpy.busday_count(self.first_day, last_day, holidays=excluded_days)
         if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here. 
             count += 1 
@@ -275,24 +273,36 @@ class Semester(models.Model):
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
-        date_after_fraction = numpy.busday_offset(self.first_day, days_to_fraction, roll='backward', holidays=excluded_days)
+        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward', holidays=excluded_days)
         return date_after_fraction
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
+        """ The date `class days` from the start of the semester
+
+        Arguments:
+            class_days {int} -- number of days since start
+
+        Keyword Arguments:
+            add_holidays {bool} -- [description] (default: {False})
+
+        Returns:
+            {datetime} -- [description]
+        """
         excluded_days = self.excluded_days()
 
-        # The next day of class excluding holidays/weekends
-        date = workday(self.first_day, class_days, excluded_days)
+        # The next day of class excluding holidays/weekends, -1 because first day counts as 1, not zero.
+        d = numpy.busday_offset(self.first_day, class_days - 1, roll='forward', holidays=excluded_days).astype(date)
 
         # Might want to include the holidays (if class day is Friday, then work done on weekend/holidays won't show up
         # till Monday.  For chart, want to include those days
-        if (add_holidays):
-            next_date = workday(self.first_day, class_days + 1, excluded_days)
-            num_holidays_to_add = next_date - date - timedelta(days=1)  # If more than one day difference
-            date += num_holidays_to_add
+        # if (add_holidays):
+        #     next_date = numpy.busday_offset(self.first_day, class_days + 1, roll='backward', holidays=excluded_days)
+        #     # next_date = workday(self.first_day, class_days + 1, excluded_days)
+        #     num_holidays_to_add = next_date - d - timedelta(days=1)  # If more than one day difference
+        #     d += num_holidays_to_add
 
         # convert from date to datetime
-        dt = datetime.combine(date, datetime.max.time())
+        dt = datetime.combine(d, datetime.max.time())
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
