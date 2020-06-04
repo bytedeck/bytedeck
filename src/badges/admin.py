@@ -24,9 +24,7 @@ class BadgeTypeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource):
     class Meta:
         model = Badge
-        # Why was xp excluded?  This means XP wasn't being imported with the badges.
-        # Can't think of reason why XP was originally expluded
-        # exclude = ('xp',)
+        import_id_fields = ('import_id',)
 
 
 class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):
