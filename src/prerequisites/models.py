@@ -365,7 +365,7 @@ class Prereq(IsAPrereqMixin, models.Model):
     @classmethod
     def add_simple_prereq(cls, parent_object, prereq_object):
         """
-        Adds an object (the prereq_parent) as a prerequisite to another object (prereq_object)
+        Adds an object (prereq_object) as a prerequisite to another object (parent_object)
         Does not include any more complicated logic such as OR AND NOT
         :param parent_object: The owner of the prereq (i.e the object that needs the prereq fulfilled before it becomes available)
         :param prereq_object: The preq that needs to be completed before the parent becomes available
