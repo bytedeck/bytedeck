@@ -12,7 +12,6 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-from workdays import networkdays, workday
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -158,14 +157,14 @@ class SemesterManager(models.Manager):
         else:
             return SiteConfig.get().active_semester
 
-    def set_active(self, active_sem_id):
-        sems = self.get_queryset()
-        for sem in sems:
-            if sem.id == active_sem_id:
-                sem.active = True
-            else:
-                sem.active = False
-            sem.save()
+    def set_active(self, sem_id):
+        # Set all to active = False
+        self.get_queryset().update(active=False)  # note thisdoes not fire post_save/update signals
+
+        # Then set only this one to active=True
+        sem = self.get_queryset().get(id=sem_id)
+        sem.active = True
+        sem.save()
 
     def complete_active_semester(self):
 
@@ -230,14 +229,17 @@ class Semester(models.Model):
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
-        excluding weekends and ExcludedDates) '''
+        excluding weekends and ExcludedDates). '''
 
         excluded_days = self.excluded_days()
         if upto_today and date.today() < self.last_day:
             last_day = date.today()
         else:
             last_day = self.last_day
-        return networkdays(self.first_day, last_day, excluded_days)
+        count = numpy.busday_count(self.first_day, last_day, holidays=excluded_days)
+        if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here. 
+            count += 1 
+        return count
 
     def excluded_days(self):
         return self.excludeddate_set.all().values_list('date', flat=True)
@@ -266,35 +268,43 @@ class Semester(models.Model):
         return self.last_day
 
     def get_date(self, fraction_complete):
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        after a fraction of the semester is over """
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
-        return workday(self.first_day, days_to_fraction, excluded_days)
+        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward', holidays=excluded_days)
+        return date_after_fraction
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
+        """ The date `class days` from the start of the semester
+
+        Arguments:
+            class_days {int} -- number of days since start
+
+        Keyword Arguments:
+            add_holidays {bool} -- [description] (default: {False})
+
+        Returns:
+            {datetime} -- [description]
+        """
         excluded_days = self.excluded_days()
 
-        # The next day of class excluding holidays/weekends
-        date = workday(self.first_day, class_days, excluded_days)
+        # The next day of class excluding holidays/weekends, -1 because first day counts as 1, not zero.
+        d = numpy.busday_offset(self.first_day, class_days - 1, roll='forward', holidays=excluded_days).astype(date)
 
         # Might want to include the holidays (if class day is Friday, then work done on weekend/holidays won't show up
         # till Monday.  For chart, want to include those days
-        if (add_holidays):
-            next_date = workday(self.first_day, class_days + 1, excluded_days)
-            num_holidays_to_add = next_date - date - timedelta(days=1)  # If more than one day difference
-            date += num_holidays_to_add
+        # if (add_holidays):
+        #     next_date = numpy.busday_offset(self.first_day, class_days + 1, roll='backward', holidays=excluded_days)
+        #     # next_date = workday(self.first_day, class_days + 1, excluded_days)
+        #     num_holidays_to_add = next_date - d - timedelta(days=1)  # If more than one day difference
+        #     d += num_holidays_to_add
 
         # convert from date to datetime
-        dt = datetime.combine(date, datetime.max.time())
+        dt = datetime.combine(d, datetime.max.time())
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
-
-    def get_student_mark_list(self, students_only=False):
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
-        mark_list = []
-        for student in students:
-            mark_list.append(student.profile.mark())
-        return mark_list
 
 
 class DateType(models.Model):
@@ -329,7 +339,7 @@ class ExcludedDate(models.Model):
         return self.date.strftime("%d-%b-%Y")
 
 
-class Course(models.Model, ):
+class Course(IsAPrereqMixin, models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     xp_for_100_percent = models.PositiveIntegerField(default=1000)
@@ -483,7 +493,7 @@ class CourseStudent(models.Model):
     def xp_per_day_ave(self):
         days = self.semester.days_so_far()
         if days > 0:
-            return self.user.profile.xp_cached / self.semester.days_so_far()
+            return self.user.profile.xp_cached / days
         else:
             return 0
 

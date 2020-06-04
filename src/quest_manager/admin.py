@@ -1,3 +1,4 @@
+from uuid import UUID
 from django.contrib import admin
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist
@@ -10,6 +11,7 @@ from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
 
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
+from badges.models import Badge
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .signals import tidy_html
 from .models import Quest, Category, QuestSubmission, CommonData
@@ -76,7 +78,7 @@ class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin
 
 
 class QuestResource(resources.ModelResource):
-    prereq_quest_import_id = Field(column_name='prereq_quest_import_id')
+    prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
 
@@ -85,12 +87,16 @@ class QuestResource(resources.ModelResource):
         import_id_fields = ('import_id',)
         exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
 
-    def dehydrate_prereq_quest_import_id(self, quest):
-        # save basic single/simple prerequisite quest, if there is one.
-        prereqs = Prereq.objects.all_parent(quest)
-        for p in prereqs:
+    def dehydrate_prereq_import_ids(self, quest):
+        # save basic single/simple prerequisites, if there are any (no OR).
+        # save as an & seperated list of import_ids (UUIDs)
+        prereq_import_ids = ""
+        for p in quest.prereqs():
             if p.prereq_content_type == ContentType.objects.get_for_model(Quest):
-                return p.get_prereq().import_id
+                prereq_import_ids += "&" + str(p.get_prereq().import_id)
+            elif p.prereq_content_type == ContentType.objects.get_for_model(Badge):
+                prereq_import_ids += "&" + str(p.get_prereq().import_id)
+        return prereq_import_ids
 
     def dehydrate_campaign_title(self, quest):
         if quest.campaign:
@@ -104,29 +110,35 @@ class QuestResource(resources.ModelResource):
         else:
             return None
 
-    def generate_simple_prereqs(self, parent_quest, data_dict):
+    def generate_simple_prereqs(self, parent_object, data_dict):
         # check that the prereq quest exists as an import-linked quest via import_id
 
-        prereq_quest_import_id = data_dict["prereq_quest_import_id"]
+        prereq_import_ids = data_dict["prereq_import_ids"]
+        prereq_import_ids = prereq_import_ids.split('&')
+        prereq_object = None
 
-        if prereq_quest_import_id:
-            try:
-                prereq_quest = Quest.objects.get(import_id=prereq_quest_import_id)
-            except ObjectDoesNotExist:
-                return False
+        for import_id in prereq_import_ids:
+            if import_id:  # can be blank sometimes
+                try:
+                    prereq_object = Quest.objects.get(import_id=UUID(import_id))
+                except ObjectDoesNotExist:
+                    try:
+                        prereq_object = Badge.objects.get(import_id=UUID(import_id))
+                    except ObjectDoesNotExist:
+                        pass
 
-            existing_prereqs_groups = Prereq.objects.all_parent(parent_quest)
+            if prereq_object:
 
-            # generate list of objects for already existing primary prereq
-            existing_primary_prereqs = [p.get_prereq() for p in existing_prereqs_groups]
+                existing_prereqs_groups = parent_object.prereqs()
+                # generate list of objects for already existing primary prereq
+                existing_primary_prereqs = [p.get_prereq() for p in existing_prereqs_groups]
 
-            # check if the imported prereq already exists
-            if prereq_quest in existing_primary_prereqs:
-                return False
-            else:
-                # Create a new prereq to this quest
-                Prereq.add_simple_prereq(parent_quest, prereq_quest)
-        return True
+                # check if the imported prereq already exists
+                if prereq_object in existing_primary_prereqs:
+                    pass
+                else:
+                    # Create a new prereq to this quest
+                    Prereq.add_simple_prereq(parent_object, prereq_object)
 
     def generate_campaign(self, quest, data_dict):
         campaign_title = data_dict["campaign_title"]

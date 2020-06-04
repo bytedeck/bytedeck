@@ -1,11 +1,16 @@
-from datetime import timedelta, date
+from mock import patch
+
+from datetime import datetime, timedelta, date
+from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.shortcuts import reverse
 
 from model_bakery import baker
 from freezegun import freeze_time
 from tenant_schemas.test.cases import TenantTestCase
 
-from courses.models import MarkRange, Course, Semester, Block, Rank, Grade
+from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate, CourseStudent
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -53,12 +58,43 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
 
 
-class SemesterTestModel(TenantTestCase):
+class SemesterModelManagerTest(TenantTestCase):
+    def setUp(self):
+        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
+    
+    def test_get_current(self):
+        """ Get's the current semester as defined by SiteConfig """
+        self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
+
+    def test_get_current_as_queryset(self):
+        """ Get's the current semester object in a quesryset  """
+        self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [repr(SiteConfig.get().active_semester)])
+
+    def test_set_active(self):
+        """ Only one active semester, so should also set all others to active=False  """
+        current_sem = SiteConfig.get().active_semester
+        self.assertTrue(current_sem.active)
+        Semester.objects.set_active(self.semester1.id)
+        self.semester1.refresh_from_db()
+        self.assertTrue(self.semester1.active)
+        # previous active semester is now not
+        current_sem.refresh_from_db()
+        self.assertFalse(current_sem.active)
+
+    def test_complete_active_semester(self):
+        """ set current semester to closed and do lots of stuff..  """
+        # TODO
+        pass
+
+
+class SemesterModelTest(TenantTestCase):
 
     def setUp(self):
-        self.semester_start = date(2020, 9, 8)
-        self.semester_end = date(2021, 1, 22)
-        self.today_fake = date(2020, 10, 20)  # some date in the semester
+        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        self.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
         self.semester = baker.make(Semester,
                                    first_day=self.semester_start,
                                    last_day=self.semester_end
@@ -91,24 +127,157 @@ class SemesterTestModel(TenantTestCase):
         with freeze_time(self.semester_end, tz_offset=0):
             self.assertTrue(self.semester.is_open())
 
-        # Timezone problems?    
+        # Timezone problems?   
+
+    def test_num_days(self):
+        """The number of classes in the semester, from start to end date excluding weekends and excluded dates
+        """
+        # no excluded dates yet, so 21 weekdays in Sep 2019 (see setup)
+        self.assertEqual(self.semester.num_days(), 21)
+
+        # add some excluded dates
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 2))  # Mon
+        self.assertEqual(self.semester.num_days(), 20)
+
+        # Future dates should only go up to end.
+        with freeze_time(date(2019, 10, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 20)
+
+    def test_num_days_upto_today(self):
+        """The number of classes in the semester SO FAR up to today
+        """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 10)
+
+        # Future dates should only go up to end.
+        with freeze_time(date(2019, 10, 15), tz_offset=0):
+            self.assertEqual(self.semester.num_days(upto_today=True), 21)
+
+    def test_excluded_days(self):
+        """ returns a list of dates excluded for this semester (holidays and other non-instructional days) """
+        # add some excluded dates
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
+        baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 2))  # Mon
+
+        dates = self.semester.excluded_days()
+        self.assertListEqual(list(dates), [date(2019, 9, 1), date(2019, 9, 2)])
+
+    def test_days_so_far(self):
+        self.assertEqual(self.semester.days_so_far(), self.semester.num_days(upto_today=True))
+
+    def test_fraction_complete(self):
+        """ how far through the semester as a fraction """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            # 10 days so far (excluding weekends) / 21 days total
+            fraction_complete = self.semester.fraction_complete()
+            self.assertAlmostEqual(fraction_complete, 10 / 21)
+
+    def test_percent_complete(self):
+        """ how far through the semester as a percent """
+        with freeze_time(date(2019, 9, 15), tz_offset=0):
+            # 10 days so far (excluding weekends) / 21 days total * 100
+            percent_complete = self.semester.percent_complete()
+            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)   
+
+    def test_get_interim1_date(self):
+        self.assertEqual(self.semester.get_interim1_date(), self.semester.get_date(0.25))
+
+    def test_get_term_date(self):
+        self.assertEqual(self.semester.get_term_date(), self.semester.get_date(0.5))
+
+    def test_get_interim2_date(self):
+        self.assertEqual(self.semester.get_interim2_date(), self.semester.get_date(0.75))
+    
+    def test_get_final_date(self):
+        self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
+
+    def test_get_date(self):
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        after a fraction of the semester is over """
+        self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
+        self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
+        self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
+
+    def test_get_datetime_by_days_since_start(self):
+        """ 5 days since start of semester should fall on 6 Sep 2019, 
+        6 days should push through weekend and land on 9 Sep 2019 """
+        dt = self.semester.get_datetime_by_days_since_start(5)
+        expected = timezone.make_aware(datetime(2019, 9, 6, 23, 59, 59, 999999), timezone.get_default_timezone())
+        self.assertEqual(dt, expected)
+
+        dt = self.semester.get_datetime_by_days_since_start(6)
+        expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
+        self.assertEqual(dt, expected)
 
 
-class CourseTestModel(TenantTestCase):
+class CourseModelTest(TenantTestCase):
 
     def setUp(self):
         self.course = baker.make(Course)
 
-    def test_semester_creation(self):
+    def test_course_creation(self):
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
-    # def test condition_met_as_prerequisite(self):
-    #     pass
+    def test_condition_met_as_prerequisite(self):
+        """ If the user is CURRENTLY registered in this course, then condition is met """
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=self.course)
+        self.assertFalse(self.course.condition_met_as_prerequisite(student, 1))
+
+        baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
+        self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
     def test_default_object_created(self):
         """ A data migration should make a default object for this model """
         self.assertTrue(Course.objects.filter(title="Default").exists())
+
+
+class CourseStudentModelTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User)
+        self.course = baker.make(Course)
+        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+
+    def test_course_student_creation(self):
+        self.assertIsInstance(self.course_student, CourseStudent)
+        # self.assertEqual(str(self.course), self.course.title)
+
+    def test_course_student_get_absolute_url(self):
+        self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_calc_mark(self, fraction_complete):
+        fraction_complete.return_value = 0.5
+        course = baker.make(Course, xp_for_100_percent=100)
+        course_student = baker.make(CourseStudent, user=self.student, course=course, semester=SiteConfig.get().active_semester)
+        mark = course_student.calc_mark(50)
+        self.assertEqual(mark, 100)
+        mark = course_student.calc_mark(10)
+        self.assertEqual(mark, 20)
+        mark = course_student.calc_mark(0)
+        self.assertEqual(mark, 0)
+
+        fraction_complete.return_value = 1.0
+        mark = course_student.calc_mark(100)
+        self.assertEqual(mark, 100)
+        mark = course_student.calc_mark(50)
+        self.assertEqual(mark, 50)
+
+    @patch('courses.models.Semester.days_so_far')
+    def test_xp_per_day_ave(self, days_so_far):
+
+        self.student.profile.xp_cached = 120
+        self.student.profile.save()
+        days_so_far.return_value = 10
+        xp_per_day = self.course_student.xp_per_day_ave()
+        self.assertEqual(xp_per_day, 12)
+
+        days_so_far.return_value = 0
+        xp_per_day = self.course_student.xp_per_day_ave()
+        self.assertEqual(xp_per_day, 0)
 
 
 class BlockModelTest(TenantTestCase):

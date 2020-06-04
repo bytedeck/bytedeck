@@ -4,6 +4,12 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.5.0] 2020-06-03
+* [teachers] Badge prereqs are now imported
+* [teachers] Multiple (simple) prereqs can now be imported between badges and quests
+* [bugfix] Badge import_id fixed from 1.4.0
+* [dev] Many new tests added
+
 ### [1.4.0] 2020-06-01
 * [teachers] Badges now have an import ID and can be updated by export/import
 * [dev] Default graphics updated to ByteDeck
