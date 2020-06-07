@@ -1,4 +1,4 @@
-FROM python:3.7-slim
+FROM python:3.8-slim
 
 #### For development within the container in VS Code ##
 # https://code.visualstudio.com/docs/remote/containers
@@ -19,6 +19,9 @@ RUN pip install pylint
 
 # Install git, process tools, lsb-release (common in install instructions for CLIs)
 RUN apt-get install -y git procps lsb-release
+
+# Required for psycopg2: https://github.com/psycopg/psycopg2/issues/699
+RUN apt-get install -y --no-install-recommends libpq-dev
 
 # Install any missing dependencies for enhanced language service
 RUN apt-get install -y libicu[0-9][0-9]
