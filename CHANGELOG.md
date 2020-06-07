@@ -4,6 +4,11 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.6.0] 2020-06-07
+* [dev] Upgrade to Python 3.8
+* [dev] Optimize uwsgi
+
 ### [1.5.0] 2020-06-03
 * [teachers] Badge prereqs are now imported
 * [teachers] Multiple (simple) prereqs can now be imported between badges and quests
