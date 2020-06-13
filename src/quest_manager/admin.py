@@ -144,13 +144,15 @@ class QuestResource(resources.ModelResource):
         campaign_title = data_dict["campaign_title"]
         campaign_icon = data_dict["campaign_icon"]
 
-        campaign, created = Category.objects.get_or_create(
-            title=campaign_title,
-            defaults={'icon': campaign_icon},
-        )
+        # Might not have a campaign.
+        if campaign_title:
+            campaign, created = Category.objects.get_or_create(
+                title=campaign_title,
+                defaults={'icon': campaign_icon},
+            )
 
-        quest.campaign = campaign
-        quest.save()
+            quest.campaign = campaign
+            quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         for data_dict in dataset.dict:
