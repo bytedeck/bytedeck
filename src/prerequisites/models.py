@@ -8,10 +8,23 @@ from django.db.models.base import ObjectDoesNotExist
 
 class HasPrereqsMixin:
     """ 
-    For models that have prerequisites that determine their objects' availablity.
+    For models that have prerequisite requirements that determine their objects' availablity.
     """
+
     def prereqs(self):
+        """ A queryset of all the object's prerequisites """
         return Prereq.objects.all_parent(self)
+
+    def add_simple_prereqs(self, prereq_objects_list):
+        """ Adds a single object as a pre-requisite requirement to this parent object """
+        for prereq_object in prereq_objects_list:
+            print("Pre: ", prereq_object)
+            Prereq.add_simple_prereq(self, prereq_object)
+
+    def clear_all_prereqs(self):
+        """ Removes all pre-requisite requirements from this parent object """
+        num_deleted = self.prereqs().delete()
+        return num_deleted
 
 
 class IsAPrereqMixin:
@@ -370,6 +383,7 @@ class Prereq(IsAPrereqMixin, models.Model):
         :param parent_object: The owner of the prereq (i.e the object that needs the prereq fulfilled before it becomes available)
         :param prereq_object: The preq that needs to be completed before the parent becomes available
         :return: True if successful
+        #TODO: verify that prereq_object implements IsAPrereqMixin
         """
         if not parent_object or not prereq_object:
             return False
@@ -393,8 +407,10 @@ class Prereq(IsAPrereqMixin, models.Model):
 
     @staticmethod
     def model_is_registered(content_type):
-        # Check if class has the method `condition_met_as_prerequisite`
+        """Check if class has the method `condition_met_as_prerequisite`
+        TODO should instead check if model implements IsAPrereqMixin
         # http://stackoverflow.com/questions/25295327/how-to-check-if-a-python-class-has-particular-method-or-not
+        """
         mc = content_type.model_class()
 
         # deleted models?
