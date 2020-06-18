@@ -98,15 +98,17 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
 
-        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+
+        # 403 for CRUD views:
+        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher

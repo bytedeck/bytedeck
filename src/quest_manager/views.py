@@ -6,7 +6,7 @@ from comments.models import Comment, Document
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
@@ -15,7 +15,6 @@ from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from notifications.signals import notify
-from prerequisites.models import Prereq
 from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
