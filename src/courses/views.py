@@ -125,7 +125,7 @@ def end_active_semester(request):
         request,
         semester_warnings.get(sem, semester_warnings['success']))
 
-    return redirect('config')
+    return redirect('config:site_config_update')
 
 
 @allow_non_public_view
