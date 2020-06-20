@@ -19,7 +19,7 @@ from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
 
-from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+from .forms import (QuestForm, TAQuestForm, SubmissionForm, SubmissionFormStaff,
                     SubmissionQuickReplyForm)
 from .models import Quest, QuestSubmission
 
@@ -45,7 +45,6 @@ class QuestFormViewMixin():
     """Data and methods common to QuestCreateView, QuestUpdateView, and QuestCopyView
     """
     model = Quest
-    form_class = QuestForm
 
     def form_valid(self, form):
         # TA created quests should not be visible to students.
@@ -69,14 +68,11 @@ class QuestFormViewMixin():
             self.object.clear_all_prereqs()
             self.object.add_simple_prereqs([quest_prereq, badge_prereq])
 
-    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
-    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
-    def get_form_kwargs(self):
-        # grab the current set of form #kwargs
-        kwargs = super().get_form_kwargs()
-        # Update the kwargs with the user_id
-        kwargs['user'] = self.request.user
-        return kwargs
+    def get_form_class(self):
+        if self.request.user.profile.is_TA:
+            return TAQuestForm
+        else:
+            return QuestForm
 
 
 class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
@@ -122,23 +118,19 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
 
 
 class QuestCopy(QuestCreate):
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['heading'] = "Copy a Quest"
-        return context
-
-    def get_form(self, *args, **kwargs):
-        form = super().get_form(*args, **kwargs)
-        # by default, set the quest this was copied from as a prerequisite, which is passed as a kwarg to the view
-        copied_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
-        form.fields['new_quest_prerequisite'].initial = copied_quest
-        return form
+    # def get_context_data(self, **kwargs):
+    #     context = super().get_context_data(**kwargs)
+    #     context['heading'] = "Copy a Quest"
+    #     return context
 
     def get_form_kwargs(self):
-        # grab the current set of form #kwargs
+        # grab the current set of form kwargs
         kwargs = super().get_form_kwargs()
-        # Update the kwargs with the user_id
-        kwargs['user'] = self.request.user
+
+        # by default, set the quest this was copied from as the new_quest_prerequisite
+        # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
+        copied_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
+        kwargs['initial']['new_quest_prerequisite'] = copied_quest
 
         new_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
         new_quest.pk = None  # autogen a new primary key (quest_id by default)

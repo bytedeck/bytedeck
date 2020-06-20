@@ -73,22 +73,9 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        # user is provided to the form sicne TAs will have limited fields.  
-        # TODO Probably this should be done in an inherited sub-from for TAs with logic in the view using the TA subform instead...
-        # Started one below this form, finish and test later!
-        user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
 
         self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
-
-        # self.fields['new_quest_prerequisite'].queryset = Badge.objects.all_manually_granted()
-        # self.fields['new_badge_prerequisite'].widget = BadgeSelect2MultipleWidget(
-        #     model=Badge,
-        #     queryset=Badge.objects.all_manually_granted(),
-        #     search_fields=[
-        #         'name__icontains',
-        #     ]
-        # )
 
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
@@ -163,30 +150,16 @@ class QuestForm(forms.ModelForm):
             )
         )
 
-        # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
-        if user.profile.is_TA:
-            self.fields['visible_to_students'].widget = forms.HiddenInput()
-            # self.fields['max_repeats'].widget = forms.HiddenInput()
-            # self.fields['hours_between_repeats'].widget = forms.HiddenInput()
-            # self.fields['specific_teacher_to_notify'].widget = forms.HiddenInput()
-            # self.fields['hideable'].widget = forms.HiddenInput()
-            # self.fields['sort_order'].widget = forms.HiddenInput()
-            # self.fields['date_available'].widget = forms.HiddenInput()
-            # self.fields['time_available'].widget = forms.HiddenInput()
-            # self.fields['date_expired'].widget = forms.HiddenInput()
-            # self.fields['time_expired'].widget = forms.HiddenInput()
-            self.fields['available_outside_course'].widget = forms.HiddenInput()
-            self.fields['archived'].widget = forms.HiddenInput()
-            self.fields['editor'].widget = forms.HiddenInput()
 
-
-# class TAQuestForm(QuestForm):
-#     def __init__(self, *args, **kwargs):
-#         super(TAQuestForm, self).__init__(*args, **kwargs)
-#         self.fields['visible_to_students'].widget = forms.HiddenInput()
-#         self.fields['available_outside_course'].widget = forms.HiddenInput()
-#         self.fields['archived'].widget = forms.HiddenInput()
-#         self.fields['editor'].widget = forms.HiddenInput()
+class TAQuestForm(QuestForm):
+    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # SET visible to students here to?
+        self.fields['visible_to_students'].widget = forms.HiddenInput()
+        self.fields['available_outside_course'].widget = forms.HiddenInput()
+        self.fields['archived'].widget = forms.HiddenInput()
+        self.fields['editor'].widget = forms.HiddenInput()
 
 
 class SubmissionForm(forms.Form):
