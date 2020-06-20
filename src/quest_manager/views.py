@@ -83,7 +83,6 @@ class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
         context['heading'] = "Create New Quest"
-        context['action_value'] = ""
         context['cancel_url'] = reverse('quests:quests')
         context['submit_btn_value'] = "Create"
         return context
@@ -96,10 +95,8 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
         return self.get_object().is_editable(self.request.user)
 
     def get_context_data(self, **kwargs):
-        # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
         context['heading'] = "Update Quest"
-        context['action_value'] = ""
         context['cancel_url'] = reverse('quests:quest_detail', args=[self.object.id])
         context['submit_btn_value'] = "Update"
         return context
@@ -107,7 +104,7 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
     def get_success_url(self):
         if self.object.archived:
             return reverse("quests:quests")
-        return self.object.get_absolute_url()
+        return self.object.get_absolute_url()  # this is default
 
     def get_form(self, *args, **kwargs):
         form = super().get_form(*args, **kwargs)
@@ -118,13 +115,8 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
 
 
 class QuestCopy(QuestCreate):
-    # def get_context_data(self, **kwargs):
-    #     context = super().get_context_data(**kwargs)
-    #     context['heading'] = "Copy a Quest"
-    #     return context
 
     def get_form_kwargs(self):
-        # grab the current set of form kwargs
         kwargs = super().get_form_kwargs()
 
         # by default, set the quest this was copied from as the new_quest_prerequisite

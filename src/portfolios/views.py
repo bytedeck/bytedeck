@@ -36,7 +36,6 @@ class PortfolioCreate(AllowNonPublicViewMixin, LoginRequiredMixin, CreateView):
         # Call the base implementation first to get a context
         context = super(PortfolioCreate, self).get_context_data(**kwargs)
         context['heading'] = "Create " + self.request.user.get_username() + "'s Portfolio"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Create"
         return context
 
@@ -132,7 +131,6 @@ class ArtworkCreate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageM
         context = super(ArtworkCreate, self).get_context_data(**kwargs)
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         context['heading'] = "Add Art to " + portfolio.user.get_username() + "'s Portfolio"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Create"
         context['portfolio'] = portfolio
         return context
@@ -159,7 +157,6 @@ class ArtworkUpdate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageM
         # Call the base implementation first to get a context
         context = super(ArtworkUpdate, self).get_context_data(**kwargs)
         context['heading'] = "Edit " + self.object.portfolio.user.get_username() + "'s Portfolio Art"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Update"
         context['portfolio'] = self.object.portfolio
         return context

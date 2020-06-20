@@ -188,7 +188,6 @@ class Create(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
         context = super(Create, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         context['heading'] = "Create New Announcement"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Save"
         return context
 
@@ -207,7 +206,6 @@ class Update(AllowNonPublicViewMixin, SuccessMessageMixin, UpdateView):
         context = super(Update, self).get_context_data(**kwargs)
         # Add in a QuerySet of all the books
         context['heading'] = "Edit Announcement"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Update"
         return context
 

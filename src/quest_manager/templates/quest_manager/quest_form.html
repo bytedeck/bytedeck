@@ -11,7 +11,7 @@
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
-<form action="{{ action_value }}" enctype="multipart/form-data" method="post">
+<form action="" enctype="multipart/form-data" method="post">
   {% csrf_token %}
   {% crispy form %}
 </form>

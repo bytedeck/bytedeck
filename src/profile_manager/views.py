@@ -137,7 +137,6 @@ class ProfileUpdate(AllowNonPublicViewMixin, UpdateView):
         # Call the base implementation first to get a context
         context = super(ProfileUpdate, self).get_context_data(**kwargs)
         context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
-        context['action_value'] = ""
         context['submit_btn_value'] = "Update"
         context['profile'] = profile
         return context
