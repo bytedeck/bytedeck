@@ -899,6 +899,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(quest_to_update.prereqs().count(), 1)
         self.assertIn("new-prereq-quest2", str(quest_to_update.prereqs()))
 
+
 class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 
