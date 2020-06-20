@@ -16,9 +16,8 @@ class HasPrereqsMixin:
         return Prereq.objects.all_parent(self)
 
     def add_simple_prereqs(self, prereq_objects_list):
-        """ Adds a single object as a pre-requisite requirement to this parent object """
+        """ Adds each object in the list as a simple pre-requisite requirement to this parent object """
         for prereq_object in prereq_objects_list:
-            print("Pre: ", prereq_object)
             Prereq.add_simple_prereq(self, prereq_object)
 
     def clear_all_prereqs(self):

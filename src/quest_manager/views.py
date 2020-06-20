@@ -67,7 +67,6 @@ class QuestFormViewMixin():
         badge_prereq = form.cleaned_data['new_badge_prerequisite']
         if quest_prereq or badge_prereq:
             self.object.clear_all_prereqs()
-            print([quest_prereq, badge_prereq])
             self.object.add_simple_prereqs([quest_prereq, badge_prereq])
 
     # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
