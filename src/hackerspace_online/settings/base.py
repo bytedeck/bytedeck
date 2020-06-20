@@ -353,7 +353,7 @@ SUMMERNOTE_CONFIG = {
         'width': '100%',
         'height': '480',
 
-        # 'followingToolbar': False,
+        'followingToolbar': False,
 
         # Customize toolbar buttons
         'toolbar': [
