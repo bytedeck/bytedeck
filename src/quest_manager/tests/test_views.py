@@ -98,15 +98,17 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
 
-        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+
+        # 403 for CRUD views:
+        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -694,7 +696,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         pass
 
 
-class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 
         class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
@@ -854,9 +856,48 @@ class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
-        # TODO
-        # TAs should not be able to make a quest visible_to_students
-        # When a quest is made visible_to_students by a teacher, the editor should be removed
+    # TODO
+    # TAs should not be able to make a quest visible_to_students
+    # When a quest is made visible_to_students by a teacher, the editor should be removed
+
+    def test_create_with_new_prereqs(self):
+        """ Add a quest and badge prereq during quest creation """
+        self.client.force_login(self.test_teacher)
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest).id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge').id
+        response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertEqual(new_quest.prereqs().count(), 2)
+
+    def test_update_with_new_prereqs(self):
+        """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
+        self.client.force_login(self.test_teacher)
+        quest_to_update = baker.make(Quest)
+        self.assertEqual(quest_to_update.prereqs().count(), 0)
+
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest").id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge', name="new-prereq-badge").id
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            data=self.minimal_valid_form_data
+        )
+        self.assertRedirects(response, quest_to_update.get_absolute_url())
+        self.assertEqual(quest_to_update.prereqs().count(), 2)
+        self.assertIn("new-prereq-quest", str(quest_to_update.prereqs()))
+        self.assertIn("new-prereq-badge", str(quest_to_update.prereqs()))
+
+        # now update again, overwriting existing prereqs:
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest2").id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = ''
+
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            data=self.minimal_valid_form_data
+        )
+        self.assertRedirects(response, quest_to_update.get_absolute_url())
+        self.assertEqual(quest_to_update.prereqs().count(), 1)
+        self.assertIn("new-prereq-quest2", str(quest_to_update.prereqs()))
 
 
 class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -1183,9 +1224,6 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         # simulate a logged in teacher
         self.client.force_login(self.test_teacher)
 
-        # Can access the Create view
-        self.assert200('quests:quest_copy', args=[self.quest.id])
-
         get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
         self.assertEqual(get_response.status_code, 200)
 
@@ -1256,6 +1294,31 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         # Copied quests should set the original as a pre-requisite
         self.assertEqual(new_quest.prereqs().count(), 1)
         self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
+
+    def test_copy_with_new_prereqs(self):
+        """ When copying a quest should be able to set new prereqs """
+        self.client.force_login(self.test_teacher)
+
+        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
+        self.assertEqual(get_response.status_code, 200)
+
+        # See above tests for explanation of this
+        form_data = get_response.context['form'].initial
+        form_data = {k: "" if v is None else v for (k, v) in form_data.items()}
+        form_data['icon'] = ""
+        form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest").id
+        form_data['new_badge_prerequisite'] = baker.make('badges.Badge', name="new-prereq-badge").id
+
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=form_data
+        )
+        copied_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, copied_quest.get_absolute_url())
+
+        self.assertEqual(copied_quest.prereqs().count(), 2)
+        self.assertIn("new-prereq-quest", str(copied_quest.prereqs()))
+        self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
 
 class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):

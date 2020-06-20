@@ -6,7 +6,7 @@ from comments.models import Comment, Document
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
@@ -15,7 +15,6 @@ from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from notifications.signals import notify
-from prerequisites.models import Prereq
 from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
@@ -39,60 +38,70 @@ class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView):
     success_url = reverse_lazy('quests:quests')
 
     def dispatch(self, *args, **kwargs):
-        return super(QuestDelete, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
-class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView):
-    def test_func(self):
-        return is_staff_or_TA(self.request.user)
-
+class QuestFormViewMixin():
+    """Data and methods common to QuestCreateView, QuestUpdateView, and QuestCopyView
+    """
     model = Quest
     form_class = QuestForm
-
-    def get_context_data(self, **kwargs):
-        # Call the base implementation first to get a context
-        context = super(QuestCreate, self).get_context_data(**kwargs)
-        context['heading'] = "Create New Quest"
-        context['action_value'] = ""
-        context['cancel_url'] = reverse('quests:quests')
-        context['submit_btn_value'] = "Create"
-        return context
-
-    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
-    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
-    def get_form_kwargs(self):
-        # grab the current set of form #kwargs
-        kwargs = super(QuestCreate, self).get_form_kwargs()
-        # Update the kwargs with the user_id
-        kwargs['user'] = self.request.user
-        return kwargs
 
     def form_valid(self, form):
         # TA created quests should not be visible to students.
         if self.request.user.profile.is_TA:
             form.instance.visible_to_students = False
             form.instance.editor = self.request.user
-        return super(QuestCreate, self).form_valid(form)
+        # When a teacher makes a form visible, remove editor abilities.
+        elif form.instance.visible_to_students:
+            form.instance.editor = None
 
-    # @user_passes_test(test_func)
-    # def dispatch(self, *args, **kwargs):
-    #     return super(QuestCreate, self).dispatch(*args, **kwargs)
+        # Save the object so we can add prereqs to it
+        super_response = super().form_valid(form)
+        self.set_new_prereqs(form)
+        return super_response
+
+    def set_new_prereqs(self, form):
+        # Set new prerequisites, if any:
+        quest_prereq = form.cleaned_data['new_quest_prerequisite']
+        badge_prereq = form.cleaned_data['new_badge_prerequisite']
+        if quest_prereq or badge_prereq:
+            self.object.clear_all_prereqs()
+            self.object.add_simple_prereqs([quest_prereq, badge_prereq])
+
+    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
+    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
+    def get_form_kwargs(self):
+        # grab the current set of form #kwargs
+        kwargs = super().get_form_kwargs()
+        # Update the kwargs with the user_id
+        kwargs['user'] = self.request.user
+        return kwargs
 
 
-class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, UpdateView):
+class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
+    def test_func(self):
+        return is_staff_or_TA(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get a context
+        context = super().get_context_data(**kwargs)
+        context['heading'] = "Create New Quest"
+        context['action_value'] = ""
+        context['cancel_url'] = reverse('quests:quests')
+        context['submit_btn_value'] = "Create"
+        return context
+
+
+class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
         return self.get_object().is_editable(self.request.user)
 
-    model = Quest
-    form_class = QuestForm
-
-    # template_name = ''
-
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(QuestUpdate, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         context['heading'] = "Update Quest"
         context['action_value'] = ""
         context['cancel_url'] = reverse('quests:quest_detail', args=[self.object.id])
@@ -104,24 +113,40 @@ class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, UpdateView):
             return reverse("quests:quests")
         return self.object.get_absolute_url()
 
-    # The quest form needs the request object to see what user is trying to use it (teacher vs TA)
-    # https://stackoverflow.com/questions/31204710/change-form-fields-based-on-request
+    def get_form(self, *args, **kwargs):
+        form = super().get_form(*args, **kwargs)
+        qs = form.fields['new_quest_prerequisite'].queryset
+        # Remove the object being edited as an option for a prerequisite
+        form.fields['new_quest_prerequisite'].queryset = qs.exclude(id=self.object.id)
+        return form
+
+
+class QuestCopy(QuestCreate):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['heading'] = "Copy a Quest"
+        return context
+
+    def get_form(self, *args, **kwargs):
+        form = super().get_form(*args, **kwargs)
+        # by default, set the quest this was copied from as a prerequisite, which is passed as a kwarg to the view
+        copied_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
+        form.fields['new_quest_prerequisite'].initial = copied_quest
+        return form
+
     def get_form_kwargs(self):
         # grab the current set of form #kwargs
-        kwargs = super(QuestUpdate, self).get_form_kwargs()
+        kwargs = super().get_form_kwargs()
         # Update the kwargs with the user_id
         kwargs['user'] = self.request.user
+
+        new_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
+        new_quest.pk = None  # autogen a new primary key (quest_id by default)
+        new_quest.import_id = uuid.uuid4()
+        new_quest.name = new_quest.name + " - COPY"
+
+        kwargs['instance'] = new_quest
         return kwargs
-
-    def form_valid(self, form):
-        # TA created quests should not be visible to students.
-        if self.request.user.profile.is_TA:
-            form.instance.visible_to_students = False
-            form.instance.editor = self.request.user
-        elif form.instance.visible_to_students:
-            form.instance.editor = None
-
-        return super(QuestUpdate, self).form_valid(form)
 
 
 @allow_non_public_view
@@ -311,43 +336,6 @@ def ajax_submission_info(request, submission_id=None):
         return JsonResponse({"quest_info_html": quest_info_html})
     else:
         raise Http404
-
-
-@allow_non_public_view
-@user_passes_test(is_staff_or_TA)
-def quest_copy(request, quest_id):
-    new_quest = get_object_or_404(Quest, pk=quest_id)
-    new_quest.pk = None  # autogen a new primary key (quest_id by default)
-    new_quest.import_id = uuid.uuid4()
-    new_quest.name = new_quest.name + " - COPY"
-    # print(quest_to_copy)
-    # print(new_quest)
-    # new_quest.save()
-
-    form = QuestForm(request.POST or None, instance=new_quest, user=request.user)
-
-    if form.is_valid():
-        if request.user.profile.is_TA:
-            form.instance.visible_to_students = False
-            form.instance.editor = request.user
-
-        form.save()
-        # make the copied quest a prerequisite for the new quest
-        copied_quest = get_object_or_404(Quest, pk=quest_id)
-        Prereq.add_simple_prereq(new_quest, copied_quest)
-
-        # add same campaigns/categories as copied quest
-        # new_quest.categories = copied_quest.categories.all()
-
-        return redirect(new_quest)
-
-    context = {
-        'heading': 'Copy a Quest',
-        'form': form,
-        'submit_btn_value': 'Create',
-        'cancel_url': reverse('quests:quests')
-    }
-    return render(request, "quest_manager/quest_form.html", context)
 
 
 @allow_non_public_view
