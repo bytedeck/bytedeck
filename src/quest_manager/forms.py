@@ -1,6 +1,5 @@
 from datetime import date
 
-from badges.models import Badge
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
@@ -10,10 +9,31 @@ from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
 from utilities.fields import RestrictedFileFormField
 
+from badges.models import Badge
 from .models import Quest
 
 
+class BadgeLabel:
+    def label_from_instance(self, obj):
+        return "{} ({} XP)".format(str(obj), obj.xp)
+
+
+class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
+    pass
+
+
 class QuestForm(forms.ModelForm):
+
+    new_quest_prerequisite = forms.ModelChoiceField(
+        queryset=Quest.objects.all(), 
+        # to_field_name="name",
+        required=False,
+    )
+    new_badge_prerequisite = forms.ModelChoiceField(
+        queryset=Badge.objects.all(),
+        # to_field_name="name",
+        required=False,
+    )
 
     class Meta:
         model = Quest
@@ -21,6 +41,8 @@ class QuestForm(forms.ModelForm):
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
+                  'new_quest_prerequisite',
+                  'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
@@ -51,7 +73,6 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        user = kwargs.pop('user', None)
         super(QuestForm, self).__init__(*args, **kwargs)
 
         self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
@@ -86,7 +107,26 @@ class QuestForm(forms.ModelForm):
                 'hours_between_repeats',
                 Accordion(
                     AccordionGroup(
-                        'Advanced',
+                        "Basic Prerequisites",
+                        # TODO This code should be combined with its use in quest_detail_content.html
+                        HTML(
+                            "<div class='help-block'>If you only want to set a single quest and/or badge as a prerequisite, you can set them here. "
+                            "Note that this will overwrite any current prerequisites that are set. For more interesting prerequisite options you "
+                            " will need to edit the quest with <a href='/admin/quest_manager/quest/{{object.id}}'>via the Admin form</a>.</div>"
+                            "<div>Current Prerequisites</div>"
+                            "<div>{% for p in form.instance.prereqs %}{% if forloop.first %}<ul class='left-aligned'><small>{% endif %}"
+                            "<li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>"
+                            "{% if forloop.last %}</small></ul>{% endif %}"
+                            "{% empty %}None"
+                            "{% endfor %}</div>",
+                        ),
+                        'new_quest_prerequisite',
+                        'new_badge_prerequisite',
+                        active=False,
+                        template='crispy_forms/bootstrap3/accordion-group.html',
+                    ),
+                    AccordionGroup(
+                        "Advanced",
                         'repeat_per_semester',
                         'specific_teacher_to_notify',
                         'blocking',
@@ -100,30 +140,26 @@ class QuestForm(forms.ModelForm):
                         'archived',
                         'editor',
                         active=False,
-                        template='crispy_forms/bootstrap3/accordion-group.html'
+                        template='crispy_forms/bootstrap3/accordion-group.html',
                     ),
                 ),
                 HTML(cancel_btn),
                 HTML(submit_btn),
+                HTML(admin_btn),
                 style="margin-top: 10px;"
             )
         )
 
-        # Don't let TA's make quests visible to students.  Teachers can do this when they approve a TA's draft quest
-        if user.profile.is_TA:
-            self.fields['visible_to_students'].widget = forms.HiddenInput()
-            # self.fields['max_repeats'].widget = forms.HiddenInput()
-            # self.fields['hours_between_repeats'].widget = forms.HiddenInput()
-            # self.fields['specific_teacher_to_notify'].widget = forms.HiddenInput()
-            # self.fields['hideable'].widget = forms.HiddenInput()
-            # self.fields['sort_order'].widget = forms.HiddenInput()
-            # self.fields['date_available'].widget = forms.HiddenInput()
-            # self.fields['time_available'].widget = forms.HiddenInput()
-            # self.fields['date_expired'].widget = forms.HiddenInput()
-            # self.fields['time_expired'].widget = forms.HiddenInput()
-            self.fields['available_outside_course'].widget = forms.HiddenInput()
-            self.fields['archived'].widget = forms.HiddenInput()
-            self.fields['editor'].widget = forms.HiddenInput()
+
+class TAQuestForm(QuestForm):
+    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # SET visible to students here to?
+        self.fields['visible_to_students'].widget = forms.HiddenInput()
+        self.fields['available_outside_course'].widget = forms.HiddenInput()
+        self.fields['archived'].widget = forms.HiddenInput()
+        self.fields['editor'].widget = forms.HiddenInput()
 
 
 class SubmissionForm(forms.Form):
@@ -134,15 +170,6 @@ class SubmissionForm(forms.Form):
                                           widget=forms.ClearableFileInput(attrs={'multiple': True}),
                                           label="Attach files",
                                           help_text="Hold Ctrl to select multiple files, 16MB limit per file")
-
-
-class BadgeLabel:
-    def label_from_instance(self, obj):
-        return "{} ({} XP)".format(str(obj), obj.xp)
-
-
-class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
-    pass
 
 
 class SubmissionFormStaff(SubmissionForm):

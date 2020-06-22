@@ -98,15 +98,17 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
 
-        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+
+        # 403 for CRUD views:
+        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -694,7 +696,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         pass
 
 
-class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 
         class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
@@ -854,9 +856,181 @@ class QuestCreateUpdateAndDeleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
-        # TODO
-        # TAs should not be able to make a quest visible_to_students
-        # When a quest is made visible_to_students by a teacher, the editor should be removed
+    # TODO
+    # TAs should not be able to make a quest visible_to_students
+    # When a quest is made visible_to_students by a teacher, the editor should be removed
+
+    def test_create_with_new_prereqs(self):
+        """ Add a quest and badge prereq during quest creation """
+        self.client.force_login(self.test_teacher)
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest).id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge').id
+        response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertEqual(new_quest.prereqs().count(), 2)
+
+    def test_update_with_new_prereqs(self):
+        """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
+        self.client.force_login(self.test_teacher)
+        quest_to_update = baker.make(Quest)
+        self.assertEqual(quest_to_update.prereqs().count(), 0)
+
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest").id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge', name="new-prereq-badge").id
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            data=self.minimal_valid_form_data
+        )
+        self.assertRedirects(response, quest_to_update.get_absolute_url())
+        self.assertEqual(quest_to_update.prereqs().count(), 2)
+        self.assertIn("new-prereq-quest", str(quest_to_update.prereqs()))
+        self.assertIn("new-prereq-badge", str(quest_to_update.prereqs()))
+
+        # now update again, overwriting existing prereqs:
+        self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest2").id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = ''
+
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            data=self.minimal_valid_form_data
+        )
+        self.assertRedirects(response, quest_to_update.get_absolute_url())
+        self.assertEqual(quest_to_update.prereqs().count(), 1)
+        self.assertIn("new-prereq-quest2", str(quest_to_update.prereqs()))
+
+
+class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
+
+            def quest_copy(request, quest_id):
+
+            via
+
+            url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.quest = baker.make(Quest, name="Test Quest")
+
+        # simulate a logged in TA (teaching assistant = a student with extra permissions)
+        self.test_ta = User.objects.create_user('test_ta')
+        self.test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
+        self.test_ta.profile.save()
+
+        self.valid_copy_form_data = {
+            'name': "Test Quest - COPY",  # only blank required field
+            # these fields are required but they have defaults
+            'xp': 0,
+            'max_repeats': 0,
+            'hours_between_repeats': 0, 
+            'sort_order': 0,
+            'date_available': "2006-10-25",
+            'time_available': "14:30:59",
+            'new_quest_prerequisite': self.quest.id,
+        }
+
+    def test_teacher_copy_quest_GET(self):
+        self.client.force_login(self.test_teacher)
+
+        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
+        self.assertEqual(get_response.status_code, 200)
+
+        # Get the data from the form  (initial visit to the page)
+        form_data = get_response.context['form'].initial
+
+        # Quest name should have changed
+        self.assertEqual(form_data['name'], 'Test Quest - COPY')
+        # And by default form should have prereq set
+        self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+
+    def test_teacher_copy_quest_POST(self):
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+
+        # Check that the new copied quest exists:
+        self.assertTrue(Quest.objects.filter(name='Test Quest - COPY').exists())
+        new_quest = Quest.objects.get(name='Test Quest - COPY')
+        # if successful, should redirect to the new quest
+        self.assertRedirects(response, new_quest.get_absolute_url())
+
+        # Copied quests should set the original as a pre-requisite
+        self.assertEqual(new_quest.prereqs().count(), 1)
+        self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
+
+    def test_TA_can_copy_quest_GET(self):
+
+        self.client.force_login(self.test_ta)
+        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
+        self.assertEqual(get_response.status_code, 200)
+
+        # Get the data from the form  (initial visit to the page)
+        form_data = get_response.context['form'].initial
+
+        # Quest name should have changed
+        self.assertEqual(form_data['name'], 'Test Quest - COPY')
+        # And by default form should have prereq set
+        self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+        # self.assertFalse(form_data['visible_to_students']) ? When is this changed?
+
+        # Also, TA's should not be able to set visible_to_students, but it is by default
+        # just make sure it is visible, and then check again after form is posted
+
+    def test_TA_copy_quest_POST(self):
+        self.client.force_login(self.test_ta)
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+
+        # Check that the new copied quest exists:
+        self.assertTrue(Quest.objects.filter(name='Test Quest - COPY').exists())
+        new_quest = Quest.objects.get(name='Test Quest - COPY')
+
+        # For TAs only, quest should be forced to not visible to students
+        self.assertFalse(new_quest.visible_to_students)
+        # and the TA should have been set as the editor
+        self.assertEqual(new_quest.editor, self.test_ta)
+
+        # Same tests as for Teacher:
+        # if successful, should redirect to the new quest
+        self.assertRedirects(response, new_quest.get_absolute_url())
+
+        # Copied quests should set the original as a pre-requisite
+        self.assertEqual(new_quest.prereqs().count(), 1)
+        self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
+
+    def test_copy_with_new_prereqs(self):
+        """ When copying a quest should be able to set new prereqs """
+        self.client.force_login(self.test_teacher)
+
+        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
+        self.assertEqual(get_response.status_code, 200)
+
+        # See above tests for explanation of this....(EXPLANATION REMOVED because above tests changed)
+        form_data = get_response.context['form'].initial
+        form_data = {k: "" if v is None else v for (k, v) in form_data.items()}
+        form_data['icon'] = ""
+        form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest").id
+        form_data['new_badge_prerequisite'] = baker.make('badges.Badge', name="new-prereq-badge").id
+
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=form_data
+        )
+        copied_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, copied_quest.get_absolute_url())
+
+        self.assertEqual(copied_quest.prereqs().count(), 2)
+        self.assertIn("new-prereq-quest", str(copied_quest.prereqs()))
+        self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
 
 class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -1161,101 +1335,6 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['s'], self.submission)
         self.assertEqual(response.context['completed'], False)
         self.assertEqual(response.context['past'], True)
-
-
-class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
-    """ Tests for:
-
-            def quest_copy(request, quest_id):
-
-            via
-
-            url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
-    """
-
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.quest = baker.make(Quest, name="Test Quest")
-
-    def test_teacher_can_copy_quests(self):
-        # simulate a logged in teacher
-        self.client.force_login(self.test_teacher)
-
-        # Can access the Create view
-        self.assert200('quests:quest_copy', args=[self.quest.id])
-
-        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
-        self.assertEqual(get_response.status_code, 200)
-
-        # Get the data from the form  (initial visit to the page)
-        form_data = get_response.context['form'].initial
-        
-        # prep data so we can send back with the POST request =)
-        # Replace `None` with empty string
-        form_data = {k: "" if v is None else v for (k, v) in form_data.items()}
-        # other fields can't handle
-        form_data['icon'] = ""
-
-        response = self.client.post(
-            reverse('quests:quest_copy', args=[self.quest.id]),
-            data=form_data
-        )
-
-        # Get the newest Quest
-        new_quest = Quest.objects.latest('datetime_created')
-        self.assertEqual(new_quest.name, "Test Quest - COPY")
-        # if successful, should redirect to the new quest
-        self.assertRedirects(response, new_quest.get_absolute_url())
-
-        # Copied quests should set the original as a pre-requisite
-        self.assertEqual(new_quest.prereqs().count(), 1)
-        self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
-
-    def test_TA_can_create_draft_quests_and_delete_own(self):
-        # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
-        self.client.force_login(test_ta)
-
-        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
-        self.assertEqual(get_response.status_code, 200)
-
-        # Get the data from the form (initial visit to the page)
-        form_data = get_response.context['form'].initial
-        
-        # prep data so we can send back with the POST request =)
-        # Replace `None` with empty string
-        form_data = {k: "" if v is None else v for (k, v) in form_data.items()}
-        # other fields can't handle
-        form_data['icon'] = ""
-
-        # Also, TA's should not be able to set visible_to_students, but it is by default
-        # just make sure it is visible, and then check again after form is posted
-        self.assertTrue(form_data['visible_to_students'])
-
-        response = self.client.post(
-            reverse('quests:quest_copy', args=[self.quest.id]),
-            data=form_data
-        )
-
-        # Get the newest Quest
-        new_quest = Quest.objects.latest('datetime_created')
-
-        # For TAs only, quest should be forced to not visible to students
-        self.assertFalse(new_quest.visible_to_students)
-        # and the TA should have been set as the editor
-        self.assertEqual(new_quest.editor, test_ta)
-
-        self.assertEqual(new_quest.name, "Test Quest - COPY")
-        # if successful, should redirect to the new quest
-        self.assertRedirects(response, new_quest.get_absolute_url())
-
-        # Copied quests should set the original as a pre-requisite
-        self.assertEqual(new_quest.prereqs().count(), 1)
-        self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
 
 
 class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):

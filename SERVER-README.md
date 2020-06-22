@@ -55,5 +55,12 @@ _`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run
 
 
 ### SSL setup using let's encrypt
+- https://certbot.eff.org/
+- https://ssl-config.mozilla.org/#server=nginx&version=1.17.7&config=modern&openssl=1.1.1d&guideline=5.4
+- Get an A+ here: https://www.ssllabs.com/ssltest/
 
-- setup steps are followed accordingly as mentioned [here](https://www.howtoforge.com/tutorial/nginx-with-letsencrypt-ciphersuite/).
+### Redis stuff
+
+- Resolve several warnings wth this this systemd unit: https://gist.github.com/tylerecouture/cf6a88c4dae6dd19872964e3c5509db7
+
+

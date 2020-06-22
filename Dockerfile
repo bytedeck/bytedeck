@@ -28,8 +28,8 @@ RUN apt-get install -y libicu[0-9][0-9]
 
 # Install uwsgi
 RUN apt-get install -y build-essential
-RUN pip install uwsgi
 
+RUN apt-get install -y libpcre3 libpcre3-dev
 
 # Install python requirements
 # Docker only rebuilds when there are changes to these files
