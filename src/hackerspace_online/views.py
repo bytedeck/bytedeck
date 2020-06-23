@@ -11,7 +11,7 @@ def home(request):
     if request.user.is_authenticated:
         return redirect('quests:quests')
 
-    return render(request, "home.html", {})
+    return redirect('account_login')
 
 
 @allow_non_public_view

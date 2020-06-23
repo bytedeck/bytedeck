@@ -31,7 +31,11 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsQuests('home')
     
     def test_home_view_anonymous(self):
-        self.assert200('home')
+        response = self.client.get(reverse('home'))
+        self.assertRedirects(
+            response,
+            reverse('account_login')
+        )
 
     def test_secret_view(self):
         self.assert200('simple')
