@@ -140,11 +140,15 @@
                        aria-expanded="false">Admin <span class="caret"></span></a>
                     <ul class="dropdown-menu">
                         <!-- <li class="dropdown-header">Content</li> -->
-                        <li><a href="{% url 'quests:flagged' %}">Flagged Submissions</a></li>
-                        <li><a href="{% url 'config:site_config_update_own' %}">Site Configuration</a></li>
+                        <li><a href="{% url 'quests:flagged' %}"><i class="fa fa-fw fa-flag-o"></i>&nbsp;Flagged Submissions</a></li>
+                        <li><a href="{% url 'config:site_config_update_own' %}"><i class="fa fa-fw fa-sliders"></i>&nbsp;Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Database</li>
-                        <li><a href="/admin">Django Admin</a></li>
+                        <li><a href="/admin"><i class="fa fa-fw fa-database"></i>&nbsp;Django Admin</a></li>
+                        <li role="separator" class="divider"></li>
+                        <li class="dropdown-header">ByteDeck</li>
+                        <li><a href="https://github.com/bytedeck/bytedeck/blob/develop/CHANGELOG.md"><i class="fa fa-fw fa-history"></i>&nbsp;Changelog</a></li>
+                        <li><a title="Ask a question, report a bug, or request a feature!" href="mailto:contact@bytedeck.com"><i class="fa fa-fw fa-envelope-o"></i>&nbsp;Contact</a></li>
                         <!-- <li class="dropdown-header">Debug</li> -->
                     </ul>
                 </li>
