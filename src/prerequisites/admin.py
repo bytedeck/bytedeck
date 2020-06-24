@@ -6,7 +6,7 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 from .models import Prereq, PrereqAllConditionsMet
-from .tasks import update_quest_conditions_all
+from .tasks import update_quest_conditions_all_users
 
 
 class PrereqInlineForm(forms.ModelForm):
@@ -44,7 +44,7 @@ def auto_name_selected_prereqs(modeladmin, request, queryset):
 
 
 def recalculate_available_quests_for_all_users(modeladmin, request, queryset):
-    update_quest_conditions_all.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+    update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
     messages.add_message(
         request, messages.INFO, 
         'Recalculating... this might take a while so I\'m doing it the background. You don\'t need to stick around and can leave this page.'

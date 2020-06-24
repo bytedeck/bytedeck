@@ -1,9 +1,9 @@
+import sys
 import json
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.db import models
-from django.db.models.base import ObjectDoesNotExist
 
 
 class HasPrereqsMixin:
@@ -163,9 +163,10 @@ class PrereqManager(models.Manager):
     def all_parent(self, parent_object):
         return self.get_queryset().get_all_for_parent_object(parent_object)
 
-    # TODO: Add in alternate prereqs to!
     def all_reliant_on(self, prereq_object):
-        return self.get_queryset().get_all_for_prereq_object(prereq_object)
+        qs = self.get_queryset().get_all_for_prereq_object(prereq_object)
+        or_qs = self.get_queryset().get_all_for_or_prereq_object(prereq_object)
+        return qs.union(or_qs)
 
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):
         """
@@ -293,24 +294,15 @@ class Prereq(IsAPrereqMixin, models.Model):
 
     def parent(self):
         """:return the parent as its object"""
-        try:
-            return self.parent_content_type.get_object_for_this_type(pk=self.parent_object_id)
-        except ObjectDoesNotExist:
-            return None
+        return self.parent_object
 
     def get_prereq(self):
         """:return the main prereq as its object"""
-        try:
-            return self.prereq_content_type.get_object_for_this_type(pk=self.prereq_object_id)
-        except ObjectDoesNotExist:
-            return None
+        return self.prereq_object
 
     def get_or_prereq(self):
         """:return the alternate prereq as its object"""
-        try:
-            return self.or_prereq_content_type.get_object_for_this_type(pk=self.or_prereq_object_id)
-        except ObjectDoesNotExist:
-            return None
+        return self.or_prereq_object
 
     # A Prereq can itself be a prereq_object
     def condition_met_as_prerequisite(self, user, num_required=1):
@@ -382,19 +374,29 @@ class Prereq(IsAPrereqMixin, models.Model):
         :param parent_object: The owner of the prereq (i.e the object that needs the prereq fulfilled before it becomes available)
         :param prereq_object: The preq that needs to be completed before the parent becomes available
         :return: True if successful
-        #TODO: verify that prereq_object implements IsAPrereqMixin
         """
+        # This breaks some data migrations because custom methods are not available during
+        # migrations, and it seems the objects don't get their Mixin during the data migrations?
+        # if not isinstance(parent_object, HasPrereqsMixin):
+        #     raise TypeError("parent_object does not implement HasPrereqsMixin")
+        # if not isinstance(prereq_object, IsAPrereqMixin):
+        #     raise TypeError("parent_object does not implement IsAPrereqMixin")
+
+        # prereq_object can be sent empty for convenience
         if not parent_object or not prereq_object:
-            return False
+            return None
+
         new_prereq = cls(
+            # Why do tests throw errors when I try to assign the GFK objects directly?
+            # parent_object=parent_object,
+            # prereq_object=prereq_object
             parent_content_type=ContentType.objects.get_for_model(parent_object),
             parent_object_id=parent_object.id,
             prereq_content_type=ContentType.objects.get_for_model(prereq_object),
             prereq_object_id=prereq_object.id,
         )
-
         new_prereq.save()
-        return True
+        return new_prereq
 
     @classmethod
     def all_registered_content_types(cls):
@@ -406,20 +408,13 @@ class Prereq(IsAPrereqMixin, models.Model):
 
     @staticmethod
     def model_is_registered(content_type):
-        """Check if class has the method `condition_met_as_prerequisite`
-        TODO should instead check if model implements IsAPrereqMixin
-        # http://stackoverflow.com/questions/25295327/how-to-check-if-a-python-class-has-particular-method-or-not
-        """
+        """Check if class implements IsAPrereqMixin"""
         mc = content_type.model_class()
 
-        # deleted models?
-        if mc is None:
-            return False
-
-        if any("condition_met_as_prerequisite" in B.__dict__ for B in mc.__mro__):
+        if issubclass(mc, IsAPrereqMixin):
             return True
-
-        return False
+        else:
+            return False
 
 
 class PrereqAllConditionsMet(models.Model):
@@ -431,17 +426,26 @@ class PrereqAllConditionsMet(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     # these next two fields look like a custom Generic Foreign Key implementation?
-    ids = models.TextField()  # str representation of a list of ids for the model, e.g '[25, 34, 55, 56, 77]'
-    model_name = models.CharField(max_length=256)  # model name as a strnig with .get_model_name() .... only Quests or other models too?
+    ids = models.TextField(default='[]')  # str representation of a list of ids for the model, e.g '[25, 34, 55, 56, 77]'
+    model_name = models.CharField(max_length=256)  # model name as a string with .get_model_name()
 
     def add_id(self, new_id):
-        ids = self.get_ids([])
+        ids = self.get_ids()
         if new_id not in ids:
             ids.append(new_id)
-            self.ids = str(ids)
-            self.save()
+            self.set_ids(ids)
 
-    def get_ids(self, default=None):
+    def remove_id(self, id_to_remove):
+        ids = self.get_ids()
+        if id_to_remove in ids:
+            ids.remove(id_to_remove)
+            self.set_ids(ids)
+
+    def get_ids(self):
         if self.ids:
             return json.loads(self.ids)
-        return default
+        return PrereqAllConditionsMet.ids.default
+
+    def set_ids(self, id_list=[]):
+        self.ids = str(id_list)
+        self.save()

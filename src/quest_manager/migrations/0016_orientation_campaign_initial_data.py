@@ -112,7 +112,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('quest_manager', '0015_campaign_and_quest_initial_data'),
         ('prerequisites', '0004_auto_20190702_0311'),
-        ('badges', '0005_badge_initialdata')
+        ('badges', '0009_badge_initialdata')
     ]
 
     operations = [
