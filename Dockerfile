@@ -29,7 +29,8 @@ RUN apt-get install -y libicu[0-9][0-9]
 # Install uwsgi
 RUN apt-get install -y build-essential
 
-# RUN apt-get install -y libpcre3 libpcre3-dev
+#https://stackoverflow.com/questions/21669354/rebuild-uwsgi-with-pcre-support
+RUN apt-get install -y libpcre3 libpcre3-dev
 
 RUN pip install uwsgi
 # Install python requirements
