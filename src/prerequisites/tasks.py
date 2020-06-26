@@ -11,6 +11,7 @@ from tenant_schemas_celery.task import TenantTask
 
 from hackerspace_online.celery import app
 
+from courses.models import CourseStudent
 from quest_manager.models import Quest
 from prerequisites.models import Prereq, PrereqAllConditionsMet
 
@@ -36,7 +37,77 @@ class TransactionAwareTask(TenantTask):
             logger.error(traceback.format_exc())
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+def update_conditions_for_quest(self, quest_id, start_from_user_id):
+    """Cycles through all relevant users and adds this quest to their cache of available quests (PrereqAllConditionsMet), if they meet the prereqs,
+    or removes it if they don't. This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
+
+    If the quest is available outside a course, it will update the cache for ALL users, otherwise it will only update
+    students who are currently registered in a course.
+
+    Args:
+        quest_id (int): The quest with updated prerequisites (i.e this quest is the parent_object of an updated Prereq),
+        start_from_user_id (int): user_id to start with for the next bunch of calculations
+    """
+    quest = Quest.objects.filter(id=quest_id).first()
+    if not quest:
+        # If the quest is deleted while this task is running.
+        return
+
+    # check if this already started recently, if so, don't need to start a new one.
+    cache_key = f'update_conditions_for_quest_{quest_id}_wait'
+    if start_from_user_id == 1 and cache.get(cache_key):
+        return
+
+    # Set a 1 second cache to prevent this task from running multiple times concurrently for the same quest
+    # for example, when prereqs are updated, one might be deleted and two more added, that will result in 3 signals!
+    cache.set(cache_key, True, 1)
+
+    if quest.available_outside_course:
+        users = User.objects.all()
+    else:
+        users = CourseStudent.objects.all_users_for_active_semester()
+
+    users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
+    user = None
+
+    for user in users:
+        try:
+            quest_prereq_cache, created = PrereqAllConditionsMet.objects.get_or_create(
+                user=user, 
+                model_name=Quest.get_model_name(),
+            )
+        except PrereqAllConditionsMet.MultipleObjectsReturned:
+            # why are there multiple?  Delete cache and regenerate new for this user
+            caches = PrereqAllConditionsMet.objects.filter(user=user, model_name=Quest.get_model_name())
+            caches.delete()
+            # do full recalc for the user:
+            update_quest_conditions_for_user.apply_async(args=[user.id], queue='default')
+            # carry on with the next user
+            continue
+
+        if Prereq.objects.all_conditions_met(quest, user):
+            quest_prereq_cache.add_id(quest.id)
+        else: 
+            quest_prereq_cache.remove_id(quest.id)
+
+    else:
+        # finished the previous bunch, call the next bunch recursively 
+        # or maybe there were no users in the bunch... check that too
+        if user:
+            # user is the last user that was updated, increment by 1
+            minimum_user_id = user.id + 1
+            user = User.objects.filter(id__gte=minimum_user_id).values('id').first()
+            if user:
+                # there are more users, so keep going.
+                self.apply_async(
+                    queue='default',
+                    # doesn't seem necessary, each group of 10 only takes about 0.1 seconds?
+                    countdown=1,  # delay a bit to give some time for the last group to finish, so we don't hog all the resources.
+                    kwargs={'quest_id': quest.id, 'start_from_user_id': minimum_user_id}
+                )
+
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
 def update_quest_conditions_for_user(self, user_id):
     user = User.objects.filter(id=user_id).first()
     if not user:
@@ -47,40 +118,24 @@ def update_quest_conditions_for_user(self, user_id):
     return met_list.id
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
-def update_conditions_for_quest(self, quest_id, start_from_user_id):
-    quest = Quest.objects.filter(id=quest_id).first()
-    if not quest:
-        return
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+def update_quest_conditions_all_users(self, start_from_user_id):
+    """Cycles through all quests for all users to update the cache of available quests (PreqAllConditionsMet)
+    This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
+    TODO: should only cycle through users currently in a course, unless the quest is available outside a course.
 
-    users = User.objects.filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
-    for user in users:
-        if not Prereq.objects.all_conditions_met(quest, user):
-            return
+    Args:
+        user_id to start with for the next bunch of calculations
+    """
 
-        filter_kwargs = {'user': user, 'model_name': Quest.get_model_name()}
-        met_list = PrereqAllConditionsMet.objects.filter(**filter_kwargs).first()
-        if met_list:
-            met_list.add_id(quest.id)
-        else:
-            met_list = PrereqAllConditionsMet.objects.create(ids=[quest.id], **filter_kwargs)
-    else:
-        user_id = user.id + 1
-        user = User.objects.filter(id__gte=user_id).values('id').first()
-        if user:
-            self.apply_async(
-                queue='default',
-                countdown=20,
-                kwargs={'quest_id': quest.id, 'start_from_user_id': user_id}
-            )
-
-
-@app.task(base=TransactionAwareTask, bind=True, name='update_quest_conditions_all', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
-def update_quest_conditions_all(self, start_from_user_id):
     if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
         return
 
-        cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
+    cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
+
+    # users = User.objects.filter(id__gte=start_from_user_id)
+    # print("`update_quest_conditions_all` affected users: ", users.count())
+    # users_list = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])
 
     users = list(User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]) # noqa
     for uid in users:
