@@ -122,7 +122,6 @@ def update_quest_conditions_for_user(self, user_id):
 def update_quest_conditions_all_users(self, start_from_user_id):
     """Cycles through all quests for all users to update the cache of available quests (PreqAllConditionsMet)
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
-    TODO: should only cycle through users currently in a course, unless the quest is available outside a course.
 
     Args:
         user_id to start with for the next bunch of calculations
@@ -133,14 +132,14 @@ def update_quest_conditions_all_users(self, start_from_user_id):
 
     cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
-    # users = User.objects.filter(id__gte=start_from_user_id)
-    # print("`update_quest_conditions_all` affected users: ", users.count())
-    # users_list = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])
+    # only cycle through users currently in a course
+    users = CourseStudent.objects.all_users_for_active_semester()
+    users = users.order_by('id').filter(id__gte=start_from_user_id)
 
-    users = list(User.objects.filter(id__gte=start_from_user_id).values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]) # noqa
+    users = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]) # noqa
     for uid in users:
         update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
 
     if users:
         user = User.objects.filter(id__gte=users[-1] + 1).values('id').first()
-        user and self.apply_async(args=[user['id']], queue='default', countdown=100)
+        user and self.apply_async(args=[user['id']], queue='default', countdown=5)
