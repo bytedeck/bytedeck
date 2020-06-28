@@ -91,3 +91,14 @@ class PrerequisitesSignalsTest(TenantTestCase):
         prereq.save()  # update
         self.assertEqual(task.call_count, 2)
         task.assert_called_with(kwargs={'quest_id': quest.id, 'start_from_user_id': 1}, queue='default')
+
+    @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
+    def test_update_cache_triggered_by_parent_object_deletion(self, task):
+        """When a quest is deleted it will cascade to delete any prereqs for which it is a parent.
+        That shouldn't break this signal.
+        """
+        quest = baker.make('quest_manager.quest')
+        baker.make(Prereq, prereq_invert=True, parent_object=quest)  # creation
+
+        quest.delete()  # doesn't call task because parent_object no longer exists.
+        self.assertEqual(task.call_count, 1)  
