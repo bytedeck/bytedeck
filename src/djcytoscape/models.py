@@ -664,6 +664,7 @@ class CytoScape(models.Model):
 
     def json(self):
         elements = self.cytoelement_set.all()
+        elements = elements.select_related('data_parent', 'data_source', 'data_target')
         # print(elements)
 
         json_str = "cytoscape({ \n"
