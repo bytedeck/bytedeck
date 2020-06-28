@@ -64,10 +64,7 @@
 <script src="{% static 'djcytoscape/js/cytoscape-dagre.js' %}"></script>
 
 <script>
-    var cy = {{ cytoscape_json|safe }}
-
-    // change mouse cursor and label style on hover to indicate link
-    // moved to cyto style js
+    var cy = cytoscape({{ cytoscape_json|safe }})
 
     // redirect to linked quest map
     cy.on('tap', '[href]', function(){

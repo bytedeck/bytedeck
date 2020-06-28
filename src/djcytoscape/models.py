@@ -1,16 +1,54 @@
-import ast
+# import ast
 import json
+import re
 
 import random
 from badges.models import Badge
 from courses.models import Rank
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+# from django.contrib.postgres.fields import JSONField
 from django.core.exceptions import ObjectDoesNotExist
 from django.urls import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+
+
+def clean_JSON(dirty_json_str):
+    """ Takes a poorly formatted JSON string and cleans it up a bit:
+    - double quote all keys,
+    - replace single quotes with double quotes,
+    - remove trailing commas after last element, and
+    - wrap in braces if needed
+    """
+    txt = dirty_json_str.strip()
+
+    # remove trailing comma
+    if txt[-1] == ",":
+        txt = txt[:-1]
+
+    # remove trailing comma before closing brace or square bracket
+    regex = r"(,)\s*[\]}]"
+    txt = re.sub(regex, '', txt)
+
+    # Add enclosing braces if not present
+    if txt[0] != "{":
+        txt = "{" + txt
+
+    if txt[-1] != "}":
+        txt += "}"
+
+    # Find unquoted keys and add quotes:
+    # https://regex101.com/r/oV0udR/1
+    regex = r"([{,]\s*)([^\"':]+)(\s*:)"
+    subst = "\\1\"\\2\"\\3"
+    txt = re.sub(regex, subst, txt, 0)
+
+    # replace single quotes with double quotes:
+    txt = txt.replace("\'", "\"")
+
+    return txt
 
 
 class CytoStyleClass(models.Model):
@@ -28,51 +66,61 @@ class CytoStyleClass(models.Model):
 class CytoStyleSet(models.Model):
     DEFAULT_NAME = "Default"
 
-    DEFAULT_INIT_OPTIONS = ("minZoom: 0.5, \n" 
-                            "maxZoom: 1.5, \n" 
-                            "wheelSensitivity: 0.1, \n" 
-                            "zoomingEnabled: false, \n" 
-                            "userZoomingEnabled: false, \n"
-                            "autoungrabify: true,\n"
-                            "autounselectify: true,\n"
-                            ""
-                            )
+    DEFAULT_INIT_OPTIONS = json.dumps({
+        'minZoom': 0.5, 
+        'maxZoom': 1.5, 
+        'wheelSensitivity': 0.1,
+        'zoomingEnabled': False,
+        'userZoomingEnabled': False,
+        'autoungrabify': True,
+        'autounselectify': True,
+    })
 
-    DEFAULT_LAYOUT_OPTIONS = "'nodeSep': 25, \n 'rankSep': 10, \n"
+    DEFAULT_LAYOUT_OPTIONS = json.dumps({
+        'nodeSep': 25,
+        'rankSep': 10,
+    })
 
-    DEFAULT_NODE_STYLES = "'label':         'data(label)', \n" \
-                          "'text-valign':   'center', 'text-halign': 'right', \n" \
-                          "'text-margin-x': '-155', \n" \
-                          "'text-wrap': 'wrap',\n" \
-                          "'text-max-width': 150,\n" \
-                          "'background-position-x': 0,\n" \
-                          "'height': 24,\n" \
-                          "'font-size': 12,\n" \
-                          "'background-fit':'contain', \n" \
-                          "'shape':         'roundrectangle', \n" \
-                          "'background-opacity': 0, \n" \
-                          "'background-position-x': 0, \n" \
-                          "'width':         180, \n" \
-                          "'border-width':  1, \n" \
-                          "'padding-right': 5, 'padding-left':5, 'padding-top':5, 'padding-bottom':5, \n" \
-                          "'text-events':   'yes'," \
-                          ""
+    DEFAULT_NODE_STYLES = json.dumps({
+        'label': 'data(label)',
+        'text-valign': 'center', 'text-halign': 'right',
+        'text-margin-x': -155,
+        'text-wrap': 'wrap',
+        'text-max-width': 150,
+        'background-position-x': 0,
+        'height': 24,
+        'font-size': 12,
+        'background-fit': 'contain',
+        'shape': 'roundrectangle',
+        'background-opacity': 0,
+        'background-position-x': 0,
+        'width': 180,
+        'border-width': 1,
+        'padding-right': 5, 'padding-left': 5, 'padding-top': 5, 'padding-bottom': 5,
+        'text-events': 'yes',
+    })
 
-    DEFAULT_EDGE_STYLES = "'width': 1, \n" \
-                          "'curve-style':   'bezier', \n" \
-                          "'line-color':    'black', \n" \
-                          "'line-style':    'solid', \n" \
-                          "'target-arrow-shape': 'triangle-backcurve', \n" \
-                          "'target-arrow-color':'black', \n" \
-                          "'text-rotation': 'autorotate', \n" \
-                          "'label':         'data(label)', \n" \
-                          ""
+    DEFAULT_EDGE_STYLES = json.dumps({
+        'width': 1,
+        'curve-style': 'bezier',
+        'line-color': 'black',
+        'line-style': 'solid',
+        'target-arrow-shape': 'triangle-backcurve',
+        'target-arrow-color': 'black',
+    })
+#   "'label':         'data(label)',
+#   "'font-size': '12px', \n" 
+#   "'text-background-color': 'white',
+#   "'text-background-opacity': 1,
+#   "'text-margin-x': 12,
+#   "'text-margin-y': 2,"
 
-    DEFAULT_PARENT_STYLES = "'text-rotation':   '-90deg', \n" \
-                            "'text-halign':     'left', \n" \
-                            "'text-margin-x':   -10, \n" \
-                            "'text-margin-y':   -40, \n" \
-                            ""
+    DEFAULT_PARENT_STYLES = json.dumps({
+        'text-rotation': '-90deg',
+        'text-halign': 'left',
+        'text-margin-x': -10,
+        'text-margin-y': -40,
+    })
 
     LAYOUT_CHOICES = (('null', 'null'),
                       ('random', 'random'),
@@ -158,34 +206,87 @@ var updateBounds = function () {
     def __str__(self):
         return self.name
 
+    def get_styles_json_dict(self):
+        """ Generate a dict representing this styleset that can be serialized as JSON. Example:
+        {
+            "style": [
+                {
+                    "selector": "node",
+                    "style": {
+                        "label": "data(label)"
+                    }
+                },
+                {
+                    "selector": "edge",
+                    "style": {
+                        "width": 1,
+                        "curve-style": "bezier",
+                        "target-arrow-shape": "triangle-backcurve"
+                    }
+                },
+                {
+                    # OTHER SELECTOR STYLES
+                }
+            ]
+        }      
+        """
+        json_dict = {}
+
+        style_list = []
+        style_list.append(self.get_node_styles_dict())
+        style_list.append(self.get_edge_styles_dict())
+        style_list.append(self.get_parent_styles_dict())
+        if self.style_classes.all():
+            style_list.append(self.get_classes_json_list())
+
+        json_dict["style"] = style_list
+
+        return json_dict
+
     def get_node_styles(self):
         if self.node_styles:
             return self.get_selector_styles_json('node', self.node_styles)
         return ""
+
+    def get_node_styles_dict(self):
+        return CytoStyleSet.get_selector_styles_json_dict('node', self.node_styles)
 
     def get_edge_styles(self):
         if self.edge_styles:
             return self.get_selector_styles_json('edge', self.edge_styles)
         return ""
 
+    def get_edge_styles_dict(self):
+        return CytoStyleSet.get_selector_styles_json_dict('edge', self.edge_styles)
+
     def get_parent_styles(self):
         if self.parent_styles:
             return self.get_selector_styles_json('$node > node', self.parent_styles)
         return ""
 
+    def get_parent_styles_dict(self):
+        return CytoStyleSet.get_selector_styles_json_dict('$node > node', self.parent_styles)
+
     def get_init_options(self):
         if self.init_options:
-            return self.init_options
+            return clean_JSON(self.init_options)
         return ""
 
+    def get_init_options_dict(self):
+        if self.init_options:
+            return json.loads(clean_JSON(self.init_options))
+        return None
+
     def get_layout_json(self):
-        json_str = ""
-        json_str += "  layout: { \n"
-        json_str += "    name: '" + self.layout_name + "', \n"
-        if self.layout_options:
-            json_str += self.layout_options
-        json_str += "  }, \n"
-        return json_str
+        return json.dumps(self.get_layout_json_dict())
+
+    def get_layout_json_dict(self):
+        layout = {}
+        layout["name"] = self.layout_name
+        layout_options_str = clean_JSON(self.layout_options)
+        layout.update(json.loads(layout_options_str))
+        layout_dict = {"layout": layout}
+        return layout_dict
 
     def get_classes(self):
         json_str = ""
@@ -195,15 +296,33 @@ var updateBounds = function () {
             json_str += self.get_selector_styles_json(selector, style_class.styles)
         return json_str
 
+    def get_classes_json_list(self):
+        json_list = []
+        for style_class in self.style_classes.all():
+            selector = f'.{style_class.name}'  # key = ".className"
+            json_list.append(
+                self.get_selector_styles_json_dict(selector, style_class.styles)
+            )
+        return json_list
+
     @staticmethod
     def get_selector_styles_json(selector, styles):
-        json_str = "    { \n"
-        json_str += "      selector: '" + selector + "', \n"
-        json_str += "      style: { \n"
-        json_str += styles
-        json_str += "      } \n"
-        json_str += "    }, \n"
-        return json_str
+        try:
+            result = json.dumps(CytoStyleSet.get_selector_styles_json_dict(selector, styles))
+            return result
+        except json.decoder.JSONDecodeError as e:
+            print(e)
+
+    @staticmethod
+    def get_selector_styles_json_dict(selector, styles):
+        if styles:
+            json_dict = {}
+            json_dict['selector'] = selector
+            styles = clean_JSON(styles)
+            json_dict['style'] = json.loads(styles)
+            return json_dict
+        else:
+            return None
 
 
 class CytoElementQuerySet(models.query.QuerySet):
@@ -275,6 +394,7 @@ class CytoElement(models.Model):
     min_len = models.IntegerField(default=1,
                                   help_text="number of ranks to keep between the source and target of the edge")
     href = models.URLField(blank=True, null=True)
+    # json_cache = models.JSONField(blank=True, null=True, help_text="This field is an autogenerated cache to speed up retreival.")
 
     objects = CytoElementManager()
 
@@ -288,65 +408,78 @@ class CytoElement(models.Model):
         ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
 
     def __str__(self):
-        return str(self.id) + ": " + str(self.label) if self.label else "EDGE"
-
-    def get_data_dict(self):
-        """:return data_dict text field as a python dictionary."""
-        return ast.literal_eval(self.data_dict)
-
-    def add_data(self, key, value):
-        data = self.get_data_dict()
-        data[key] = value
-        self.data_dict = data
-        self.save()
-
-    def get_data(self, key):
-        """:return the value for this key.  None if key doesn't exist."""
-        data = self.get_data_dict()
-        return data.get(key)
-
-    def get_data_json(self):
-        return json.dumps(self.data_dict)
+        if self.group == self.NODES:
+            return str(self.id) + ": " + str(self.label) 
+        else:
+            return str(self.id) + ": " + str(self.data_source.id) + "->" + str(self.data_target.id)
 
     def has_parent(self):
         return self.data_parent is not None
 
     def is_edge(self):
+        """Edges will have a source and target"""
         return self.data_source and self.data_target
 
     def is_node(self):
+        """Anything that is not an edge.  Includes compound nodes (i.e. campaigns/Categories)"""
         return not self.is_edge()
 
-    def json(self):
-        json_str = "    {\n"
-        # json_str +=         "      group: '" + self.group + "',\n"
-        json_str += "      data: {\n"
-        json_str += "        id: " + str(self.id) + ",\n"
+    def json_dict(self):
+        """ Returns a json serializable python dictionary representing this element as a djcytoscape node or edge
+        resulting in something like:
+        {   
+            "data": {
+                "id": 2107,
+                "label": "Badge: ByteDeck Proficiency* (2)",
+                "href": "/maps/2/1/1/",
+                "Badge": 1
+            },
+            "classes": "Badge link"
+        }
+        """
+        data = {"id": self.id}
+
         if self.label:
-            json_str += '        label: "' + self.label + '",\n'  # TODO: should properly escape string
+            data["label"] = self.label
+
         if self.has_parent():
-            json_str += "        parent: " + str(self.data_parent.id) + ",\n"
+            data["parent"] = self.data_parent.id
+            
         elif self.is_edge():
-            json_str += "        source: " + str(self.data_source.id) + ",\n"
-            json_str += "        target: " + str(self.data_target.id) + ",\n"
-            json_str += "        minLen: " + str(self.min_len) + ",\n"
+            data["source"] = self.data_source.id
+            data["target"] = self.data_target.id
+            if self.min_len and self.min_len != 1:  # 1 is default, not needed:
+                data["minLen"] = str(self.min_len)
             # json_str += "        edgeWeight: 1, \n"  # '" + str(self.edge_weight) + "',\n"
         if self.href:
-            json_str += "        href: '" + self.href + "',\n"
+            data["href"] = self.href
         if self.selector_id:
-            json_str += "        " + self.selector_id + ",\n"
-        json_str += "      },\n "  # end data
-        if self.classes:
-            json_str += "     classes: '" + self.classes + "',\n"
-        json_str += "    },\n "
+            # selector_id will be something like "Quest: 342"
+            key = self.selector_id.split(":")[0].strip() 
+            value = self.selector_id.split(":")[1].strip()  # this is the pk/id of the quest or badge
+            data[key] = int(value)
+ 
+        json_dict = {"data": data}
 
-        return json_str
+        if self.classes:
+            json_dict["classes"] = self.classes
+
+        return json_dict
+
+    def json(self):
+        return json.dumps(self.json_dict())
+
+    # def save_json_cache(self):
+    #     json = self.json()
+    #     self.json_cache = self.json()
 
     @staticmethod
     def generate_selector_id(obj):
         """
-        unique id in the form of 'model-#' where the model = Quest (etc) and # = object id.
-        Examples: Quest-21 or Badge-5
+        unique id in the form of 'model: #' where the model = Quest (etc) and # = object id.
+        Examples: Quest: 21 or Badge: 5
+        # Todo, this seems uneccessary, because we just have to parse it when building the json dict.  
+        # Just save the model name and the id seperately?
         """
         return str(type(obj).__name__) + ": " + str(obj.id)
 
@@ -663,48 +796,86 @@ class CytoScape(models.Model):
     objects = CytoScapeManager()
 
     def json(self):
+        return json.dumps(self.json_dict())
+
+    def get_container_value(self):
+        return f"document.getElementById('{self.container_element_id}')"
+
+    def json_dict(self):
+        """ Returns a json string representing this cytoscape
+        by generating a json serializable python dictionary"""
+
+        json_dict = {}
+
+        json_dict['container'] = self.get_container_value()
+
         elements = self.cytoelement_set.all()
         elements = elements.select_related('data_parent', 'data_source', 'data_target')
-        # print(elements)
+        nodes = elements.filter(group=CytoElement.NODES)
+        edges = elements.filter(group=CytoElement.EDGES)
 
-        json_str = "cytoscape({ \n"
-        json_str += "  container: document.getElementById('" + self.container_element_id + "'), \n"
-        json_str += "  elements: [ \n"
-        for element in elements:
-            json_str += element.json()
-        json_str += "  ], \n"
+        nodes_list = [node.json_dict() for node in nodes]
+        edges_list = [edge.json_dict() for edge in edges]
+
+        json_dict['elements'] = {
+            'nodes': nodes_list,
+            'edges': edges_list,
+        }
+
+        styles_dict = {}
+
         if self.style_set:
-            json_str += self.style_set.get_layout_json()
-            json_str += "  style: [ \n"
-            json_str += self.style_set.get_node_styles()
-            json_str += self.style_set.get_edge_styles()
-            json_str += self.style_set.get_parent_styles()
-            json_str += self.style_set.get_classes()
-        # json_str += self.get_selector_styles_json('.Quest', self.quest_styles)
-        # json_str += self.get_selector_styles_json('.Badge', self.badge_styles)
-        # json_str += self.get_selector_styles_json('.campaign', self.campaign_styles)
-        # json_str += self.get_selector_styles_json('.hidden', self.hidden_styles)
-        # json_str += self.get_selector_styles_json('.link', self.link_styles)
-        # json_str += self.get_selector_styles_json('.link_hover', self.link_hover_styles)
+            # Add layout dictionary
+            json_dict.update(self.style_set.get_layout_json_dict())
+
+            # Add to styles dict
+            styles_dict.update(self.style_set.get_init_options_dict())
+            styles_dict.update(self.style_set.get_styles_json_dict())
+
+        # append styles for specific nodes into the style list
         for element in elements:
             if element.id_styles:
-                json_str += self.get_selector_styles_json(str(element.id), element.id_styles)
-        json_str += "  ], \n"  # end style: [
-        if self.style_set:
-            json_str += self.style_set.get_init_options()
-        json_str += "});"
+                styles_dict["style"].append(
+                    CytoStyleSet.get_selector_styles_json_dict("#" + str(element.id), element.id_styles)
+                )
+     
+        if styles_dict:
+            json_dict.update(styles_dict)
 
-        return json_str
+        print(json.dumps(json_dict, indent=2))
+        return json_dict
 
-    @staticmethod
-    def get_selector_styles_json(selector, styles):
-        json_str = "    { \n"
-        json_str += "      selector: '#" + selector + "', \n"
-        json_str += "      style: { \n"
-        json_str += styles
-        json_str += "      } \n"
-        json_str += "    }, \n"
-        return json_str
+        # # OLD
+        # json_str = "cytoscape({ \n"
+        # json_str += "  container: document.getElementById('" + self.container_element_id + "'), \n"
+        # json_str += "  elements: { \n"
+        # json_str += ""
+        # json_str += "   nodes: [\n"
+        # for node in nodes:
+        #     json_str += node.json() + ","
+        # json_str += "   ], \n"
+        # json_str += "   edges: [\n"
+        # for edge in edges:
+        #     json_str += edge.json() + ","
+        # json_str += "   ], \n"
+        # json_str += "  },\n"
+        # if self.style_set:
+        #     json_str += self.style_set.get_layout_json()
+        #     json_str += "  style: [ \n"
+        #     json_str += self.style_set.get_node_styles()
+        #     json_str += self.style_set.get_edge_styles()
+        #     json_str += self.style_set.get_parent_styles()
+        #     json_str += self.style_set.get_classes()
+
+        # for element in elements:
+        #     if element.id_styles:
+        #         json_str += CytoStyleSet.get_selector_styles_json("#" + str(element.id), element.id_styles)
+        # json_str += "  ], \n"  # end style: [
+        # if self.style_set:
+        #     json_str += self.style_set.get_init_options()
+        # json_str += "});"
+
+        # return json_str
 
     @staticmethod
     def generate_label(obj):
@@ -744,7 +915,7 @@ class CytoScape(models.Model):
         except self.DoesNotExist:
             return None
 
-    def add_node_from_object(self, obj, initial_node=False):
+    def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
         # check for an icon
@@ -933,7 +1104,7 @@ class CytoScape(models.Model):
             #  > ...
 
             # create the new reliant node if it doesn't already exist
-            new_node, created = self.add_node_from_object(obj)
+            new_node, created = self.create_node_from_object(obj)
 
             # if mother node is in a campaign/parent, add new_node as a reliant in the temp_campaign
             if mother_node.data_parent:
@@ -949,7 +1120,7 @@ class CytoScape(models.Model):
                 group=CytoElement.EDGES,
                 data_source=mother_node,
                 data_target=new_node,
-                # defaults={'attribute': value},
+                defaults={'label': "TEST EDGE LABEL"},
             )
 
             # If repeatable, add circular edge
@@ -1003,7 +1174,7 @@ class CytoScape(models.Model):
 
     def calculate_nodes(self):
         # Create the starting node from the initial quest
-        mother_node, created = self.add_node_from_object(self.initial_content_object, initial_node=True)
+        mother_node, created = self.create_node_from_object(self.initial_content_object, initial_node=True)
         # Temp campaign list used to track funky edges required for compound nodes to display properly with dagre
         self.init_temp_campaign_list()
         # Add nodes reliant on the mother_node, this is recursive and will generate all nodes until endpoints reached

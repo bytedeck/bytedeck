@@ -88,8 +88,17 @@ def quest_map_personalized(request, scape_id, user_id):
             personalized_user = None
 
         scape = get_object_or_404(CytoScape, id=scape_id)
+
+        map_json = scape.json()
+
+        # need to remove the quotes around the container value: "document.getElementById('cy')"
+        # quotes are placed there so the entire thing will be json serializable, but before sending to the template we need 
+        # the container value to run as javascript
+        container_value = scape.get_container_value()
+        map_json = map_json.replace('"' + container_value + '"', container_value)
+
         return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
-                                                              'cytoscape_json': scape.json(),
+                                                              'cytoscape_json': map_json,
                                                               'completed_quests': quest_ids,
                                                               'fullscreen': True,
                                                               'personalized_user': personalized_user,
