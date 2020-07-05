@@ -237,7 +237,7 @@ var updateBounds = function () {
         style_list.append(self.get_edge_styles_dict())
         style_list.append(self.get_parent_styles_dict())
         if self.style_classes.all():
-            style_list.append(self.get_classes_json_list())
+            style_list.extend(self.get_classes_json_list())
 
         json_dict["style"] = style_list
 
