@@ -35,7 +35,11 @@ cy.style()
     .selector("edge")
       .style({
         "width": 1,
-        "curve-style": "bezier",
+        // "curve-style": "bezier",
+        "curve-style": "taxi",
+        "taxi-direction": "vertical",
+        "taxi-turn": "5px",
+        "taxi-turn-min-distance": "5px",
         "line-color": "black",
         "line-style": "solid",
         "target-arrow-shape": "triangle-backcurve",
@@ -83,8 +87,8 @@ cy.style()
 
 var layout = cy.layout({
     "name": "dagre",
-    "nodeSep": 25,
-    "rankSep": 10
+    "nodeSep": 25,  // horizontal seperation of campaigns/chains/columns
+    "rankSep": 15  // vertical seperation of nodes
 });
 layout.run();
 
