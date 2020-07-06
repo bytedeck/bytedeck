@@ -47,8 +47,6 @@
       Some quests are available based on your Rank; see the <a href="{% url 'courses:ranks' %}">Ranks page</a>
       to view the Rank-based maps.</p>
 
-
-
     {% if scape.parent_scape %}
         <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
     {% endif %}
@@ -64,17 +62,25 @@
 <script src="{% static 'djcytoscape/js/cytoscape-dagre.js' %}"></script>
 
 <script>
-    var cy = cytoscape({{ cytoscape_json|safe }})
+    var mapContainer = document.getElementById('cy');
+    mapContainer.style.visibility = 'hidden';
 
-    // redirect to linked quest map
-    cy.on('tap', '[href]', function(){
-        window.location.href = this.data('href');
-    });
+    // https://js.cytoscape.org/#core/initialisation
+    var cy = cytoscape({
+      container: mapContainer,
+      minZoom: 0.5,
+      maxZoom: 1.5,
+      wheelSensitivity: 0.1,
+      zoomingEnabled: false,
+      userZoomingEnabled: false,
+      autoungrabify: true,
+      autounselectify: true,
+      elements: {{ elements|safe }},
+      style: {{ class_styles|safe }}
 
+    }); 
 
-
-    // scape.style_set
-    {{ scape.style_set.javascript|safe }}
+    // cy.add( {{ elements|safe }})  // alternate method
 
     // completed quests
     cy.ready( function(event) {
@@ -83,49 +89,6 @@
         {% endfor %}
     });
 
-
-    cy.on('mouseover', '[href]', function(){
-        $('#cy').css('cursor', 'pointer');
-        this.addClass('link_hover')
-    });
-    cy.on('mouseout', '[href]', function(){
-        $('#cy').css('cursor', 'move');
-        this.removeClass('link_hover')
-    });
-
-    // nodes that don't link
-    cy.on('mouseover', '[^href]', function(){
-        $('#cy').css('cursor', 'default');
-    });
-    cy.on('mouseout', '[^href]', function(){
-        $('#cy').css('cursor', 'move');
-    });
-
-
-    cy.on('ready', function () {
-        updateBounds();
-    });
-
-
-    $(document).ready(function() { 
-      updateBounds();
-      //if they resize the window, resize the diagram
-      $(window).resize(function () {
-        updateBounds();
-      });
-        cy.center();
-        cy.resize();
-
-
-    }); // dom ready
-
-    var updateBounds = function () {
-        var bounds = cy.elements().boundingBox();
-        $('#cy').css('height', bounds.h + 50);
-        cy.center();
-        cy.resize();
-    };
-
 </script>
 
 <script src="{% static 'djcytoscape/js/maps.js' %}"></script>
@@ -133,5 +96,7 @@
 {% if request.user.profile.dark_theme %}
  <script src="{% static 'djcytoscape/js/maps-dark.js' %}"></script>
 {% endif %}
+
+<script>mapContainer.style.visibility = 'visible';</script>
 
 {% endblock %}
