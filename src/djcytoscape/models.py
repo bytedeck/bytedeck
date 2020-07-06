@@ -548,7 +548,7 @@ class CytoScape(models.Model):
         }
         return elements_dict
 
-    def elements_json(self):
+    def generate_elements_json(self):
         return json.dumps(self.elements_dict())
 
     def class_styles_list(self):
@@ -559,6 +559,15 @@ class CytoScape(models.Model):
                     element.get_selector_styles_json_dict("#" + str(element.id), element.id_styles)
                 )
         return ls
+
+    def generate_class_styles_json(self):
+        return json.dumps(self.class_styles_list())
+
+    def update_cache(self):
+        self.elements_json = self.generate_elements_json(self)
+        self.class_styles_json = self.generate_class_styles_json(self)
+        self.save()
+
 
     @staticmethod
     def generate_label(obj):
@@ -859,6 +868,7 @@ class CytoScape(models.Model):
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
         self.fix_nonsequential_campaign_edges()
         self.last_regeneration = timezone.now()
+        self.update_cache()
         self.save()
 
     def regenerate(self):

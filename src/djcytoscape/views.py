@@ -90,8 +90,8 @@ def quest_map_personalized(request, scape_id, user_id):
 
         context = {
             'scape': scape,
-            'elements': scape.elements_dict(),
-            'class_styles': scape.class_styles_list(),
+            'elements': scape.elements_json,
+            'class_styles': scape.class_styles_json,
             'completed_quests': quest_ids,
             'fullscreen': True,
             'personalized_user': personalized_user,  

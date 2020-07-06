@@ -162,5 +162,14 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIn('nodes', eles_dict)
         self.assertIn('edges', eles_dict)
 
-    def test_elements_json(self):
+    def test_generate_elements_json(self):
         self.assertValidJSON(self.map.elements_json())
+
+    def test_class_styles_list(self):
+        styles_list = self.map.class_styles_list()
+        self.assertIsInstance(styles_list, list)
+        style1 = styles_list[0]
+        # list of dictionaries
+        self.assertIsInstance(style1, dict)
+        self.assertIn('selector', style1)
+        self.assertIn('style', style1)
