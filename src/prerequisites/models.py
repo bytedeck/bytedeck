@@ -410,7 +410,8 @@ class Prereq(IsAPrereqMixin, models.Model):
         """Check if class implements IsAPrereqMixin"""
         mc = content_type.model_class()
 
-        if issubclass(mc, IsAPrereqMixin):
+        # handle old content types that may not have been removed? mc = None
+        if mc and issubclass(mc, IsAPrereqMixin):
             return True
         else:
             return False
