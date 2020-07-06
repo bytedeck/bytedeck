@@ -63,7 +63,7 @@
 
 <script>
     var mapContainer = document.getElementById('cy');
-    mapContainer.style.visibility = 'hidden';
+    //mapContainer.style.visibility = 'hidden';
 
     // https://js.cytoscape.org/#core/initialisation
     var cy = cytoscape({
@@ -76,8 +76,7 @@
       autoungrabify: true,
       autounselectify: true,
       elements: {{ elements|safe }},
-      style: {{ class_styles|safe }}
-
+      style: {{ class_styles|safe }},
     }); 
 
     // cy.add( {{ elements|safe }})  // alternate method
@@ -97,6 +96,5 @@
  <script src="{% static 'djcytoscape/js/maps-dark.js' %}"></script>
 {% endif %}
 
-<script>mapContainer.style.visibility = 'visible';</script>
 
 {% endblock %}

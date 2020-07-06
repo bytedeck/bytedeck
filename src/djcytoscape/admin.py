@@ -9,7 +9,6 @@ class CytoScapeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'name',
         'initial_content_type', 'initial_object_id',
         'parent_scape',
-        # 'style_set',
         'is_the_primary_scape',
         'autobreak'
     ]

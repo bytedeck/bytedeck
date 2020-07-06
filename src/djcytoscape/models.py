@@ -49,236 +49,6 @@ def clean_JSON(dirty_json_str):
     return txt
 
 
-# class CytoStyleClass(models.Model):
-#     name = models.CharField(max_length=20, help_text="a period will be added before the name when used as a selector")
-#     styles = models.TextField(blank=True, null=True,
-#                               help_text="Format = key1: value1, key2: value2, ... (see http://js.cytoscape.org/#style)")
-
-#     class Meta:
-#         verbose_name = "Map Style"
-
-#     def __str__(self):
-#         return self.name
-
-
-# class CytoStyleSet(models.Model):
-#     DEFAULT_NAME = "Default"
-
-#     DEFAULT_INIT_OPTIONS = json.dumps({
-#         'minZoom': 0.5, 
-#         'maxZoom': 1.5, 
-#         'wheelSensitivity': 0.1,
-#         'zoomingEnabled': False,
-#         'userZoomingEnabled': False,
-#         'autoungrabify': True,
-#         'autounselectify': True,
-#     })
-
-#     DEFAULT_LAYOUT_OPTIONS = json.dumps({
-#         'nodeSep': 25,
-#         'rankSep': 10,
-#     })
-
-#     DEFAULT_NODE_STYLES = json.dumps({
-#         'label': 'data(label)',
-#         'text-valign': 'center', 'text-halign': 'right',
-#         'text-margin-x': -155,
-#         'text-wrap': 'wrap',
-#         'text-max-width': 150,
-#         'background-position-x': 0,
-#         'height': 24,
-#         'font-size': 12,
-#         'background-fit': 'contain',
-#         'shape': 'roundrectangle',
-#         'background-opacity': 0,
-#         'background-position-x': 0,
-#         'width': 180,
-#         'border-width': 1,
-#         'padding-right': 5, 'padding-left': 5, 'padding-top': 5, 'padding-bottom': 5,
-#         'text-events': 'yes',
-#     })
-
-#     DEFAULT_EDGE_STYLES = json.dumps({
-#         'width': 1,
-#         'curve-style': 'bezier',
-#         'line-color': 'black',
-#         'line-style': 'solid',
-#         'target-arrow-shape': 'triangle-backcurve',
-#         'target-arrow-color': 'black',
-#     })
-# #   "'label':         'data(label)',
-# #   "'font-size': '12px', \n" 
-# #   "'text-background-color': 'white',
-# #   "'text-background-opacity': 1,
-# #   "'text-margin-x': 12,
-# #   "'text-margin-y': 2,"
-
-#     DEFAULT_PARENT_STYLES = json.dumps({
-#         'text-rotation': '-90deg',
-#         'text-halign': 'left',
-#         'text-margin-x': -10,
-#         'text-margin-y': -40,
-#     })
-
-#     LAYOUT_CHOICES = (('null', 'null'),
-#                       ('random', 'random'),
-#                       ('grid', 'grid'),
-#                       ('circle', 'circle'),
-#                       ('concentric', 'concentric'),
-#                       ('breadthfirst', 'breadthfirst'),
-#                       ('cose', 'cose'),
-#                       ('cola', 'cola'),
-#                       ('dagre', 'dagre'),
-#                       )
-
-#     name = models.CharField(max_length=50)
-#     init_options = models.TextField(blank=True, null=True, default=DEFAULT_INIT_OPTIONS,
-#                                     help_text="Format = key1: value1, key2: value2, ... (see "
-#                                               "http://js.cytoscape.org/#core/initialisation)")
-#     layout_name = models.CharField(max_length=50, default="dagre", choices=LAYOUT_CHOICES,
-#                                    help_text="see http://js.cytoscape.org/#layouts")
-#     layout_options = models.TextField(blank=True, null=True, default=DEFAULT_LAYOUT_OPTIONS,
-#                                       help_text="Format = key1: value1, key2: value2, ... (see "
-#                                                 "http://js.cytoscape.org/#layouts)")
-#     node_styles = models.TextField(blank=True, null=True,
-#                                    help_text="Format = key1: value1, key2: value2, ... (see "
-#                                              "http://js.cytoscape.org/#style)")
-#     edge_styles = models.TextField(blank=True, null=True,
-#                                    help_text="Format = key1: value1, key2: value2, ... (see "
-#                                              "http://js.cytoscape.org/#style)")
-#     parent_styles = models.TextField(blank=True, null=True,
-#                                      help_text="Format = key1: value1, key2: value2, ... (see "
-#                                                "http://js.cytoscape.org/#style)")
-#     style_classes = models.ManyToManyField(CytoStyleClass, blank=True)
-#     javascript = models.TextField(blank=True, null=True,
-#                                   help_text="Will be placed inside script tags. JQuery available. "
-#                                             "See http://js.cytoscape.org/#core")
-
-#     class Meta:
-#         verbose_name = "Map Style Set"
-
-#     def __str__(self):
-#         return self.name
-
-#     def get_styles_json_dict(self):
-#         """ Generate a dict representing this styleset that can be serialized as JSON. Example:
-#         {
-#             "style": [
-#                 {
-#                     "selector": "node",
-#                     "style": {
-#                         "label": "data(label)"
-#                     }
-#                 },
-#                 {
-#                     "selector": "edge",
-#                     "style": {
-#                         "width": 1,
-#                         "curve-style": "bezier",
-#                         "target-arrow-shape": "triangle-backcurve"
-#                     }
-#                 },
-#                 {
-#                     # OTHER SELECTOR STYLES
-#                 }
-#             ]
-#         }      
-#         """
-#         json_dict = {}
-
-#         style_list = []
-#         style_list.append(self.get_node_styles_dict())
-#         style_list.append(self.get_edge_styles_dict())
-#         style_list.append(self.get_parent_styles_dict())
-#         if self.style_classes.all():
-#             style_list.extend(self.get_classes_json_list())
-
-#         json_dict["style"] = style_list
-
-#         return json_dict
-
-#     def get_node_styles(self):
-#         if self.node_styles:
-#             return self.get_selector_styles_json('node', self.node_styles)
-#         return ""
-
-#     def get_node_styles_dict(self):
-#         return CytoStyleSet.get_selector_styles_json_dict('node', self.node_styles)
-
-#     def get_edge_styles(self):
-#         if self.edge_styles:
-#             return self.get_selector_styles_json('edge', self.edge_styles)
-#         return ""
-
-#     def get_edge_styles_dict(self):
-#         return CytoStyleSet.get_selector_styles_json_dict('edge', self.edge_styles)
-
-#     def get_parent_styles(self):
-#         if self.parent_styles:
-#             return self.get_selector_styles_json('$node > node', self.parent_styles)
-#         return ""
-
-#     def get_parent_styles_dict(self):
-#         return CytoStyleSet.get_selector_styles_json_dict('$node > node', self.parent_styles)
-
-#     def get_init_options(self):
-#         if self.init_options:
-#             return clean_JSON(self.init_options)
-#         return ""
-
-#     def get_init_options_dict(self):
-#         if self.init_options:
-#             return json.loads(clean_JSON(self.init_options))
-#         return None
-
-#     def get_layout_json(self):
-#         return json.dumps(self.get_layout_json_dict())
-
-#     def get_layout_json_dict(self):
-#         layout = {}
-#         layout["name"] = self.layout_name
-#         layout_options_str = clean_JSON(self.layout_options)
-#         layout.update(json.loads(layout_options_str))
-#         layout_dict = {"layout": layout}
-#         return layout_dict
-
-#     def get_classes(self):
-#         json_str = ""
-#         style_classes = self.style_classes.all()
-#         for style_class in style_classes:
-#             selector = "." + style_class.name
-#             json_str += self.get_selector_styles_json(selector, style_class.styles)
-#         return json_str
-
-#     def get_classes_json_list(self):
-#         json_list = []
-#         for style_class in self.style_classes.all():
-#             selector = f'.{style_class.name}'  # key = ".className"
-#             json_list.append(
-#                 self.get_selector_styles_json_dict(selector, style_class.styles)
-#             )
-#         return json_list
-
-#     @staticmethod
-#     def get_selector_styles_json(selector, styles):
-#         try:
-#             result = json.dumps(CytoStyleSet.get_selector_styles_json_dict(selector, styles))
-#             return result
-#         except json.decoder.JSONDecodeError as e:
-#             print(e)
-
-#     @staticmethod
-#     def get_selector_styles_json_dict(selector, styles):
-#         if styles:
-#             json_dict = {}
-#             json_dict['selector'] = selector
-#             styles = clean_JSON(styles)
-#             json_dict['style'] = json.loads(styles)
-#             return json_dict
-#         else:
-#             return None
-
-
 class CytoElementQuerySet(models.query.QuerySet):
     def all_scape(self, scape_id):
         return self.filter(scape_id=scape_id)
@@ -431,6 +201,17 @@ class CytoElement(models.Model):
         # Just save the model name and the id seperately?
         """
         return str(type(obj).__name__) + ": " + str(obj.id)
+
+    @staticmethod
+    def get_selector_styles_json_dict(selector, styles):
+        if styles:
+            json_dict = {}
+            json_dict['selector'] = selector
+            styles = clean_JSON(styles)
+            json_dict['style'] = json.loads(styles)
+            return json_dict
+        else:
+            return None
 
 
 class TempCampaignNode(object):
@@ -608,10 +389,9 @@ class TempCampaign(object):
 
 
 class CytoScapeManager(models.Manager):
-    def generate_random_tree_scape(self, name, size=100, container_element_id="cy"):
+    def generate_random_tree_scape(self, name, size=100):
         scape = CytoScape(
             name=name,
-            container_element_id=container_element_id,
             layout_name='breadthfirst',
             layout_options="directed: true, spacingFactor: " + str(1.75 * 30 / size),
         )
@@ -650,10 +430,9 @@ class CytoScapeManager(models.Manager):
 
         return scape
 
-    def generate_random_scape(self, name, size=100, container_element_id="cy"):
+    def generate_random_scape(self, name, size=100):
         new_scape = CytoScape(
             name=name,
-            container_element_id=container_element_id
         )
         new_scape.save()
 
@@ -710,8 +489,6 @@ class CytoScape(models.Model):
                                                help_text="There can only be one primary map/scape. Making this True "
                                                          "will change all other map/scapes will be set to False.")
     last_regeneration = models.DateTimeField(default=timezone.now)
-    container_element_id = models.CharField(max_length=50, default="cy",
-                                            help_text="id of the html element where the graph's canvas will be placed")
     autobreak = models.BooleanField(default=True,
                                     help_text="Stop the map when reaching a quest with a ~ or a badge with a *."
                                               "If this is unchecked, the map is gonna be CRAZY!")
@@ -753,12 +530,6 @@ class CytoScape(models.Model):
 
     objects = CytoScapeManager()
 
-    def json(self):
-        return json.dumps(self.json_dict())
-
-    def get_container_value(self):
-        return f"document.getElementById('{self.container_element_id}')"
-
     def elements(self):
         elements = self.cytoelement_set.all()
         return elements.select_related('data_parent', 'data_source', 'data_target')
@@ -785,7 +556,7 @@ class CytoScape(models.Model):
         for element in self.elements():
             if element.id_styles:
                 ls.append(
-                    CytoStyleSet.get_selector_styles_json_dict("#" + str(element.id), element.id_styles)
+                    element.get_selector_styles_json_dict("#" + str(element.id), element.id_styles)
                 )
         return ls
 
@@ -1032,7 +803,7 @@ class CytoScape(models.Model):
                 group=CytoElement.EDGES,
                 data_source=mother_node,
                 data_target=new_node,
-                defaults={'label': "TEST EDGE LABEL"},
+                # defaults={'label': "TEST EDGE LABEL"},
             )
 
             # If repeatable, add circular edge
@@ -1065,13 +836,12 @@ class CytoScape(models.Model):
             return False
 
     @staticmethod
-    def generate_map(initial_object, name, parent_scape=None, container_element_id="cy", autobreak=True):
+    def generate_map(initial_object, name, parent_scape=None, autobreak=True):
 
         scape = CytoScape(
             name=name,
             initial_content_object=initial_object,
             parent_scape=parent_scape,
-            container_element_id=container_element_id,
             autobreak=autobreak,
         )
         scape.save()
