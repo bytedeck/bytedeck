@@ -564,10 +564,9 @@ class CytoScape(models.Model):
         return json.dumps(self.class_styles_list())
 
     def update_cache(self):
-        self.elements_json = self.generate_elements_json(self)
-        self.class_styles_json = self.generate_class_styles_json(self)
+        self.elements_json = self.generate_elements_json()
+        self.class_styles_json = self.generate_class_styles_json()
         self.save()
-
 
     @staticmethod
     def generate_label(obj):

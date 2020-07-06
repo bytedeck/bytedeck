@@ -88,6 +88,9 @@ def quest_map_personalized(request, scape_id, user_id):
 
         scape = get_object_or_404(CytoScape, id=scape_id)
 
+        if scape.class_styles_json is None or scape.class_styles_json is None:
+            scape.update_cache()
+
         context = {
             'scape': scape,
             'elements': scape.elements_json,
