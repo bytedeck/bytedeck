@@ -36,11 +36,11 @@ cy.style()
     .selector("edge")
       .style({
         "width": 1,
-        // "curve-style": "bezier",
-        "curve-style": "taxi",
+        "curve-style": "bezier",
+        // "curve-style": "taxi",
         "taxi-direction": "vertical",
-        "taxi-turn": "8px",
-        "taxi-turn-min-distance": "8px",
+        "taxi-turn": "15px",
+        "taxi-turn-min-distance": "15px",
         "line-color": "black",
         "line-style": "solid",
         "target-arrow-shape": "triangle-backcurve",
@@ -88,7 +88,8 @@ cy.style()
       })
     .selector (".Badge")
       .style({
-        "border-width": 3
+        "border-width": 3,
+        "shape": "cut-rectangle",
       })
     .selector(".hidden")
       .style({
@@ -105,6 +106,13 @@ cy.style()
 /**************************************/
 
 var layout = cy.layout({
+
+    // name: 'breadthfirst',
+    // directed: true,
+    // grid: false,
+    // spacingFactor: 0.5,
+    // maximal: true,
+    animate: true,
     "name": "dagre",
     "nodeSep": 60,  // horizontal seperation of campaigns/chains/columns
     "rankSep": 24  // vertical seperation of nodes
