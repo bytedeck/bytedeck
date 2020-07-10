@@ -24,6 +24,19 @@ class HasPrereqsMixin:
         num_deleted = self.prereqs().delete()
         return num_deleted
 
+    def has_or_prereq(self, or_prereq_object):
+        """Returns True if this object has or_prereq_object as an alternate requirement.
+        """
+        ct = ContentType.objects.get_for_model(or_prereq_object)
+        prereqs = self.prereqs().filter(
+            or_prereq_content_type__pk=ct.id,
+            or_prereq_object_id=or_prereq_object.id
+        )
+        if prereqs:
+            return True
+        else:
+            return False
+
 
 class IsAPrereqMixin:
     """

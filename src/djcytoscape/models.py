@@ -805,6 +805,9 @@ class CytoScape(models.Model):
             # add new_node to a campaign/compound/parent, if required
             self.add_to_campaign(obj, new_node, mother_node)
 
+            # if obj.has_or_prereq(current_obj):
+            #     pass
+
             # TODO: should add number of times prereq is required, similar to repeat edges below
             CytoElement.objects.get_or_create(
                 scape=self,
@@ -815,7 +818,6 @@ class CytoScape(models.Model):
             )
 
             # If repeatable, add circular edge
-            # TODO: cool idea, but currently big edge gets in the way, need a tight small one.
             if hasattr(obj, 'max_repeats'):
                 if obj.max_repeats != 0:
                     if obj.max_repeats < 0:

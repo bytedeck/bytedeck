@@ -15,16 +15,16 @@ cy.style()
         "label": "data(label)",
         "text-valign": "center",
         "text-halign": "right",
-        "text-margin-x": -132,
+        "text-margin-x": -155,
         "text-wrap": "wrap",
-        "text-max-width": 130,
+        "text-max-width": 150,
         "background-position-x": 0,
         "height": 24,
         "font-size": 12,
         "background-fit": "contain",
         "shape": "roundrectangle",
         "background-opacity": 0,
-        "width": 160,
+        "width": 180,
         "border-width": 1,
         "padding-right": 5,
         "padding-left": 5,
@@ -58,21 +58,24 @@ cy.style()
       .style({
         "text-rotation": "-90deg",
         "text-halign": "left",
-        "text-margin-x": 10,
-        // "text-margin-y": -40
+        "text-margin-x": -10,
+        "text-margin-y": -40
       })
     .selector('.repeat-edge')
-        .style({
-          'loop-direction': '100deg', 
-          'loop-sweep': '-15deg',
-          'target-endpoint': '95deg',
-          'source-endpoint': '103deg',
-          'control-point-step-size': 72,
-          // 'label': "data(label)",
-          'text-margin-x': 10,
-          'text-margin-y': -3,
-          'font-size': 12,
-        })
+      .style({
+        'loop-direction': '100deg', 
+        'loop-sweep': '-20deg',
+        'target-endpoint': '90deg',
+        'source-endpoint': '103deg',
+        'control-point-step-size': 80,
+        'text-margin-x': 10,
+        'text-margin-y': -3,
+        'font-size': 12,
+      })
+    .selector('.alternate-edge')
+      .style({
+        "line-style": "dashed",
+      })
     .selector(".link_hover")
       .style({
         "background-opacity": 1,
@@ -103,8 +106,8 @@ cy.style()
 
 var layout = cy.layout({
     "name": "dagre",
-    "nodeSep": 45,  // horizontal seperation of campaigns/chains/columns
-    "rankSep": 20  // vertical seperation of nodes
+    "nodeSep": 60,  // horizontal seperation of campaigns/chains/columns
+    "rankSep": 24  // vertical seperation of nodes
 });
 layout.run();
 
