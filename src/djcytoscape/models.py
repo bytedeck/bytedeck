@@ -816,19 +816,23 @@ class CytoScape(models.Model):
 
             # If repeatable, add circular edge
             # TODO: cool idea, but currently big edge gets in the way, need a tight small one.
-            # if hasattr(obj, 'max_repeats'):
-            #     if obj.max_repeats != 0:
-            #         if obj.max_repeats < 0:
-            #             label = '∞'
-            #         else:
-            #             label = 'x ' + str(obj.max_repeats)
-            #         repeat_edge = CytoElement(
-            #             scape=self, group=CytoElement.EDGES,
-            #             data_source=new_node,
-            #             data_target=new_node,
-            #             label=label,
-            #         )
-            #         repeat_edge.save()
+            if hasattr(obj, 'max_repeats'):
+                if obj.max_repeats != 0:
+                    if obj.max_repeats < 0:
+                        label = '∞'
+                    else:
+                        label = 'x' + str(obj.max_repeats)
+
+                    CytoElement.objects.get_or_create(
+                        scape=self,
+                        group=CytoElement.EDGES,
+                        data_source=new_node,
+                        data_target=new_node,
+                        defaults={
+                            'label': label,
+                            'classes': 'repeat-edge',
+                        },
+                    )
 
             # recursive, continue adding if this is a new node, and not a closing node
             if created and not self.is_transition_node(new_node):

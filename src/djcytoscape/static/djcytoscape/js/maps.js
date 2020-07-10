@@ -15,22 +15,23 @@ cy.style()
         "label": "data(label)",
         "text-valign": "center",
         "text-halign": "right",
-        "text-margin-x": "-155",
+        "text-margin-x": -132,
         "text-wrap": "wrap",
-        "text-max-width": 150,
+        "text-max-width": 130,
         "background-position-x": 0,
         "height": 24,
         "font-size": 12,
         "background-fit": "contain",
         "shape": "roundrectangle",
         "background-opacity": 0,
-        "width": 180,
+        "width": 160,
         "border-width": 1,
         "padding-right": 5,
         "padding-left": 5,
         "padding-top": 5,
         "padding-bottom": 5,
-        "text-events": "yes"
+        "text-events": "yes",
+        "background": "data(background)",
       })
     .selector("edge")
       .style({
@@ -38,8 +39,8 @@ cy.style()
         // "curve-style": "bezier",
         "curve-style": "taxi",
         "taxi-direction": "vertical",
-        "taxi-turn": "5px",
-        "taxi-turn-min-distance": "5px",
+        "taxi-turn": "8px",
+        "taxi-turn-min-distance": "8px",
         "line-color": "black",
         "line-style": "solid",
         "target-arrow-shape": "triangle-backcurve",
@@ -48,15 +49,30 @@ cy.style()
     .selector("edge[label]") // add labels to edges that have them.
       .style({
         "text-rotation": "0deg",
-        "label": "data(label)"
+        "label": "data(label)",
+        "text-halign": "right",
+        // "text-max-width": 130,
+        // "text-min-width": 130,
       })
     .selector("$node > node") // compound nodes (campaigns)
       .style({
         "text-rotation": "-90deg",
         "text-halign": "left",
-        "text-margin-x": -10,
-        "text-margin-y": -40
+        "text-margin-x": 10,
+        // "text-margin-y": -40
       })
+    .selector('.repeat-edge')
+        .style({
+          'loop-direction': '100deg', 
+          'loop-sweep': '-15deg',
+          'target-endpoint': '95deg',
+          'source-endpoint': '103deg',
+          'control-point-step-size': 72,
+          // 'label': "data(label)",
+          'text-margin-x': 10,
+          'text-margin-y': -3,
+          'font-size': 12,
+        })
     .selector(".link_hover")
       .style({
         "background-opacity": 1,
@@ -87,8 +103,8 @@ cy.style()
 
 var layout = cy.layout({
     "name": "dagre",
-    "nodeSep": 25,  // horizontal seperation of campaigns/chains/columns
-    "rankSep": 15  // vertical seperation of nodes
+    "nodeSep": 45,  // horizontal seperation of campaigns/chains/columns
+    "rankSep": 20  // vertical seperation of nodes
 });
 layout.run();
 
