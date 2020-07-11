@@ -69,7 +69,8 @@
     var cy = cytoscape({
       container: mapContainer,
       minZoom: 0.5,
-      maxZoom: 1.5,
+      maxZoom: 3,
+      zoom: 3,
       wheelSensitivity: 0.1,
       zoomingEnabled: true,
       userZoomingEnabled: true,
@@ -78,8 +79,6 @@
       elements: {{ elements|safe }},
       style: {{ class_styles|safe }},
     }); 
-
-    // cy.add( {{ elements|safe }})  // alternate method
 
     // completed quests
     cy.ready( function(event) {

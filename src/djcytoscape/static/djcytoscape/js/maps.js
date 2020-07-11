@@ -112,12 +112,15 @@ var layout = cy.layout({
     // grid: false,
     // spacingFactor: 0.5,
     // maximal: true,
-    animate: true,
+
+    // animate: true,
+    fit: false,  // whether to fit to viewport
+
     "name": "dagre",
-    "nodeSep": 60,  // horizontal seperation of campaigns/chains/columns
-    "rankSep": 24  // vertical seperation of nodes
+    "nodeSep": 45,  // horizontal seperation of campaigns/chains/columns
+    "rankSep": 20,  // vertical seperation of nodes // try 24 for taxi?
 });
-layout.run();
+layout.run()
 
 /***************************************
  * 
@@ -148,27 +151,27 @@ cy.on('mouseout', '[^href]', function(){
 });
 
 
-cy.on('ready', function () {
-    updateBounds();
-});
-
-
 $(document).ready(function() { 
-    updateBounds();
+
+    cy.ready( function () {
+      updateBounds();
+    });
+    
     //if they resize the window, resize the diagram
     $(window).resize(function () {
+        console.log("resize")
         updateBounds();
     });
-    cy.center();
-    cy.resize();
 
 }); // dom ready
 
 var updateBounds = function () {
+    cy.reset()
     var bounds = cy.elements().boundingBox();
     $('#cy').css('height', bounds.h + 50);
-    cy.center();
+    cy.zoom(1.05)
     cy.resize();
+    cy.center();
 };
 
 $("#btn-fullscreen").click(function() {
