@@ -18,10 +18,11 @@ class HasPrereqsMixin:
     def add_simple_prereqs(self, prereq_objects_list):
         """ Adds each object in the list as a simple pre-requisite requirement to this parent object """
         for prereq_object in prereq_objects_list:
-            if not isinstance(prereq_object, IsAPrereqMixin):
-                raise TypeError
-            else:
-                Prereq.add_simple_prereq(self, prereq_object)
+            if prereq_object:
+                if not isinstance(prereq_object, IsAPrereqMixin):
+                    raise TypeError
+                else:
+                    Prereq.add_simple_prereq(self, prereq_object)
 
     def clear_all_prereqs(self):
         """ Removes all pre-requisite requirements from this parent object """

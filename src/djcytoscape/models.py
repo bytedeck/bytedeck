@@ -786,6 +786,9 @@ class CytoScape(models.Model):
                             # defaults={'attribute': value},
                         )
 
+    def create_parent_scape_node(self):
+        pass
+
     def add_reliant(self, current_obj, mother_node):
         reliant_objects = current_obj.get_reliant_objects(exclude_NOT=True)
         for obj in reliant_objects:
@@ -866,14 +869,20 @@ class CytoScape(models.Model):
         scape.calculate_nodes()
         return scape
 
-    def calculate_nodes(self):
+    def calculate_nodes(self,):
+        # if there is a parent scape, create the starting node to link back to the parent scape
+        if self.parent_scape:
+            self.create_parent_scape_node()
         # Create the starting node from the initial quest
         mother_node, created = self.create_node_from_object(self.initial_content_object, initial_node=True)
+
         # Temp campaign list used to track funky edges required for compound nodes to display properly with dagre
         self.init_temp_campaign_list()
+
         # Add nodes reliant on the mother_node, this is recursive and will generate all nodes until endpoints reached
         # Endpoints... not sure yet, but probably quests starting with '~' tilde character, or add a new field?
         self.add_reliant(self.initial_content_object, mother_node)
+
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
         self.fix_nonsequential_campaign_edges()
         self.last_regeneration = timezone.now()
