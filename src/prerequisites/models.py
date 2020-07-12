@@ -104,17 +104,17 @@ class IsAPrereqMixin:
         """
         return Prereq.objects.is_prerequisite(self)
 
-    def get_reliant_qs(self):
+    def get_reliant_qs(self, exclude_NOT=False):
         """
         :return: a queryset containing the objects that require this as a prereq
         """
-        return Prereq.objects.all_reliant_on(self)
+        return Prereq.objects.all_reliant_on(self, exclude_NOT=exclude_NOT)
 
-    def get_reliant_objects(self, active_only=True):
+    def get_reliant_objects(self, active_only=True, exclude_NOT=False):
         """
         :return: a list containing the objects that require this as a prereq
         """
-        reliant_qs = self.get_reliant_qs()
+        reliant_qs = self.get_reliant_qs(exclude_NOT=exclude_NOT)
         reliant_objects = []
         for prereq in reliant_qs:
             parent_obj = prereq.parent()
@@ -186,15 +186,21 @@ class PrereqQuerySet(models.query.QuerySet):
         return self.filter(parent_content_type__pk=ct.id,
                            parent_object_id=parent_object.id)
 
-    def get_all_for_prereq_object(self, prereq_object):
+    def get_all_for_prereq_object(self, prereq_object, exclude_NOT=False):
         ct = ContentType.objects.get_for_model(prereq_object)
-        return self.filter(prereq_content_type__pk=ct.id,
-                           prereq_object_id=prereq_object.id)
+        qs = self.filter(prereq_content_type__pk=ct.id,
+                         prereq_object_id=prereq_object.id)
+        if exclude_NOT:
+            qs = qs.exclude(prereq_invert=True)
+        return qs
 
-    def get_all_for_or_prereq_object(self, prereq_object):
+    def get_all_for_or_prereq_object(self, prereq_object, exclude_NOT=False):
         ct = ContentType.objects.get_for_model(prereq_object)
-        return self.filter(or_prereq_content_type__pk=ct.id,
-                           or_prereq_object_id=prereq_object.id)
+        qs = self.filter(or_prereq_content_type__pk=ct.id,
+                         or_prereq_object_id=prereq_object.id)
+        if exclude_NOT:
+            qs.exclude(or_prereq_invert=True)
+        return qs
 
         # object matching sender, target or action object
         # def get_object_anywhere(self, object):
@@ -215,9 +221,9 @@ class PrereqManager(models.Manager):
     def all_parent(self, parent_object):
         return self.get_queryset().get_all_for_parent_object(parent_object)
 
-    def all_reliant_on(self, prereq_object):
-        qs = self.get_queryset().get_all_for_prereq_object(prereq_object)
-        or_qs = self.get_queryset().get_all_for_or_prereq_object(prereq_object)
+    def all_reliant_on(self, prereq_object, exclude_NOT=False):
+        qs = self.get_queryset().get_all_for_prereq_object(prereq_object, exclude_NOT=exclude_NOT)
+        or_qs = self.get_queryset().get_all_for_or_prereq_object(prereq_object, exclude_NOT=exclude_NOT)
         return qs.union(or_qs)
 
     def all_conditions_met(self, parent_object, user, no_prereq_means=True):

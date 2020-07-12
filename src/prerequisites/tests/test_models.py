@@ -95,10 +95,70 @@ class HasPrereqsMixinTest(TenantTestCase):
 
     def test_has_inverted_prereq(self):
         self.assertFalse(self.quest_parent.has_inverted_prereq())
-        
+
         self.prereq_with_or.prereq_invert = True
         self.prereq_with_or.save()
         self.assertTrue(self.quest_parent.has_inverted_prereq())
+
+
+class IsAPrereqMixinTest(TenantTestCase):
+    def setUp(self):
+        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+
+        self.prereq_with_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq,
+            or_prereq_object=self.quest_or_prereq
+        ) 
+
+        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+
+        self.prereq_without_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq2,
+        )
+
+    def test_is_used_prereq(self):
+        self.assertTrue(self.quest_prereq.is_used_prereq())
+        self.assertFalse(baker.make('quest_manager.Quest').is_used_prereq())
+
+    def test_get_reliant_qs(self):
+        reliant = self.quest_prereq.get_reliant_qs()
+        self.assertListEqual(list(reliant), list(Prereq.objects.all_reliant_on(self.quest_prereq)))
+
+    def test_get_reliant_objects(self):
+        reliant_objects = self.quest_prereq.get_reliant_objects()
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
+        # try adding another, this time as an OR
+        Prereq.objects.create(
+            parent_object=self.quest_prereq2,
+            prereq_object=baker.make('quest_manager.Quest'),
+            or_prereq_object=self.quest_prereq,
+        )
+
+        reliant_objects = self.quest_prereq.get_reliant_objects()
+        self.assertListEqual(list(reliant_objects), [self.quest_parent, self.quest_prereq2])
+
+    def test_get_reliant_objects_exclude_NOT(self):
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
+        # or requirement isn't the object we're checking, so inverting it shouldn't make a difference.
+        self.prereq_with_or.or_prereq_invert = True
+        self.prereq_with_or.save()
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertEqual(len(reliant_objects), 1)
+
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertEqual(len(reliant_objects), 0)
+
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=False)
+        self.assertEqual(len(reliant_objects), 1)
 
 
 class PrereqModelTest(TenantTestCase):

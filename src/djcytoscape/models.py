@@ -787,7 +787,7 @@ class CytoScape(models.Model):
                         )
 
     def add_reliant(self, current_obj, mother_node):
-        reliant_objects = current_obj.get_reliant_objects()
+        reliant_objects = current_obj.get_reliant_objects(exclude_NOT=True)
         for obj in reliant_objects:
             # mother_node
             #  > obj (reliant node 1)
