@@ -11,6 +11,60 @@ from prerequisites.models import PrereqAllConditionsMet, Prereq, IsAPrereqMixin
 User = get_user_model()
 
 
+class HasPrereqsMixinTest(TenantTestCase):
+    def setUp(self):
+        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+
+        self.prereq_with_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq,
+            or_prereq_object=self.quest_or_prereq
+        ) 
+
+        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+
+        self.prereq_without_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq2,
+        ) 
+
+    def test_prereqs(self):
+        """Returns the 2 prereqs created in setup"""
+        prereqs = self.quest_parent.prereqs()
+        self.assertEqual(len(prereqs), 2)
+
+    def test_add_simple_prereqs(self):
+        """Adds 3 new prereqs using this method"""
+        prereq_objects = [
+            baker.make('quest_manager.Quest'),
+            baker.make('quest_manager.Quest'),
+            baker.make('quest_manager.Quest'),
+        ]
+        self.quest_parent.add_simple_prereqs(prereq_objects)
+        self.assertEqual(self.quest_parent.prereqs().count(), 5)
+
+    def test_add_simple_prereqs_type_errpr(self):
+        """Objects that do not implement the `IsAPrereqMixin` should throw a type error"""
+        with self.assertRaises(TypeError):
+            self.quest_parent.add_simple_prereqs([object()])
+
+    def test_clear_all_prereqs(self):
+        self.quest_parent.clear_all_prereqs()
+        self.assertEqual(self.quest_parent.prereqs().count(), 0)
+
+    def test_has_or_prereq(self):
+        """ When there is an OR prereq, both should return True"""
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq))
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2))
+
+    def test_has_or_prereq_type_error(self):
+        with self.assertRaises(TypeError):
+            self.quest_parent.has_or_prereq(object())
+
+
 class PrereqModelTest(TenantTestCase):
     def setUp(self):
         self.student = baker.make(User, username='student', is_staff=False)

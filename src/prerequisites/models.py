@@ -3,6 +3,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class HasPrereqsMixin:
@@ -17,22 +18,32 @@ class HasPrereqsMixin:
     def add_simple_prereqs(self, prereq_objects_list):
         """ Adds each object in the list as a simple pre-requisite requirement to this parent object """
         for prereq_object in prereq_objects_list:
-            Prereq.add_simple_prereq(self, prereq_object)
+            if not isinstance(prereq_object, IsAPrereqMixin):
+                raise TypeError
+            else:
+                Prereq.add_simple_prereq(self, prereq_object)
 
     def clear_all_prereqs(self):
         """ Removes all pre-requisite requirements from this parent object """
         num_deleted = self.prereqs().delete()
         return num_deleted
 
-    def has_or_prereq(self, or_prereq_object):
-        """Returns True if this object has or_prereq_object as an alternate requirement.
+    def has_or_prereq(self, prereq_object):
+        """Returns True if this object has the prereq_object as part of a prerequisite with an alterante "or" requirement.
         """
-        ct = ContentType.objects.get_for_model(or_prereq_object)
-        prereqs = self.prereqs().filter(
-            or_prereq_content_type__pk=ct.id,
-            or_prereq_object_id=or_prereq_object.id
+        if not isinstance(prereq_object, IsAPrereqMixin):
+            raise TypeError
+
+        # Get all prereqs that have an OR object
+        qs = self.prereqs().exclude(or_prereq_object_id=None)
+
+        ct = ContentType.objects.get_for_model(prereq_object)
+        # Then filter those for prereqs that have the provided object in either spot
+        qs = qs.filter(
+            Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id) |  # or
+            Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id) 
         )
-        if prereqs:
+        if qs:
             return True
         else:
             return False
