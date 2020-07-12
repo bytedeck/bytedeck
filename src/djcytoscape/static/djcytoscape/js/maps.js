@@ -72,7 +72,7 @@ cy.style()
         'text-margin-y': -3,
         'font-size': 12,
       })
-    .selector('.alternate-edge')
+    .selector('edge.complicated-prereqs')
       .style({
         "line-style": "dashed",
       })

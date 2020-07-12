@@ -60,9 +60,45 @@ class HasPrereqsMixinTest(TenantTestCase):
         self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq))
         self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2))
 
+    def test_has_or_prereq_exclude_NOT(self):
+        """ When there is an OR prereq, both should return True, unless it's a NOT"""
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2))
+
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq, exclude_NOT=False))
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq, exclude_NOT=False))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2, exclude_NOT=False)) 
+
     def test_has_or_prereq_type_error(self):
         with self.assertRaises(TypeError):
             self.quest_parent.has_or_prereq(object())
+
+    def test_has_or_prereq_no_object(self):
+        """If no object is provided, should check if there are any OR prereqs at all"""
+        self.assertTrue(self.quest_parent.has_or_prereq())
+
+        Prereq.objects.create(
+            parent_object=self.quest_prereq2,
+            prereq_object=baker.make('quest_manager.Quest'),
+        ) 
+        self.assertFalse(self.quest_prereq2.has_or_prereq())
+
+    def test_has_or_prereq_no_object_exclude_NOT(self):
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        self.assertFalse(self.quest_parent.has_or_prereq())
+        self.assertTrue(self.quest_parent.has_or_prereq(exclude_NOT=False))
+
+    def test_has_inverted_prereq(self):
+        self.assertFalse(self.quest_parent.has_inverted_prereq())
+        
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        self.assertTrue(self.quest_parent.has_inverted_prereq())
 
 
 class PrereqModelTest(TenantTestCase):

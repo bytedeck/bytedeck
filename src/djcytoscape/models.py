@@ -805,8 +805,12 @@ class CytoScape(models.Model):
             # add new_node to a campaign/compound/parent, if required
             self.add_to_campaign(obj, new_node, mother_node)
 
-            # if obj.has_or_prereq(current_obj):
-            #     pass
+            # add a class to alternate prerequisites edges so they can be styled differently if desired
+            if obj.has_or_prereq() or obj.has_inverted_prereq():
+                # add "alternate" class
+                defaults = {'classes': 'complicated-prereqs'}
+            else:
+                defaults = {}
 
             # TODO: should add number of times prereq is required, similar to repeat edges below
             CytoElement.objects.get_or_create(
@@ -814,10 +818,10 @@ class CytoScape(models.Model):
                 group=CytoElement.EDGES,
                 data_source=mother_node,
                 data_target=new_node,
-                # defaults={'label': "TEST EDGE LABEL"},
+                defaults=defaults,
             )
 
-            # If repeatable, add circular edge
+            # If repeatable, also add circular edge
             if hasattr(obj, 'max_repeats'):
                 if obj.max_repeats != 0:
                     if obj.max_repeats < 0:

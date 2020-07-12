@@ -28,21 +28,50 @@ class HasPrereqsMixin:
         num_deleted = self.prereqs().delete()
         return num_deleted
 
-    def has_or_prereq(self, prereq_object):
+    def has_or_prereq(self, prereq_object=None, exclude_NOT=True):
         """Returns True if this object has the prereq_object as part of a prerequisite with an alterante "or" requirement.
+        By default will return false if the prereq_objects is flagged as NOT.
+
+        If not specific_prereq_object is provided, then return True if it has ANY or prereqs.
         """
-        if not isinstance(prereq_object, IsAPrereqMixin):
+        if prereq_object and not isinstance(prereq_object, IsAPrereqMixin):
             raise TypeError
 
         # Get all prereqs that have an OR object
-        qs = self.prereqs().exclude(or_prereq_object_id=None)
+        qs = self.prereqs()
+        qs = qs.exclude(or_prereq_object_id=None)
+
+        if not prereq_object:
+            # then return True if any are found
+            if exclude_NOT:
+                qs = qs.exclude(or_prereq_invert=True).exclude(prereq_invert=True)
+            if qs:
+                return True
+            else:
+                return False
 
         ct = ContentType.objects.get_for_model(prereq_object)
         # Then filter those for prereqs that have the provided object in either spot
-        qs = qs.filter(
-            Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id) |  # or
-            Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id) 
-        )
+        if exclude_NOT:
+            qs = qs.filter(
+                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id, or_prereq_invert=False) |  # or
+                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id, prereq_invert=False) 
+            )
+        else:
+            qs = qs.filter(
+                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id) |  # or
+                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id) 
+            )
+        if qs:
+            return True
+        else:
+            return False
+
+    def has_inverted_prereq(self):
+        """Returns true if this object has any prereqs that are inverted, i.e NOT"""
+        # just remove all prereqs that are not inverted and see if anything is left
+        qs = self.prereqs()
+        qs = qs.filter(Q(or_prereq_invert=True) | Q(prereq_invert=True))
         if qs:
             return True
         else:
