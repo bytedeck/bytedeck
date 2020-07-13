@@ -606,6 +606,63 @@ class CytoScape(models.Model):
         except self.DoesNotExist:
             return None
 
+    def create_first_node(self, obj):
+        """ Creates the first node from `obj`, then if this map has a parent, creates an aditiona node to link back to back to the parent scape/map.
+        Returns the first node."""
+
+        # the initial node in this map
+        first_node, _ = self.create_node_from_object(obj, initial_node=True)
+
+        if self.parent_scape:
+            # the node to link to the parent map
+            parent_node, _ = CytoElement.objects.get_or_create(
+                scape=self,
+                group=CytoElement.NODES,
+                label=f"{self.parent_scape.name} Quest Map",
+                href=reverse('maps:quest_map', args=[self.parent_scape.id]),
+                classes='link parent-map'
+            )
+
+            # link them together with an edge
+            CytoElement.objects.get_or_create(
+                scape=self,
+                group=CytoElement.EDGES,
+                data_source=parent_node,
+                data_target=first_node,
+            )
+        
+        return first_node
+
+    def create_child_map_node(self, obj, data_source):
+        """ If this obj is a transition node (to a new map, make a node to link to the next map"""
+        ct = ContentType.objects.get_for_model(obj)
+        # obj = ct.get_object_for_this_type(id=obj.id)
+
+        child_map_qs = CytoScape.objects.filter(initial_content_type=ct.id, initial_object_id=obj.id)
+        if child_map_qs.exists():
+            child_map = child_map_qs[0]
+            label = f"{child_map.name} Map"
+        else:
+            label = "The Void"
+
+        child_map_node, _ = CytoElement.objects.get_or_create(
+            scape=self,
+            group=CytoElement.NODES,
+            label=label,
+            href=reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
+            classes="link child-map",
+        )
+
+        # link them together with an edge
+        CytoElement.objects.get_or_create(
+            scape=self,
+            group=CytoElement.EDGES,
+            data_source=data_source,
+            data_target=child_map_node,
+        )
+
+        return child_map_node
+
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
@@ -620,22 +677,14 @@ class CytoScape(models.Model):
             group=CytoElement.NODES,
             selector_id=CytoElement.generate_selector_id(obj),
             label=self.generate_label(obj),
+            href=obj.get_absolute_url(),
             defaults={'id_styles': "'background-image': '" + img_url + "'",
                       'classes': type(obj).__name__, }
         )
 
         # if this is a transition node (to a new map), add the link to href field. And add the "link" class
         if not initial_node and self.is_transition_node(new_node):
-            ct = ContentType.objects.get_for_model(obj)
-            obj = ct.get_object_for_this_type(id=obj.id)
-
-            # <content_type_id>, <object_id>, <originating_scape_id>
-            new_node.href = reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id])
-            new_node.classes += " link"
-            new_node.save()
-        else:  # add a link to the object itself
-            new_node.href = obj.get_absolute_url()
-            new_node.save()
+            self.create_child_map_node(obj, new_node)
 
         return new_node, created
 
@@ -786,9 +835,6 @@ class CytoScape(models.Model):
                             # defaults={'attribute': value},
                         )
 
-    def create_parent_scape_node(self):
-        pass
-
     def add_reliant(self, current_obj, mother_node):
         reliant_objects = current_obj.get_reliant_objects(exclude_NOT=True)
         for obj in reliant_objects:
@@ -870,11 +916,10 @@ class CytoScape(models.Model):
         return scape
 
     def calculate_nodes(self,):
-        # if there is a parent scape, create the starting node to link back to the parent scape
-        if self.parent_scape:
-            self.create_parent_scape_node()
-        # Create the starting node from the initial quest
-        mother_node, created = self.create_node_from_object(self.initial_content_object, initial_node=True)
+
+        # Create the starting node from the initial quest, and a link back to the parent map if there is one
+        # mother_node, created = self.create_node_from_object(self.initial_content_object, initial_node=True)
+        mother_node = self.create_first_node(self.initial_content_object)
 
         # Temp campaign list used to track funky edges required for compound nodes to display properly with dagre
         self.init_temp_campaign_list()

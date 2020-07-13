@@ -61,7 +61,7 @@ cy.style()
         "text-margin-x": -10,
         "text-margin-y": -40
       })
-    .selector('.repeat-edge')
+    .selector('edge.repeat-edge')
       .style({
         'loop-direction': '100deg', 
         'loop-sweep': '-20deg',
@@ -94,6 +94,13 @@ cy.style()
     .selector(".hidden")
       .style({
         "opacity": 0
+      })
+    .selector('node.parent-map, node.child-map')
+      .style({
+        "label": "data(label)",
+        "text-halign": "center",
+        "text-margin-x": 0,
+        "border-style": 'dashed',
       })
     .update()
 ;
