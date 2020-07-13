@@ -112,7 +112,7 @@ class QuestForm(forms.ModelForm):
                         HTML(
                             "<div class='help-block'>If you only want to set a single quest and/or badge as a prerequisite, you can set them here. "
                             "Note that this will overwrite any current prerequisites that are set. For more interesting prerequisite options you "
-                            " will need to edit the quest with <a href='/admin/quest_manager/quest/{{object.id}}'>via the Admin form</a>.</div>"
+                            " will need to edit the quest via the <a href='/admin/quest_manager/quest/{{object.id}}'>Admin form</a>.</div>"
                             "<div>Current Prerequisites</div>"
                             "<div>{% for p in form.instance.prereqs %}{% if forloop.first %}<ul class='left-aligned'><small>{% endif %}"
                             "<li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>"
