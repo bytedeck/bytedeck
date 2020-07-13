@@ -114,10 +114,11 @@ class QuestForm(forms.ModelForm):
                             "Note that this will overwrite any current prerequisites that are set. For more interesting prerequisite options you "
                             " will need to edit the quest via the <a href='/admin/quest_manager/quest/{{object.id}}'>Admin form</a>.</div>"
                             "<div>Current Prerequisites</div>"
-                            "<div>{% for p in form.instance.prereqs %}{% if forloop.first %}<ul class='left-aligned'><small>{% endif %}"
+                            "<div><ul class='left-aligned'><small>"
+                            "{% for p in form.instance.prereqs %}"
                             "<li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>"
-                            "{% if forloop.last %}</small></ul>{% endif %}"
-                            "{% empty %}None"
+                            "{% empty %}<li>None</li>"
+                            "</small></ul>"
                             "{% endfor %}</div>",
                         ),
                         'new_quest_prerequisite',
