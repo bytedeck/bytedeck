@@ -22,7 +22,7 @@ from .forms import AnnouncementForm
 from .models import Announcement
 from .tasks import publish_announcement, send_notifications
 
-
+# Patrick was here
 @allow_non_public_view
 @login_required
 def comment(request, ann_id):
