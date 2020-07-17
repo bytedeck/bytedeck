@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from prerequisites.tasks import update_quest_conditions_all
+from prerequisites.tasks import update_quest_conditions_all_users
 
 
 class Command(BaseCommand):
@@ -8,4 +8,4 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write('Creating conditions met for all users...')
-        update_quest_conditions_all.apply_async(args=[1], queue='default')
+        update_quest_conditions_all_users.apply_async(args=[1], queue='default')

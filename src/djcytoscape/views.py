@@ -26,7 +26,6 @@ class ScapeUpdate(AllowNonPublicViewMixin, UpdateView):
         'name',
         'initial_content_type', 'initial_object_id',
         'parent_scape',
-        'style_set',
         'is_the_primary_scape',
         'autobreak'
     ]
@@ -88,12 +87,20 @@ def quest_map_personalized(request, scape_id, user_id):
             personalized_user = None
 
         scape = get_object_or_404(CytoScape, id=scape_id)
-        return render(request, 'djcytoscape/quest_map.html', {'scape': scape,
-                                                              'cytoscape_json': scape.json(),
-                                                              'completed_quests': quest_ids,
-                                                              'fullscreen': True,
-                                                              'personalized_user': personalized_user,
-                                                              })
+
+        if scape.class_styles_json is None or scape.class_styles_json is None:
+            scape.update_cache()
+
+        context = {
+            'scape': scape,
+            'elements': scape.elements_json,
+            'class_styles': scape.class_styles_json,
+            'completed_quests': quest_ids,
+            'fullscreen': True,
+            'personalized_user': personalized_user,  
+        }
+
+        return render(request, 'djcytoscape/quest_map.html', context)
     else:
         raise Http404()
 

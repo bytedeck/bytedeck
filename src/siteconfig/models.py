@@ -51,7 +51,7 @@ class SiteConfig(models.Model):
 
     banner_image = models.ImageField(
         verbose_name="Banner Image", null=True, blank=True,
-        help_text="The banner will be displayed on your landing page and in a smaller format at the top left of the site (up to 1140px wide)"
+        help_text="The image will be displayed at the top left of the site 262px wide"
     )
 
     banner_image_dark = models.ImageField(

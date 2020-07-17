@@ -1,0 +1,273 @@
+# from mock import patch
+
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+
+from model_bakery import baker
+from tenant_schemas.test.cases import TenantTestCase
+
+from prerequisites.models import PrereqAllConditionsMet, Prereq, IsAPrereqMixin
+
+User = get_user_model()
+
+
+class HasPrereqsMixinTest(TenantTestCase):
+    def setUp(self):
+        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+
+        self.prereq_with_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq,
+            or_prereq_object=self.quest_or_prereq
+        ) 
+
+        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+
+        self.prereq_without_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq2,
+        ) 
+
+    def test_prereqs(self):
+        """Returns the 2 prereqs created in setup"""
+        prereqs = self.quest_parent.prereqs()
+        self.assertEqual(len(prereqs), 2)
+
+    def test_add_simple_prereqs(self):
+        """Adds 3 new prereqs using this method"""
+        prereq_objects = [
+            baker.make('quest_manager.Quest'),
+            baker.make('quest_manager.Quest'),
+            baker.make('quest_manager.Quest'),
+        ]
+        self.quest_parent.add_simple_prereqs(prereq_objects)
+        self.assertEqual(self.quest_parent.prereqs().count(), 5)
+
+    def test_add_simple_prereqs_type_errpr(self):
+        """Objects that do not implement the `IsAPrereqMixin` should throw a type error"""
+        with self.assertRaises(TypeError):
+            self.quest_parent.add_simple_prereqs([object()])
+
+    def test_clear_all_prereqs(self):
+        self.quest_parent.clear_all_prereqs()
+        self.assertEqual(self.quest_parent.prereqs().count(), 0)
+
+    def test_has_or_prereq(self):
+        """ When there is an OR prereq, both should return True"""
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq))
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2))
+
+    def test_has_or_prereq_exclude_NOT(self):
+        """ When there is an OR prereq, both should return True, unless it's a NOT"""
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2))
+
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq, exclude_NOT=False))
+        self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq, exclude_NOT=False))
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2, exclude_NOT=False)) 
+
+    def test_has_or_prereq_type_error(self):
+        with self.assertRaises(TypeError):
+            self.quest_parent.has_or_prereq(object())
+
+    def test_has_or_prereq_no_object(self):
+        """If no object is provided, should check if there are any OR prereqs at all"""
+        self.assertTrue(self.quest_parent.has_or_prereq())
+
+        Prereq.objects.create(
+            parent_object=self.quest_prereq2,
+            prereq_object=baker.make('quest_manager.Quest'),
+        ) 
+        self.assertFalse(self.quest_prereq2.has_or_prereq())
+
+    def test_has_or_prereq_no_object_exclude_NOT(self):
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        self.assertFalse(self.quest_parent.has_or_prereq())
+        self.assertTrue(self.quest_parent.has_or_prereq(exclude_NOT=False))
+
+    def test_has_inverted_prereq(self):
+        self.assertFalse(self.quest_parent.has_inverted_prereq())
+
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        self.assertTrue(self.quest_parent.has_inverted_prereq())
+
+
+class IsAPrereqMixinTest(TenantTestCase):
+    def setUp(self):
+        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+
+        self.prereq_with_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq,
+            or_prereq_object=self.quest_or_prereq
+        ) 
+
+        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+
+        self.prereq_without_or = Prereq.objects.create(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq2,
+        )
+
+    def test_is_used_prereq(self):
+        self.assertTrue(self.quest_prereq.is_used_prereq())
+        self.assertFalse(baker.make('quest_manager.Quest').is_used_prereq())
+
+    def test_get_reliant_qs(self):
+        reliant = self.quest_prereq.get_reliant_qs()
+        self.assertListEqual(list(reliant), list(Prereq.objects.all_reliant_on(self.quest_prereq)))
+
+    def test_get_reliant_objects(self):
+        reliant_objects = self.quest_prereq.get_reliant_objects()
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
+        # try adding another, this time as an OR
+        Prereq.objects.create(
+            parent_object=self.quest_prereq2,
+            prereq_object=baker.make('quest_manager.Quest'),
+            or_prereq_object=self.quest_prereq,
+        )
+
+        reliant_objects = self.quest_prereq.get_reliant_objects()
+        self.assertListEqual(list(reliant_objects), [self.quest_parent, self.quest_prereq2])
+
+    def test_get_reliant_objects_exclude_NOT(self):
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
+        # or requirement isn't the object we're checking, so inverting it shouldn't make a difference.
+        self.prereq_with_or.or_prereq_invert = True
+        self.prereq_with_or.save()
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertEqual(len(reliant_objects), 1)
+
+        self.prereq_with_or.prereq_invert = True
+        self.prereq_with_or.save()
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertEqual(len(reliant_objects), 0)
+
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=False)
+        self.assertEqual(len(reliant_objects), 1)
+
+
+class PrereqModelTest(TenantTestCase):
+    def setUp(self):
+        self.student = baker.make(User, username='student', is_staff=False)
+        self.quest_parent = baker.make('quest_manager.Quest')
+        self.quest_prereq = baker.make('quest_manager.Quest')
+        self.prereq = Prereq(
+            parent_object=self.quest_parent,
+            prereq_object=self.quest_prereq
+        )
+    
+    def test_object_creation(self):
+        self.assertIsInstance(self.prereq, Prereq)
+        self.assertIsInstance(self.prereq, IsAPrereqMixin)
+
+    def test_parent(self):
+        "returns the parent of the prereq"
+        self.assertEqual(self.prereq.parent(), self.quest_parent)
+
+    def test_get_prereq(self):
+        "returns the main prereq requirement"
+        self.assertEqual(self.prereq.get_prereq(), self.quest_prereq)
+
+    def test_get_or_prereq(self):
+        "returns the alternate prereq requirement"
+        self.assertEqual(self.prereq.get_or_prereq(), None)
+
+    # Todo: need some massive mocking for this one
+    # @patch('prereq_object.condition_met_as_prerequisite', return_value=True)
+    # def test_conditions_met(self, condition_met_as_prerequisite):
+    #     print("Call count: ", condition_met_as_prerequisite.call_count)
+    #     self.assertTrue(self.prereq.condition_met(self.student))
+
+    def test_cls_add_simple_prereq(self):
+        quest3 = baker.make('quest_manager.Quest')
+        Prereq.add_simple_prereq(self.quest_parent, quest3)
+        self.assertIn(self.quest_parent, quest3.get_reliant_objects())
+
+    # def test_cls_add_simple_prereq_bad_parent(self):
+    #     """A parent_object that does not implement the HasPrereqsMixin should raise an exception
+    #     """
+    #     with self.assertRaises(TypeError):
+    #         quest3 = baker.make('quest_manager.Quest')
+    #         some_object = object()
+    #         Prereq.add_simple_prereq(some_object, quest3)
+
+    def test_cls_model_is_registered(self):
+        """A model that implements the IsAPrereqMixin returns True
+        """
+        ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        self.assertTrue(Prereq.model_is_registered(ct))
+
+        ct = ContentType.objects.get(app_label='auth', model='user')
+        self.assertFalse(Prereq.model_is_registered(ct))  
+
+    def test_all_registered_content_types(self):
+        """There are 6 models that implement the IsAPrereqMixin
+        """
+        cts = Prereq.all_registered_content_types()
+        self.assertEqual(cts.count(), 6)
+
+
+class PrereqAllConditionsMetModelTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User, username='student', is_staff=False)
+        self.prereq_cache = baker.make(
+            PrereqAllConditionsMet,
+            user=self.student,
+            model_name='fake_model_name'
+        )
+
+    def test_object_creation(self):
+        self.assertIsInstance(self.prereq_cache, PrereqAllConditionsMet)
+        self.assertEqual(self.prereq_cache.user, self.student)
+        self.assertEqual(self.prereq_cache.ids, '[]')
+
+    def test_get_ids_when_empty(self):
+        self.assertEqual([], self.prereq_cache.get_ids())
+
+    def test_get_ids(self):
+        ids = [1, 2, 3, 4, 5]
+        self.prereq_cache.ids = str(ids)
+        self.assertEqual(ids, self.prereq_cache.get_ids())
+
+    def test_add_id(self):
+        self.assertEqual(len(self.prereq_cache.get_ids()), 0)
+
+        self.prereq_cache.add_id(100)
+        self.assertEqual(len(self.prereq_cache.get_ids()), 1)
+        self.assertEqual(self.prereq_cache.get_ids(), [100])
+
+        self.prereq_cache.add_id(101)
+        self.assertEqual(len(self.prereq_cache.get_ids()), 2)
+        self.assertEqual(self.prereq_cache.get_ids(), [100, 101])
+
+    def test_remove_id(self):
+        self.prereq_cache.ids = str([1, 2, 3, 4, 5])
+        self.assertIn(1, self.prereq_cache.get_ids())
+
+        self.prereq_cache.remove_id(1)
+        self.assertNotIn(1, self.prereq_cache.get_ids())
+
+    def test_remove_id_that_doesnt_exist(self):
+        ids = [1, 2, 3, 4, 5]
+        self.prereq_cache.ids = str(ids)
+        self.assertNotIn(6, self.prereq_cache.get_ids())
+
+        self.prereq_cache.remove_id(6)
+        self.assertNotIn(6, self.prereq_cache.get_ids())
+        self.assertEqual(len(self.prereq_cache.get_ids()), len(ids))

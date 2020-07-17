@@ -328,9 +328,6 @@ class BadgeAssertionManager(models.Manager):
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
-        # print("###########################" + str(xp))
-        # print(date)
-        # print(timezone.now())
         return xp
 
 

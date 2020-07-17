@@ -140,11 +140,15 @@
                        aria-expanded="false">Admin <span class="caret"></span></a>
                     <ul class="dropdown-menu">
                         <!-- <li class="dropdown-header">Content</li> -->
-                        <li><a href="{% url 'quests:flagged' %}">Flagged Submissions</a></li>
-                        <li><a href="{% url 'config:site_config_update_own' %}">Site Configuration</a></li>
+                        <li><a href="{% url 'quests:flagged' %}"><i class="fa fa-fw fa-flag-o"></i>&nbsp;Flagged Submissions</a></li>
+                        <li><a href="{% url 'config:site_config_update_own' %}"><i class="fa fa-fw fa-sliders"></i>&nbsp;Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Database</li>
-                        <li><a href="/admin">Django Admin</a></li>
+                        <li><a href="/admin"><i class="fa fa-fw fa-database"></i>&nbsp;Django Admin</a></li>
+                        <li role="separator" class="divider"></li>
+                        <li class="dropdown-header">ByteDeck</li>
+                        <li><a href="https://github.com/bytedeck/bytedeck/blob/develop/CHANGELOG.md"><i class="fa fa-fw fa-history"></i>&nbsp;Changelog</a></li>
+                        <li><a title="Ask a question, report a bug, or request a feature!" href="mailto:contact@bytedeck.com"><i class="fa fa-fw fa-envelope-o"></i>&nbsp;Contact</a></li>
                         <!-- <li class="dropdown-header">Debug</li> -->
                     </ul>
                 </li>
@@ -206,30 +210,8 @@
                 <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
                 {% endif %}
             </ul>
-            {% if not request.user.is_authenticated and not "/accounts/login" in request.get_full_path %}
-            <form class="navbar-form navbar-right" method="POST" action="{% url 'account_login' %}"> {% csrf_token %}
-                <div class="input-group input-group-unified input-group-sm">
-                    <input type="text" class="form-control" name="login" placeholder="Username" autofocus />
-                    <input type="password" class="form-control" name="password" placeholder="Password"/>
-                    <input type='hidden' name="next" value="{{ request.GET.next }}">
-              <span class="input-group-btn">
-                <button type="submit" class="btn btn-default">Sign In</button>
-              </span>
-                </div>
-            </form>
 
-            {% endif %}
         </div><!--/.nav-collapse -->
-
-
-
-{#        <div class="navbar navbar-centered">#}
-{#            <a href="{% url 'courses:marks' request.user.id %}"#}
-{#               class="navbar-text-large-container">XP:#}
-{#                <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>#}
-{#            </a>#}
-{#        </div>#}
-
 
     </div> <!-- .container-fluid -->
 </nav>

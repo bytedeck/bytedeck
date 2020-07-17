@@ -4,12 +4,23 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.7.0] 2020-07-17
+* [teachers] Seperate nodes for linked quest maps
+* [teachers] Maps are zoomable [#534](https://github.com/timberline-secondary/hackerspace/issues/534)
+* [teachers] Repeatable quests are indicated on maps
+* [teachers] New links in admin menu
+* [bugfix] Remove NOT prereqs from the map [#177](https://github.com/timberline-secondary/hackerspace/issues/177)
+* [bugfix] Alternate (OR) prerequisites are now properly connected in maps [#149](https://github.com/timberline-secondary/hackerspace/issues/149)
+* [bugfix] Minor formatting tweaks and typos
+* [dev] Cache maps for faster loading [#559](https://github.com/timberline-secondary/hackerspace/issues/559)
+* [dev] Refactor map styling
+* [dev] More efficient quest prereq conditions met caching via celery tasks [#563](https://github.com/timberline-secondary/hackerspace/issues/563)
 
 ### [1.6.1] 2020-06-21
 * [teachers] Add simple prerequisite quest and/or badge to the main quest form [#543](https://github.com/timberline-secondary/hackerspace/issues/543)
 * [bugfix] Broken 'close semester' page [#553](https://github.com/timberline-secondary/hackerspace/issues/553)
 * [bugifx] Don't create empty campaigns on import [#538](https://github.com/timberline-secondary/hackerspace/issues/538)
-* [bugifx] Form jitter when scrolling [#547](https://github.com/timberline-secondary/hackerspace/issues/547)
+* [bugfix] Form jitter when scrolling [#547](https://github.com/timberline-secondary/hackerspace/issues/547)
 * [dev] Better 500 Server error message [#554](https://github.com/timberline-secondary/hackerspace/issues/554)
 * [dev] Resolve REDIS warnings in production
 * [dev] Install PCRE for uwsgi server [#539](https://github.com/timberline-secondary/hackerspace/issues/532)
