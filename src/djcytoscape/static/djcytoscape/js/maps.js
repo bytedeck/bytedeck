@@ -172,6 +172,7 @@ $(document).ready(function() {
 
 }); // dom ready
 
+
 var updateBounds = function () {
     cy.reset()
     var bounds = cy.elements().boundingBox();
@@ -179,7 +180,15 @@ var updateBounds = function () {
     cy.zoom(1.05)
     cy.resize();
     cy.center();
+    updateZooming()
 };
+
+var updateZooming = function () {
+    // enable zooming if mobile device or smallscreen (otherwise zooming is annoying and 
+    // messes up page scrolling when using mouse wheel)
+    var small_screen = window.matchMedia("(max-width: 767px)")
+    cy.userZoomingEnabled(small_screen.matches);
+}
 
 $("#btn-fullscreen").click(function() {
     $("#cy").toggleClass("fullscreen");
