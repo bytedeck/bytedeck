@@ -125,7 +125,7 @@ var layout = cy.layout({
 
     "name": "dagre",
     "nodeSep": 45,  // horizontal seperation of campaigns/chains/columns
-    "rankSep": 20,  // vertical seperation of nodes // try 24 for taxi?
+    "rankSep": 15,  // vertical seperation of nodes // try 24 for taxi?
 });
 layout.run()
 
@@ -176,8 +176,8 @@ $(document).ready(function() {
 var updateBounds = function () {
     cy.reset()
     var bounds = cy.elements().boundingBox();
-    $('#cy').css('height', bounds.h + 50);
-    cy.zoom(1.05)
+    $('#cy').css('height', bounds.h + 100);
+    cy.zoom(1.0)
     cy.resize();
     cy.center();
     updateZooming()
