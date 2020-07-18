@@ -22,6 +22,8 @@ from .forms import AnnouncementForm
 from .models import Announcement
 from .tasks import publish_announcement, send_notifications
 
+# Patrick's here!
+
 
 @allow_non_public_view
 @login_required
