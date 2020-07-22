@@ -15,9 +15,9 @@ cy.style()
         "label": "data(label)",
         "text-valign": "center",
         "text-halign": "right",
-        "text-margin-x": -155,
+        "text-margin-x": -150,
         "text-wrap": "wrap",
-        "text-max-width": 150,
+        "text-max-width": 147,
         "background-position-x": 0,
         "height": 24,
         "font-size": 12,
@@ -98,9 +98,14 @@ cy.style()
     .selector('node.parent-map, node.child-map')
       .style({
         "label": "data(label)",
+        // "text-halign": "center",
+        // "text-margin-x": 0,
+        "border-style": 'dashed',
+      })
+    .selector('node.parent-map')
+      .style({
         "text-halign": "center",
         "text-margin-x": 0,
-        "border-style": 'dashed',
       })
     .update()
 ;
