@@ -203,7 +203,6 @@ def regenerate_all(request):
             scape.regenerate()
         except scape.InitialObjectDoesNotExist:
             messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
-            return redirect('djcytoscape:primary')
 
     messages.success(request, "All valid quest maps have been regenerated.")
     return redirect('djcytoscape:primary')
