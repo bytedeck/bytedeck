@@ -90,7 +90,7 @@
         <h3 class="panel-title">General</h3>
       </div>
       <div class="panel-body">
-        <p>Student Number: {% if object.student_number %}{{ object.student_number}}{% else %}<i>None. Edit your profile!</i>{% endif %}</p>
+        <p>Username: {{ object.user.get_username}}</p>
         <p>Grad Year: {% if object.grad_year %}{{ object.grad_year}}{% else %}<i>None. Edit your profile!</i>{% endif %}</p>
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
         {% if request.user.is_staff %}
