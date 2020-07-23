@@ -4,7 +4,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator, validate_comma_separated_integer_list
 from django.db import models
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
@@ -367,6 +368,7 @@ class Profile(models.Model):
         return User.objects.filter(id__in=user_id_list)
 
 
+@receiver(post_save, sender=User)
 def create_profile(sender, **kwargs):
     from django.db import connection
 
@@ -398,7 +400,12 @@ def create_profile(sender, **kwargs):
                 verb='.  New user registered: ')
 
 
-post_save.connect(create_profile, sender=User)
+@receiver(post_delete, sender=Profile)
+def post_delete_user(sender, instance, *args, **kwargs):
+    """If a profile is deleted, then that to cascade and delete profile as well.
+    """
+    if instance.user:  # just in case user is not specified or was already deleted
+        instance.user.delete()
 
 
 def smart_list(value, delimiter=",", func=None):
