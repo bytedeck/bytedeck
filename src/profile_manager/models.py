@@ -1,10 +1,11 @@
-import re
+# import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.validators import RegexValidator, validate_comma_separated_integer_list
+from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
@@ -63,10 +64,10 @@ def user_directory_path(instance, filename):
 
 
 class Profile(models.Model):
-    student_number_regex_string = r"^(9[89])(\d{5})$"
-    student_number_validator = RegexValidator(regex=student_number_regex_string,
-                                              message="Invalid student number.",
-                                              code='invalid_student_number',)
+    # student_number_regex_string = r"^(9[89])(\d{5})$"
+    # student_number_validator = RegexValidator(regex=student_number_regex_string,
+    #                                           message="Invalid student number.",
+    #                                           code='invalid_student_number',)
 
     @staticmethod
     def get_grad_year_choices():
@@ -87,8 +88,8 @@ class Profile(models.Model):
                                       verbose_name='Preferred first name',
                                       help_text='If you would prefer your teacher to call you by a name other than \
                                       the name on your school records, please put it here.')
-    student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
-                                                 validators=[student_number_validator])
+    # student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
+    #                                              validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
     is_test_account = models.BooleanField(default=False,
                                           help_text="A test account that won't show up in student lists",
@@ -367,6 +368,7 @@ class Profile(models.Model):
         return User.objects.filter(id__in=user_id_list)
 
 
+@receiver(post_save, sender=User)
 def create_profile(sender, **kwargs):
     from django.db import connection
 
@@ -377,9 +379,9 @@ def create_profile(sender, **kwargs):
             new_profile = Profile(user=current_user)
 
             # if user's name matches student number (e.g 9912345), set student number:
-            pattern = re.compile(Profile.student_number_regex_string)
-            if pattern.match(current_user.get_username()):
-                new_profile.student_number = int(current_user.get_username())
+            # pattern = re.compile(Profile.student_number_regex_string)
+            # if pattern.match(current_user.get_username()):
+            #     new_profile.student_number = int(current_user.get_username())
 
             # set first and last name on the profile.  This should be removed and just use the first and last name
             # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
@@ -398,7 +400,12 @@ def create_profile(sender, **kwargs):
                 verb='.  New user registered: ')
 
 
-post_save.connect(create_profile, sender=User)
+@receiver(post_delete, sender=Profile)
+def post_delete_user(sender, instance, *args, **kwargs):
+    """If a profile is deleted, then that to cascade and delete profile as well.
+    """
+    if instance.user:  # just in case user is not specified or was already deleted
+        instance.user.delete()
 
 
 def smart_list(value, delimiter=",", func=None):

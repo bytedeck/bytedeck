@@ -118,7 +118,8 @@ class CytoElement(models.Model):
     min_len = models.IntegerField(default=1,
                                   help_text="number of ranks to keep between the source and target of the edge")
     href = models.URLField(blank=True, null=True)
-
+    is_transition = models.BooleanField(default=False,
+                                        help_text="Whether this node transitions to a new map")
     objects = CytoElementManager()
 
     class Meta:
@@ -191,6 +192,15 @@ class CytoElement(models.Model):
 
     def json(self):
         return json.dumps(self.json_dict())
+
+    def convert_to_transition_node(self, obj, scape):
+        """ If this obj is a transition node (to a new map), convert it."""
+        ct = ContentType.objects.get_for_model(obj)
+
+        self.href = reverse('maps:quest_map_interlink', args=[ct.id, obj.id, scape.id])
+        self.classes = "link child-map"
+        self.is_transition = True
+        self.save()
 
     @staticmethod
     def generate_selector_id(obj):
@@ -530,6 +540,10 @@ class CytoScape(models.Model):
 
     objects = CytoScapeManager()
 
+    class InitialObjectDoesNotExist(Exception):
+        """The initial object for this does not exist, it may have been deleted"""
+        pass
+
     def elements(self):
         elements = self.cytoelement_set.all()
         return elements.select_related('data_parent', 'data_source', 'data_target')
@@ -662,7 +676,7 @@ class CytoScape(models.Model):
         )
 
         return child_map_node
-
+        
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
@@ -677,14 +691,16 @@ class CytoScape(models.Model):
             group=CytoElement.NODES,
             selector_id=CytoElement.generate_selector_id(obj),
             label=self.generate_label(obj),
-            href=obj.get_absolute_url(),
-            defaults={'id_styles': "'background-image': '" + img_url + "'",
-                      'classes': type(obj).__name__, }
+            defaults={
+                      'id_styles': "'background-image': '" + img_url + "'",
+                      'classes': type(obj).__name__,
+                      'href': obj.get_absolute_url(),
+                     }
         )
 
-        # if this is a transition node (to a new map), add the link to href field. And add the "link" class
+        # if this is a transition node (to a new map), format it and link it.
         if not initial_node and self.is_transition_node(new_node):
-            self.create_child_map_node(obj, new_node)
+            new_node.convert_to_transition_node(obj, self)
 
         return new_node, created
 
@@ -935,6 +951,10 @@ class CytoScape(models.Model):
         self.save()
 
     def regenerate(self):
+        if self.initial_content_object is None:
+            self.delete()            
+            raise(self.InitialObjectDoesNotExist)
+
         # Delete existing nodes
         CytoElement.objects.all_for_scape(self).delete()
         self.calculate_nodes()

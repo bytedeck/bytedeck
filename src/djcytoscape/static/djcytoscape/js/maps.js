@@ -15,9 +15,9 @@ cy.style()
         "label": "data(label)",
         "text-valign": "center",
         "text-halign": "right",
-        "text-margin-x": -155,
+        "text-margin-x": -150,
         "text-wrap": "wrap",
-        "text-max-width": 150,
+        "text-max-width": 147,
         "background-position-x": 0,
         "height": 24,
         "font-size": 12,
@@ -98,9 +98,14 @@ cy.style()
     .selector('node.parent-map, node.child-map')
       .style({
         "label": "data(label)",
+        // "text-halign": "center",
+        // "text-margin-x": 0,
+        "border-style": 'dashed',
+      })
+    .selector('node.parent-map')
+      .style({
         "text-halign": "center",
         "text-margin-x": 0,
-        "border-style": 'dashed',
       })
     .update()
 ;
@@ -125,7 +130,7 @@ var layout = cy.layout({
 
     "name": "dagre",
     "nodeSep": 45,  // horizontal seperation of campaigns/chains/columns
-    "rankSep": 20,  // vertical seperation of nodes // try 24 for taxi?
+    "rankSep": 15,  // vertical seperation of nodes // try 24 for taxi?
 });
 layout.run()
 
@@ -172,14 +177,23 @@ $(document).ready(function() {
 
 }); // dom ready
 
+
 var updateBounds = function () {
     cy.reset()
     var bounds = cy.elements().boundingBox();
-    $('#cy').css('height', bounds.h + 50);
-    cy.zoom(1.05)
+    $('#cy').css('height', bounds.h + 100);
+    cy.zoom(1.0)
     cy.resize();
     cy.center();
+    updateZooming()
 };
+
+var updateZooming = function () {
+    // enable zooming if mobile device or smallscreen (otherwise zooming is annoying and 
+    // messes up page scrolling when using mouse wheel)
+    var small_screen = window.matchMedia("(max-width: 767px)")
+    cy.userZoomingEnabled(small_screen.matches);
+}
 
 $("#btn-fullscreen").click(function() {
     $("#cy").toggleClass("fullscreen");

@@ -186,7 +186,12 @@ def generate_map(request, ct_id=None, obj_id=None, scape_id=None, autobreak=True
 @staff_member_required
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
-    scape.regenerate()
+    try:
+        scape.regenerate()
+    except scape.InitialObjectDoesNotExist:
+        messages.warning(request, f"The initial object for the {scape.name} Map no longer exists. The map has now been removed too.")
+        return redirect('djcytoscape:primary')
+
     return redirect('djcytoscape:quest_map', scape_id=scape.id)
 
 
@@ -194,6 +199,10 @@ def regenerate(request, scape_id):
 @staff_member_required
 def regenerate_all(request):
     for scape in CytoScape.objects.all():
-        scape.regenerate()
-    messages.success(request, "All quest maps have been regenerated.")
+        try:
+            scape.regenerate()
+        except scape.InitialObjectDoesNotExist:
+            messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
+
+    messages.success(request, "All valid quest maps have been regenerated.")
     return redirect('djcytoscape:primary')

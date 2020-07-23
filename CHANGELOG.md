@@ -4,6 +4,12 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.7.1] 2020-07-23
+* [bugfix] Handle maps that have had their initial object deleted [#566](https://github.com/timberline-secondary/hackerspace/issues/566)
+* [bugfix] Better interlink nodes for maps
+* [bugfix] Map zooming on mobile only (messes with scrolling otherwise)
+* [bugfix] Remove student number field in profile [#572](https://github.com/timberline-secondary/hackerspace/issues/572)
+
 ### [1.7.0] 2020-07-17
 * [teachers] Seperate nodes for linked quest maps
 * [teachers] Maps are zoomable [#534](https://github.com/timberline-secondary/hackerspace/issues/534)

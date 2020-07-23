@@ -1,6 +1,7 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
 
 from model_bakery import baker
@@ -173,3 +174,21 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIsInstance(style1, dict)
         self.assertIn('selector', style1)
         self.assertIn('style', style1)
+
+    def test_regenerate(self):
+        """Can regenerate without error on a known good map object"""
+        self.map.regenerate()
+
+    def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
+        """when regenerating a map that has had its initial object deleted, remove it and raise error."""
+        bad_map = CytoScape.objects.create(
+            name="bad map", 
+            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'), 
+            initial_object_id=99999,  # a non-existant object
+        ) 
+
+        with self.assertRaises(bad_map.InitialObjectDoesNotExist):
+            bad_map.regenerate()
+
+        # should have been deleted at this point
+        self.assertFalse(CytoScape.objects.filter(name="bad map").exists())

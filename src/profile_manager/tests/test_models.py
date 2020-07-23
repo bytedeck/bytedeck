@@ -9,11 +9,12 @@ from siteconfig.models import SiteConfig
 from courses.models import Semester
 from profile_manager.models import Profile, smart_list
 
+User = get_user_model()
+
 
 class ProfileTestModel(TenantTestCase):
 
     def setUp(self):
-        User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.user = baker.make(User)
         # Profiles are created automatically with each user, so we only need to access profiles via users
@@ -26,8 +27,14 @@ class ProfileTestModel(TenantTestCase):
         self.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
 
     def test_profile_creation(self):
+        """Profile is automatically created when a user is created in setUp()"""
         self.assertIsInstance(self.user.profile, Profile)
         self.assertEqual(str(self.user.profile), self.user.username)
+
+    def test_profile_deletion(self):
+        """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too. """
+        Profile.objects.filter(pk=self.profile.pk).delete()
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 
     def test_profile_alias_clipped(self):
         max_len = 16
