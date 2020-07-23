@@ -540,6 +540,10 @@ class CytoScape(models.Model):
 
     objects = CytoScapeManager()
 
+    class InitialObjectDoesNotExist(Exception):
+        """The initial object for this does not exist, it may have been deleted"""
+        pass
+
     def elements(self):
         elements = self.cytoelement_set.all()
         return elements.select_related('data_parent', 'data_source', 'data_target')
@@ -947,6 +951,10 @@ class CytoScape(models.Model):
         self.save()
 
     def regenerate(self):
+        if self.initial_content_object is None:
+            self.delete()            
+            raise(self.InitialObjectDoesNotExist)
+
         # Delete existing nodes
         CytoElement.objects.all_for_scape(self).delete()
         self.calculate_nodes()
