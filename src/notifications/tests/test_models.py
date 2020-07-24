@@ -60,3 +60,6 @@ class NotificationModelTest(TenantTestCase):
         # now the student should have one if it worked.
         notes_after = self.student.notifications.all()
         self.assertEqual(notes_after.count(), 1)
+
+        notes_unread = Notification.objects.all_unread(self.student)
+        self.assertEqual(notes_unread.count(), 1)

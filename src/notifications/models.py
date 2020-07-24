@@ -39,11 +39,11 @@ class NotificationQuerySet(models.query.QuerySet):
         return self.filter(target_content_type__pk=object_type.id,
                            target_object_id=object.id)
 
-    def mark_targetless(self, recipient):
-        qs = self.get_unread().get_user(recipient)
-        qs_no_target = qs.filter(target_object_id=None)
-        if qs_no_target:
-            qs_no_target.update(unread=False)
+    # def mark_targetless(self, recipient):
+    #     qs = self.get_unread().get_user(recipient)
+    #     qs_no_target = qs.filter(target_object_id=None)
+    #     if qs_no_target:
+    #         qs_no_target.update(unread=False)
 
     def mark_all_read(self, recipient):
         qs = self.get_unread().get_user(recipient)
@@ -76,7 +76,7 @@ class NotificationManager(models.Manager):
         return self.get_queryset().get_user(user).get_read()
 
     def all_for_user(self, user):
-        self.get_queryset().mark_targetless(user)
+        # self.get_queryset().mark_targetless(user)
         return self.get_queryset().get_user(user)
 
     def get_user_target(self, user, target):
