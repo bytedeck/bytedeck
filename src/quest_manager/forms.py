@@ -43,7 +43,7 @@ class QuestForm(forms.ModelForm):
                   'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
-                  'specific_teacher_to_notify', 'blocking',
+                  'specific_teacher_to_notify', 'blocking', 
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
 
@@ -118,8 +118,7 @@ class QuestForm(forms.ModelForm):
                             "{% for p in form.instance.prereqs %}"
                             "<li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>"
                             "{% empty %}<li>None</li>"
-                            "</small></ul>"
-                            "{% endfor %}</div>",
+                            "{% endfor %}</small></ul></div>",
                         ),
                         'new_quest_prerequisite',
                         'new_badge_prerequisite',
