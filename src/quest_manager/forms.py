@@ -128,7 +128,6 @@ class QuestForm(forms.ModelForm):
                     AccordionGroup(
                         "Advanced",
                         'repeat_per_semester',
-                        'specific_teacher_to_notify',
                         'blocking',
                         'hideable',
                         'sort_order',
