@@ -1,8 +1,10 @@
 from django.db import connection
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 
 from .initialization import load_initial_tenant_data
+
+User = get_user_model()
 
 
 def create_superuser(sender, tenant, **kwargs):

@@ -4,6 +4,7 @@ from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
 from tenant_schemas.test.cases import TenantTestCase
+from tenant_schemas.test.client import TenantClient
 from tenant_schemas.utils import tenant_context
 
 from tenant.models import Tenant
@@ -68,8 +69,23 @@ class PublicTenantTestAdminPublic(TenantTestCase):
             # schema names should be all lower case and dashes converted to underscores
             self.assertEqual(non_public_tenant.schema_name, "non_public")
 
-        # oddly, seems to switch connections to the newly created "non_public" schema
-        # so need to set context back to public to test more stuff
+        # make sure we can access and sign-in to the new tenant
+        with tenant_context(non_public_tenant):
+            from django.contrib.auth import get_user_model
+            from django.urls import reverse
+
+            client = TenantClient(non_public_tenant)
+            response = client.get(reverse('account_login'))
+            self.assertEqual(response.status_code, 200)
+
+            test_teacher = get_user_model().objects.create_user('test_teacher', password="password", is_staff=True)
+            client = TenantClient(non_public_tenant)
+            client.force_login(test_teacher)
+            response = client.get(reverse('quests:quests'))
+            self.assertEqual(response.status_code, 200)
+        
+    def test_public_tenant_admin_save_new_tenant_with_bad_names(self):
+
         with tenant_context(self.public_tenant):
             # tenant names with spaces should be rejected:
             with self.assertRaises(ValidationError):
