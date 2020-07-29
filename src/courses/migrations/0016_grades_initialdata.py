@@ -2,7 +2,7 @@
 
 from django.db import migrations
 
-
+# NO LONGER USED, tenant/initialization.py instead
 # Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
 def load_initial_data(apps, schema_editor):
     Grade = apps.get_model('courses', 'Grade')
@@ -38,5 +38,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(load_initial_data),
+        # migrations.RunPython(load_initial_data),
     ]
