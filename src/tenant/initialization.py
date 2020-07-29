@@ -17,10 +17,10 @@ User = get_user_model()
 
 
 def load_initial_tenant_data():
-    create_superuser()
+    user = create_superuser()
     create_site_config_object()
     create_initial_course()
-    create_initial_blocks()
+    create_initial_blocks(user)
     create_initial_ranks()
     create_initial_grades()
     create_initial_badge_types()
@@ -30,11 +30,12 @@ def load_initial_tenant_data():
 
 def create_superuser(sender, tenant, **kwargs):
     # print("Creating default super user of the tenant %s - %s." % (tenant.schema_name, tenant.domain_url))
-    User.objects.create_superuser(
+    user = User.objects.create_superuser(
         username=settings.TENANT_DEFAULT_SUPERUSER_USERNAME, 
         # email='admin@%s.com' % tenant.schema_name, 
         password=settings.TENANT_DEFAULT_SUPERUSER_PASSWORD
     )
+    return user
 
 
 def create_site_config_object():
@@ -46,8 +47,8 @@ def create_initial_course():
     Course.objects.create(title="Default")
 
 
-def create_initial_blocks():
-    Block.objects.create(block="Default")
+def create_initial_blocks(user):
+    Block.objects.create(block="Default", current_teacher=user)
 
 
 def create_initial_ranks():
