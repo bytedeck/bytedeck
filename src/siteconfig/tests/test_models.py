@@ -1,7 +1,7 @@
 from django.templatetags.static import static
 from django.urls import reverse
 
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
 from siteconfig.models import SiteConfig

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from prerequisites.models import PrereqAllConditionsMet, Prereq, IsAPrereqMixin
 

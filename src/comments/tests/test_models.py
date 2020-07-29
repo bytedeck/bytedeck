@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 from model_bakery.recipe import Recipe
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from comments.models import Comment
 

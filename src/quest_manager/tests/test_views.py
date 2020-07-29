@@ -14,8 +14,8 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from mock import patch
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from quest_manager.models import Quest, QuestSubmission

@@ -7,7 +7,7 @@ from django.shortcuts import reverse
 
 from model_bakery import baker
 from freezegun import freeze_time
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate, CourseStudent
 from siteconfig.models import SiteConfig

@@ -2,7 +2,7 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from tenant_schemas.models import TenantMixin
+from django_tenants.models import TenantMixin, DomainMixin
 
 
 def check_tenant_name(name):
@@ -56,8 +56,23 @@ class Tenant(TenantMixin):
         else:  # Production
             return "https://{}".format(self.domain_url)
 
+    @property
+    def domain_url(self):
+        domain = Domain.objects.select_related('tenant').get(tenant=self)
+        return domain.domain
+
+    @domain_url.setter
+    def domain_url(self, new_domain):
+        domain = Domain.objects.select_related('tenant').get(tenant=self)
+        domain.domain = new_domain
+        domain.save()
+
     @classmethod
     def get(cls):
         """ Used to access the Tenant object for the current connection """
         from django.db import connection
         return Tenant.objects.get(schema_name=connection.schema_name)
+
+
+class Domain(DomainMixin):
+    pass

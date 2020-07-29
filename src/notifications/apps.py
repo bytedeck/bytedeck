@@ -5,7 +5,7 @@ from django.apps import AppConfig
 
 
 # from django_celery_beat.models import CrontabSchedule, PeriodicTask
-# from tenant_schemas.utils import get_tenant_model, tenant_context
+# from django_tenants.utils import get_tenant_model, tenant_context
 
 
 class NotificationsConfig(AppConfig):

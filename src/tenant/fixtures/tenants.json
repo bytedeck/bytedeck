@@ -3,11 +3,18 @@
     "model": "tenant.tenant",
     "pk": 1,
     "fields": {
-      "domain_url": "localhost",
       "schema_name": "public",
       "name": "public",
       "desc": "",
       "created_on": "2020-03-27"
+    }
+  },
+  {
+    "model": "tenant.domain",
+    "pk": 1,
+    "fields": {
+      "domain": "localhost",
+      "tenant": 1
     }
   }
 ]
