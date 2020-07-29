@@ -37,7 +37,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 # Application definition
 SHARED_APPS = (
-    'tenant_schemas',
+    'django_tenants',
     'tenant',
     'django.contrib.contenttypes',
 
@@ -115,7 +115,7 @@ TENANT_APPS = (
 
 
 INSTALLED_APPS = (
-    'tenant_schemas',
+    'django_tenants',
     'tenant.apps.TenantConfig',
 
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
@@ -190,7 +190,7 @@ INSTALLED_APPS = (
 )
 
 MIDDLEWARE = [
-    'tenant_schemas.middleware.TenantMiddleware',
+    'django_tenants.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
@@ -237,8 +237,8 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
-        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
+        'KEY_FUNCTION': 'django_tenants.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key'
     },
     'select2': {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -247,7 +247,7 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
         'TIMEOUT': None,
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
+        'KEY_FUNCTION': 'django_tenants.cache.make_key'
     }
 }
 SELECT2_CACHE_BACKEND = 'default'
@@ -525,7 +525,7 @@ POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'hellonepal')
 
 DATABASES = {
     'default': {
-        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': POSTGRES_DB_NAME,
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
@@ -535,11 +535,11 @@ DATABASES = {
 }
 
 DATABASE_ROUTERS = (
-    'tenant_schemas.routers.TenantSyncRouter',
+    'django_tenants.routers.TenantSyncRouter',
 )
 
 TENANT_MODEL = "tenant.Tenant"
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
-SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
