@@ -4,7 +4,7 @@ from django.test import SimpleTestCase
 
 from django_tenants.test.cases import TenantTestCase
 
-from tenant.models import Tenant, check_tenant_name
+from tenant.models import Tenant, check_tenant_name, Domain
 
 User = get_user_model()
 
@@ -14,11 +14,12 @@ class TenantModelTest(TenantTestCase):
     def setUp(self):
         # TenantTestCase comes with a `self.tenant` already, but let make another so we can test development
         # stuff on localhost domain
-        self.tenant_localhost = Tenant(
-            domain_url='my-dev-schema.localhost',
-            schema_name='my_development_schema',
-            name='my_name'
-        )
+        with Tenant(schema_name='public'):
+            self.tenant_localhost = Tenant.objects.create(
+                schema_name='my_development_schema',
+                name='my_name'
+            )
+        domain = Domain.objects.create(domain='my-dev-schema.localhost', tenant=self.tenant_localhost)
         pass
 
     def test_tenant_test_case(self):

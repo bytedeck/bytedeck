@@ -67,9 +67,9 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             return
         if not change:
             obj.schema_name = get_schema_name(obj.name)
-            obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
-        
+
         obj.save()
+        obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \

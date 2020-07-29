@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import tenant_context
 
-from tenant.models import Tenant
+from tenant.models import Tenant, Domain
 from tenant.admin import TenantAdmin, TenantAdminForm
 
 
@@ -52,10 +52,10 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     def setUp(self):
         # create the public schema
         self.public_tenant = Tenant(
-            domain_url='localhost',
             schema_name='public',
             name='public'
         )
+        domain = Domain(domain='localhost', tenant=self.public_tenant)
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
     def test_public_tenant_admin_save_model(self):

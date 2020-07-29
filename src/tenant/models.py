@@ -63,9 +63,12 @@ class Tenant(TenantMixin):
 
     @domain_url.setter
     def domain_url(self, new_domain):
-        domain = Domain.objects.select_related('tenant').get(tenant=self)
-        domain.domain = new_domain
-        domain.save()
+        try:
+            domain = Domain.objects.select_related('tenant').get(tenant=self)
+            domain.domain = new_domain
+            domain.save()
+        except Domain.DoesNotExist:
+            domain = Domain.objects.create(tenant=self, domain=new_domain)
 
     @classmethod
     def get(cls):
