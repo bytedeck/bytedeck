@@ -3,7 +3,7 @@
 from django.db import migrations
 
 
-# Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
+# NO LONGER USED, THIS METHOD ISN"T CALLED.  INITIAL DATA IS CREATED VIA SIGNAL in tenant/apps.py , new code is in tenant/initialization.py
 def load_initial_data(apps, schema_editor):
     Category = apps.get_model('quest_manager', 'Category')
     # BadgeType = apps.get_model('badges', 'BadgeType')

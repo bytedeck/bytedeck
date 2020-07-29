@@ -4,7 +4,7 @@ from django.db import migrations
 from prerequisites.models import Prereq
 
 
-# Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
+# NO LONGER USED, THIS METHOD ISN"T CALLED.  INITIAL DATA IS CREATED VIA SIGNAL in tenant/apps.py , new code is in tenant/initialization.py
 def load_orientation_campaign(apps, schema_editor):
     """ Installs an campaign of several quests including all the prerequisites linking them together
     """

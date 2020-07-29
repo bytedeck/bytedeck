@@ -6,19 +6,69 @@ among other issues
 The methods are c
 """
 from quest_manager.models import Quest, Category
-from badges.models import Badge
+from badges.models import Badge, BadgeType
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 
 
 def load_initial_tenant_data():
     create_site_config_object()
+    create_initial_badges()
     load_orientation_campaign()
 
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """
     SiteConfig.objects.create()
+
+
+def create_initial_badges():
+    # Talents
+    badge_type = BadgeType.objects.get(name="Talent")  # created in previous data migration
+    Badge.objects.create(
+        name="ByteDeck Proficiency",
+        xp=2,
+        short_description="<p>You have demonstrated your proficiency with this online platform. I hope you enjoy using it for this course!</p>",
+        badge_type=badge_type,
+        sort_order=10,
+        active=True,
+        import_id='fa3b0518-cf9c-443c-8fe4-f4a887b495a7'
+    )
+
+    # Awards
+    badge_type = BadgeType.objects.get(name="Award")  # created in previous data migration
+    Badge.objects.bulk_create([
+        Badge(
+            name="Penny",
+            xp=1,
+            short_description="<p>According to the Royal Canadian Mint, the official national term of the coin is the <i>one-cent piece</i>, but in practice the terms penny and cent predominate. Originally, \"penny\" referred to a two-cent coin. When the two-cent coin was discontinued, penny took over as the new one-cent coin's name. </p>\r\n\r\n<p>These cents were originally issued to bring some kind of order to the Canadian monetary system, which, until 1858, relied on British coinage, bank and commercial tokens, U.S. currency and Spanish milled dollars. Canada no longer uses the penny, but we still do!</p>",  # noqa
+            badge_type=badge_type,
+            icon="icons/badges/Penny_jxri7my.png",
+            sort_order=10,
+            active=True,
+            import_id='033afa34-bd34-4252-80f1-6542a4055f7e'
+        ),
+        Badge(
+            name="Nickel",
+            xp=5,
+            short_description="<p>The nickel as we are familiar with it was introduced in 1922, originally made from 99.9% nickel metal. These coins were magnetic, due to the high nickel content. Versions during World War II were minted in copper-zinc, then chrome and nickel-plated steel, and finally returned again to nickel, at the end of the war. A plated steel version was again made 1951–54 during the Korean War. Rising nickel prices eventually caused another switch to cupronickel in 1982 (an alloy similar to the U.S. nickel), but more recently, Canadian nickels are minted in nickel-plated steel, containing a small amount of copper.</p>",  # noqa
+            badge_type=badge_type,
+            icon="icons/badges/Nickel_tbGmjLc.png",
+            sort_order=20,
+            active=True,
+            import_id='82da2a3a-fb21-4d61-b997-b22978699a51'
+        ),
+        Badge(
+            name="Dime",
+            xp=10,
+            short_description="<p>According to the Royal Canadian Mint, the official national term of the coin is the <i>10 cent piece</i>, but in practice, the term dime predominates in English-speaking Canada. It is nearly identical in size to the American dime, but unlike its counterpart, the Canadian dime is magnetic due to a distinct metal composition: from 1968 to 1999 it was composed entirely of nickel, and since 2000 it has had a high steel content.</p>",  # noqa
+            badge_type=badge_type,
+            icon="icons/badges/dime_9kO69sh.png",
+            sort_order=30,
+            active=True,
+            import_id='bb12b3d1-ce6e-40e3-a411-f43aadfe571a'
+        ),
+    ])
 
 
 def load_orientation_campaign():
@@ -30,9 +80,9 @@ def load_orientation_campaign():
         name="Welcome to ByteDeck!",
         xp=3,
         short_description="An introduction to ByteDeck.",
-        instructions="<h3>\n    Welcome!\n</h3>\n<p>\n    This is your first intro quest.\n</p>\n<p>\n    This is where you give students information about this quest. You can add images, video tutorials, step-by-step written instructions, links, and anything else students need, in this space.\n</p>\n<p>\n    For this quest, you will probably want to give them a bit of a tour, or explanation, about how you're using ByteDeck. Here's a written intro, in case you want to start with that.\n</p>\n<p>\n    -----\n</p>\n<p>\n</p>\n<p>\n    This website is designed to give you a chance to explore content at your own pace. The content is broken down into larger units (campaigns) and within those are smaller lessons and assignments (quests like this one). As you progress you will need to submit your quests for approval before moving on. This involves following submission instructions and then using the Submit button at the bottom of the quest.\n</p>\n<p>\n    Some quests will be automatically approved and others you will need to wait for an instructor to approve. Your teacher may give you feedback on your submission and/or ask you to fix something about your quest and re-submit it, so make sure you pay attention to any notifications (little numbers that appear next to the bell icon at the top right of your screen).\n</p>\n<p>\n    You can always look at the \"Maps\" (left menu) to see what future quests will be available, so you can continue working without waiting for your quests to be approved.\n</p>",
-        submission_details="<p>This is where you tell students what they need to do to submit this quest successfully. This quest is automatically approved, so:</p><p>Just submit this quest and the next ones will automatically become available to you.<br></p>",
-        instructor_notes="<p>This is your teacher cheat sheet - anything that would help you decide whether to approve or return a quest. This quest is automatically approved, so you wouldn't need any notes here, but you will probably find this section useful in future quests.</p>",
+        instructions="<h3>\n    Welcome!\n</h3>\n<p>\n    This is your first intro quest.\n</p>\n<p>\n    This is where you give students information about this quest. You can add images, video tutorials, step-by-step written instructions, links, and anything else students need, in this space.\n</p>\n<p>\n    For this quest, you will probably want to give them a bit of a tour, or explanation, about how you're using ByteDeck. Here's a written intro, in case you want to start with that.\n</p>\n<p>\n    -----\n</p>\n<p>\n</p>\n<p>\n    This website is designed to give you a chance to explore content at your own pace. The content is broken down into larger units (campaigns) and within those are smaller lessons and assignments (quests like this one). As you progress you will need to submit your quests for approval before moving on. This involves following submission instructions and then using the Submit button at the bottom of the quest.\n</p>\n<p>\n    Some quests will be automatically approved and others you will need to wait for an instructor to approve. Your teacher may give you feedback on your submission and/or ask you to fix something about your quest and re-submit it, so make sure you pay attention to any notifications (little numbers that appear next to the bell icon at the top right of your screen).\n</p>\n<p>\n    You can always look at the \"Maps\" (left menu) to see what future quests will be available, so you can continue working without waiting for your quests to be approved.\n</p>",  # noqa
+        submission_details="<p>This is where you tell students what they need to do to submit this quest successfully. This quest is automatically approved, so:</p><p>Just submit this quest and the next ones will automatically become available to you.<br></p>",  # noqa
+        instructor_notes="<p>This is your teacher cheat sheet - anything that would help you decide whether to approve or return a quest. This quest is automatically approved, so you wouldn't need any notes here, but you will probably find this section useful in future quests.</p>",  # noqa
         import_id="bee53060-c332-4f75-85e1-6a8f9503ebe1",
         hideable=False,
         verification_required=False,
