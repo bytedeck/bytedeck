@@ -28,11 +28,11 @@ def load_initial_tenant_data():
     create_orientation_campaign()
 
 
-def create_superuser(sender, tenant, **kwargs):
+def create_superuser():
     # print("Creating default super user of the tenant %s - %s." % (tenant.schema_name, tenant.domain_url))
     user = User.objects.create_superuser(
         username=settings.TENANT_DEFAULT_SUPERUSER_USERNAME, 
-        # email='admin@%s.com' % tenant.schema_name, 
+        email='admin@example.com', 
         password=settings.TENANT_DEFAULT_SUPERUSER_PASSWORD
     )
     return user
