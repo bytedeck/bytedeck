@@ -241,8 +241,11 @@ CACHES = {
         'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
     },
     'select2': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'cache_table',
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
         'TIMEOUT': None,
         'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
