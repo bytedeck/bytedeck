@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from tenant.models import Tenant, check_tenant_name
 
