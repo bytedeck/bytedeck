@@ -3,6 +3,7 @@
 from django.db import migrations
 
 
+# NO LONGER USED, SEE tenant/initialization.py
 # Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
 def load_initial_data(apps, schema_editor):
     # https://docs.djangoproject.com/en/2.2/ref/migration-operations/#runpython
@@ -36,5 +37,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(load_initial_data),
+        #migrations.RunPython(load_initial_data),
     ]

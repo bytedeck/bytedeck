@@ -2,8 +2,6 @@
 I found fixtures too difficult to update, and django-tenant-schemas doesn't load fixtures properly anyway
 I found data migrations to cause too many problems, and they  got in the way squashing migrations and keeping them simple, 
 among other issues
-
-The methods are c
 """
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType
@@ -13,13 +11,31 @@ from siteconfig.models import SiteConfig
 
 def load_initial_tenant_data():
     create_site_config_object()
+    create_initial_badge_types()
     create_initial_badges()
-    load_orientation_campaign()
+    create_orientation_campaign()
 
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """
     SiteConfig.objects.create()
+
+
+def create_initial_badge_types():
+    BadgeType.objects.create(
+        name="Talent",
+        sort_order=1,
+        description="Talents are badges that are automatically granted by completing a specific set of prerequisites.",
+        repeatable=True,
+        fa_icon="fa-hand-spock-o"
+    )
+    BadgeType.objects.create(
+        name="Award",
+        sort_order=3,
+        description="Awards are badges that are manually granted by teachers.",
+        repeatable=True,
+        fa_icon="fa-diamond"
+    )
 
 
 def create_initial_badges():
@@ -71,7 +87,7 @@ def create_initial_badges():
     ])
 
 
-def load_orientation_campaign():
+def create_orientation_campaign():
     """ Installs a campaign of several quests including all the prerequisites linking them together
     """
 
