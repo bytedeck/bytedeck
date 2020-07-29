@@ -3,14 +3,21 @@ I found fixtures too difficult to update, and django-tenant-schemas doesn't load
 I found data migrations to cause too many problems, and they  got in the way squashing migrations and keeping them simple, 
 among other issues
 """
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+
 from courses.models import Grade, Rank, Course, Block
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 
+User = get_user_model()
+
 
 def load_initial_tenant_data():
+    create_superuser()
     create_site_config_object()
     create_initial_course()
     create_initial_blocks()
@@ -19,6 +26,15 @@ def load_initial_tenant_data():
     create_initial_badge_types()
     create_initial_badges()
     create_orientation_campaign()
+
+
+def create_superuser(sender, tenant, **kwargs):
+    # print("Creating default super user of the tenant %s - %s." % (tenant.schema_name, tenant.domain_url))
+    User.objects.create_superuser(
+        username=settings.TENANT_DEFAULT_SUPERUSER_USERNAME, 
+        # email='admin@%s.com' % tenant.schema_name, 
+        password=settings.TENANT_DEFAULT_SUPERUSER_PASSWORD
+    )
 
 
 def create_site_config_object():
