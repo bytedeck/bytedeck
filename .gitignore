@@ -1,3 +1,6 @@
+# Contains secrets
+.env.production
+
 #these files have might have production keys and passwords etc.
 production_*.py
 

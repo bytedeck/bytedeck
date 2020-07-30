@@ -13,8 +13,8 @@ services:
   db:
     container_name: db
     build: ./postgresql
-    expose:
-      - "5432"
+    # expose:
+    #   - "5432"
     ports:
       - 5432:5432
     volumes:
@@ -28,11 +28,12 @@ services:
       retries: 5
   redis:
     image: "redis:5.0-alpine"
+    env_file: .env
     sysctls:
       # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
       net.core.somaxconn: 512
     ports:
-      - 6379:6379
+      - 6379:${REDIS_PORT}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 1s
@@ -52,8 +53,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    links: 
-      - db:db
+    # links: 
+    #   - db:db
   celery:
     build: .
     env_file: .env
@@ -69,6 +70,8 @@ services:
   celery-beat:
     build: .
     env_file: .env
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
