@@ -55,7 +55,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
             schema_name='public',
             name='public'
         )
-        domain = Domain(domain='localhost', tenant=self.public_tenant)
+        _ = Domain(domain='localhost', tenant=self.public_tenant)
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
     def test_public_tenant_admin_save_model(self):

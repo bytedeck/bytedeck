@@ -19,8 +19,7 @@ class TenantModelTest(TenantTestCase):
                 schema_name='my_development_schema',
                 name='my_name'
             )
-        domain = Domain.objects.create(domain='my-dev-schema.localhost', tenant=self.tenant_localhost)
-        pass
+        _ = Domain.objects.create(domain='my-dev-schema.localhost', tenant=self.tenant_localhost)
 
     def test_tenant_test_case(self):
         """ From docs: https://django-tenant-schemas.readthedocs.io/en/latest/test.html
