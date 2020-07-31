@@ -6,14 +6,16 @@ production_*.py
 
 sentmail/
 
-#to fill this directory if needed run:
+# MEDIA AND COLLECTED STATIC FILES
 # python manage.py collectstatic
+_media_uploads/
+_collected_static/
+collected_static/
 static_in_venv/
 local_static_root/
 
 #celery
 celerybeat.pid
-
 
 # Linux:
 bin/

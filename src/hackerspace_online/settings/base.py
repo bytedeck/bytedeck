@@ -21,6 +21,7 @@ env = environ.Env(
 )
 
 project_root = environ.Path(__file__) - 4  # "/"
+PROJECT_ROOT = project_root()
 BASE_DIR = project_root('src')  # "/src/"
 
 # read in the .env file
@@ -249,7 +250,7 @@ SELECT2_CACHE_BACKEND = 'default'
 
 
 ## I18N AND L10N ####################################################################
-# https://docs.djangoproject.com/en/1.8/topics/i18n/
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/Vancouver'
 USE_I18N = True
@@ -274,7 +275,6 @@ CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' up
 
 ## DATABASES #######################################################
 
-# https://docs.djangoproject.com/en/1.8/ref/settings/#databases
 POSTGRES_HOST = env('POSTGRES_HOST')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = env('POSTGRES_PORT')
 POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
@@ -297,11 +297,21 @@ DATABASE_ROUTERS = (
 )
 
 
-## Static files (CSS, JavaScript, Images) ###########################
-# https://docs.djangoproject.com/en/1.8/howto/static-files/
-# Statics file settings are in the local and production files
-STATIC_URL = '/static/'
+## STATIC AND MEDIA ###########################
+
+# Urls to display media and static, e.g. example.com/media/
 MEDIA_URL = '/media/'
+STATIC_URL = '/static/'
+
+# The absolute path to the directory where uploaded media files will be saved to
+MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
+
+# The absolute path to the directory where `collectstatic` will move the static files to.
+STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
+
+STATICFILES_DIRS = (os.path.join(BASE_DIR, "static"),
+    # '/var/www/static/',
+)
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
@@ -568,6 +578,9 @@ if DEBUG:
         'debug_toolbar.panels.logging.LoggingPanel',
         'debug_toolbar.panels.redirects.RedirectsPanel',
     ]
+
+    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+    EMAIL_FILE_PATH = 'sentmail/'  # change this to a proper location
 
 ## TESTING ##################################################
 
