@@ -20,16 +20,18 @@ env = environ.Env(
     ALLOWED_HOSTS=(list)
 )
 
-project_root = environ.Path(__file__) - 4
-BASE_DIR = project_root('src')
+project_root = environ.Path(__file__) - 4  # "/"
+BASE_DIR = project_root('src')  # "/src/"
 
-# reading .env file
+# read in the .env file
 environ.Env.read_env(os.path.join(project_root(), '.env'))
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
-ALLOWED_HOSTS = env('DEBUG')
+ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+
+WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
 SHARED_APPS = (
@@ -55,7 +57,6 @@ SHARED_APPS = (
     # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
-
 
     'django.contrib.sites',
 
@@ -224,13 +225,13 @@ TEMPLATES = [
 
 ## REDIS AND CACHES #################################################
 
-REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
-REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+REDIS_HOST = env('REDIS_HOST')  # os.environ.get('REDIS_HOST', '127.0.0.1')
+REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
@@ -246,6 +247,84 @@ CACHES = {
 }
 SELECT2_CACHE_BACKEND = 'default'
 
+
+## I18N AND L10N ####################################################################
+# https://docs.djangoproject.com/en/1.8/topics/i18n/
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'America/Vancouver'
+USE_I18N = True
+USE_L10N = True
+USE_TZ = True
+
+
+## CELERY ####################################################################
+
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_MAX_RETRIES = 10
+CELERY_TASKS_BUNCH_SIZE = 10
+
+# allowed delay between conditions met updates for all users:
+CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+
+
+## DATABASES #######################################################
+
+# https://docs.djangoproject.com/en/1.8/ref/settings/#databases
+POSTGRES_HOST = env('POSTGRES_HOST')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
+POSTGRES_PORT = env('POSTGRES_PORT')
+POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
+POSTGRES_USER = env('POSTGRES_USER')
+POSTGRES_PASSWORD = env('POSTGRES_PASSWORD')
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'NAME': POSTGRES_DB_NAME,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT
+    }
+}
+
+DATABASE_ROUTERS = (
+    'tenant_schemas.routers.TenantSyncRouter',
+)
+
+
+## Static files (CSS, JavaScript, Images) ###########################
+# https://docs.djangoproject.com/en/1.8/howto/static-files/
+# Statics file settings are in the local and production files
+STATIC_URL = '/static/'
+MEDIA_URL = '/media/'
+
+CRISPY_TEMPLATE_PACK = 'bootstrap3'
+
+SITE_ID = 1
+
+# https://github.com/charettes/django-colorful
+GRAPPELLI_CLEAN_INPUT_TYPES = False
+
+
+## TENANTS ###############################################################
+
+TENANT_MODEL = "tenant.Tenant"
+
+TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
+TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
+
+# See this: https://github.com/timberline-secondary/hackerspace/issues/388
+# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
+SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+
+
+## AUTHENTICATION ##################################################
+
 AUTHENTICATION_BACKENDS = (
 
     # Needed to login by username in Django admin, regardless of `allauth`
@@ -255,30 +334,6 @@ AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend',
 
 )
-
-WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
-
-# Database
-# https://docs.djangoproject.com/en/1.8/ref/settings/#databases
-# define in local or production
-
-
-# Internationalization
-# https://docs.djangoproject.com/en/1.8/topics/i18n/
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'America/Vancouver'
-USE_I18N = True
-USE_L10N = True
-USE_TZ = True
-
-# Static files (CSS, JavaScript, Images) ####################
-# https://docs.djangoproject.com/en/1.8/howto/static-files/
-# Statics file settings are in the local and production files
-STATIC_URL = '/static/'
-
-CRISPY_TEMPLATE_PACK = 'bootstrap3'
-
-SITE_ID = 1
 
 # AllAuth Configuration
 # SOCIALACCOUNT_PROVIDERS = \
@@ -323,6 +378,7 @@ ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 # Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
+
 
 #################################
 #
@@ -482,63 +538,13 @@ SUMMERNOTE_CONFIG = {
 
 }
 
-# Celery:
-CELERY_BROKER_URL = "redis://{}:{}/0".format(REDIS_HOST, REDIS_PORT)
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
 
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_MAX_RETRIES = 10
-CELERY_TASKS_BUNCH_SIZE = 10
-
-# allowed delay between conditions met updates for all users:
-CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
-
-# Django Postman
-POSTMAN_DISALLOW_ANONYMOUS = True
-# POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
-
-
-def POSTMAN_NOTIFICATION_APPROVAL(u): return u.profile.get_messages_by_email
-
-
-POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
-POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
-# POSTMAN_SHOW_USER_AS = lambda u: u.id
-
-# https://github.com/charettes/django-colorful
-GRAPPELLI_CLEAN_INPUT_TYPES = False
-
-POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
-POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
-POSTGRES_DB_NAME = os.environ.get('POSTGRES_DB_NAME', 'postgres')
-POSTGRES_USER = os.environ.get('POSTGRES_USER', 'postgres')
-POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'hellonepal')
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'tenant_schemas.postgresql_backend',
-        'NAME': POSTGRES_DB_NAME,
-        'USER': POSTGRES_USER,
-        'PASSWORD': POSTGRES_PASSWORD,
-        'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
-    }
-}
-
-DATABASE_ROUTERS = (
-    'tenant_schemas.routers.TenantSyncRouter',
-)
-
-TENANT_MODEL = "tenant.Tenant"
-
-# See this: https://github.com/timberline-secondary/hackerspace/issues/388
-# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
-SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
-
+## DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
 if DEBUG:
+
+    INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
     INSTALLED_APPS += ('debug_toolbar',
@@ -561,4 +567,15 @@ if DEBUG:
         'debug_toolbar.panels.signals.SignalsPanel',
         'debug_toolbar.panels.logging.LoggingPanel',
         'debug_toolbar.panels.redirects.RedirectsPanel',
+    ]
+
+## TESTING ##################################################
+
+import sys
+
+TESTING = 'test' in sys.argv
+if TESTING:
+    # Use weaker password hasher for speeding up tests (when tested)
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
     ]

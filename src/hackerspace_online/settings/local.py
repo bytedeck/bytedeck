@@ -10,18 +10,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 
 
-TESTING = 'test' in sys.argv
-if TESTING:
-    # Use weaker password hasher for speeding up tests (when tested)
-    PASSWORD_HASHERS = [
-        'django.contrib.auth.hashers.MD5PasswordHasher',
-    ]
+# TESTING = 'test' in sys.argv
+# if TESTING:
+#     # Use weaker password hasher for speeding up tests (when tested)
+#     PASSWORD_HASHERS = [
+#         'django.contrib.auth.hashers.MD5PasswordHasher',
+#     ]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
-
-INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
 EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
 EMAIL_FILE_PATH = 'sentmail/'  # change this to a proper location
@@ -66,7 +64,7 @@ STATICFILES_DIRS = (
     # '/var/www/static/',
 )
 
-MEDIA_URL = "/media/"
+
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set properly in production settings for deployment
 MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project", "media_root")
@@ -75,5 +73,5 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "static_in_project", "media_root")
 # END STATIC #######################################
 
 
-TENANT_DEFAULT_SUPERUSER_USERNAME = 'admin'
-TENANT_DEFAULT_SUPERUSER_PASSWORD = 'password'
+# TENANT_DEFAULT_SUPERUSER_USERNAME = 'admin'
+# TENANT_DEFAULT_SUPERUSER_PASSWORD = 'password'

@@ -16,7 +16,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
 # ALLOWED_HOSTS = [www.hackerspace.sd72.bc.ca, hackerspace.sd72.bc.ca]
 
 EMAIL_HOST = 'smtp.gmail.com'
@@ -49,7 +49,6 @@ STATICFILES_DIRS = (
     # '/var/www/static/',
 )
 
-MEDIA_URL = "/media/"
 # The absolute path to the directory where collectstatic will collect static files for deployment.
 # Set properly in production settings for deployment
 MEDIA_ROOT = "/home/couture/www/hackerspace/media"
