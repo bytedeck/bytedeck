@@ -11,29 +11,25 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
 
-# root of project
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# https://django-environ.readthedocs.io/en/latest/#django-environ
+import environ
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
+env = environ.Env(
+    # set casting, default value
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list)
+)
 
-# Define secret key in local and production files
-# SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = ''
+project_root = environ.Path(__file__) - 4
+BASE_DIR = project_root('src')
 
+# reading .env file
+environ.Env.read_env(os.path.join(project_root(), '.env'))
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG set in local or production file
-# DEBUG = True
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env('DEBUG')
 
-
-# ALLOWED_HOSTS = []
-
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
-# EMAIL_HOST_PASSWORD =""
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
+ALLOWED_HOSTS = env('DEBUG')
 
 # Application definition
 SHARED_APPS = (
@@ -226,7 +222,8 @@ TEMPLATES = [
     },
 ]
 
-# Redis:
+## REDIS AND CACHES #################################################
+
 REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 
@@ -513,7 +510,6 @@ POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
 # https://github.com/charettes/django-colorful
 GRAPPELLI_CLEAN_INPUT_TYPES = False
 
-
 POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
 POSTGRES_DB_NAME = os.environ.get('POSTGRES_DB_NAME', 'postgres')
@@ -540,3 +536,29 @@ TENANT_MODEL = "tenant.Tenant"
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
 SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+
+
+if DEBUG:
+    # DEBUG TOOLBAR
+    MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+    INSTALLED_APPS += ('debug_toolbar',
+                    'template_timings_panel',
+                    # http://django-cachalot.readthedocs.io
+                    # 'cachalot',
+                    )
+    DEBUG_TOOLBAR_PANELS = [
+        'debug_toolbar.panels.versions.VersionsPanel',
+        'debug_toolbar.panels.timer.TimerPanel',
+        'debug_toolbar.panels.settings.SettingsPanel',
+        'debug_toolbar.panels.headers.HeadersPanel',
+        'debug_toolbar.panels.request.RequestPanel',
+        'debug_toolbar.panels.sql.SQLPanel',
+        'debug_toolbar.panels.staticfiles.StaticFilesPanel',
+        'debug_toolbar.panels.templates.TemplatesPanel',
+        'template_timings_panel.panels.TemplateTimings.TemplateTimings',
+        # 'cachalot.panels.CachalotPanel',
+        'debug_toolbar.panels.cache.CachePanel',
+        'debug_toolbar.panels.signals.SignalsPanel',
+        'debug_toolbar.panels.logging.LoggingPanel',
+        'debug_toolbar.panels.redirects.RedirectsPanel',
+    ]
