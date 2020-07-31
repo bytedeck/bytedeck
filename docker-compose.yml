@@ -45,6 +45,8 @@ services:
     #restart: unless-stopped
     build: .
     env_file: .env
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
     # command: # see docker-compose.overide.yml or docker-compose.prod.yml
     volumes: 
       - .:/app
