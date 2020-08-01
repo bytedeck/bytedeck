@@ -309,8 +309,12 @@ MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_upload
 # The absolute path to the directory where `collectstatic` will move the static files to.
 STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
 
-STATICFILES_DIRS = (os.path.join(BASE_DIR, "static"),
-    # '/var/www/static/',
+STATICFILES_DIRS = env(
+    'STATICFILES_DIRS', 
+    default=(
+        os.path.join(BASE_DIR, "static"),
+        # '/var/www/static/',
+    )
 )
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
