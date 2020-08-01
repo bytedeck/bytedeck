@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+import sys
 
 # https://django-environ.readthedocs.io/en/latest/#django-environ
 import environ
@@ -20,7 +21,7 @@ env = environ.Env(
     ALLOWED_HOSTS=(list)
 )
 
-project_root = environ.Path(__file__) - 4  # "/"
+project_root = environ.Path(__file__) - 3  # "/"
 PROJECT_ROOT = project_root()
 BASE_DIR = project_root('src')  # "/src/"
 
@@ -224,7 +225,7 @@ TEMPLATES = [
     },
 ]
 
-## REDIS AND CACHES #################################################
+# REDIS AND CACHES #################################################
 
 REDIS_HOST = env('REDIS_HOST')  # os.environ.get('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
@@ -249,7 +250,7 @@ CACHES = {
 SELECT2_CACHE_BACKEND = 'default'
 
 
-## I18N AND L10N ####################################################################
+# I18N AND L10N ####################################################################
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/Vancouver'
@@ -258,7 +259,7 @@ USE_L10N = True
 USE_TZ = True
 
 
-## CELERY ####################################################################
+# CELERY ####################################################################
 
 CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 CELERY_ACCEPT_CONTENT = ['application/json']
@@ -270,10 +271,11 @@ CELERY_TASK_MAX_RETRIES = 10
 CELERY_TASKS_BUNCH_SIZE = 10
 
 # allowed delay between conditions met updates for all users:
-CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+# In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  
 
 
-## DATABASES #######################################################
+# DATABASES #######################################################
 
 POSTGRES_HOST = env('POSTGRES_HOST')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = env('POSTGRES_PORT')
@@ -296,7 +298,7 @@ DATABASE_ROUTERS = (
     'tenant_schemas.routers.TenantSyncRouter',
 )
 
-## EMAIL ######################################
+# EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
 EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
@@ -318,7 +320,7 @@ if admins_raw:
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
 
 
-## STATIC AND MEDIA ###########################
+# STATIC AND MEDIA ###########################
 
 # Urls to display media and static, e.g. example.com/media/
 MEDIA_URL = '/media/'
@@ -346,7 +348,7 @@ SITE_ID = 1
 GRAPPELLI_CLEAN_INPUT_TYPES = False
 
 
-## TENANTS ###############################################################
+# TENANTS ###############################################################
 
 TENANT_MODEL = "tenant.Tenant"
 
@@ -354,11 +356,11 @@ TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
 TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
-# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
+# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. 
 SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
 
 
-## AUTHENTICATION ##################################################
+# AUTHENTICATION ##################################################
 
 AUTHENTICATION_BACKENDS = (
 
@@ -388,7 +390,8 @@ LOGIN_URL = 'account_login'
 # ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username, e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
+# Specifies the login method to use – whether the user logs in by entering their username, 
+# e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
 # ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL #(=settings.LOGIN_URL)
@@ -400,18 +403,22 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
 ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
-# Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory” the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
+# Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
+# the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified 
+# e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
 # ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
-# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – see the section on HTTPS for more information.
+# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – 
+# see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
 ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
 # ACCOUNT_LOGOUT_ON_GET #(=False)
 # Determines whether or not the user is automatically logged out by a mere GET request. See documentation for the LogoutView for details.
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
-# Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation on password change. (Django 1.7+)
+# Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation
+#  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 
 
@@ -574,7 +581,7 @@ SUMMERNOTE_CONFIG = {
 }
 
 
-## DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
+# DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
 if DEBUG:
 
@@ -582,11 +589,12 @@ if DEBUG:
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
-    INSTALLED_APPS += ('debug_toolbar',
-                    'template_timings_panel',
-                    # http://django-cachalot.readthedocs.io
-                    # 'cachalot',
-                    )
+    INSTALLED_APPS += (
+        'debug_toolbar',
+        'template_timings_panel',
+        # http://django-cachalot.readthedocs.io
+        # 'cachalot',
+    )
     DEBUG_TOOLBAR_PANELS = [
         'debug_toolbar.panels.versions.VersionsPanel',
         'debug_toolbar.panels.timer.TimerPanel',
@@ -605,9 +613,7 @@ if DEBUG:
     ]
 
 
-## TESTING ##################################################
-
-import sys
+# TESTING ##################################################
 
 TESTING = 'test' in sys.argv
 if TESTING:
