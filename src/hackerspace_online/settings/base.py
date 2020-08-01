@@ -296,6 +296,27 @@ DATABASE_ROUTERS = (
     'tenant_schemas.routers.TenantSyncRouter',
 )
 
+## EMAIL ######################################
+
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
+EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
+
+EMAIL_HOST = env('EMAIL_HOST', default=None)
+EMAIL_HOST_USER = env('EMAIL_HOST', default=None)
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default=None)
+
+EMAIL_PORT = env('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
+
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
+
+# SERVER ERRORS EMAIL
+admins_raw = env('ADMINS', default=[])
+if admins_raw:
+    # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
+    ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')] 
+SERVER_EMAIL = env('SERVER_EMAIL', default=None)
+
 
 ## STATIC AND MEDIA ###########################
 
@@ -583,8 +604,6 @@ if DEBUG:
         'debug_toolbar.panels.redirects.RedirectsPanel',
     ]
 
-    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
-    EMAIL_FILE_PATH = 'sentmail/'  # change this to a proper location
 
 ## TESTING ##################################################
 

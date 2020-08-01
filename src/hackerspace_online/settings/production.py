@@ -26,33 +26,3 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = "Timberline Hackerspace"
 
-
-# Database
-# https://docs.djangoproject.com/en/1.8/ref/settings/#databases
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
-}
-
-# Static files (CSS, JavaScript, Images) ####################
-# https://docs.djangoproject.com/en/1.8/howto/static-files/
-
-# The absolute path to the directory where collectstatic will collect static files for deployment.
-# Set in production settings for deployment
-STATIC_ROOT = "/home/couture/www/hackerspace/static"
-# STATIC_ROOT = "/home/90158/www/hackerspace/static"
-
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static_in_project",  "static_root"),
-    # '/var/www/static/',
-)
-
-# The absolute path to the directory where collectstatic will collect static files for deployment.
-# Set properly in production settings for deployment
-MEDIA_ROOT = "/home/couture/www/hackerspace/media"
-# MEDIA_ROOT = "/home/90158/www/hackerspace/media"
-
-
-# END STATIC #######################################
