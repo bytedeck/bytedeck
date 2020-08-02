@@ -50,11 +50,6 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # Prevent docker from buffering console output
 ENV PYTHONUNBUFFERED 1
 
-ENV POSTGRES_HOST "db"
-ENV REDIS_HOST "redis"
-
-# The port
-EXPOSE 8000
 
 # Install python requirements
 # Docker only rebuilds when there are changes to these files

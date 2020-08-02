@@ -1,4 +1,4 @@
-version: '2.2' # supported by default install on Ubuntu 18.04
+version: '2.4'
 
 ###############################################################################
 #
@@ -10,15 +10,14 @@ version: '2.2' # supported by default install on Ubuntu 18.04
 ################################################################################
 
 services:
+
   db:
-    container_name: db
+    # container_name: db
     build: ./postgresql
-    expose:
-      - "5432"
-    ports:
-      - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - backend-network
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
     healthcheck:
@@ -26,34 +25,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    
+
   redis:
     image: "redis:5.0-alpine"
+    env_file: .env
     sysctls:
       # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
       net.core.somaxconn: 512
-    ports:
-      - 6379:6379
+    networks:
+      - backend-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 1s
       timeout: 3s
       retries: 30
+
   web:
     #restart: unless-stopped
     build: .
     env_file: .env
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
+      REDIS_HOST: redis  # takes precendent over .env file
     # command: # see docker-compose.overide.yml or docker-compose.prod.yml
     volumes: 
       - .:/app
     ports:
       - 8000:8000
+    networks:
+      - backend-network
+      - frontend-network
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    links: 
-      - db:db
+
   celery:
     build: .
     env_file: .env
@@ -61,23 +69,35 @@ services:
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
+    networks:
+      - backend-network
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+
   celery-beat:
     build: .
     env_file: .env
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
+    networks:
+      - backend-network
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  frontend-network:
+  backend-network:

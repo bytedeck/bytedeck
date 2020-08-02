@@ -10,30 +10,30 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+import sys
 
-# root of project
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# https://django-environ.readthedocs.io/en/latest/#django-environ
+import environ
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
+env = environ.Env(
+    # set casting, default value
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list)
+)
 
-# Define secret key in local and production files
-# SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = ''
+project_root = environ.Path(__file__) - 3  # "/"
+PROJECT_ROOT = project_root()
+BASE_DIR = project_root('src')  # "/src/"
 
+# read in the .env file
+environ.Env.read_env(os.path.join(project_root(), '.env'))
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG set in local or production file
-# DEBUG = True
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env('DEBUG')
 
+ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
-# ALLOWED_HOSTS = []
-
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_HOST_USER = 'timberline.hackerspace@gmail.com'
-# EMAIL_HOST_PASSWORD =""
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
+WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
 SHARED_APPS = (
@@ -59,7 +59,6 @@ SHARED_APPS = (
     # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
-
 
     'django.contrib.sites',
 
@@ -226,14 +225,15 @@ TEMPLATES = [
     },
 ]
 
-# Redis:
-REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
-REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+# REDIS AND CACHES #################################################
+
+REDIS_HOST = env('REDIS_HOST')  # os.environ.get('REDIS_HOST', '127.0.0.1')
+REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://{}:{}/1".format(REDIS_HOST, REDIS_PORT),
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
@@ -249,6 +249,119 @@ CACHES = {
 }
 SELECT2_CACHE_BACKEND = 'default'
 
+
+# I18N AND L10N ####################################################################
+
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'America/Vancouver'
+USE_I18N = True
+USE_L10N = True
+USE_TZ = True
+
+
+# CELERY ####################################################################
+
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_MAX_RETRIES = 10
+CELERY_TASKS_BUNCH_SIZE = 10
+
+# allowed delay between conditions met updates for all users:
+# In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  
+
+
+# DATABASES #######################################################
+
+POSTGRES_HOST = env('POSTGRES_HOST')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
+POSTGRES_PORT = env('POSTGRES_PORT')
+POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
+POSTGRES_USER = env('POSTGRES_USER')
+POSTGRES_PASSWORD = env('POSTGRES_PASSWORD')
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'NAME': POSTGRES_DB_NAME,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT
+    }
+}
+
+DATABASE_ROUTERS = (
+    'tenant_schemas.routers.TenantSyncRouter',
+)
+
+# EMAIL ######################################
+
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
+EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
+
+EMAIL_HOST = env('EMAIL_HOST', default=None)
+EMAIL_HOST_USER = env('EMAIL_HOST', default=None)
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default=None)
+
+EMAIL_PORT = env('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
+
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
+
+# SERVER ERRORS EMAIL
+admins_raw = env('ADMINS', default=[])
+if admins_raw:
+    # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
+    ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')] 
+SERVER_EMAIL = env('SERVER_EMAIL', default=None)
+
+
+# STATIC AND MEDIA ###########################
+
+# Urls to display media and static, e.g. example.com/media/
+MEDIA_URL = '/media/'
+STATIC_URL = '/static/'
+
+# The absolute path to the directory where uploaded media files will be saved to
+MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
+
+# The absolute path to the directory where `collectstatic` will move the static files to.
+STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
+
+STATICFILES_DIRS = env(
+    'STATICFILES_DIRS', 
+    default=(
+        os.path.join(BASE_DIR, "static"),
+        # '/var/www/static/',
+    )
+)
+
+CRISPY_TEMPLATE_PACK = 'bootstrap3'
+
+SITE_ID = 1
+
+# https://github.com/charettes/django-colorful
+GRAPPELLI_CLEAN_INPUT_TYPES = False
+
+
+# TENANTS ###############################################################
+
+TENANT_MODEL = "tenant.Tenant"
+
+TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
+TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
+
+# See this: https://github.com/timberline-secondary/hackerspace/issues/388
+# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. 
+SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+
+
+# AUTHENTICATION ##################################################
+
 AUTHENTICATION_BACKENDS = (
 
     # Needed to login by username in Django admin, regardless of `allauth`
@@ -258,30 +371,6 @@ AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend',
 
 )
-
-WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
-
-# Database
-# https://docs.djangoproject.com/en/1.8/ref/settings/#databases
-# define in local or production
-
-
-# Internationalization
-# https://docs.djangoproject.com/en/1.8/topics/i18n/
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'America/Vancouver'
-USE_I18N = True
-USE_L10N = True
-USE_TZ = True
-
-# Static files (CSS, JavaScript, Images) ####################
-# https://docs.djangoproject.com/en/1.8/howto/static-files/
-# Statics file settings are in the local and production files
-STATIC_URL = '/static/'
-
-CRISPY_TEMPLATE_PACK = 'bootstrap3'
-
-SITE_ID = 1
 
 # AllAuth Configuration
 # SOCIALACCOUNT_PROVIDERS = \
@@ -301,7 +390,8 @@ LOGIN_URL = 'account_login'
 # ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username, e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
+# Specifies the login method to use – whether the user logs in by entering their username, 
+# e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
 # ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL #(=settings.LOGIN_URL)
@@ -313,19 +403,24 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
 ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
-# Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory” the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
+# Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
+# the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified 
+# e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
 # ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
-# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – see the section on HTTPS for more information.
+# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – 
+# see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
 ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
 # ACCOUNT_LOGOUT_ON_GET #(=False)
 # Determines whether or not the user is automatically logged out by a mere GET request. See documentation for the LogoutView for details.
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
-# Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation on password change. (Django 1.7+)
+# Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation
+#  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
+
 
 #################################
 #
@@ -485,58 +580,44 @@ SUMMERNOTE_CONFIG = {
 
 }
 
-# Celery:
-CELERY_BROKER_URL = "redis://{}:{}/0".format(REDIS_HOST, REDIS_PORT)
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
 
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_MAX_RETRIES = 10
-CELERY_TASKS_BUNCH_SIZE = 10
+# DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
-# allowed delay between conditions met updates for all users:
-CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
+if DEBUG:
 
-# Django Postman
-POSTMAN_DISALLOW_ANONYMOUS = True
-# POSTMAN_NOTIFICATION_APPROVAL = 'path.to.function.accepts.user.action.site.returns.boolean'
+    INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
+    # DEBUG TOOLBAR
+    MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+    INSTALLED_APPS += (
+        'debug_toolbar',
+        'template_timings_panel',
+        # http://django-cachalot.readthedocs.io
+        # 'cachalot',
+    )
+    DEBUG_TOOLBAR_PANELS = [
+        'debug_toolbar.panels.versions.VersionsPanel',
+        'debug_toolbar.panels.timer.TimerPanel',
+        'debug_toolbar.panels.settings.SettingsPanel',
+        'debug_toolbar.panels.headers.HeadersPanel',
+        'debug_toolbar.panels.request.RequestPanel',
+        'debug_toolbar.panels.sql.SQLPanel',
+        'debug_toolbar.panels.staticfiles.StaticFilesPanel',
+        'debug_toolbar.panels.templates.TemplatesPanel',
+        'template_timings_panel.panels.TemplateTimings.TemplateTimings',
+        # 'cachalot.panels.CachalotPanel',
+        'debug_toolbar.panels.cache.CachePanel',
+        'debug_toolbar.panels.signals.SignalsPanel',
+        'debug_toolbar.panels.logging.LoggingPanel',
+        'debug_toolbar.panels.redirects.RedirectsPanel',
+    ]
 
 
-def POSTMAN_NOTIFICATION_APPROVAL(u): return u.profile.get_messages_by_email
+# TESTING ##################################################
 
-
-POSTMAN_AUTO_MODERATE_AS = True  # only student <> teacher interactions will be allowed, so no need to moderate student <> student
-POSTMAN_NAME_USER_AS = 'id'  # need to use key/id for select2 widget
-# POSTMAN_SHOW_USER_AS = lambda u: u.id
-
-# https://github.com/charettes/django-colorful
-GRAPPELLI_CLEAN_INPUT_TYPES = False
-
-
-POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
-POSTGRES_PORT = os.environ.get('POSTGRES_PORT', '5432')
-POSTGRES_DB_NAME = os.environ.get('POSTGRES_DB_NAME', 'postgres')
-POSTGRES_USER = os.environ.get('POSTGRES_USER', 'postgres')
-POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'hellonepal')
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'tenant_schemas.postgresql_backend',
-        'NAME': POSTGRES_DB_NAME,
-        'USER': POSTGRES_USER,
-        'PASSWORD': POSTGRES_PASSWORD,
-        'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
-    }
-}
-
-DATABASE_ROUTERS = (
-    'tenant_schemas.routers.TenantSyncRouter',
-)
-
-TENANT_MODEL = "tenant.Tenant"
-
-# See this: https://github.com/timberline-secondary/hackerspace/issues/388
-# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. That's why getting rid of # the warning
-SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+TESTING = 'test' in sys.argv
+if TESTING:
+    # Use weaker password hasher for speeding up tests (when tested)
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
