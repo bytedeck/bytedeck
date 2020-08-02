@@ -65,6 +65,8 @@ services:
   celery:
     build: .
     env_file: .env
+    environment:
+      REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:

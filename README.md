@@ -1,7 +1,7 @@
 LMS originating from Timberline Secondary School's Digital Hackerspace
 
 [![Build Status](https://api.travis-ci.org/bytedeck/bytedeck.svg?branch=develop)](https://travis-ci.org/bytedeck/bytedeck/)
-[![Coverage Status](https://coveralls.io/repos/github/timberline-secondary/hackerspace/badge.svg?branch=HEAD)](https://coveralls.io/github/timberline-secondary/hackerspace?branch=HEAD)
+[![Coverage Status](https://coveralls.io/repos/github/bytedeck/bytedeck/badge.svg?branch=develop)](https://coveralls.io/github/bytedeck/bytedeck?branch=develop)
 
 # Hackerspace development environment installation
 
