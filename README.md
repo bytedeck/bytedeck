@@ -1,4 +1,4 @@
-LMS for Timberline Secondary School's Digital Hackerspace
+LMS originating from Timberline Secondary School's Digital Hackerspace
 
 [![Build Status](https://api.travis-ci.org/bytedeck/bytedeck.svg?branch=develop)](https://travis-ci.org/bytedeck/bytedeck/)
 [![Coverage Status](https://coveralls.io/repos/github/timberline-secondary/hackerspace/badge.svg?branch=HEAD)](https://coveralls.io/github/timberline-secondary/hackerspace?branch=HEAD)
@@ -9,9 +9,9 @@ LMS for Timberline Secondary School's Digital Hackerspace
 
 ### Installing Tools
 
-Although the hackerspace uses several tools, you only need to set up a two of them thanks to docker!
+Although bytedeck uses several tools, you only need to set up a two of them thanks to docker!
 
-The instructions below will help you get the hackerspace running using [docker](https://www.docker.com/), and then help you set up a development environment with [VS Code](https://code.visualstudio.com/).
+The instructions below will help you get bytedeck running using [docker](https://www.docker.com/), and then help you set up a development environment with [VS Code](https://code.visualstudio.com/).
 
 The instructions assume you are using Ubuntu (or another Debian based linux distro), although it is possible to get it working anywhere you can install docker.
 
@@ -35,7 +35,7 @@ Add yourself to the docker group:
 #### Fork the repository
 
 1. Create a Github account.
-2. Go to https://github.com/timberline-secondary/hackerspace
+2. Go to https://github.com/bytedeck/bytedeck
 3. The main branch of this repo is the `develop` branch, make sure you are on that branch.
 3. Click the "Fork" button on the top right corner.
 4. This will allow you to have your own copy of the project on your GitHub account.
@@ -49,7 +49,7 @@ Add yourself to the docker group:
 3. Go to your forked repository in github
 4. Click "Clone or download" and copy the url, then paste it into the command:  
 `git clone yoururlhere`
-5. This will download the project into ~/Developer/hackerspace/
+5. This will download the project into ~/Developer/bytedeck/
 
 ### Running the Code
 
@@ -58,18 +58,20 @@ This will create your docker containers and initialize the database by running m
 
 1. Open a terminal
 2. Move into the project directory:  
-`cd ~/Developer/hackerspace`
+`cd ~/Developer/bytedeck`
 3. Build the containers (db, redis, celery, and celery-beat):  
 `docker-compose build`
 4. Start the postgres database container (db) in the background/daemonized (-d)  
 `docker-compose up -d db`
-5. For development, let's run the django app in a vertiual environment instead of using the web container:
+5. For development, let's run the django app in a virtual environment instead of using the web container:
    1. Create a python virtual environment (we'll put ours in a venv directory):   
-   `virtualenv venv --python=python3.7`
+   `virtualenv venv --python=python3.8`
    2. Enter the virtual environment:  
    `source venv/bin/activate`
    3. Install our requirements:  
    `pip install -r requirements.txt`
+   3. Copy the example environment file to the one you'll be using.  Docker-compose and django will both be lookign for a `.env` files with various settings that you can customize:  
+   `cp .env.example .env`
    3. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):  
    `./src/manage.py migrate_schemas --shared`
    4. Run the app ot make sure you don't get any errors yet, with:  
@@ -85,7 +87,7 @@ This will create your docker containers and initialize the database by running m
 10. To view errors in the containers when they are running in the background, you can use `docker-compose logs`
 
 ### Creating a Tenant
-If everything has worked so far, you should now be able to create your own hackerspace website as a new tenant:
+If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
 
 0. If the server isn't already running, run it with: `./src/manage.py runserver` (and ignore the link it tells you to access the page)
 1. Go to django admin at http://localhost:8000/admin/ (this is known as the Public tenant, it's where we can control all the other sites or tenants)
@@ -129,7 +131,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 2. Log in:
    - url: [localhost:8080](http://localhost:8080)
    - email: admin@admin.com
-   - password: password
+   - password: password  (or whatever you changed this to in you `.env` file)
 3. Click "Add New Server"
 4. Give it any Name you want
 5. In the Connection tab set:  
@@ -137,7 +139,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
    - Port: 5432
    - Maintenance database: postgres
    - Username: postgres
-   - Password: hellonepal
+   - Password: Change.Me!  (or whatever you change the db password to in you `.env` file)
 6. Hit Save
 7. At the top left expand the Servers tree to find the database, and explore!
 8. You'll probably want to look at Schemas > (pick a schema) > Tables
@@ -162,10 +164,10 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 
 ## Contributing Quick Reference
 
-For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/timberline-secondary/hackerspace/blob/develop/CONTRIBUTING.md)
+For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md)
 
-1. Move into your cloned directory. `cd ~/Developer/hackerspace`
-2. Add the upstream remote: `git remote add upstream git@github.com:timberline-secondary/hackerspace.git`
+1. Move into your cloned directory. `cd ~/Developer/bytedeck`
+2. Add the upstream remote: `git remote add upstream git@github.com:bytedeck/bytedeck.git`
 3. Pull in changes from the upstream master: `git pull upstream` (in case anything has changed since you cloned it)
 5. Create a new branch: `git checkout -b yourbranchname`
 6. Make your changes and them commit: `git commit -am "Useful description of your changes"`

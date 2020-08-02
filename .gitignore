@@ -1,4 +1,5 @@
 # Contains secrets
+.env
 .env.production
 
 #these files have might have production keys and passwords etc.
