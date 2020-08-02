@@ -9,7 +9,9 @@ dist: bionic
 services:
  - docker
 
-before_script: pip install docker-compose
+before_script: 
+   - pip install docker-compose
+   - cp .env.example .env
 
 # Don't use coveralls for Pull Requests because it doesn't have access to the environment variables
 # https://docs.travis-ci.com/user/pull-requests/#pull-requests-and-security-restrictions
