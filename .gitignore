@@ -5,12 +5,12 @@
 #these files have might have production keys and passwords etc.
 production_*.py
 
-sentmail/
 
 # MEDIA AND COLLECTED STATIC FILES
 # python manage.py collectstatic
 _media_uploads/
 _collected_static/
+_sent_mail/
 collected_static/
 static_in_venv/
 local_static_root/

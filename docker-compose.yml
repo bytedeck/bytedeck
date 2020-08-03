@@ -66,6 +66,7 @@ services:
     build: .
     env_file: .env
     environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
       REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
@@ -84,6 +85,7 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db  # takes precendent over .env file
+      REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:

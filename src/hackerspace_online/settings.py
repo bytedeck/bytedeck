@@ -227,7 +227,7 @@ TEMPLATES = [
 
 # REDIS AND CACHES #################################################
 
-REDIS_HOST = env('REDIS_HOST')  # os.environ.get('REDIS_HOST', '127.0.0.1')
+REDIS_HOST = env('REDIS_HOST', default='127.0.0.1')  # os.environ.get('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
 
 CACHES = {
@@ -277,7 +277,7 @@ CONDITIONS_UPDATE_COUNTDOWN = 60 * 1
 
 # DATABASES #######################################################
 
-POSTGRES_HOST = env('POSTGRES_HOST')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
+POSTGRES_HOST = env('POSTGRES_HOST', default='127.0.0.1')  # os.environ.get('POSTGRES_HOST', '127.0.0.1')
 POSTGRES_PORT = env('POSTGRES_PORT')
 POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
 POSTGRES_USER = env('POSTGRES_USER')
