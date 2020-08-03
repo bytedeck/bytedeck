@@ -2,7 +2,7 @@
 
 from django.db import migrations
 
-
+# NO LONGER USED, tenant/initialization.py instead
 def load_more_initial_data(apps, schema_editor):
     Course = apps.get_model('courses', 'Course')
 
@@ -36,5 +36,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(load_more_initial_data),
+        # migrations.RunPython(load_more_initial_data),
     ]

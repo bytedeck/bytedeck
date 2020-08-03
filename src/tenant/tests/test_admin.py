@@ -4,6 +4,7 @@ from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
 from tenant_schemas.test.cases import TenantTestCase
+# from tenant_schemas.test.client import TenantClient
 from tenant_schemas.utils import tenant_context
 
 from tenant.models import Tenant
@@ -61,15 +62,44 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     def test_public_tenant_admin_save_model(self):
 
         with tenant_context(self.public_tenant):
-            non_public_tenant = Tenant(name="Non-Public")  # Not a valid name, but not validated in this test
+            non_public_tenant = Tenant(
+                name="Non-Public",  # Not a valid name, but not validated in this test
+                domain_url='non-public.localhost'
+            )  
+
             # public tenant should be able to create new tenant/schemas
             self.tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
             self.assertIsInstance(non_public_tenant, Tenant)
             # schema names should be all lower case and dashes converted to underscores
             self.assertEqual(non_public_tenant.schema_name, "non_public")
 
-        # oddly, seems to switch connections to the newly created "non_public" schema
-        # so need to set context back to public to test more stuff
+        # TODO: Not working, can't figure out why?
+        # When try to use client.get() the context switches back to the public tenant
+        # WHY!?!?
+
+        # make sure we can access and sign-in to the new tenant
+        # with tenant_context(non_public_tenant):
+        #     from django.db import connection
+        #     from django.contrib.auth import get_user_model
+        #     from django.urls import reverse
+
+        #     client = TenantClient(non_public_tenant)
+        #     connection.set_tenant(non_public_tenant)
+        #     print(connection.schema_name)  # non_public
+        #     response = client.get(reverse('account_login'))
+        #     print(connection.schema_name)  # public
+
+        #     # self.assertEqual(response.status_code, 200)
+        #     print(connection.schema_name)
+
+        #     test_teacher = get_user_model().objects.create_user('test_teacher', password="password", is_staff=True)
+        #     client = TenantClient(non_public_tenant)
+        #     client.force_login(test_teacher)
+        #     response = client.get(reverse('quests:quests'))
+        #     self.assertEqual(response.status_code, 200)
+        
+    def test_public_tenant_admin_save_new_tenant_with_bad_names(self):
+
         with tenant_context(self.public_tenant):
             # tenant names with spaces should be rejected:
             with self.assertRaises(ValidationError):

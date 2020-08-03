@@ -33,34 +33,6 @@ RUN apt-get install -y build-essential
 RUN apt-get install -y libpcre3 libpcre3-dev
 
 RUN pip install uwsgi
-# Install python requirements
-# Docker only rebuilds when there are changes to these files
-# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
-COPY ./requirements-production.txt requirements-production.txt
-COPY ./requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-
-######################################################
-
-# Set environment variables
-
-# Don't create .pyc files (why don't we want these?)
-ENV PYTHONDONTWRITEBYTECODE 1
-# Prevent docker from buffering console output
-ENV PYTHONUNBUFFERED 1
-
-ENV POSTGRES_HOST "db"
-
-ENV REDIS_HOST "redis"
-
-# Set working directory for subsequent RUN ADD COPY CMD instructions
-COPY . /app/
-WORKDIR /app/
-
-# The port
-EXPOSE 8000
-
-#### More from https://github.com/Microsoft/vscode-remote-try-python ##
 
 # Clean up
 RUN apt-get autoremove -y \
@@ -70,6 +42,30 @@ ENV DEBIAN_FRONTEND=dialog
 
 # Set the default shell to bash rather than sh
 ENV SHELL /bin/bash
+
+# Set environment variables
+
+# Don't create .pyc files (why don't we want these?)
+ENV PYTHONDONTWRITEBYTECODE 1
+# Prevent docker from buffering console output
+ENV PYTHONUNBUFFERED 1
+
+
+# Install python requirements
+# Docker only rebuilds when there are changes to these files
+# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
+COPY ./requirements-production.txt requirements-production.txt
+COPY ./requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+
+######################################################
+
+# Set working directory for subsequent RUN ADD COPY CMD instructions
+COPY . /app/
+WORKDIR /app/
+
+
+#### More from https://github.com/Microsoft/vscode-remote-try-python ##
 
 #######################################################################
 
