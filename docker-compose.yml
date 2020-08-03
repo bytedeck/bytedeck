@@ -12,21 +12,19 @@ version: '2.2'
 services:
 
   db:
-    # container_name: db
     build: ./postgresql
+    env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     networks:
       - backend-network
-    environment:
-      POSTGRES_HOST_AUTH_METHOD: "trust"  # http://support.divio.com/en/articles/3719228-database-is-uninitialized-and-superuser-password-is-not-specified
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
     
-
   redis:
     image: "redis:5.0-alpine"
     env_file: .env
