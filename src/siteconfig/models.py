@@ -177,8 +177,8 @@ class SiteConfig(models.Model):
 
     @classmethod
     def get(cls):
-        """ Used to access the single model instance for the current tenant/schema """
+        """ Used to access the single model instance for the current tenant/schema 
+        The SiteConfig object is created automatically after the tenant is created"""
 
         # Create the settings instance for this tenant if it doesn't already exist
-        obj, created = cls.objects.get_or_create()
-        return obj
+        return cls.objects.get()

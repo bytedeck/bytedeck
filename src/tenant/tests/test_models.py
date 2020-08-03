@@ -19,8 +19,7 @@ class TenantModelTest(TenantTestCase):
             schema_name='my_development_schema',
             name='my_name'
         )
-        pass
-
+        
     def test_tenant_test_case(self):
         """ From docs: https://django-tenant-schemas.readthedocs.io/en/latest/test.html
         If you want a test to happen at any of the tenant’s domain, you can use the test case TenantTestCase. 

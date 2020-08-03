@@ -4,6 +4,7 @@ from django.db import migrations
 from django.core.exceptions import ObjectDoesNotExist
 
 
+# NO LONGER CALLED.  INIT DATA CODE MOVED TO /src/tenant/initialization.py
 # Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
 def load_initial_data(apps, schema_editor):
     Badge = apps.get_model('badges', 'Badge')
@@ -78,5 +79,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(load_initial_data),
+        # migrations.RunPython(load_initial_data),
     ]

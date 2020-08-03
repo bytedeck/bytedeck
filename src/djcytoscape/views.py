@@ -12,10 +12,12 @@ from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView
 from django.urls import reverse_lazy
 
-from .models import CytoScape
 from quest_manager.models import QuestSubmission, Quest
-from djcytoscape.forms import GenerateQuestMapForm
 from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+
+from .models import CytoScape
+from .forms import GenerateQuestMapForm
+from .tasks import regenerate_all_maps
 
 User = get_user_model()
 
@@ -198,11 +200,17 @@ def regenerate(request, scape_id):
 @allow_non_public_view
 @staff_member_required
 def regenerate_all(request):
-    for scape in CytoScape.objects.all():
-        try:
-            scape.regenerate()
-        except scape.InitialObjectDoesNotExist:
-            messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
+    scapes = CytoScape.objects.all()
+    if scapes.count() > 5:
+        messages.warning(request, "You have a lot of maps, so the map regeneration is being processed in the background. It may take a few minutes.")  # noqa
+        regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
+    else:
+        for scape in CytoScape.objects.all():
+            try:
+                scape.regenerate()
+            except scape.InitialObjectDoesNotExist:
+                messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
 
-    messages.success(request, "All valid quest maps have been regenerated.")
+        messages.success(request, "All valid quest maps have been regenerated.")
+
     return redirect('djcytoscape:primary')
