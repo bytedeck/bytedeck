@@ -27,5 +27,6 @@ services:
     user: $WUID:$WGID
   celery:
     env_file: .env.production
+    user: $WUID:$WGID
   celery-beat:
     env_file: .env.production
