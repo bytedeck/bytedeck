@@ -12,7 +12,6 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
@@ -156,15 +155,6 @@ class SemesterManager(models.Manager):
             return self.get_queryset().filter(pk=SiteConfig.get().active_semester.pk)
         else:
             return SiteConfig.get().active_semester
-
-    def set_active(self, sem_id):
-        # Set all to active = False
-        self.get_queryset().update(active=False)  # note thisdoes not fire post_save/update signals
-
-        # Then set only this one to active=True
-        sem = self.get_queryset().get(id=sem_id)
-        sem.active = True
-        sem.save()
 
     def complete_active_semester(self):
 
