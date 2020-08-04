@@ -1,24 +1,37 @@
 import json
 
 from django.contrib.auth.decorators import login_required
-from django.urls import reverse
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render, Http404, HttpResponseRedirect, redirect
-from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
-
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import Http404, HttpResponseRedirect, redirect, render
+from django.urls import reverse
+from django.utils import timezone
 from tenant.views import allow_non_public_view
+
 from .models import Notification
 
 
 @allow_non_public_view
 @login_required
 def list(request):
-    notifications = Notification.objects.all_for_user(request.user)
+    notifications_list = Notification.objects.all_for_user(request.user)
+
+    paginator = Paginator(notifications_list, 15)
+    page = request.GET.get('page', 1)
+
+    try:
+        notifications = paginator.page(page)
+    except PageNotAnInteger:
+        notifications = paginator.page(1)
+    except EmptyPage:
+        notifications = paginator.page(paginator.num_pages)
+
     context = {
-        "notifications": notifications,
+        'notifications': notifications,
     }
-    return render(request, "notifications/list.html", context)
+
+    return render(request, 'notifications/list.html', context)
 
 
 @allow_non_public_view
