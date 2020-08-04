@@ -1,15 +1,13 @@
 from datetime import timedelta
-from django.utils.timezone import localtime
-from django.contrib.auth import get_user_model
 
-from model_bakery import baker
-from freezegun import freeze_time
-from tenant_schemas.test.cases import TenantTestCase
-
-from quest_manager.models import Quest, QuestSubmission
 from courses.models import Semester
-
+from django.contrib.auth import get_user_model
+from django.utils.timezone import localtime
+from freezegun import freeze_time
+from model_bakery import baker
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
+from tenant_schemas.test.cases import TenantTestCase
 
 User = get_user_model()
 
@@ -253,7 +251,7 @@ class QuestManagerTest(TenantTestCase):
         Quest-1hr-cooldown      Y       True         1
         Quest-blocking          N       NA           NA
         """
-        active_semester = baker.make(Semester, active=True)
+        active_semester = baker.make(Semester)
 
         quest_inprog_sem2 = baker.make(Quest, name='Quest-inprogress-sem2')
         sub_inprog_sem2 = baker.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
@@ -318,7 +316,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
     def test_quest_submission_qs_get_semester(self):
         """QuestSubmissionQuerySet.get_semester should return all quest submissions for given semester"""
-        semester = baker.make(Semester, active=True)
+        semester = baker.make(Semester)
         first = baker.make(QuestSubmission, semester=semester)
         baker.make(QuestSubmission)
         qs = QuestSubmission.objects.order_by('id').get_semester(semester).values_list('id', flat=True)
@@ -386,13 +384,16 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.assertListEqual(list(qs), [first.id])
 
     def make_test_submissions_stack(self):
-        active = baker.make(Semester, active=True)
-        inactive = baker.make(Semester, active=False)
-        quest1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=active)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=active)
-        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=active)
-        quest2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=inactive)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=True, semester=inactive)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=inactive)
-        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=inactive)
+        semester = baker.make(Semester)
+        another_semester = baker.make(Semester)
+
+        quest1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=semester)
+
+        quest2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=another_semester)
+
         return quest1, quest2
