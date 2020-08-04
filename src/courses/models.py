@@ -200,7 +200,6 @@ class Semester(models.Model):
 
     first_day = models.DateField(blank=True, null=True, default=date.today)
     last_day = models.DateField(blank=True, null=True, default=default_end_date)
-    active = models.BooleanField(default=False)
     closed = models.BooleanField(
         default=False,
         help_text="All student courses in this semester have been closed and final marks recorded."
