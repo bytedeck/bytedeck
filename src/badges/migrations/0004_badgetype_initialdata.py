@@ -3,33 +3,6 @@
 from django.db import migrations
 
 
-# NO LONGER USED, SEE tenant/initialization.py
-# Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
-def load_initial_data(apps, schema_editor):
-    # https://docs.djangoproject.com/en/2.2/ref/migration-operations/#runpython
-    BadgeType = apps.get_model('badges', 'BadgeType')
-
-    db_alias = schema_editor.connection.alias
-    db_BadgeTypeManager = BadgeType.objects.using(db_alias)
-
-    # add some initial data if none has been created yet
-    if not db_BadgeTypeManager.exists():
-        db_BadgeTypeManager.create(
-            name="Talent",
-            sort_order=1,
-            description="Talents are badges that are automatically granted by completing a specific set of prerequisites.",
-            repeatable=True,
-            fa_icon="fa-hand-spock-o"
-        )
-        db_BadgeTypeManager.create(
-            name="Award",
-            sort_order=3,
-            description="Awards are badges that are manually granted by teachers.",
-            repeatable=True,
-            fa_icon="fa-diamond"
-        )
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
