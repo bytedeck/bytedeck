@@ -43,8 +43,8 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertEqual(self.config.get_default_icon_url(), static('img/default_icon.png'))
 
     def test_get_favicon_url(self):
-        """ Returns None if no favicon set """
-        self.assertEqual(self.config.get_favicon_url(), None)
+        """ Returns default if no favicon set """
+        self.assertEqual(self.config.get_favicon_url(), static('icon/favicon.ico'))
 
     def test_get_banner_image_url(self):
         self.assertEqual(self.config.get_banner_image_url(), static('img/banner.png'))

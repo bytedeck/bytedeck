@@ -5,6 +5,7 @@ from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -39,3 +40,11 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_secret_view(self):
         self.assert200('simple')
+
+    # def test_favicon(self):
+    #     response = self.client.get('favicon.ico')
+    #     self.assertRedirects(
+    #         response,
+    #         SiteConfig.get().get_favicon_url(),
+    #         status_code=301,  # permanent
+    #     )
