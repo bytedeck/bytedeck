@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import models
+from django.db import connection, models
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
+from tenant_schemas.utils import get_public_schema_name
 
 User = get_user_model()
 
@@ -177,8 +178,13 @@ class SiteConfig(models.Model):
 
     @classmethod
     def get(cls):
-        """ Used to access the single model instance for the current tenant/schema 
-        The SiteConfig object is created automatically after the tenant is created"""
+        """
+        Used to access the single model instance for the current tenant/schema 
+        The SiteConfig object is create automatically via signal af ter new tenants are created.
+        after ne
+        """
 
-        # Create the settings instance for this tenant if it doesn't already exist
-        return cls.objects.get()
+        if connection.schema_name != get_public_schema_name():
+            return cls.objects.get()
+
+        return None
