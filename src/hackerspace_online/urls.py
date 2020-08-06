@@ -56,6 +56,8 @@ urlpatterns += [
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
+    # Browsers looks for favicon.ico at root, redirect them to proper favicon to prevent constant 404s
+    url(r'^favicon\.ico$', views.FaviconRedirectView.as_view()),
 ]
 
 

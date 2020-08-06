@@ -150,7 +150,7 @@ class SiteConfig(models.Model):
         elif self.site_logo and hasattr(self.site_logo, 'url'):
             return self.site_logo.url
         else:
-            return None
+            return static('icon/favicon.ico')
 
     def get_banner_image_url(self):
         if self.banner_image and hasattr(self.banner_image, 'url'):
