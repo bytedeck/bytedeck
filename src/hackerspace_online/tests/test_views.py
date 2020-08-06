@@ -41,10 +41,8 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
     def test_secret_view(self):
         self.assert200('simple')
 
-    # def test_favicon(self):
-    #     response = self.client.get('favicon.ico')
-    #     self.assertRedirects(
-    #         response,
-    #         SiteConfig.get().get_favicon_url(),
-    #         status_code=301,  # permanent
-    #     )
+    def test_favicon(self):
+        """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
+        response = self.client.get('/favicon.ico')
+        self.assertEqual(response.status_code, 301)  # permanent redirect
+        self.assertEqual(response.url, SiteConfig.get().get_favicon_url())
