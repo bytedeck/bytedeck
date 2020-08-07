@@ -1,0 +1,19 @@
+name: Build and Tests
+
+on: [push, pull_request]
+
+jobs: 
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Copy sample environment variables
+        run: cp .env.example .env
+      - name: Build the docker-compose stack
+        run: docker-compose up -d
+      - name: Check running containers
+        run: docker ps -a
+      - name: Run test suite
+        run: docker-compose run web python src/manage.py test src --parallel
+      
