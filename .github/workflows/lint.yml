@@ -13,3 +13,4 @@ jobs:
         path: src
         ignore: W291,E216,W504,W503,E126,W293
         maxlinelength: 150
+        repotoken: ${{ secrets.GITHUB_TOKEN }}
