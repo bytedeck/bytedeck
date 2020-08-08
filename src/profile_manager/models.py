@@ -1,23 +1,22 @@
 # import re
 
+from badges.models import BadgeAssertion
+from courses.models import CourseStudent, Rank
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
-
-from siteconfig.models import SiteConfig
-from tenant_schemas.utils import get_public_schema_name
-
-from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent
+from django_resized import ResizedImageField
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
+from siteconfig.models import SiteConfig
+from tenant_schemas.utils import get_public_schema_name
 from utilities.models import RestrictedFileField
 
 
@@ -79,7 +78,7 @@ class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    avatar = ResizedImageField(size=[256, 256], upload_to='avatars/', null=True, blank=True, force_format='JPEG')
     first_name = models.CharField(max_length=50, null=True, blank=False,
                                   help_text='Use the first name that matches your school records.')
     last_name = models.CharField(max_length=50, null=True, blank=False,
@@ -103,15 +102,15 @@ class Profile(models.Model):
     # Student options
     get_announcements_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published." # noqa
+        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published."  # noqa
     )
     get_notifications_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day." # noqa
+        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day."  # noqa
     )
     get_messages_by_email = models.BooleanField(
         default=True,
-        help_text="If your teacher sends you a message, get an instance email." # noqa
+        help_text="If your teacher sends you a message, get an instance email."  # noqa
     )
     visible_to_other_students = models.BooleanField(
         default=False, help_text="Your marks will be visible to other students through the student list.")
@@ -340,7 +339,7 @@ class Profile(models.Model):
         # TODO: Fix this laziness
         try:
             return self.xp_cached - self.rank().xp
-        except: # noqa
+        except:  # noqa
             # TODO
             return 0
 
