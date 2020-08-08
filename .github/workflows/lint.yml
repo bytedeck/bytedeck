@@ -1,0 +1,15 @@
+name: Lint
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    name: Lint with Flake8
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - uses: tonybajan/flake8-check-action@v1.0.0
+      with:
+        path: src
+        ignore: W291,E216,W504,W503,E126,W293
+        maxlinelength: 150
