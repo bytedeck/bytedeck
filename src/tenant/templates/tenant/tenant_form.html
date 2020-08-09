@@ -31,7 +31,7 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="modalProgressLabel">Generating your Deck...</h5>
+          <h5 class="modal-title" id="modalProgressLabel">Generating the deck: <strong><span id="urlSpan" ></span></strong></h5>
         </div>
         <div class="modal-body">
           <p>This may take a moment.</p>
@@ -48,8 +48,12 @@
     document.getElementById("submitBtn").addEventListener("click", function(){
       // Allow a delay before showing the progress bar.  This prevents it from flashing up when the form invalidates.
       setTimeout(function() {
-          progressModal.show()
-          animateProgressBar()
+        // set the new deck url in the title
+        tenantName = document.getElementById('id_name').value;
+        document.getElementById('urlSpan').innerHTML = tenantName + ".bytedeck.com";
+
+        progressModal.show();
+        animateProgressBar();
       }, 500);
     }); 
 
