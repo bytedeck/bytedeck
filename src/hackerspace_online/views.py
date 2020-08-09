@@ -7,6 +7,8 @@ from siteconfig.models import SiteConfig
 
 @allow_non_public_view
 def home(request):
+    """Public view never reaches here.  See allow_non_public_view decorator/mixin for redirection for public tenant
+    """
     if request.user.is_staff:
         return redirect('quests:approvals')
 
@@ -26,3 +28,7 @@ class FaviconRedirectView(AllowNonPublicViewMixin, RedirectView):
 
     def get_redirect_url(self, *args, **kwargs):
         return SiteConfig.get().get_favicon_url()
+
+
+def landing(request):
+    return render(request, "index.html", {})
