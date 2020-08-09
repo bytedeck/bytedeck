@@ -83,6 +83,9 @@
     {% include "quest_manager/pagination_controls.html" %}
   {% endwith %}
 
+{% elif user.block_set.count == 0 %}
+  <p>You are not assigned as the teacher for any blocks yet.</p>
+  <button>Join a block</button>
 {% else %}
   <p>None.</p>
 {% endif %}
