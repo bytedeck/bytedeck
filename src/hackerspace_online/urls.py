@@ -48,6 +48,7 @@ urlpatterns += [
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
     url(r'^config/', include('siteconfig.urls', namespace='config')),
+    url(r'^decks/', include('tenant.urls', namespace='decks')),
 
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
