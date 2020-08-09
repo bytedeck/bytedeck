@@ -126,6 +126,8 @@ def end_active_semester(request):
         semester_warnings.get(sem, semester_warnings['success']))
 
     return redirect('config:site_config_update_own')
+
+
 @allow_non_public_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
