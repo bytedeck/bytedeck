@@ -2,8 +2,7 @@ import functools
 
 from django.db import connection
 from django.http import Http404
-from django.shortcuts import redirect
-from django.urls import reverse
+from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from tenant_schemas.utils import get_public_schema_name
 
@@ -16,7 +15,7 @@ def allow_non_public_view(f):
             return f(*args, **kwargs)
         elif request.path == '/':
             # TEMPORARY: redirect home page of the public tenant to admin site until we create a landing page.
-            return redirect(reverse('admin:index'))
+            return render(request, "index.html", {})
 
         raise Http404("Page not found!")
     return wrapper
