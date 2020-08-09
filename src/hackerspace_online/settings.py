@@ -62,6 +62,8 @@ SHARED_APPS = (
 
     'django.contrib.sites',
 
+    'captcha',
+
     'grappelli',
     'crispy_forms',
     'bootstrap_datepicker_plus',
@@ -145,6 +147,9 @@ INSTALLED_APPS = (
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
+
+    # https://pypi.org/project/django-recaptcha/
+    'captcha',
 
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
@@ -358,6 +363,18 @@ TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. 
 SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+
+
+# RECAPTCHA #######################################################
+
+recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
+if recaptcha_keys_available:
+    RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
+    RECAPTCHA_PRIVATE_KEY = env('RECAPTCHA_PRIVATE_KEY')
+else:
+    # Google provides test keys which are set as the default for RECAPTCHA_PUBLIC_KEY and RECAPTCHA_PRIVATE_KEY. 
+    # These cannot be used in production since they always validate to true and a warning will be shown on the reCAPTCHA.
+    pass
 
 
 # AUTHENTICATION ##################################################
@@ -586,6 +603,11 @@ SUMMERNOTE_CONFIG = {
 if DEBUG:
 
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
+    # Google provides default keys in development that always validate, but results in this error:
+    # captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making 
+    # use of the Google test keys and will not behave as expected in a production environment
+    SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
