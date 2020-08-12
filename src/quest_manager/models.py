@@ -142,8 +142,6 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
-    def debug(self):
-        self.debug_object_list = list(self)
 
     def exclude_hidden(self, user):
         """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
@@ -154,6 +152,7 @@ class QuestQuerySet(models.query.QuerySet):
         Otherwise, return full qs """
         blocking_quests = self.filter(blocking=True)
         if user:
+            # Check the student's submissions in progress.
             blocking_subs_in_progress = QuestSubmission.objects.all_not_completed(user=user, blocking=False).filter(quest__blocking=True)  # noqa
         else:
             blocking_subs_in_progress = False
@@ -559,6 +558,14 @@ class QuestSubmissionManager(models.Manager):
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
+        """ Returns a queryset of all QuestSubmissions that are currently in progress.
+        This could be quests a student has started, or ones they have completed but have been returned.
+
+        Keyword Arguments:
+            user {User} -- if not provided, then will include in progress quests for all students. (default: {None})
+            active_semester_only {bool} -- (default: {True})
+            blocking {bool} -- Whether or not to account for blokcing quests.  This is only used if a User is provided. (default: {False})
+        """
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
 
