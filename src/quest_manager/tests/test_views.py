@@ -699,9 +699,9 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 
-        class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, CreateView)
-        class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView)
-        class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, UpdateView)
+        class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, CreateView)
+        class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView)
+        class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateView)
     """
 
     def setUp(self):

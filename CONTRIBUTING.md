@@ -31,7 +31,7 @@ Pull requests are the best way to propose changes to the codebase (we use [Githu
 
 ### Contributing with Multitenant Architecture in Mind:
 When contributing to this repo, you need to keep in mind its multi-tenant architecture.  Here are a few quick tips:
-* **Views**: If you create a new view, class-based views need to use the `AllowNonPublicViewMixin` and function-based views need the `@allow_non_public_view` decorator (see tenants/views.py for definitions for these two)
+* **Views**: If you create a new view, class-based views need to use the `NonPublicOnlyViewMixin` and function-based views need the `@non_public_only_view` decorator (see tenants/views.py for definitions for these two)
 * **Admin**: Model admin classes must all use the `NonPublicSchemaOnlyAdminAccessMixin`
 * **Tests**: All(?) tests need to inherit from the [`TenantTestCase`](https://django-tenant-schemas.readthedocs.io/en/latest/test.html) and use the `TenantClient`
 * **SiteConfig**: To get the SiteConfig singleton of a specific tenant, use the class method `SiteConfig.get()`

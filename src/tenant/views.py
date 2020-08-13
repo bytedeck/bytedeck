@@ -17,6 +17,7 @@ def public_only_view(f):
     """A decorator that causes a view to raise Http404() if it is accessed by a non-public tenant"""
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
+        print(connection.schema_name)
         if connection.schema_name == get_public_schema_name():
             return f(*args, **kwargs)
         else:
@@ -31,7 +32,7 @@ class PublicOnlyViewMixin:
         return super().dispatch(*args, **kwargs)
 
 
-def allow_non_public_view(f):
+def non_public_only_view(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         request = args[0]
@@ -46,9 +47,9 @@ def allow_non_public_view(f):
     return wrapper
 
 
-class AllowNonPublicViewMixin:
+class NonPublicOnlyViewMixin:
 
-    @method_decorator(allow_non_public_view)
+    @method_decorator(non_public_only_view)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
 

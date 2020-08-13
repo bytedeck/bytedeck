@@ -7,12 +7,12 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, HttpResponseRedirect, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from tenant.views import allow_non_public_view
+from tenant.views import non_public_only_view
 
 from .models import Notification
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def list(request):
     notifications_list = Notification.objects.all_for_user(request.user)
@@ -34,7 +34,7 @@ def list(request):
     return render(request, 'notifications/list.html', context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def list_unread(request):
     notifications = Notification.objects.all_unread(request.user)
@@ -44,7 +44,7 @@ def list_unread(request):
     return render(request, "notifications/list.html", context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def read_all(request):
     notifications = Notification.objects.all_unread(request.user)
@@ -57,7 +57,7 @@ def read_all(request):
     return redirect('notifications:list')
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def read(request, id):
     try:
@@ -78,7 +78,7 @@ def read(request, id):
         raise HttpResponseRedirect(reverse('notifications:list'))
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax(request):
     if request.is_ajax() and request.method == "POST":
@@ -115,7 +115,7 @@ def ajax(request):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_mark_read(request):
     if request.is_ajax() and request.method == "POST":
