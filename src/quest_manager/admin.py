@@ -155,13 +155,14 @@ class QuestResource(resources.ModelResource):
             quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
-            parent_quest = Quest.objects.get(import_id=import_id)
+        if not dry_run:
+            for data_dict in dataset.dict:
+                import_id = data_dict["import_id"]
+                parent_quest = Quest.objects.get(import_id=import_id)
 
-            self.generate_simple_prereqs(parent_quest, data_dict)
+                self.generate_simple_prereqs(parent_quest, data_dict)
 
-            self.generate_campaign(parent_quest, data_dict)
+                self.generate_campaign(parent_quest, data_dict)
 
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
