@@ -1,3 +1,4 @@
+from django_select2.forms import Select2Widget, ModelSelect2Widget
 from datetime import date
 
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
@@ -24,13 +25,24 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
 
 class QuestForm(forms.ModelForm):
 
-    new_quest_prerequisite = forms.ModelChoiceField(
-        queryset=Quest.objects.all(), 
+    new_quest_prerequisite = forms.ChoiceField(
         # to_field_name="name",
         required=False,
+        widget=ModelSelect2Widget(
+            model=Quest,
+            queryset=Quest.objects.all(),
+            search_fields=['name__icontains'],
+            attrs={'data-width': '100%'}
+        ),
     )
-    new_badge_prerequisite = forms.ModelChoiceField(
-        queryset=Badge.objects.all(),
+
+    new_badge_prerequisite = forms.ChoiceField(
+        widget=ModelSelect2Widget(
+            model=Badge,
+            queryset=Badge.objects.all(),
+            search_fields=['name__icontains'],
+            attrs={'data-width': '100%'},
+        ),
         # to_field_name="name",
         required=False,
     )
@@ -70,6 +82,9 @@ class QuestForm(forms.ModelForm):
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
+            'campaign': Select2Widget(attrs={'data-width': '100%'}),
+            'common_data': Select2Widget(attrs={'data-width': '100%'}),
+            'specific_teacher_to_notify': Select2Widget(attrs={'data-width': '100%'})
         }
 
     def __init__(self, *args, **kwargs):
@@ -128,6 +143,7 @@ class QuestForm(forms.ModelForm):
                     AccordionGroup(
                         "Advanced",
                         'repeat_per_semester',
+                        'specific_teacher_to_notify',
                         'blocking',
                         'hideable',
                         'sort_order',

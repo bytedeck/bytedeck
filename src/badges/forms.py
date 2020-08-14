@@ -50,5 +50,6 @@ class BulkBadgeAssertionForm(forms.Form):
                 'last_name__istartswith',
                 'preferred_name__istartswith',
                 'user__username__istartswith',
-            ]
+            ],
+            attrs={'data-width': '100%'}
         )
