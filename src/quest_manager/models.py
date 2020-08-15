@@ -57,7 +57,7 @@ class XPItem(models.Model):
     visible_to_students = models.BooleanField(default=True)
     archived = models.BooleanField(default=False,
                                    help_text='Setting this will prevent it from appearing in admin quest lists.  '
-                                             'To un-archive a quest, you will need to access it through Django Admin.')
+                                             'To un-archive a quest, you will need to access it through Site Administration.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     repeat_per_semester = models.BooleanField(
