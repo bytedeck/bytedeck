@@ -167,9 +167,10 @@ class QuestResource(resources.ModelResource):
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
-    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
-                    'common_data', 'campaign', 'editor')
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor']
+    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
+                    'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
+                   'specific_teacher_to_notify', 'common_data', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description']
     inlines = [
         # TaggedItemInline
