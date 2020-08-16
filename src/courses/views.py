@@ -6,11 +6,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
-                              redirect, render)
+                              redirect, render, reverse)
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
-
 from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
@@ -60,28 +60,20 @@ class CourseStudentList(NonPublicOnlyViewMixin, ListView):
     model = CourseStudent
 
 
-@non_public_only_view
-@staff_member_required
-def add_course_student(request, user_id):
-    if int(user_id) > 0:
-        user = get_object_or_404(User, pk=user_id)
-    else:
-        user = None
+@method_decorator(staff_member_required, name='dispatch')
+class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
+    model = CourseStudent
+    form_class = CourseStudentForm
+    template_name = 'courses/coursestudent_form.html'
 
-    form = CourseStudentForm(request.POST or None)
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        user = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        kwargs['instance'] = CourseStudent(user=user)
+        return kwargs
 
-    if form.is_valid():
-        new_course_student = form.save(commit=False)
-        new_course_student.user = user
-        new_course_student.save()
-        # messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-        return redirect('profiles:profile_detail', pk=user.profile.id)
-
-    context = {
-        "user": user,
-        "form": form,
-    }
-    return render(request, 'courses/coursestudent_form.html', context)
+    def get_success_url(self):
+        return reverse('profiles:profile_detail', args=(self.object.user.profile.id, ))
 
 
 class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateView):
