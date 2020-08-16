@@ -7,7 +7,6 @@ from courses.models import MarkDistributionHistogram
 app_name = 'courses'
 
 urlpatterns = [
-    url(r'^$', views.CourseStudentList.as_view(), name='list'),
     url(r'^create/$', views.CourseStudentCreate.as_view(), name='create'),
     url(r'^add/(?P<user_id>[0-9]+)/$', views.CourseAddStudent.as_view(), name='add'),
     url(r'^ranks/$', views.RankList.as_view(), name='ranks'),

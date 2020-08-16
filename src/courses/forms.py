@@ -28,21 +28,3 @@ class CourseStudentForm(forms.ModelForm):
         fields = ['semester', 'block', 'course', 'grade_fk']
     #         exclude = ['user', 'active']
     #         # widgets = {'user': forms.HiddenInput()}
-
-    # class CourseStudentForm(forms.ModelForm):
-    #
-    #     class Meta:
-    #         model = CourseStudent
-    #         exclude = ['user', 'active']
-    #
-    #     def full_clean(self):
-    #         super(CourseStudentForm, self).full_clean()
-    #         try:
-    #             self.instance.validate_unique()
-    #         except forms.ValidationError as e:
-    #             self._update_errors(e)
-
-    # def clean(self):
-    #     cleaned_data = super(CourseStudentForm, self).clean()
-    #     self.validate_unique()
-    #     return cleaned_data

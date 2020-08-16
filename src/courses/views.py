@@ -3,6 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
@@ -52,12 +53,8 @@ def mark_calculations(request, user_id=None):
     return render(request, template_name, context)
 
 
-class RankList(NonPublicOnlyViewMixin, ListView):
+class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Rank
-
-
-class CourseStudentList(NonPublicOnlyViewMixin, ListView):
-    model = CourseStudent
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -76,7 +73,7 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         return reverse('profiles:profile_detail', args=(self.object.user.profile.id, ))
 
 
-class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateView):
+class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
@@ -88,23 +85,10 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateVie
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
 
-        # def get_initial(self):
-        #     data = { 'user': self.request.user }
-        #     return data
-
-        # def form_valid(self, form):
-        #     form.instance.user = self.request.user
-        #     return super(CourseStudentCreate, self).form_valid(form)
-
-
-#
 
 @non_public_only_view
 @staff_member_required
 def end_active_semester(request):
-    if not request.user.is_superuser:
-        return HttpResponse(status=401)
-
     sem = Semester.objects.complete_active_semester()
     semester_warnings = {
         Semester.CLOSED: 'Semester is already closed, no action taken.',
