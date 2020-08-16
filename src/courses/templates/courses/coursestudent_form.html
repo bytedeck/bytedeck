@@ -5,7 +5,7 @@
 
 {% block content %}
 
-<p>{% if user %}Adding a course for {{user}}
+<p>{% if form.instance.user and form.instance.user != user %}Adding a course for {{form.instance.user}}
 {% else %}Please enter information about your course as it appears on your schedule
 {% endif %}
 </p>
