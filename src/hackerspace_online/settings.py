@@ -303,6 +303,11 @@ DATABASE_ROUTERS = (
     'tenant_schemas.routers.TenantSyncRouter',
 )
 
+# ADMIN
+DEFAULT_SUPERUSER_USERNAME = env('DEFAULT_SUPERUSER_USERNAME', default='admin')
+DEFAULT_SUPERUSER_PASSWORD = env('DEFAULT_SUPERUSER_PASSWORD', default='admin')
+DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@admin.com')
+
 # EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
