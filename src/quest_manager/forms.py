@@ -25,24 +25,24 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
 
 class QuestForm(forms.ModelForm):
 
-    new_quest_prerequisite = forms.ChoiceField(
+    new_quest_prerequisite = forms.ModelChoiceField(
         # to_field_name="name",
         required=False,
+        queryset=Quest.objects.all(),
         widget=ModelSelect2Widget(
             model=Quest,
-            queryset=Quest.objects.all(),
             search_fields=['name__icontains'],
             attrs={'data-width': '100%'}
         ),
     )
 
-    new_badge_prerequisite = forms.ChoiceField(
+    new_badge_prerequisite = forms.ModelChoiceField(
         widget=ModelSelect2Widget(
             model=Badge,
-            queryset=Badge.objects.all(),
             search_fields=['name__icontains'],
             attrs={'data-width': '100%'},
         ),
+        queryset=Badge.objects.all(),
         # to_field_name="name",
         required=False,
     )
