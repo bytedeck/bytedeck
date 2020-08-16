@@ -138,12 +138,11 @@ class Profile(models.Model):
     #################################
 
     def __str__(self):
-        profile = ""
-        if self.first_name:
-            profile = self.first_name
+        if self.user.first_name:
+            profile = self.user.first_name
             if self.preferred_name:
                 profile += " (" + self.preferred_name + ")"
-            profile += " " + self.last_name
+            profile += " " + self.user.last_name
             if self.alias:
                 profile += ", aka " + self.alias_clipped()
         else:
@@ -157,8 +156,8 @@ class Profile(models.Model):
         # new students won't have name info yet
         if self.preferred_name:
             return self.preferred_name
-        elif self.first_name:
-            return self.first_name
+        elif self.user.first_name:
+            return self.user.first_name
         else:
             return ""
 
@@ -169,8 +168,8 @@ class Profile(models.Model):
 
     def preferred_full_name(self):
         name = self.get_preferred_name()
-        if self.last_name:
-            name += " " + self.last_name
+        if self.user.last_name:
+            name += " " + self.user.last_name
         return name if name else str(self.user)
 
     def public_name(self):
@@ -186,10 +185,7 @@ class Profile(models.Model):
         return name
 
     def formal_name(self):
-        if self.first_name and self.last_name:
-            return self.first_name + " " + self.last_name
-        else:
-            return ""
+        return self.user.get_full_name()
 
     def get_absolute_url(self):
         return reverse('profiles:profile_detail', kwargs={'pk': self.id})
@@ -376,16 +372,6 @@ def create_profile(sender, **kwargs):
 
         if kwargs["created"]:
             new_profile = Profile(user=current_user)
-
-            # if user's name matches student number (e.g 9912345), set student number:
-            # pattern = re.compile(Profile.student_number_regex_string)
-            # if pattern.match(current_user.get_username()):
-            #     new_profile.student_number = int(current_user.get_username())
-
-            # set first and last name on the profile.  This should be removed and just use the first and last name
-            # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
-            new_profile.first_name = current_user.first_name
-            new_profile.last_name = current_user.last_name
 
             new_profile.save()
 
