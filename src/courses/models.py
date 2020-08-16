@@ -467,8 +467,8 @@ class CourseStudent(models.Model):
             + ": " + str(self.course) \
             + " " + str(self.grade_fk.value) if self.grade_fk else ""
 
-    def get_absolute_url(self):
-        return reverse('courses:list')
+    # def get_absolute_url(self):
+    #     return reverse('courses:list')
         # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property

@@ -233,8 +233,8 @@ class CourseStudentModelTest(TenantTestCase):
         self.assertIsInstance(self.course_student, CourseStudent)
         # self.assertEqual(str(self.course), self.course.title)
 
-    def test_course_student_get_absolute_url(self):
-        self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
+    # def test_course_student_get_absolute_url(self):
+    #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
     @patch('courses.models.Semester.fraction_complete')
     def test_calc_mark(self, fraction_complete):
