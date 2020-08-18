@@ -452,11 +452,11 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def has_completion_date(self):
         return self.filter(time_completed__isnull=False)
 
-    def no_game_lab(self):
-        return self.filter(game_lab_transfer=False)
+    def grant_xp(self):
+        return self.filter(do_not_grant_xp=False)
 
-    def game_lab(self):
-        return self.filter(game_lab_transfer=True)
+    def dont_grant_xp(self):
+        return self.filter(do_not_grant_xp=True)
 
     def get_semester(self, semester):
         return self.filter(semester=semester)
@@ -530,7 +530,7 @@ class QuestSubmissionManager(models.Manager):
 
         if user is None:
             # Staff have a separate tab for skipped quests
-            qs = qs.no_game_lab()
+            qs = qs.grant_xp()
         else:
             qs = qs.get_user(user)
 
@@ -541,9 +541,9 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.get_completed_before(up_to_date)
 
         return qs
-        #     return self.get_queryset().approved().no_game_lab()
+        #     return self.get_queryset().approved().grant_xp()
         # return self.get_queryset().get_user(user).approved()
-        #     return self.get_queryset().approved().completed().no_game_lab()
+        #     return self.get_queryset().approved().completed().grant_xp()
         # return self.get_queryset().get_user(user).approved().completed()
 
     def all_skipped(self, user=None):
@@ -553,7 +553,7 @@ class QuestSubmissionManager(models.Manager):
                                )
 
         if user is None:
-            return qs.approved().completed().game_lab()
+            return qs.approved().completed().dont_grant_xp()
         return qs.get_user(user).approved().completed()
 
     # i.e In Progress
@@ -674,7 +674,7 @@ class QuestSubmissionManager(models.Manager):
             return None
 
     def calculate_xp(self, user):
-        total_xp = self.all_approved(user).no_game_lab().aggregate(Sum('quest__xp'))
+        total_xp = self.all_approved(user).grant_xp().aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
         if xp is None:
             xp = 0
@@ -682,7 +682,7 @@ class QuestSubmissionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # print("submission.calculate_xp_to_date date: " + str(date))
-        qs = self.all_approved(user, up_to_date=date).no_game_lab()
+        qs = self.all_approved(user, up_to_date=date).grant_xp()
 
         total_xp = qs.aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
@@ -743,8 +743,7 @@ class QuestSubmission(models.Model):
     time_returned = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
-    # all references to gamelab changed to "skipped"
-    game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
+    do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
     semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
@@ -793,7 +792,7 @@ class QuestSubmission(models.Model):
         self.is_completed = True  # might have been false if returned
         self.is_approved = True
         self.time_approved = timezone.now()
-        self.game_lab_transfer = transfer
+        self.do_not_grant_xp = transfer
         self.save()
         # update badges
         BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
@@ -802,7 +801,7 @@ class QuestSubmission(models.Model):
     def mark_returned(self):
         self.is_completed = False
         self.is_approved = False
-        self.game_lab_transfer = False
+        self.do_not_grant_xp = False
         self.time_returned = timezone.now()
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP

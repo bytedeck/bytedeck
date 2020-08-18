@@ -29,8 +29,8 @@ class PrerequisitesSignalsTest(TenantTestCase):
         Updating of a badge assertion should...
         """
         sem = baker.make(Semester)  # not sure why model baker doesn't create this automatically
-        badge_assertion = baker.make(BadgeAssertion, user=self.student, game_lab_transfer=True, semester=sem)
-        badge_assertion.game_lab_transfer = False
+        badge_assertion = baker.make(BadgeAssertion, user=self.student, do_not_grant_xp=True, semester=sem)
+        badge_assertion.do_not_grant_xp = False
         badge_assertion.save()
         self.assertEqual(task.call_count, 2)
 
