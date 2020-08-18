@@ -2,10 +2,10 @@
 from django.http import HttpResponse, Http404
 from django.test import RequestFactory
 
-# from mock import patch
+from mock import patch, PropertyMock
 
 from tenant_schemas.test.cases import TenantTestCase
-# from tenant_schemas.utils import get_public_schema_name
+from tenant_schemas.utils import get_public_schema_name
 
 # from tenant_schemas.test.client import TenantClient
 
@@ -15,46 +15,45 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from tenant.views import public_only_view, non_public_only_view
 
 
+# Create a views for testing the mixins/decorators
+@public_only_view
+def view_accessible_by_public_only(request):
+    return HttpResponse(status=200)
+
+
+@non_public_only_view
+def view_accessible_by_non_public_only(request):
+    return HttpResponse(status=200)
+
+
 class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        # self.client = TenantClient(self.tenant)
+        # generate an empty request instance so we can call our views directly
+        self.request = self.factory.get('/does/not/exist/')
 
-    def test_public_only_view(self):
-
-        # Create a view for testing the mixin
-        @public_only_view
-        def view_accessible_by_public_only(request):
-            return HttpResponse(status=200)
-
-        # generate a request instance so we can call our view directly
-        request = self.factory.get('/')
-
-        # We're in the test tenant, so shouldn't be able to access:
+    def test_public_only_view__non_public_tenant(self):
+        """Non-public tenant can't access views with the `public_only_view` decorator"""
+        # We're in the test tenant by default, so shouldn't be able to access:
         with self.assertRaises(Http404):
-            view_accessible_by_public_only(request)
-
-        # patch public tenant connection (mock the object?)  HOW?
-        # with patch('tenant.views.connection.schema_name', return_value=get_public_schema_name()):
-        # with patch.object('tenant.views.connection', 'schema_name', get_public_schema_name()):
-        #     response = view_accessible_by_public_only(request)  
-        #     self.assertEqual(response.status_code, 200)
-
-    def test_non_public_only_view(self):
-
-        # Create a view for testing the mixin
-        @non_public_only_view
-        def view_accessible_by_non_public_only(request):
-            return HttpResponse(status=200)
-
-        # generate a request instance so we can call our view directly
-        request = self.factory.get('/nowhere/')
-
-        # By default we are in the "test" tenant, so should be able to use the view
-        response = view_accessible_by_non_public_only(request)  
+            view_accessible_by_public_only(self.request)
+    
+    @patch('tenant.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
+    def test_public_only_view__public_tenant(self, mock_schema):
+        """Public tenant can access views with the `public_only_view` decorator"""
+        # we mocked the public tenant, so should be able to
+        response = view_accessible_by_public_only(self.request) 
         self.assertEqual(response.status_code, 200)
 
-        # Should NOT be able to access from the public tenant:
-        # Need to mock the connection
-        # with self.assertRaises(Http404):
-        #     view_accessible_by_non_public_only(request)
+    def test_non_public_only_view__non_public_tenant(self):
+        """Non-public tenant can access views with the `non_public_only_view` decorator"""
+        # By default we are in the "test" tenant, so should be able to use the view
+        response = view_accessible_by_non_public_only(self.request)  
+        self.assertEqual(response.status_code, 200)
+
+    @patch('tenant.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
+    def test_non_public_only_view__public_tenant(self, mock_schema):
+        """Public tenant can't access views with the `non_public_only_view` decorator"""
+        # We are mocking the public tenant
+        with self.assertRaises(Http404):
+            view_accessible_by_non_public_only(self.request)

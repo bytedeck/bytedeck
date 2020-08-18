@@ -3,7 +3,6 @@ from datetime import date, datetime, timedelta
 from courses.models import (Block, Course, CourseStudent, ExcludedDate, Grade,
                             MarkRange, Rank, Semester)
 from django.contrib.auth import get_user_model
-from django.shortcuts import reverse
 from django.utils import timezone
 from freezegun import freeze_time
 from mock import patch
