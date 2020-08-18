@@ -106,7 +106,7 @@
         {% for object in object_list %}
 
             <tr {% if request.user.is_staff %}
-                    {% if object.game_lab_transfer_process_on or object.banned_from_comments %}
+                    {% if object.not_earning_xp or object.banned_from_comments %}
                         class="warning"
                     {% elif object.gone_stale %}
                         class="danger"
@@ -168,11 +168,11 @@
                                class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
                                 <i class="fa fa-commenting-o"></i>
                             </a>
-                            <a href="{% url 'profiles:GameLab_toggle' object.id %}"
-                               title="{% if object.game_lab_transfer_process_on %}Turn quest skipping off
+                            <a href="{% url 'profiles:xp_toggle' object.id %}"
+                               title="{% if object.not_earning_xp %}Turn quest skipping off
                            {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"
                                class="btn btn-sm
-                        {% if object.game_lab_transfer_process_on %}btn-success{% else %}btn-default{% endif %}">
+                        {% if object.not_earning_xp %}btn-success{% else %}btn-default{% endif %}">
                                 <i class="fa fa-magic"></i>
                             </a>
                             <a href="/admin/auth/user/{{ object.user.id }}/password/" class="btn btn-sm btn-default"

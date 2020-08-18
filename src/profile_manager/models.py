@@ -95,7 +95,7 @@ class Profile(models.Model):
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
-    game_lab_transfer_process_on = models.BooleanField(default=False)
+    not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
     xp_cached = models.IntegerField(default=0)
 

@@ -805,7 +805,7 @@ def skip(request, submission_id):
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
     # also make sure it's the student who owns the submission
-    if (request.user.profile.game_lab_transfer_process_on and submission.user == request.user) or request.user.is_staff:
+    if (request.user.profile.not_earning_xp and submission.user == request.user) or request.user.is_staff:
 
         # add default comment to submission
         # origin_path = submission.get_absolute_url()
@@ -834,7 +834,7 @@ def skip(request, submission_id):
 @login_required
 def skipped(request, quest_id):
     """A combination of the start and complete views, but automatically approved
-    regardless, and game_lab_transfer = True
+    regardless, and do_not_grant_xp = True
     """
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
@@ -847,27 +847,6 @@ def skipped(request, quest_id):
         submission = new_sub
 
     return skip(request, submission.id)
-
-    # #make sure another user isn't hacking in with urls
-    # if submission.user != request.user and not request.user.is_staff:
-    #     return redirect('quests:quests')
-    #
-    # #add default comment to submission
-    # origin_path = submission.get_absolute_url()
-    # comment_text = "(GameLab transfer - no XP for this quest)"
-    # comment_new = Comment.objects.create_comment(
-    #     user = request.user,
-    #     path = origin_path,
-    #     text = comment_text,
-    #     target = submission,
-    # )
-    #
-    # #approve quest automatically, and mark as transfer.
-    # submission.mark_completed() ###################
-    # submission.mark_approved(transfer = True)
-    #
-    # messages.success(request, ("Transfer Successful. No XP was granted for this quest."))
-    # return redirect("quests:quests")
 
 
 @non_public_only_view

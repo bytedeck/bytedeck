@@ -180,9 +180,9 @@ def tour_complete(request):
 
 @non_public_only_view
 @staff_member_required(login_url='/')
-def GameLab_toggle(request, profile_id):
+def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
-    profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
+    profile.not_earning_xp = not profile.not_earning_xp
     profile.save()
     return redirect_to_previous_page(request)
 

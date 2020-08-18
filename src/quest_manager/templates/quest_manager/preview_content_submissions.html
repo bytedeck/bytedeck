@@ -18,7 +18,7 @@
             <i class="fa fa-fw fa-play-circle"></i><span class="visible-lg-inline-block icon-text">Continue</span>
       </a>
 
-      {% if request.user.profile.game_lab_transfer_process_on %}
+      {% if request.user.profile.not_earning_xp %}
         <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
       {% endif %}
     {% else %}
