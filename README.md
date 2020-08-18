@@ -21,13 +21,13 @@ The instructions assume you are using Ubuntu (or another Debian based linux dist
 Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
 https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
 
-By the end, you should be able to run docker's test image:  
+By the end, you should be able to run docker's test image:
 `$ sudo docker run hello-world`
 
 #### Install docker-compose
 `sudo apt install docker-compose`
 
-Add yourself to the docker group:  
+Add yourself to the docker group:
 `sudo usermod -aG docker $USER`
 
 
@@ -43,49 +43,52 @@ Add yourself to the docker group:
 
 #### Clone your fork
 
-1. Open the directory where you want to put the code.  I like to create a new directory for my code projects called Developer:  
+1. Open the directory where you want to put the code.  I like to create a new directory for my code projects called Developer:
 `mkdir ~/Developer`
-2. Move into the parent directory of the project:  
+2. Move into the parent directory of the project:
 `cd ~/Developer`
-3. Go to your forked repository in github
-4. Click "Clone or download" and copy the url, then paste it into the command:  
+3. Go to your forked repository in GitHub
+4. Click "Clone or download" and copy the url, then paste it into the command:
 `git clone yoururlhere`
 5. This will download the project into ~/Developer/bytedeck/
 
 ### Running the Code
 
 #### Initial setup
-This will create your docker containers and initialize the database by running migrations and creating some inital data that is required:
+This will create your docker containers and initialize the database by running migrations and creating some initial data that is required:
 
 1. Open a terminal
-2. Move into the project directory:  
+2. Move into the project directory:
 `cd ~/Developer/bytedeck`
-3. Build the containers (db, redis, celery, and celery-beat):  
+3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize
+`cp .env.example .env`
+4. Build the containers (db, redis, celery, and celery-beat):
 `docker-compose build`
-4. Start the postgres database container (db) in the background/daemonized (-d)  
+5. Start the postgres database container (db) in the background/daemonized (-d)
 `docker-compose up -d db`
-5. For development, let's run the django app in a virtual environment instead of using the web container:
-   1. Create a python virtual environment (we'll put ours in a venv directory):   
+6. For development, let's run the django app in a virtual environment instead of using the web container:
+   1. Create a python virtual environment (we'll put ours in a venv directory):
    `virtualenv venv --python=python3.8`
-   2. Enter the virtual environment:  
+   2. Enter the virtual environment:
    `source venv/bin/activate`
-   3. Install our requirements:  
+   3. Install our requirements:
    `pip install -r requirements.txt`
-   3. Copy the example environment file to the one you'll be using.  Docker-compose and django will both be lookign for a `.env` files with various settings that you can customize:  
+   4. Copy the example environment file to the one you'll be using.  Docker-compose and django will both be looking for a `.env` files with various settings that you can customize:
    `cp .env.example .env`
-   3. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):  
+   5. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):
    `./src/manage.py migrate_schemas --shared`
-   4. Run the app ot make sure you don't get any errors yet, with:  
+   6. Run the app to make sure you don't get any errors yet, with:
    `./src/manage.py runserver`
-6. Now that we've migrated, run a setup script to create the public tenant and a superuser, this will run through the web container:  
-`bash init_public_schema.sh`
-7. You should now get a 404 page (until we create a lnading page) at http://localhost:8000
-8. But you should be able to log in to the admin site!  http://localhost:8000/admin/
+7. Now that we've migrated, run a management command to create the public tenant and a superuser:
+`./src/manage.py initdb`
+8. You should now get a 404 page (until we create a landing page) at http://localhost:8000
+9. But you should be able to log in to the admin site!  http://localhost:8000/admin/
    - user: admin
-   - password: hellonepal
-9. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up):   
-`docker-compose up celery celery-beat` 
-10. To view errors in the containers when they are running in the background, you can use `docker-compose logs`
+   - password: admin (this is defined in DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
+
+10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up):
+`docker-compose up celery celery-beat`
+11. To view errors in the containers when they are running in the background, you can use `docker-compose logs`
 
 ### Creating a Tenant
 If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
@@ -96,7 +99,7 @@ If everything has worked so far, you should now be able to create your own byted
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
    - user: admin
    - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
-4. Now you should be in your own Hackerspace site!
+4. Now you should be in your own bytedeck site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
 ### TODO: Installing more Sample Data <-- NOT SETUP YET
@@ -106,7 +109,7 @@ Once we DO make it, this is how you'd install (leaving here so I don't forget =)
 
 Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
 
-1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated):  
+1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated):
 `./src/manage.py tenant_command shell`
 2. Type `?` to see a list of tenants you've made.  You should have at least one that is not "public".  Select it by entering it's name (without the "- localhost" part).
 3. Inside the shell, execute the following commands:
@@ -114,20 +117,20 @@ Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/late
    from django.core.management import call_command
    call_command('loaddata', 'src/tenant_specific_data.json')
    ```
-4. use Ctrl + D or `exit()` to close the Python shell. 
+4. use Ctrl + D or `exit()` to close the Python shell.
 
 ### Running Tests and Checking Code Style
 You can run tests either locally, or through the web container:
-1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):  
+1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):
 `./src/manage.py test src && flake8 src`
 2. Or run via the web container (assuming it's running. If not, change `exec` to `run`)
 `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
-3. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:  
+3. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
 `./src/manage.py test src --parallel --failfast && flake8 src`
 
 ### Advanced: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
-1. Run the pg-admin container:  
+1. Run the pg-admin container:
 `docker-compose up pg-admin`
 2. Log in:
    - url: [localhost:8080](http://localhost:8080)
@@ -135,7 +138,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
    - password: password  (or whatever you changed this to in you `.env` file)
 3. Click "Add New Server"
 4. Give it any Name you want
-5. In the Connection tab set:  
+5. In the Connection tab set:
    - Host name/address: db
    - Port: 5432
    - Maintenance database: postgres
@@ -180,4 +183,4 @@ For full details on code contributions, please see [CONTRIBUTING.md](https://git
 11. Start work on another feature by checking out the develop branch again: `git checkout develop`
 12. Start again at Step 3 and repeat!
 
-If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html). 
+If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
