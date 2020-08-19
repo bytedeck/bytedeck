@@ -927,7 +927,18 @@ div.btn-group.action-btn-group {
 
 }
 
+/*************** select2 ****************/
+.select2 {
+    width: 100% !important;
+}
 
+.select2-selection--single {
+    height: 34px !important;
+}
+
+.select2-selection__clear {
+    font-size: 1.2em; /* increase size of little `x` button */
+}
 
 /*************** SECRET ****************/
 

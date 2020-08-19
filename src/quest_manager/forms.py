@@ -32,7 +32,6 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Quest,
             search_fields=['name__icontains'],
-            attrs={'data-width': '100%'}
         ),
     )
 
@@ -40,7 +39,6 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Badge,
             search_fields=['name__icontains'],
-            attrs={'data-width': '100%'},
         ),
         queryset=Badge.objects.all(),
         # to_field_name="name",
@@ -55,7 +53,7 @@ class QuestForm(forms.ModelForm):
                   'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
-                  'specific_teacher_to_notify', 'blocking', 
+                  'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
 
@@ -82,9 +80,9 @@ class QuestForm(forms.ModelForm):
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
-            'campaign': Select2Widget(attrs={'data-width': '100%'}),
-            'common_data': Select2Widget(attrs={'data-width': '100%'}),
-            'specific_teacher_to_notify': Select2Widget(attrs={'data-width': '100%'})
+            'campaign': Select2Widget(),
+            'common_data': Select2Widget(),
+            'specific_teacher_to_notify': Select2Widget()
         }
 
     def __init__(self, *args, **kwargs):
