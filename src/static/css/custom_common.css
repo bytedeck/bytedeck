@@ -391,6 +391,19 @@ ol > ol > ol {
     margin-bottom: 10px;
 }
 
+/************ ANNOUNCEMENT *******************/
+
+.announcement-dropdown {
+    display: inline-block;
+    bottom: 8px;
+    text-shadow: none;
+}
+
+.announcement-content {
+    overflow-wrap: break-word;
+}
+
+
 /*********** Bootstrap BADGES **************************/
 
 .badge.list-group-item-badge {

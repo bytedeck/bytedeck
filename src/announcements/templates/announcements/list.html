@@ -34,6 +34,13 @@
     });
 
   </script>
+  <script>
+    // Announcements
+    var announcement_actions = document.querySelectorAll('.announcement-dropdown a')
+    $('.announcement-dropdown a').click((e) => {
+        e.stopPropagation();
+    });
+  </script>
 {% endblock %}
 
 {% block content %}
@@ -68,15 +75,33 @@
         {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
         {{object.title}}
         <!-- </a> -->
-        <small class="pull-right">{{object.datetime_released.date|date:'D, N j, Y'}}
-          <a href="#"
-             title="Copy permalink"
-             class="text-muted permalink"
-             data-clipboard-text="{{ object.get_absolute_url }}#{{ object.id }}"
-          >
-           <i class="fa fa-clipboard"></i>
-         </a>
+        <small>
+          <span class="announcement-date">{{object.datetime_released.date|date:'D, N j, Y'}}</span>
         </small>
+        <div class="dropdown dropdown-hover announcement-dropdown pull-right">
+          <button class="btn btn-default dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
+            aria-haspopup="true" aria-expanded="false">
+            <i class="fa fa-ellipsis-v"></i>
+          </button>
+          <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
+            {% if request.user.is_staff %}
+            <li><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
+            <li><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
+            {% if object.draft %}
+              <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
+            {% endif %}
+            <li role="separator" class="divider"></li>
+            {% endif %}
+            <li>
+              <a href="#"
+                 title="Copy permalink"
+                 class="text-muted permalink"
+                 data-clipboard-text="{{ object.get_absolute_url }}#{{ object.id }}">
+                Copy
+              </a>
+            </li>
+          </ul>
+        </div>
       </h4>
     </div>
     <div id="collapse{{object.id}}"
@@ -84,20 +109,8 @@
       role="tabpanel" aria-labelledby="heading{{object.id}}">
       <ul class="list-group">
         <li class="list-group-item announcement-content">
-          {% if request.user.is_staff %}
-          <div class="announcement-button-group">
-            <a class="btn btn-danger" href="{% url 'announcements:delete' object.id %}" role="button">Delete</a>
-            <a class="btn btn-warning" href="{% url 'announcements:update' object.id %}" role="button">Edit</a>
-            {% if object.draft %}
-            <a class="btn btn-success" href="{% url 'announcements:publish' object.id %}" role="button"
-               title="Publish and broadcast this announcement to students.">Publish</a>
-            {% else %}
-            <a class="btn btn-primary" href="{% url 'announcements:copy' object.id %}" role="button">Copy</a>
-            {% endif %}
-          </div>
-          {% endif %}
           <!-- <i class="fa fa-quote-left fa-2x pull-left"></i> -->
-          <div class="clearfix">
+          <div class="clearfix announcement-content">
             {{object.content|safe}}
           </div>
         </li>
