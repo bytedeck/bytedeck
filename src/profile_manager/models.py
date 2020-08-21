@@ -78,7 +78,7 @@ class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
-    avatar = ResizedImageField(size=[256, 256], upload_to='avatars/', null=True, blank=True, force_format='JPEG')
+    avatar = ResizedImageField(upload_to='avatars/', null=True, blank=True)
     first_name = models.CharField(max_length=50, null=True, blank=False,
                                   help_text='Use the first name that matches your school records.')
     last_name = models.CharField(max_length=50, null=True, blank=False,
