@@ -21,14 +21,14 @@ class HasPrereqsMixinTest(TenantTestCase):
             parent_object=self.quest_parent,
             prereq_object=self.quest_prereq,
             or_prereq_object=self.quest_or_prereq
-        ) 
+        )
 
         self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
 
         self.prereq_without_or = Prereq.objects.create(
             parent_object=self.quest_parent,
             prereq_object=self.quest_prereq2,
-        ) 
+        )
 
     def test_prereqs(self):
         """Returns the 2 prereqs created in setup"""
@@ -45,7 +45,7 @@ class HasPrereqsMixinTest(TenantTestCase):
         self.quest_parent.add_simple_prereqs(prereq_objects)
         self.assertEqual(self.quest_parent.prereqs().count(), 5)
 
-    def test_add_simple_prereqs_type_errpr(self):
+    def test_add_simple_prereqs_type_error(self):
         """Objects that do not implement the `IsAPrereqMixin` should throw a type error"""
         with self.assertRaises(TypeError):
             self.quest_parent.add_simple_prereqs([object()])
@@ -71,7 +71,7 @@ class HasPrereqsMixinTest(TenantTestCase):
 
         self.assertTrue(self.quest_parent.has_or_prereq(self.quest_or_prereq, exclude_NOT=False))
         self.assertTrue(self.quest_parent.has_or_prereq(self.quest_prereq, exclude_NOT=False))
-        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2, exclude_NOT=False)) 
+        self.assertFalse(self.quest_parent.has_or_prereq(self.quest_prereq2, exclude_NOT=False))
 
     def test_has_or_prereq_type_error(self):
         with self.assertRaises(TypeError):
@@ -84,7 +84,7 @@ class HasPrereqsMixinTest(TenantTestCase):
         Prereq.objects.create(
             parent_object=self.quest_prereq2,
             prereq_object=baker.make('quest_manager.Quest'),
-        ) 
+        )
         self.assertFalse(self.quest_prereq2.has_or_prereq())
 
     def test_has_or_prereq_no_object_exclude_NOT(self):
@@ -111,7 +111,7 @@ class IsAPrereqMixinTest(TenantTestCase):
             parent_object=self.quest_parent,
             prereq_object=self.quest_prereq,
             or_prereq_object=self.quest_or_prereq
-        ) 
+        )
 
         self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
 
@@ -170,7 +170,7 @@ class PrereqModelTest(TenantTestCase):
             parent_object=self.quest_parent,
             prereq_object=self.quest_prereq
         )
-    
+
     def test_object_creation(self):
         self.assertIsInstance(self.prereq, Prereq)
         self.assertIsInstance(self.prereq, IsAPrereqMixin)
@@ -198,13 +198,13 @@ class PrereqModelTest(TenantTestCase):
         Prereq.add_simple_prereq(self.quest_parent, quest3)
         self.assertIn(self.quest_parent, quest3.get_reliant_objects())
 
-    # def test_cls_add_simple_prereq_bad_parent(self):
-    #     """A parent_object that does not implement the HasPrereqsMixin should raise an exception
-    #     """
-    #     with self.assertRaises(TypeError):
-    #         quest3 = baker.make('quest_manager.Quest')
-    #         some_object = object()
-    #         Prereq.add_simple_prereq(some_object, quest3)
+    def test_cls_add_simple_prereq_bad_parent(self):
+        """A parent_object that does not implement the HasPrereqsMixin should raise an exception
+        """
+        with self.assertRaises(TypeError):
+            quest3 = baker.make('quest_manager.Quest')
+            some_object = object()
+            Prereq.add_simple_prereq(some_object, quest3)
 
     def test_cls_model_is_registered(self):
         """A model that implements the IsAPrereqMixin returns True
@@ -213,7 +213,7 @@ class PrereqModelTest(TenantTestCase):
         self.assertTrue(Prereq.model_is_registered(ct))
 
         ct = ContentType.objects.get(app_label='auth', model='user')
-        self.assertFalse(Prereq.model_is_registered(ct))  
+        self.assertFalse(Prereq.model_is_registered(ct))
 
     def test_all_registered_content_types(self):
         """There are 6 models that implement the IsAPrereqMixin

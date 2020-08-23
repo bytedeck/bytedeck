@@ -7,7 +7,7 @@ from django.db.models import Q
 
 
 class HasPrereqsMixin:
-    """ 
+    """
     For models that have prerequisite requirements that determine their objects' availablity.
     """
 
@@ -56,12 +56,12 @@ class HasPrereqsMixin:
         if exclude_NOT:
             qs = qs.filter(
                 Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id, or_prereq_invert=False) |  # or
-                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id, prereq_invert=False) 
+                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id, prereq_invert=False)
             )
         else:
             qs = qs.filter(
                 Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id) |  # or
-                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id) 
+                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id)
             )
         if qs:
             return True
@@ -84,7 +84,7 @@ class IsAPrereqMixin:
     For models that act as a prerequisite.
     Classes using this mixin need to implement
     the method: condition_met_as_prerequisite(user, num_required)
-    and have a field "name", or override the autocomplete_search_fields() class method 
+    and have a field "name", or override the autocomplete_search_fields() class method
     """
 
     # TODO: Can I force implementing models to define this method?
@@ -129,7 +129,7 @@ class IsAPrereqMixin:
                     reliant_objects.append(parent_obj)
         return reliant_objects
 
-    # to help with the prerequisite choices: 
+    # to help with the prerequisite choices:
     # https://django-grappelli.readthedocs.io/en/latest/customization.html#autocomplete-lookups
     # override this static method in the class to choose different search fields
     @staticmethod
@@ -436,10 +436,10 @@ class Prereq(IsAPrereqMixin, models.Model):
         """
         # This breaks some data migrations because custom methods are not available during
         # migrations, and it seems the objects don't get their Mixin during the data migrations?
-        # if not isinstance(parent_object, HasPrereqsMixin):
-        #     raise TypeError("parent_object does not implement HasPrereqsMixin")
-        # if not isinstance(prereq_object, IsAPrereqMixin):
-        #     raise TypeError("parent_object does not implement IsAPrereqMixin")
+        if not isinstance(parent_object, HasPrereqsMixin):
+            raise TypeError("parent_object does not implement HasPrereqsMixin")
+        if not isinstance(prereq_object, IsAPrereqMixin):
+            raise TypeError("parent_object does not implement IsAPrereqMixin")
 
         # prereq_object can be sent empty for convenience
         if not parent_object or not prereq_object:
