@@ -12,18 +12,18 @@
   $.extend(true, $.summernote.lang, {
     'en-US': {
       classes: {
-        a: [ 'button', 'link', 'primary', 'secondary', 'danger'],
-        img: [ 'responsive', 'float-left', 'float-center', 'float-right', 'rounded', 'circle', 'small-shadow', 'shadow', 'large-shadow', 'thumbnail'],
-        p: [ 'text-center', 'text-right', 'text-justify', 'text-wrap', 'text-nowrap', 'text-truncate', 'text-break', 'text-lowercase', 'text-uppercase', 'text-capitalize', 'text-monospace', 'lead', 'border'],
+        a: ['button', 'link', 'primary', 'secondary', 'danger'],
+        img: ['responsive', 'rounded', 'circle', 'thumbnail'],
+        p: ['text-center', 'text-right', 'text-justify', 'text-nowrap', 'text-lowercase', 'text-uppercase', 'text-capitalize', 'text-monospace', 'lead'],
       }
     }
   });
   $.extend($.summernote.options, {
     disableTableNesting: false,
     classes: {
-      a: [ 'btn' , 'btn-link', 'btn-primary', 'btn-secondary', 'btn-danger'],
-      img: [ 'img-responsive', 'float-left', 'float-center', 'float-right', 'rounded', 'rounded-circle', 'shadow-sm', 'shadow' ,'shadow-lg' ,'img-thumbnail'],
-      p: [ 'text-center', 'text-right', 'text-justify', 'text-wrap', 'text-nowrap', 'text-truncate', 'text-break', 'text-lowercase', 'text-uppercase', 'text-capitalize', 'text-monospace', 'lead', 'border'],
+      a: ['btn' , 'btn-link', 'btn-primary', 'btn-secondary', 'btn-danger'],
+      img: ['img-responsive', 'img-rounded', 'img-circle', 'img-thumbnail'],
+      p: ['text-center', 'text-right', 'text-justify', 'text-nowrap', 'text-lowercase', 'text-uppercase', 'text-capitalize', 'text-monospace', 'lead'],
     }
   });
   $.extend($.summernote.plugins, {
