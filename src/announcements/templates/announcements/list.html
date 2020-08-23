@@ -73,20 +73,21 @@
           <i class="fa fa-wrench">&nbsp;</i>
         {% endif %}
         {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}
-        {{object.title}}
+        <span>
+          {{object.title}}
+        </span>
         <!-- </a> -->
-        <small>
-          <span class="announcement-date">{{object.datetime_released.date|date:'D, N j, Y'}}</span>
-        </small>
+
         <div class="dropdown dropdown-hover announcement-dropdown pull-right">
-          <button class="btn btn-default dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
+          <a class="dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-ellipsis-v"></i>
-          </button>
+          </a>
           <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
             {% if request.user.is_staff %}
             <li><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
             <li><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
+            <li><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
             {% if object.draft %}
               <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
             {% endif %}
@@ -97,13 +98,19 @@
                  title="Copy permalink"
                  class="text-muted permalink"
                  data-clipboard-text="{{ object.get_absolute_url }}#{{ object.id }}">
-                Copy
+                Copy permalink
               </a>
             </li>
           </ul>
         </div>
+
+        <span class="announcement-date pull-right">
+          <small>{{object.datetime_released.date|date:'D, N j, Y'}}</small>
+        </span>
       </h4>
+
     </div>
+
     <div id="collapse{{object.id}}"
       class="panel-collapse collapse {% if object.id == active_id %} in {% endif %}"
       role="tabpanel" aria-labelledby="heading{{object.id}}">
