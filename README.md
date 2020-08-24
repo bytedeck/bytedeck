@@ -73,8 +73,6 @@ This will create your docker containers and initialize the database by running m
    `source venv/bin/activate`
    3. Install our requirements:
    `pip install -r requirements.txt`
-   4. Copy the example environment file to the one you'll be using.  Docker-compose and django will both be looking for a `.env` files with various settings that you can customize:
-   `cp .env.example .env`
    5. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):
    `./src/manage.py migrate_schemas --shared`
    6. Run the app to make sure you don't get any errors yet, with:
@@ -84,11 +82,11 @@ This will create your docker containers and initialize the database by running m
 8. You should now get a 404 page (until we create a landing page) at http://localhost:8000
 9. But you should be able to log in to the admin site!  http://localhost:8000/admin/
    - user: admin
-   - password: admin (this is defined in DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
+   - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 
 10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up):
 `docker-compose up celery celery-beat`
-11. To view errors in the containers when they are running in the background, you can use `docker-compose logs`
+11. To view errors in the containers when they are running in the background, you can use `docker-compose logs -f`
 
 ### Creating a Tenant
 If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
@@ -98,26 +96,25 @@ If everything has worked so far, you should now be able to create your own byted
 2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
    - user: admin
-   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in settings/local.py)
+   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in the .env file)
 4. Now you should be in your own bytedeck site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
 ### TODO: Installing more Sample Data <-- NOT SETUP YET
-New tenants will come with some basic initial data already installed (via data migrations).  But if you want masses of data to simulate a more realistic site in production.... we need to make some so you can install it!
+New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
-Once we DO make it, this is how you'd install (leaving here so I don't forget =)
+1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated), enter you tenant's name and paste these commands:
+    ```
+    $ ./src/manage.py tenant_command shell
+    Enter Tenant Schema ('?' to list schemas): my_tenant_name
 
-Note: the [recommended way](https://django-tenant-schemas.readthedocs.io/en/latest/use.html#tenant-command) of installing fixtures (data) is [currently broken](https://github.com/bernardopires/django-tenant-schemas/issues/618#issuecomment-576455240), but we can use the shell instead:
+    In [1]: from hackerspace_online.shell_utils import generate_content
+    
+    In [2]: generate_content()  
+    ```
 
-1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated):
-`./src/manage.py tenant_command shell`
-2. Type `?` to see a list of tenants you've made.  You should have at least one that is not "public".  Select it by entering it's name (without the "- localhost" part).
-3. Inside the shell, execute the following commands:
-   ```python
-   from django.core.management import call_command
-   call_command('loaddata', 'src/tenant_specific_data.json')
-   ```
-4. use Ctrl + D or `exit()` to close the Python shell.
+2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!
+3. use Ctrl + D or `exit()` to close the Python shell.
 
 ### Running Tests and Checking Code Style
 You can run tests either locally, or through the web container:
@@ -148,23 +145,6 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 7. At the top left expand the Servers tree to find the database, and explore!
 8. You'll probably want to look at Schemas > (pick a schema) > Tables
 
-
-## Setting up a VS Code development environment
-(UNTESTED)
-
-1. Install [Visual Studio Code](https://code.visualstudio.com/docs/setup/setup-overview):
-2. Hit Ctrl + ` (back tick, above the tab key) to open a terminal in VS Code
-3. Install the following extensions:
-   1. Required: Python (Microsoft)
-   3. Optional: Django Template (bibhasdn)
-   4. Optional: ESLint: (Dirk Baeumer)
-   5. Optional: GitLens (Eric Amodio)
-   6. Optional: Docker (Microsoft)
-   7. Optional: Git Graph (mhutchie)
-   8. Optional: YAML (Red Hat)
-   9. Got any good suggestions? =D
-4. Restart VS Code so the extension work
-5. Open the project in VS Code (File > Open Folder)
 
 ## Contributing Quick Reference
 

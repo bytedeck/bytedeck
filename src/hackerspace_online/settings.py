@@ -303,10 +303,6 @@ DATABASE_ROUTERS = (
     'tenant_schemas.routers.TenantSyncRouter',
 )
 
-# ADMIN
-DEFAULT_SUPERUSER_USERNAME = env('DEFAULT_SUPERUSER_USERNAME', default='admin')
-DEFAULT_SUPERUSER_PASSWORD = env('DEFAULT_SUPERUSER_PASSWORD', default='admin')
-DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@admin.com')
 
 # EMAIL ######################################
 
@@ -356,6 +352,13 @@ SITE_ID = 1
 
 # https://github.com/charettes/django-colorful
 GRAPPELLI_CLEAN_INPUT_TYPES = False
+
+
+# PUBLIC TENANT ##############################
+
+DEFAULT_SUPERUSER_USERNAME = env('DEFAULT_SUPERUSER_USERNAME')
+DEFAULT_SUPERUSER_PASSWORD = env('DEFAULT_SUPERUSER_PASSWORD')
+DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.com')
 
 
 # TENANTS ###############################################################
