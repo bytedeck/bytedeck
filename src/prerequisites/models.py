@@ -439,7 +439,7 @@ class Prereq(IsAPrereqMixin, models.Model):
         if not isinstance(parent_object, HasPrereqsMixin):
             raise TypeError("parent_object does not implement HasPrereqsMixin")
         if not isinstance(prereq_object, IsAPrereqMixin):
-            raise TypeError("parent_object does not implement IsAPrereqMixin")
+            raise TypeError("prereq_object does not implement IsAPrereqMixin")
 
         # prereq_object can be sent empty for convenience
         if not parent_object or not prereq_object:

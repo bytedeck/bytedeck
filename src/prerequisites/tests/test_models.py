@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 
-from prerequisites.models import PrereqAllConditionsMet, Prereq, IsAPrereqMixin
+from prerequisites.models import IsAPrereqMixin, Prereq, PrereqAllConditionsMet
 
 User = get_user_model()
 
@@ -205,6 +205,14 @@ class PrereqModelTest(TenantTestCase):
             quest3 = baker.make('quest_manager.Quest')
             some_object = object()
             Prereq.add_simple_prereq(some_object, quest3)
+
+    def test_cls_add_simple_prereq_bad_prereq(self):
+        """A prereq_object that does not implement the HasPrereqsMixin should raise an exception
+        """
+        with self.assertRaises(TypeError):
+            quest3 = baker.make('quest_manager.Quest')
+            some_object = object()
+            Prereq.add_simple_prereq(quest3, some_object)
 
     def test_cls_model_is_registered(self):
         """A model that implements the IsAPrereqMixin returns True
