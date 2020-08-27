@@ -207,7 +207,7 @@ class PrereqModelTest(TenantTestCase):
             Prereq.add_simple_prereq(some_object, quest3)
 
     def test_cls_add_simple_prereq_bad_prereq(self):
-        """A prereq_object that does not implement the HasPrereqsMixin should raise an exception
+        """A prereq_object that does not implement the IsAPrereqMixin should raise an exception
         """
         with self.assertRaises(TypeError):
             quest3 = baker.make('quest_manager.Quest')
