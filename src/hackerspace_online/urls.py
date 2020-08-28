@@ -53,6 +53,9 @@ urlpatterns += [
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth
+    url(r'^accounts/password/reset/$',
+        views.CustomPasswordResetView.as_view(),
+        name='account_reset_password'),
     url(r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',
         views.CustomPasswordResetFromKeyView.as_view(),
         name='account_reset_password_from_key'),

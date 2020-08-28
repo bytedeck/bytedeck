@@ -2,12 +2,15 @@ from smtplib import SMTPException
 
 from django import forms
 from django.core.mail import mail_admins
+from django.utils.translation import gettext_lazy as _
 
-from allauth.account.forms import SignupForm
-from siteconfig.models import SiteConfig
-
+from allauth.account.adapter import get_adapter
+from allauth.account.forms import ResetPasswordForm, SignupForm
+from allauth.account.utils import filter_users_by_email
 from captcha.fields import ReCaptchaField
 from captcha.widgets import ReCaptchaV2Invisible
+
+from siteconfig.models import SiteConfig
 
 
 class CustomSignupForm(SignupForm):
@@ -15,7 +18,7 @@ class CustomSignupForm(SignupForm):
     first_name = forms.CharField(
         max_length=30,
         label='First name',
-        help_text="Please use the name that matches your school records.  You can put a different name in your profile." # noqa
+        help_text="Please use the name that matches your school records.  You can put a different name in your profile."  # noqa
     )
 
     last_name = forms.CharField(
@@ -64,5 +67,18 @@ class PublicContactForm(forms.Form):
             )
         except SMTPException:
             return False
-        
+
         return True
+
+
+class CustomResetPasswordForm(ResetPasswordForm):
+
+    def clean_email(self):
+        email = self.cleaned_data["email"]
+        email = get_adapter().clean_email(email)
+        self.users = filter_users_by_email(email, is_active=True)
+        if not self.users:
+            raise forms.ValidationError(_("The e-mail address is not assigned"
+                                          " to any user account."
+                                          " Please contact your teacher to have it reset."))
+        return self.cleaned_data["email"]
