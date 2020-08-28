@@ -1,8 +1,11 @@
+from mock import patch, PropertyMock
+
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
 
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
+from tenant_schemas.utils import get_public_schema_name
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
@@ -37,6 +40,13 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
             response,
             reverse('account_login')
         )
+
+    @patch('hackerspace_online.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
+    def test_home_public_tenant(self, mock_schema):
+        from django.db import connection
+        print(connection.schema_name)
+        """Home view for public tenant should render the public landing page directly"""
+        self.assert200('home')
 
     def test_secret_view(self):
         self.assert200('simple')

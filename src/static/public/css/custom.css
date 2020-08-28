@@ -1,0 +1,353 @@
+
+
+/*
+  Custom CSS for ByteDeck
+*/
+
+
+    body {
+      font: 'Barlow', sans-sherif;
+      line-height: 25px;
+      font-size: 16px;
+      font-weight: 'light';
+      font-style: 'normal';
+    }
+
+/* Pixel icons  */
+    .BD-pixel-ref1{
+      position:relative;
+    }
+    .BD-pixel-ref2{
+      position:relative;
+    }
+    .BD-pixel-ref3{
+      position:relative;
+    }
+    .BD-pixel-ref4{
+      position:relative;
+    }
+    .parents-pixels{
+      position: absolute;
+      bottom: 0px;
+      left:200px;
+      max-width: 100px;
+      display: block;
+      margin: auto;
+    }
+    .students-pixels{
+      position: absolute;
+      bottom: -125%;
+      right:110%;
+      max-width: 100px;
+      display: block;
+      margin: auto;
+    }
+    .teachers-pixels{
+      position: absolute;
+      bottom: 0px;
+      left:80%;
+      max-width: 100px;
+      display: block;
+      margin: auto;
+    }
+    .header-pixels{
+      position: absolute;
+      bottom: 50%;
+      right:110%;
+      max-width: 100px;
+      display: block;
+      margin: auto;
+    }
+/* End Pixel Icons*/
+
+/* Content paddings/margins */
+    .BD-content1 {
+      padding-top:100px;
+      padding-bottom:75px;
+      padding-left:50px;
+      padding-right:50px;
+    }
+    .BD-content2 {
+      padding-top:50px;
+      padding-bottom:50px;
+      padding-left:75px;
+      padding-right:75px;
+    }
+    .BD-content3 {
+      margin-bottom:70px;
+    }
+/* End Content paddings/margins */
+
+/* Colours and Background Colours */
+    .BG-BD-LightBlue{
+      background-color: #7dc3e9;
+    }
+    .BG-BD-Blue{
+      background-color: #5597d1;
+    }
+    .BG-BD-DarkBlue{
+      background-color: #2a56a6;
+    }
+    .BG-BD-Yellow{
+      background-color: #eecd40;
+    }
+    .BG-BD-White{
+      background-color: #ffffff;
+
+    }
+
+/* End Colours and Background Colours */
+
+/* Buttons */
+    .BD-btn-LightBlue-1{
+      background-color: #7dc3e9;
+      color: white;
+      padding-top:14px ;
+      padding-bottom:14px ;
+      margin-top: 10px;
+      text-align: center;
+      text-decoration: none;
+      display: block;
+      white-space: normal;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: bold;
+      font-size: 15px;
+      line-height: 19px;
+    }
+    .BD-btn-LightBlue-2{
+      background-color: #7dc3e9;
+      color: white;
+      min-width: 140px;
+      padding-top:14px ;
+      padding-bottom:14px ;
+      margin-top: 10px;
+      text-align: center;
+      text-decoration: none;
+      display: block;
+      white-space: normal;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: bold;
+      font-size: 15px;
+      line-height: 19px;
+    }
+    .BD-btn-DarkBlue {
+      background-color: #2a56a6;
+      color: white;
+      min-width: 140px;
+      padding-top:14px ;
+      padding-bottom:14px ;
+      margin-top: 10px;
+      text-align: center;
+      text-decoration: none;
+      display: block;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: bold;
+      font-size: 15px;
+      line-height: 19px;
+    }
+
+    .BD-btn-LightBlue-form {
+      background-color: #7dc3e9;
+      color: white;
+      min-width: 140px;
+      padding-top:14px ;
+      padding-bottom:14px ;
+      margin-top: 25px;
+      margin-bottom: 25px;
+      text-align: center;
+      text-decoration: none;
+      display: block;
+      white-space: normal;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: bold;
+      font-size: 15px;
+      line-height: 19px;
+    }
+    /* Button hover color*/
+    .BD-btn-LightBlue-1:hover{
+      color:#2a56a6 !important;
+    }
+    .BD-btn-LightBlue-2:hover{
+      color:#2a56a6 !important;
+    }
+    .BD-btn-LightBlue-form:hover{
+      color:#2a56a6 !important;
+    }
+    .BD-btn-DarkBlue:hover{
+      color:#7dc3e9 !important;
+    }
+    /* End Button hover color*/
+/* End Buttons */
+
+/* Text */
+    h1-BD {
+      font-size: 39.06px;
+      line-height: 60px;
+      letter-spacing: 0.2em;
+    }
+    h2-BD {
+      font-size: 23px;
+      line-height: 35px;
+      letter-spacing: 0.03em;
+      text-align: center;
+    }
+    h1-main-BD{
+      font-size: 48.83px;
+      font-weight: bold;
+      line-height: 59px;
+      letter-spacing: 0.1em;
+      color: #2E56A6;
+    }
+
+    .BD-title {
+      margin-top:20px;
+      margin-bottom:20px;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: 'semibold';
+    }
+
+    .BD-muted{
+      color: #90949c;
+      font: 'Barlow', sans-sherif;
+      font-style: 'normal';
+      font-weight: 'semibold';
+    }
+/* End Text */
+
+/* Images */
+    .apple-img-size-1{
+      height: 66px;
+      margin-bottom: 30px;
+    }
+    .gamepad-img-size-1{
+      width: 93.01px;
+      margin-bottom: 30px;
+    }
+    .console-img-size-1{
+      width: 69px;
+      margin-bottom: 45px;
+    }
+    .BD-nav-img{
+      max-height: 110px;
+    }
+    .BD-main-img{
+      max-height: 400px;
+      margin-top:20px;
+      margin-bottom:20px;
+    }
+    .BD-teacher-img{
+      max-height: 400px;
+    }
+    .BD-student-img{
+      max-height: 400px;
+    }
+    .BD-parent-img{
+      max-height:400px;
+    }
+/* End Images */
+
+/* Icons */
+  /* Hover color */
+    /* nav icons */
+    .nav-socials .fa-instagram:hover {
+      color: #7dc3e9 !important;
+    }
+    .nav-socials .fa-twitter:hover {
+      color: #7dc3e9 !important;
+    }
+    .nav-socials .fa-github:hover {
+      color: #7dc3e9 !important;
+    }
+    /* End nav icons */
+
+    /* Form icons */
+    .form-socials .fa-instagram:hover {
+      color: #2a56a6 !important;
+    }
+    .form-socials .fa-twitter:hover {
+      color: #2a56a6 !important;
+    }
+    .form-socials .fa-github:hover {
+      color: #2a56a6 !important;
+    }
+    /* End Form icons */
+  /* End Hover color */
+/* End Icons */
+
+/* Form */
+  .BD-form{
+    display: block;
+    margin-top:25px;
+  }
+  .BD-form-message{
+    display: block;
+    margin-top:25px;
+  }
+
+/* End Form */
+
+/* Footer */
+
+  .BD-footer {
+    background-color:#7dc3e9;
+    padding:45px 0 45px;
+    font-size:15px;
+    line-height:24px;
+    color:#black;
+  }
+  .BD-footer-about{
+    padding-right:100px;
+  }
+
+  .BD-footer-links {
+    list-style: none;
+    padding-left: 0px;
+  }
+
+  .BD-footer-links li {
+      display: block;
+  }
+  .BD-footer-links a {
+    color:black;
+    text-decoration:none
+  }
+
+  .BD-footer-links a:active,.BD-footer-links a:focus,.BD-footer-links a:hover
+{
+  color:#2a56a6;
+  text-decoration:none;
+}
+.BD-footer-links.inline li
+{
+  display:inline-block
+}
+
+.BD-footer-contact {
+  list-style: none;
+  padding-left: 0px;
+}
+
+.BD-footer-contact li {
+    display: block;
+}
+.BD-footer-contact a {
+  color:black;
+  text-decoration:none
+}
+
+.BD-footer-contact a:active,.BD-footer-contact a:focus,.BD-footer-contact a:hover
+{
+color:#2a56a6;
+text-decoration:none;
+}
+.BD-footer-contact.inline li
+{
+display:inline-block
+}
+
+/* End footer */

@@ -3,7 +3,6 @@ import functools
 from django.db import connection
 from django.contrib.sites.models import Site
 from django.http import Http404
-from django.shortcuts import redirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
 
@@ -34,14 +33,8 @@ class PublicOnlyViewMixin:
 def non_public_only_view(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        request = args[0]
         if connection.schema_name != get_public_schema_name():
             return f(*args, **kwargs)
-        elif request.path == '/':
-            # TEMPORARY: redirect home page of the public tenant to admin site until we create a landing page.
-            # return render(request, "index.html", {})
-            return redirect('decks:new')
-
         raise Http404("Page not found!")
     return wrapper
 
