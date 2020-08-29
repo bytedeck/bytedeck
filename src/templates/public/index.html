@@ -34,7 +34,7 @@
 
     {% if messages %}{% for message in messages %}
     <div class="alert alert-warning alert-dismissible fade show text-center lead {% if message.tags %}{{ message.tags }}{% endif %}" role="alert"}>
-        {{ message }}
+        <b>{{ message|safe }}</b>
         <button type="button" class="close" data-dismiss="alert" aria-label="Close">
           <span aria-hidden="true">&times;</span>
         </button>

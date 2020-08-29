@@ -35,7 +35,6 @@ urlpatterns = [
 
 urlpatterns += [
     url(r'^$', views.home, name='home'),
-    url(r'^test$', views.LandingPageView.as_view(), name='test'),
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
