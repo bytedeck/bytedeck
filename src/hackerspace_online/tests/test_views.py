@@ -92,7 +92,7 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
 
         self.test_email = 'test_email@bytedeck.com'
-        self.test_password = "password"
+        self.test_password = 'password'
         self.test_student1 = User.objects.create_user('test_student', email=self.test_email, password=self.test_password)
 
     def test_user_cannot_request_password_reset(self):
@@ -132,3 +132,10 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
             'password1': 'samplepassword',
             'password2': 'samplepassword'
         }
+        action_url = response.context_data.get('action_url')
+        response = self.client.post(action_url, data=data)
+        self.assertRedirects(response, reverse('account_login'))
+
+        # After changing the password student should be able to login using the new password
+        success = self.client.login(username=self.test_student1.username, password=data['password1'])
+        self.assertTrue(success)
