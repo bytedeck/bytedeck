@@ -1,4 +1,5 @@
-# from django.db import connection
+from mock import patch
+
 from django.http import HttpResponse, Http404
 from django.test import RequestFactory
 
