@@ -1,7 +1,9 @@
-from mock import patch, PropertyMock
+from mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.shortcuts import reverse
+from django.templatetags.static import static
 
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
@@ -19,6 +21,9 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
         # self.factory = RequestFactory()
         self.client = TenantClient(self.tenant)
+    
+    def test_secret_view(self):
+        self.assert200('simple')
 
     def test_home_view_staff(self):
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
@@ -41,18 +46,38 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
             reverse('account_login')
         )
 
-    @patch('hackerspace_online.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
-    def test_home_public_tenant(self, mock_schema):
-        from django.db import connection
-        print(connection.schema_name)
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_home_public_tenant(self, mock_connection1, mock_connection2):
         """Home view for public tenant should render the public landing page directly"""
         self.assert200('home')
 
-    def test_secret_view(self):
-        self.assert200('simple')
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_home_public_contact_form(self, mock_connection1, mock_connection2):
+        form_data = {
+            'name': 'First Last',
+            'email': 'test@example.com',
+            'message': 'Test Message',
+            'g-recaptcha-response': 'PASSED',
+        }
+        response = self.client.post(reverse('home'), data=form_data)
+        # Form submission redirects to same home page
+        self.assertEqual(response.status_code, 302)  
+        self.assertEqual(response.url, reverse('home'))  
+        # The view should be sent via email with form info if successfull
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_favicon(self):
         """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
         response = self.client.get('/favicon.ico')
         self.assertEqual(response.status_code, 301)  # permanent redirect
         self.assertEqual(response.url, SiteConfig.get().get_favicon_url())
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_favicon_public_tenant(self, mock_connection1, mock_connection2):
+        """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
+        response = self.client.get('/favicon.ico')
+        self.assertEqual(response.status_code, 301)  # permanent redirect
+        self.assertEqual(response.url, static('icon/favicon.ico'))

@@ -20,7 +20,6 @@ from django.contrib import admin
 from django.urls import include
 
 from hackerspace_online import views
-from hackerspace_online.views import LandingPageView
 from siteconfig.models import SiteConfig
 
 admin.site.site_header = lambda: SiteConfig.get().site_name

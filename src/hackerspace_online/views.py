@@ -17,7 +17,7 @@ from .forms import PublicContactForm
 def home(request):
     """
     For the public tenant: render the landing page.
-    For non_public tenants: render default pages based on who is authenticated
+    For non_public tenants: redirect to default pages based on who is authenticated
     """
     if connection.schema_name == get_public_schema_name():
         return LandingPageView.as_view()(request)
@@ -57,10 +57,10 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
         # It should return an HttpResponse.
         success = form.send_email()
 
-        # if success:
-        #     self.success_message = "Thank you for contacting us!  We'll be in touch soon."
-        # else:
-        self.success_message = "There was an error submitting the form.  Please try contacting us direct by email at <a href=\"mailto:contact@bytedeck.com\">contact@bytedeck.com</a>"  # noqa
+        if success:
+            self.success_message = "Thank you for contacting us!  We'll be in touch soon."
+        else:
+            self.success_message = "There was an error submitting the form.  Please try contacting us direct by email at <a href=\"mailto:contact@bytedeck.com\">contact@bytedeck.com</a>"  # noqa
 
         return super().form_valid(form)
 

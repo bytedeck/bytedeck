@@ -1,7 +1,6 @@
 from smtplib import SMTPException
 
 from django import forms
-from django.conf import settings
 from django.core.mail import mail_admins
 
 from allauth.account.forms import SignupForm

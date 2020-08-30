@@ -1,6 +1,7 @@
 import functools
 
 from django.db import connection
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.sites.models import Site
 from django.http import Http404
 from django.utils.decorators import method_decorator
@@ -46,7 +47,7 @@ class NonPublicOnlyViewMixin:
         return super().dispatch(*args, **kwargs)
 
 
-class TenantCreate(PublicOnlyViewMixin, CreateView):
+class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Tenant
     form_class = TenantForm
     template_name = 'tenant/tenant_form.html'
