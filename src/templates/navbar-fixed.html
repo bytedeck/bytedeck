@@ -103,7 +103,7 @@
                     <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
                     <span class="visible-xs-inline">Announcements</span></a>
                 </li>
-
+                {% endif %}
                 {% if request.user.is_staff %}
                 <li class="visible-xs-block">
                     <a title="Students" href="{% url 'profiles:profile_list_current' %}">
@@ -115,14 +115,6 @@
                     <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
                         <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
                     <span class="visible-xs-inline">Approvals</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% else %}
-                <li>
-                    <a title="Public Portfolios" href="{% url 'portfolios:public_list' %}">
-                        <i class="fa fa-picture-o fa-fw"></i>
-                    <span class="visible-xs-inline">Public Portfolios</span>
                     </a>
                 </li>
                 {% endif %}
