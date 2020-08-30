@@ -78,7 +78,6 @@ class CustomResetPasswordForm(ResetPasswordForm):
         email = get_adapter().clean_email(email)
         self.users = filter_users_by_email(email, is_active=True)
         if not self.users:
-            raise forms.ValidationError(_("The e-mail address is not assigned"
-                                          " to any user account."
-                                          " Please contact your teacher to have it reset."))
+            raise forms.ValidationError(_("This e-mail address is not assigned to any active user account."
+                                          " Please contact your teacher to have your password reset or to re-activate your account."))
         return self.cleaned_data["email"]
