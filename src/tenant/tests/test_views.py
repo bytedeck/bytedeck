@@ -2,8 +2,6 @@
 from django.http import HttpResponse, Http404
 from django.test import RequestFactory
 
-from mock import patch, PropertyMock
-
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.utils import get_public_schema_name
 
@@ -38,8 +36,8 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         with self.assertRaises(Http404):
             view_accessible_by_public_only(self.request)
     
-    @patch('tenant.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
-    def test_public_only_view__public_tenant(self, mock_schema):
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_public_only_view__public_tenant(self, mock_connection):
         """Public tenant can access views with the `public_only_view` decorator"""
         # we mocked the public tenant, so should be able to
         response = view_accessible_by_public_only(self.request) 
@@ -51,8 +49,8 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         response = view_accessible_by_non_public_only(self.request)  
         self.assertEqual(response.status_code, 200)
 
-    @patch('tenant.views.connection.schema_name', new_callable=PropertyMock(return_value=get_public_schema_name()))
-    def test_non_public_only_view__public_tenant(self, mock_schema):
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_non_public_only_view__public_tenant(self, mock_connection):
         """Public tenant can't access views with the `non_public_only_view` decorator"""
         # We are mocking the public tenant
         with self.assertRaises(Http404):
