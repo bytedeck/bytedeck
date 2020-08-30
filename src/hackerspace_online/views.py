@@ -1,17 +1,18 @@
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import connection
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect, render
 from django.templatetags.static import static
-from django.urls import reverse
-from django.views.generic.edit import FormView
+from django.urls import reverse, reverse_lazy
 from django.views.generic.base import RedirectView
+from django.views.generic.edit import FormView
 
+from allauth.account.views import PasswordResetFromKeyView, PasswordResetView
 from tenant_schemas.utils import get_public_schema_name
 
-from tenant.views import non_public_only_view, PublicOnlyViewMixin
 from siteconfig.models import SiteConfig
+from tenant.views import PublicOnlyViewMixin, non_public_only_view
 
-from .forms import PublicContactForm
+from .forms import CustomResetPasswordForm, PublicContactForm
 
 
 def home(request):
@@ -66,3 +67,16 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
 
     def get_success_url(self):
         return reverse('home')
+
+
+class CustomPasswordResetView(PasswordResetView):
+
+    form_class = CustomResetPasswordForm
+
+
+class CustomPasswordResetFromKeyView(PasswordResetFromKeyView):
+    success_url = reverse_lazy('account_login')
+
+
+def landing(request):
+    return render(request, "index.html", {})

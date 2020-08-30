@@ -1,10 +1,9 @@
-from mock import patch
-
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
+from mock import patch
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 from tenant_schemas.utils import get_public_schema_name
@@ -21,7 +20,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
         # self.factory = RequestFactory()
         self.client = TenantClient(self.tenant)
-    
+
     def test_secret_view(self):
         self.assert200('simple')
 
@@ -38,7 +37,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         user = User.objects.create_user(username="test_user", password="password")
         self.client.force_login(user)
         self.assertRedirectsQuests('home')
-    
+
     def test_home_view_anonymous(self):
         response = self.client.get(reverse('home'))
         self.assertRedirects(
@@ -63,8 +62,8 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         }
         response = self.client.post(reverse('home'), data=form_data)
         # Form submission redirects to same home page
-        self.assertEqual(response.status_code, 302)  
-        self.assertEqual(response.url, reverse('home'))  
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('home'))
         # The view should be sent via email with form info if successfull
         self.assertEqual(len(mail.outbox), 1)
 
@@ -81,3 +80,6 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get('/favicon.ico')
         self.assertEqual(response.status_code, 301)  # permanent redirect
         self.assertEqual(response.url, static('icon/favicon.ico'))
+
+    def test_password_reset_view(self):
+        self.assert200('account_reset_password')
