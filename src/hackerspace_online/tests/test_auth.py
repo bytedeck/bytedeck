@@ -27,8 +27,8 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
             'email': 'nonexistentemail@gmail.com'
         }
         response = self.client.post(reverse('account_reset_password'), data=data)
-        self.assertContains(response, 'The e-mail address is not assigned to any user account. '
-                                      'Please contact your teacher to have it reset.')
+        self.assertContains(response, 'error_1_id_email')  # invalid with error message
+        self.assertContains(response, 'This e-mail address is not assigned')
 
     def test_email_sent_to_requesting_user(self):
         """ Email should be sent to the requesting user containing the password verification link """
