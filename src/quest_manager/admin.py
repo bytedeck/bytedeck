@@ -155,20 +155,22 @@ class QuestResource(resources.ModelResource):
             quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
-            parent_quest = Quest.objects.get(import_id=import_id)
+        if not dry_run:
+            for data_dict in dataset.dict:
+                import_id = data_dict["import_id"]
+                parent_quest = Quest.objects.get(import_id=import_id)
 
-            self.generate_simple_prereqs(parent_quest, data_dict)
+                self.generate_simple_prereqs(parent_quest, data_dict)
 
-            self.generate_campaign(parent_quest, data_dict)
+                self.generate_campaign(parent_quest, data_dict)
 
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
-    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'max_repeats', 'date_expired',
-                    'common_data', 'campaign', 'editor')
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor']
+    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
+                    'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
+                   'specific_teacher_to_notify', 'common_data', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description']
     inlines = [
         # TaggedItemInline

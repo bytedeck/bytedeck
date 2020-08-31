@@ -22,7 +22,7 @@ class ExcludedDateInline(admin.TabularInline):
 
 
 class SemesterAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('__str__', 'first_day', 'last_day', 'active', 'closed')
+    list_display = ('__str__', 'first_day', 'last_day', 'closed')
     inlines = [
         ExcludedDateInline,
     ]

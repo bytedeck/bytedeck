@@ -1,3 +1,4 @@
+from django_select2.forms import Select2Widget, ModelSelect2Widget
 from datetime import date
 
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
@@ -25,11 +26,20 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
 class QuestForm(forms.ModelForm):
 
     new_quest_prerequisite = forms.ModelChoiceField(
-        queryset=Quest.objects.all(), 
         # to_field_name="name",
         required=False,
+        queryset=Quest.objects.all(),
+        widget=ModelSelect2Widget(
+            model=Quest,
+            search_fields=['name__icontains'],
+        ),
     )
+
     new_badge_prerequisite = forms.ModelChoiceField(
+        widget=ModelSelect2Widget(
+            model=Badge,
+            search_fields=['name__icontains'],
+        ),
         queryset=Badge.objects.all(),
         # to_field_name="name",
         required=False,
@@ -43,7 +53,7 @@ class QuestForm(forms.ModelForm):
                   'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
-                  'specific_teacher_to_notify', 'blocking', 
+                  'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
 
@@ -70,6 +80,9 @@ class QuestForm(forms.ModelForm):
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
+            'campaign': Select2Widget(),
+            'common_data': Select2Widget(),
+            'specific_teacher_to_notify': Select2Widget()
         }
 
     def __init__(self, *args, **kwargs):
@@ -128,6 +141,7 @@ class QuestForm(forms.ModelForm):
                     AccordionGroup(
                         "Advanced",
                         'repeat_per_semester',
+                        'specific_teacher_to_notify',
                         'blocking',
                         'hideable',
                         'sort_order',

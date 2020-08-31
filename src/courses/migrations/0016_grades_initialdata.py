@@ -2,34 +2,6 @@
 
 from django.db import migrations
 
-# NO LONGER USED, tenant/initialization.py instead
-# Can't use fixtures because load_fixtures method is janky with django-tenant-schemas
-def load_initial_data(apps, schema_editor):
-    Grade = apps.get_model('courses', 'Grade')
-
-    # add some initial data if none has been created yet
-    if not Grade.objects.exists():
-        Grade.objects.create(
-            name="8",
-            value=8
-        )
-        Grade.objects.create(
-            name="9",
-            value=9
-        )
-        Grade.objects.create(
-            name="10",
-            value=10
-        )
-        Grade.objects.create(
-            name="11",
-            value=11
-        )
-        Grade.objects.create(
-            name="12",
-            value=12
-        )
-
 
 class Migration(migrations.Migration):
 

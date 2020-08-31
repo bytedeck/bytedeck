@@ -2,32 +2,6 @@
 
 from django.db import migrations
 
-# NO LONGER USED, tenant/initialization.py instead
-def load_more_initial_data(apps, schema_editor):
-    Course = apps.get_model('courses', 'Course')
-
-    # Create a default course for new tenants
-    if not Course.objects.exists():
-        Course.objects.create(
-            title="Default",
-        )
-
-    Rank = apps.get_model('courses', 'Rank')
-    if not Rank.objects.exists():
-        Rank.objects.create(name="Digital Noob", xp=0, fa_icon="fa fa-circle-o")
-        Rank.objects.create(name="Digital Novice", xp=60, fa_icon="fa fa-angle-up")
-        Rank.objects.create(name="Digital Novice II", xp=125, fa_icon="fa fa-angle-double-up")
-        Rank.objects.create(name="Digital Amateur", xp=185, fa_icon="fa fa-forward fa-rotate-270")
-        Rank.objects.create(name="Digital Amateur II", xp=250, fa_icon="fa fa-fast-forward fa-rotate-270")
-        Rank.objects.create(name="Digital Apprentice", xp=310, fa_icon="fa fa-th-large")
-        Rank.objects.create(name="Digital Apprentice II", xp=375, fa_icon="fa fa-th")
-        Rank.objects.create(name="Digitcal Journeyman", xp=495, fa_icon="fa fa-pause fa-rotate-90")
-        Rank.objects.create(name="Digitcal Journeyman II", xp=595, fa_icon="fa fa-align-center")
-        Rank.objects.create(name="Digitcal Journeyman III", xp=665, fa_icon="fa fa-align-justify")
-        Rank.objects.create(name="Digital Crafter", xp=725, fa_icon="fa fa-star-o")
-        Rank.objects.create(name="Expert Digital Crafter", xp=855, fa_icon="fa fa-star")
-        Rank.objects.create(name="Master Digital Crafter", xp=1000, fa_icon="fa fa-arrows-alt")
-
 
 class Migration(migrations.Migration):
 

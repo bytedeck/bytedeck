@@ -56,7 +56,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
         self.assert404('profiles:profile_update', args=[s2_pk])
@@ -75,7 +75,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('profiles:profile_list_current')
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:GameLab_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
     def test_profile_recalculate_xp_status_codes(self):

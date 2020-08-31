@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                 ('ordinal', models.PositiveIntegerField(default=1, help_text='indicating the nth time user has received this badge')),
                 ('timestamp', models.DateTimeField(auto_now_add=True)),
                 ('updated', models.DateTimeField(auto_now=True)),
-                ('game_lab_transfer', models.BooleanField(default=False, help_text='XP not counted')),
+                ('do_not_grant_xp', models.BooleanField(default=False, help_text='XP not counted')),
                 ('badge', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='badges.Badge')),
                 ('issued_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='issued_by', to=settings.AUTH_USER_MODEL)),
                 ('semester', models.ForeignKey(default=1, on_delete=django.db.models.deletion.SET_DEFAULT, to='courses.Semester')),

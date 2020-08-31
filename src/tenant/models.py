@@ -32,14 +32,15 @@ class Tenant(TenantMixin):
         max_length=62,  # max length of a postgres schema name is 62
         unique=True, 
         validators=[check_tenant_name],
-        help_text="The name may only include lowercase letters, numbers, and dashes. \
-        It must start with a letter, and may not end in a dash, nor include consecutive dashes"
+        help_text="The name of your deck, for example the name `example` would give you the site: `example.bytedeck.com` \n\
+        The name may only include lowercase letters, numbers, and dashes. \
+        It must start with a letter, and may not end in a dash nor include consecutive dashes"
     )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
 
     def __str__(self):
-        return '%s - %s' % (self.schema_name, self.domain_url)
+        return '%s - %s' % (self.schema_name, self.domain_url)  
 
     def get_root_url(self):
         """ 

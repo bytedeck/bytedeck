@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.contrib import messages
 from django.contrib.auth.models import User
 
-from portfolios.models import Artwork
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
 from .models import Profile, create_profile
@@ -22,33 +21,31 @@ def create_missing_profiles(modeladmin, request, queryset):
         messages.success(request, msg_str)
 
 
+def migrate_names_to_user_model(modeladmin, request, queryset):
+    for profile in queryset:
+        if hasattr(profile, 'first_name') and profile.first_name:
+            profile.user.first_name = profile.first_name
+        if hasattr(profile, 'last_name') and profile.last_name:
+            profile.user.last_name = profile.last_name
+        
+        profile.user.save()
+
+    messages.success(request, "Complete")
+
+
+@admin.register(Profile)
 class ProfileAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'user_id', 'user', 'first_name', 'last_name', 'grad_year', 'is_TA',)
+    list_display = ('id', 'get_username', 'get_full_name', 'preferred_name', 'xp_cached', 'grad_year', 'is_TA', 'banned_from_comments')
 
-    actions = [create_missing_profiles]
+    actions = [create_missing_profiles, migrate_names_to_user_model]
 
-    # readonly_fields = ('user_id', )
-    #
-    # def user_id(self, obj):
-    #     return obj.user.pk
+    list_filter = ['is_TA', 'grad_year', 'banned_from_comments', 'get_announcements_by_email', 'get_notifications_by_email']
+    search_fields = ['user__username', 'user__first_name', 'user__first_name', 'preferred_name']
 
-    list_filter = ['is_TA', 'grad_year', ]
-    search_fields = ['first_name', 'last_name', 'user__username']
+    def get_username(self, obj):
+        return obj.user.get_username()
+    get_username.short_description = "Username"
 
-    # # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
-    # def get_queryset(self, request):
-    #     qs = QuestSubmission.objects.get_queryset(active_semester_only=False,
-    #                                               exclude_archived_quests=False,
-    #                                               exclude_quests_not_visible_to_students=False)
-    #     ordering = self.get_ordering(request)
-    #     if ordering:
-    #         qs = qs.order_by(*ordering)
-    #     return qs
-
-
-class ArtworkAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    pass
-
-
-admin.site.register(Profile, ProfileAdmin)
-admin.site.register(Artwork, ArtworkAdmin)
+    def get_full_name(self, obj):
+        return obj.user.get_full_name()
+    get_full_name.short_description = "Full name"

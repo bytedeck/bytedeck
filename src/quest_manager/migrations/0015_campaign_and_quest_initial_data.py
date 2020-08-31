@@ -3,35 +3,6 @@
 from django.db import migrations
 
 
-# NO LONGER USED, THIS METHOD ISN"T CALLED.  INITIAL DATA IS CREATED VIA SIGNAL in tenant/apps.py , new code is in tenant/initialization.py
-def load_initial_data(apps, schema_editor):
-    Category = apps.get_model('quest_manager', 'Category')
-    # BadgeType = apps.get_model('badges', 'BadgeType')
-
-    # add some initial data if none has been created yet
-    if not Category.objects.exists():
-        Category.objects.create(
-            title="Orientation",
-        )
-
-    Quest = apps.get_model('quest_manager', 'Quest')
-
-    # add some initial data if none has been created yet
-    if not Quest.objects.exists():
-        Quest.objects.create(
-            name="Welcome to ByteDeck!",
-            xp=3,
-            short_description="An introduction to ByteDeck.",
-            instructions="<h3>\n    Welcome!\n</h3>\n<p>\n    This is your first intro quest.\n</p>\n<p>\n    This is where you give students information about this quest. You can add images, video tutorials, step-by-step written instructions, links, and anything else students need, in this space.\n</p>\n<p>\n    For this quest, you will probably want to give them a bit of a tour, or explanation, about how you're using ByteDeck. Here's a written intro, in case you want to start with that.\n</p>\n<p>\n    -----\n</p>\n<p>\n</p>\n<p>\n    This website is designed to give you a chance to explore content at your own pace. The content is broken down into larger units (campaigns) and within those are smaller lessons and assignments (quests like this one). As you progress you will need to submit your quests for approval before moving on. This involves following submission instructions and then using the Submit button at the bottom of the quest.\n</p>\n<p>\n    Some quests will be automatically approved and others you will need to wait for an instructor to approve. Your teacher may give you feedback on your submission and/or ask you to fix something about your quest and re-submit it, so make sure you pay attention to any notifications (little numbers that appear next to the bell icon at the top right of your screen).\n</p>\n<p>\n    You can always look at the \"Maps\" (left menu) to see what future quests will be available, so you can continue working without waiting for your quests to be approved.\n</p>",
-            submission_details="<p>This is where you tell students what they need to do to submit this quest successfully. This quest is automatically approved, so:</p><p>Just submit this quest and the next ones will automatically become available to you.<br></p>",
-            instructor_notes="<p>This is your teacher cheat sheet - anything that would help you decide whether to approve or return a quest. This quest is automatically approved, so you wouldn't need any notes here, but you will probably find this section useful in future quests.</p>",
-            import_id="bee53060-c332-4f75-85e1-6a8f9503ebe1",
-            hideable=False,
-            verification_required=False,
-            
-        )
-
-
 class Migration(migrations.Migration):
 
     dependencies = [

@@ -1,19 +1,16 @@
 import re
-
 from datetime import timedelta
-from django.utils.timezone import localtime
-from django.contrib.auth import get_user_model
 
+from courses.models import Semester
+from django.contrib.auth import get_user_model
+from django.utils.timezone import localtime
+from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
-from freezegun import freeze_time
+from quest_manager.models import Category, CommonData, Quest, QuestSubmission
+from siteconfig.models import SiteConfig
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
-
-from siteconfig.models import SiteConfig
-
-from quest_manager.models import Category, CommonData, Quest, QuestSubmission
-from courses.models import Semester
 
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
@@ -62,7 +59,7 @@ class QuestTestModel(TenantTestCase):
         self.assertIsNone(matches_found)
 
     def test_quest_html_formatting_math(self):
-        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>""" # noqa
+        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""  # noqa
         self.quest.instructions = test_markup
         # Auto formatting on save
         self.quest.save()
@@ -168,7 +165,7 @@ class QuestTestModel(TenantTestCase):
         self.assertFalse(quest_semester.is_repeat_available(student))
 
         # change semesters and the quest should appear
-        new_active_sem = baker.make(Semester, active=True)
+        new_active_sem = baker.make(Semester)
         SiteConfig.get().set_active_semester(new_active_sem.id)
         self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 

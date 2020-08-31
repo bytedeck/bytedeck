@@ -57,7 +57,7 @@ class XPItem(models.Model):
     visible_to_students = models.BooleanField(default=True)
     archived = models.BooleanField(default=False,
                                    help_text='Setting this will prevent it from appearing in admin quest lists.  '
-                                             'To un-archive a quest, you will need to access it through Django Admin.')
+                                             'To un-archive a quest, you will need to access it through Site Administration.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     repeat_per_semester = models.BooleanField(
@@ -142,8 +142,6 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.query.QuerySet):
-    def debug(self):
-        self.debug_object_list = list(self)
 
     def exclude_hidden(self, user):
         """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
@@ -154,6 +152,7 @@ class QuestQuerySet(models.query.QuerySet):
         Otherwise, return full qs """
         blocking_quests = self.filter(blocking=True)
         if user:
+            # Check the student's submissions in progress.
             blocking_subs_in_progress = QuestSubmission.objects.all_not_completed(user=user, blocking=False).filter(quest__blocking=True)  # noqa
         else:
             blocking_subs_in_progress = False
@@ -453,11 +452,11 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def has_completion_date(self):
         return self.filter(time_completed__isnull=False)
 
-    def no_game_lab(self):
-        return self.filter(game_lab_transfer=False)
+    def grant_xp(self):
+        return self.filter(do_not_grant_xp=False)
 
-    def game_lab(self):
-        return self.filter(game_lab_transfer=True)
+    def dont_grant_xp(self):
+        return self.filter(do_not_grant_xp=True)
 
     def get_semester(self, semester):
         return self.filter(semester=semester)
@@ -531,7 +530,7 @@ class QuestSubmissionManager(models.Manager):
 
         if user is None:
             # Staff have a separate tab for skipped quests
-            qs = qs.no_game_lab()
+            qs = qs.grant_xp()
         else:
             qs = qs.get_user(user)
 
@@ -542,9 +541,9 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.get_completed_before(up_to_date)
 
         return qs
-        #     return self.get_queryset().approved().no_game_lab()
+        #     return self.get_queryset().approved().grant_xp()
         # return self.get_queryset().get_user(user).approved()
-        #     return self.get_queryset().approved().completed().no_game_lab()
+        #     return self.get_queryset().approved().completed().grant_xp()
         # return self.get_queryset().get_user(user).approved().completed()
 
     def all_skipped(self, user=None):
@@ -554,11 +553,19 @@ class QuestSubmissionManager(models.Manager):
                                )
 
         if user is None:
-            return qs.approved().completed().game_lab()
+            return qs.approved().completed().dont_grant_xp()
         return qs.get_user(user).approved().completed()
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
+        """ Returns a queryset of all QuestSubmissions that are currently in progress.
+        This could be quests a student has started, or ones they have completed but have been returned.
+
+        Keyword Arguments:
+            user {User} -- if not provided, then will include in progress quests for all students. (default: {None})
+            active_semester_only {bool} -- (default: {True})
+            blocking {bool} -- Whether or not to account for blokcing quests.  This is only used if a User is provided. (default: {False})
+        """
         if user is None:
             return self.get_queryset(active_semester_only).not_completed()
 
@@ -667,7 +674,7 @@ class QuestSubmissionManager(models.Manager):
             return None
 
     def calculate_xp(self, user):
-        total_xp = self.all_approved(user).no_game_lab().aggregate(Sum('quest__xp'))
+        total_xp = self.all_approved(user).grant_xp().aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
         if xp is None:
             xp = 0
@@ -675,7 +682,7 @@ class QuestSubmissionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # print("submission.calculate_xp_to_date date: " + str(date))
-        qs = self.all_approved(user, up_to_date=date).no_game_lab()
+        qs = self.all_approved(user, up_to_date=date).grant_xp()
 
         total_xp = qs.aggregate(Sum('quest__xp'))
         xp = total_xp['quest__xp__sum']
@@ -736,8 +743,7 @@ class QuestSubmission(models.Model):
     time_returned = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
-    # all references to gamelab changed to "skipped"
-    game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
+    do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
     semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
@@ -786,7 +792,7 @@ class QuestSubmission(models.Model):
         self.is_completed = True  # might have been false if returned
         self.is_approved = True
         self.time_approved = timezone.now()
-        self.game_lab_transfer = transfer
+        self.do_not_grant_xp = transfer
         self.save()
         # update badges
         BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
@@ -795,7 +801,7 @@ class QuestSubmission(models.Model):
     def mark_returned(self):
         self.is_completed = False
         self.is_approved = False
-        self.game_lab_transfer = False
+        self.do_not_grant_xp = False
         self.time_returned = timezone.now()
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP

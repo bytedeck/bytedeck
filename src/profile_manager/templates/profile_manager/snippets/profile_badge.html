@@ -1,6 +1,6 @@
               <div class="icon-badge-container">
                 <img class="icon-xl img-rounded
-                  {% if assertion.game_lab_transfer %} hackerbadge-transfer {% endif %}"
+                  {% if assertion.do_not_grant_xp %} hackerbadge-transfer {% endif %}"
                   src="{{assertion.badge.get_icon_url}}">
                 {% if assertions_of_this_badge|length > 1 %}
                   <span class="badge badge-icon-lg progress-bar-info">{{assertions_of_this_badge|length}}</span>

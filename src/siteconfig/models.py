@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import models
+from django.db import connection, models
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
+from tenant_schemas.utils import get_public_schema_name
 
 User = get_user_model()
 
@@ -23,7 +24,7 @@ def get_active_semester():
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
         # is this only needed for tests? If not then need a unique username probably, not this!
-        semester, created = Semester.objects.get_or_create(defaults={'active': True})
+        semester, created = Semester.objects.get_or_create()
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
     return semester.id
@@ -149,7 +150,7 @@ class SiteConfig(models.Model):
         elif self.site_logo and hasattr(self.site_logo, 'url'):
             return self.site_logo.url
         else:
-            return None
+            return static('icon/favicon.ico')
 
     def get_banner_image_url(self):
         if self.banner_image and hasattr(self.banner_image, 'url'):
@@ -177,8 +178,13 @@ class SiteConfig(models.Model):
 
     @classmethod
     def get(cls):
-        """ Used to access the single model instance for the current tenant/schema 
-        The SiteConfig object is created automatically after the tenant is created"""
+        """
+        Used to access the single model instance for the current tenant/schema 
+        The SiteConfig object is create automatically via signal af ter new tenants are created.
+        after ne
+        """
 
-        # Create the settings instance for this tenant if it doesn't already exist
-        return cls.objects.get()
+        if connection.schema_name != get_public_schema_name():
+            return cls.objects.get()
+
+        return None

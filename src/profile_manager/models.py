@@ -1,23 +1,22 @@
 # import re
 
+from badges.models import BadgeAssertion
+from courses.models import CourseStudent, Rank
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
-
-from siteconfig.models import SiteConfig
-from tenant_schemas.utils import get_public_schema_name
-
-from badges.models import BadgeAssertion
-from courses.models import Rank, CourseStudent
+from django_resized import ResizedImageField
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
+from siteconfig.models import SiteConfig
+from tenant_schemas.utils import get_public_schema_name
 from utilities.models import RestrictedFileField
 
 
@@ -79,7 +78,7 @@ class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    avatar = ResizedImageField(upload_to='avatars/', null=True, blank=True)
     first_name = models.CharField(max_length=50, null=True, blank=False,
                                   help_text='Use the first name that matches your school records.')
     last_name = models.CharField(max_length=50, null=True, blank=False,
@@ -96,22 +95,22 @@ class Profile(models.Model):
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
-    game_lab_transfer_process_on = models.BooleanField(default=False)
+    not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
     xp_cached = models.IntegerField(default=0)
 
     # Student options
     get_announcements_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published." # noqa
+        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published."  # noqa
     )
     get_notifications_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day." # noqa
+        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day."  # noqa
     )
     get_messages_by_email = models.BooleanField(
         default=True,
-        help_text="If your teacher sends you a message, get an instance email." # noqa
+        help_text="If your teacher sends you a message, get an instance email."  # noqa
     )
     visible_to_other_students = models.BooleanField(
         default=False, help_text="Your marks will be visible to other students through the student list.")
@@ -139,12 +138,11 @@ class Profile(models.Model):
     #################################
 
     def __str__(self):
-        profile = ""
-        if self.first_name:
-            profile = self.first_name
+        if self.user.first_name:
+            profile = self.user.first_name
             if self.preferred_name:
                 profile += " (" + self.preferred_name + ")"
-            profile += " " + self.last_name
+            profile += " " + self.user.last_name
             if self.alias:
                 profile += ", aka " + self.alias_clipped()
         else:
@@ -158,8 +156,8 @@ class Profile(models.Model):
         # new students won't have name info yet
         if self.preferred_name:
             return self.preferred_name
-        elif self.first_name:
-            return self.first_name
+        elif self.user.first_name:
+            return self.user.first_name
         else:
             return ""
 
@@ -170,8 +168,8 @@ class Profile(models.Model):
 
     def preferred_full_name(self):
         name = self.get_preferred_name()
-        if self.last_name:
-            name += " " + self.last_name
+        if self.user.last_name:
+            name += " " + self.user.last_name
         return name if name else str(self.user)
 
     def public_name(self):
@@ -187,10 +185,7 @@ class Profile(models.Model):
         return name
 
     def formal_name(self):
-        if self.first_name and self.last_name:
-            return self.first_name + " " + self.last_name
-        else:
-            return ""
+        return self.user.get_full_name()
 
     def get_absolute_url(self):
         return reverse('profiles:profile_detail', kwargs={'pk': self.id})
@@ -340,7 +335,7 @@ class Profile(models.Model):
         # TODO: Fix this laziness
         try:
             return self.xp_cached - self.rank().xp
-        except: # noqa
+        except:  # noqa
             # TODO
             return 0
 
@@ -377,16 +372,6 @@ def create_profile(sender, **kwargs):
 
         if kwargs["created"]:
             new_profile = Profile(user=current_user)
-
-            # if user's name matches student number (e.g 9912345), set student number:
-            # pattern = re.compile(Profile.student_number_regex_string)
-            # if pattern.match(current_user.get_username()):
-            #     new_profile.student_number = int(current_user.get_username())
-
-            # set first and last name on the profile.  This should be removed and just use the first and last name
-            # from the user model! But when first implemented, first and last name weren't included in the the sign up form.
-            new_profile.first_name = current_user.first_name
-            new_profile.last_name = current_user.last_name
 
             new_profile.save()
 
