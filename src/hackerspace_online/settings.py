@@ -324,6 +324,7 @@ if admins_raw:
     # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
     ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')]
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
+EMAIL_SUBJECT_PREFIX = env('EMAIL_SUBJECT_PREFIX', default='[Bytedeck Dev] ')
 
 
 # STATIC AND MEDIA ###########################

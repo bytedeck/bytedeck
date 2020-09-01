@@ -50,23 +50,26 @@ class PublicContactForm(forms.Form):
         required=True,
         help_text='We will never share your email with anyone else.')
     message = forms.CharField(widget=forms.Textarea, required=True)
-    captcha = ReCaptchaField(
-        label='',
-        widget=ReCaptchaV2Invisible
-    )
+
+    # Not using because our recaptcha key is currently set up for checkbox only
+    # and doesn't also support the invisible widget.
+    # captcha = ReCaptchaField(
+    #     label='',
+    #     widget=ReCaptchaV2Invisible
+    # )
 
     def send_email(self):
         email = self.cleaned_data["email"]
         name = self.cleaned_data["name"]
         message = self.cleaned_data["message"]
 
-        # try:
-        mail_admins(
-            subject=f"Contact from {name}",
-            message=f"Name: {name}\nEmail: {email}\nMessage: {message}",
-        )
-        # except SMTPException:
-        #     return False
+        try:
+            mail_admins(
+                subject=f"Contact from {name}",
+                message=f"Name: {name}\nEmail: {email}\nMessage: {message}",
+            )
+        except SMTPException:
+            return False
 
         return True
 
