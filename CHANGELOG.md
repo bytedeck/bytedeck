@@ -17,6 +17,7 @@ This file chronologically records all notable changes to this website, including
 * Stop messages from dissappearing after a few seconds
 * Tweak admin menu
 * Regenerate large maps in the background
+* [bugfix] Fix broken email sending
 * [bugfix] Remove references to GameLab [#609](https://github.com/timberline-secondary/hackerspace/issues/609)
 * [dev] Move CI from Travis to Github Actions
 
