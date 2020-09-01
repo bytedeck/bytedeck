@@ -60,13 +60,13 @@ class PublicContactForm(forms.Form):
         name = self.cleaned_data["name"]
         message = self.cleaned_data["message"]
 
-        try:
-            mail_admins(
-                subject=f"Contact from {name}",
-                message=f"Name: {name}\nEmail: {email}\nMessage: {message}",
-            )
-        except SMTPException:
-            return False
+        # try:
+        mail_admins(
+            subject=f"Contact from {name}",
+            message=f"Name: {name}\nEmail: {email}\nMessage: {message}",
+        )
+        # except SMTPException:
+        #     return False
 
         return True
 

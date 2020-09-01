@@ -4,6 +4,23 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.9.0] 2020-08-31
+* Forgotten password reset by email
+* Add public landing page for bytedeck.com
+* Remove public portfolio list
+* Announcement buttons moved to action menu
+* Avatars resized on upload
+* Update widgets on several forms
+* Add styling options in editor (click styles along the bottom of any large text field to toggle them)
+* Paginate notifications list
+* Add site config option to not display % mark and calculations page
+* Stop messages from dissappearing after a few seconds
+* Tweak admin menu
+* Regenerate large maps in the background
+* [bugfix] Fix broken email sending
+* [bugfix] Remove references to GameLab [#609](https://github.com/timberline-secondary/hackerspace/issues/609)
+* [dev] Move CI from Travis to Github Actions
+
 ### [1.8.0] 2020-08-02
 * [bugfux] Various minor bug fixes
 * [dev] Refactor django settings to use environment variables
