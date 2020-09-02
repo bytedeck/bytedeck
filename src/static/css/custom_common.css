@@ -395,6 +395,8 @@ ol > ol > ol {
 
 .announcement-dropdown {
     padding-left: 12px;
+    padding-right: 12px;
+    margin-left: 15px;
     line-height: 1.39;
 }
 
