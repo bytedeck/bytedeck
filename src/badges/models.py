@@ -220,8 +220,8 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_type(self, badge_type):
         return self.filter(badge__badge_type=badge_type)
 
-    def no_game_lab(self):
-        return self.filter(game_lab_transfer=False)
+    def grant_xp(self):
+        return self.filter(do_not_grant_xp=False)
 
     def get_semester(self, semester):
         return self.filter(semester=semester)
@@ -283,7 +283,7 @@ class BadgeAssertionManager(models.Manager):
             user=user,
             ordinal=ordinal,
             issued_by=issued_by,
-            game_lab_transfer=transfer,
+            do_not_grant_xp=transfer,
             semester_id=active_semester
         )
         new_assertion.save()
@@ -314,7 +314,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
-        total_xp = self.get_queryset(True).no_game_lab().get_user(user).aggregate(Sum('badge__xp'))
+        total_xp = self.get_queryset(True).grant_xp().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
@@ -322,7 +322,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # self.check_for_new_assertions(user)
-        qs = self.get_queryset(True).no_game_lab().get_user(user)
+        qs = self.get_queryset(True).grant_xp().get_user(user)
         qs = qs.get_issued_before(date)
         total_xp = qs.aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
@@ -340,7 +340,7 @@ class BadgeAssertion(models.Model):
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by',
                                   on_delete=models.SET_NULL)
-    game_lab_transfer = models.BooleanField(default=False, help_text='XP not counted')
+    do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
     semester = models.ForeignKey('courses.Semester', default=1, on_delete=models.SET_DEFAULT)
 
     objects = BadgeAssertionManager()

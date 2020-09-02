@@ -17,7 +17,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from notifications.signals import notify
 from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
-from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import (QuestForm, TAQuestForm, SubmissionForm, SubmissionFormStaff,
                     SubmissionQuickReplyForm)
@@ -30,7 +30,7 @@ def is_staff_or_TA(user):
     return user.is_staff or user.profile.is_TA
 
 
-class QuestDelete(AllowNonPublicViewMixin, UserPassesTestMixin, DeleteView):
+class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
@@ -75,7 +75,7 @@ class QuestFormViewMixin():
             return QuestForm
 
 
-class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
+class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
@@ -88,7 +88,7 @@ class QuestCreate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMix
         return context
 
 
-class QuestUpdate(AllowNonPublicViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView):
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -133,13 +133,13 @@ class QuestCopy(QuestCreate):
         return kwargs
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def quest_list2(request, quest_id=None):
     return quest_list(request, quest_id, template="quest_manager/quests2.html")
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     available_quests = []
@@ -233,7 +233,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     return render(request, template, context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
     if request.is_ajax() and request.method == "POST":
@@ -274,7 +274,7 @@ def ajax_quest_info(request, quest_id=None):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_approval_info(request, submission_id=None):
     if request.is_ajax() and request.method == "POST":
@@ -291,7 +291,7 @@ def ajax_approval_info(request, submission_id=None):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_submission_info(request, submission_id=None):
     if request.is_ajax() and request.method == "POST":
@@ -322,7 +322,7 @@ def ajax_submission_info(request, submission_id=None):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def detail(request, quest_id):
     """
@@ -362,7 +362,7 @@ def detail(request, quest_id):
 #
 # #################################
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def approve(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
@@ -510,7 +510,7 @@ def paginate(object_list, page, per_page=30):
     return object_list
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def approvals(request, quest_id=None):
     """A view for Teachers' Quest Approvals section.
@@ -625,7 +625,7 @@ def approvals(request, quest_id=None):
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def complete(request, submission_id):
     """
@@ -756,7 +756,7 @@ def complete(request, submission_id):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
@@ -777,7 +777,7 @@ def start(request, quest_id):
         return redirect(new_sub)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def hide(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
@@ -788,7 +788,7 @@ def hide(request, quest_id):
     return redirect("quests:quests")
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def unhide(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
@@ -805,7 +805,7 @@ def skip(request, submission_id):
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
     # also make sure it's the student who owns the submission
-    if (request.user.profile.game_lab_transfer_process_on and submission.user == request.user) or request.user.is_staff:
+    if (request.user.profile.not_earning_xp and submission.user == request.user) or request.user.is_staff:
 
         # add default comment to submission
         # origin_path = submission.get_absolute_url()
@@ -830,11 +830,11 @@ def skip(request, submission_id):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def skipped(request, quest_id):
     """A combination of the start and complete views, but automatically approved
-    regardless, and game_lab_transfer = True
+    regardless, and do_not_grant_xp = True
     """
     quest = get_object_or_404(Quest, pk=quest_id)
     new_sub = QuestSubmission.objects.create_submission(request.user, quest)
@@ -848,29 +848,8 @@ def skipped(request, quest_id):
 
     return skip(request, submission.id)
 
-    # #make sure another user isn't hacking in with urls
-    # if submission.user != request.user and not request.user.is_staff:
-    #     return redirect('quests:quests')
-    #
-    # #add default comment to submission
-    # origin_path = submission.get_absolute_url()
-    # comment_text = "(GameLab transfer - no XP for this quest)"
-    # comment_new = Comment.objects.create_comment(
-    #     user = request.user,
-    #     path = origin_path,
-    #     text = comment_text,
-    #     target = submission,
-    # )
-    #
-    # #approve quest automatically, and mark as transfer.
-    # submission.mark_completed() ###################
-    # submission.mark_approved(transfer = True)
-    #
-    # messages.success(request, ("Transfer Successful. No XP was granted for this quest."))
-    # return redirect("quests:quests")
 
-
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_save_draft(request):
     if request.is_ajax() and request.POST:
@@ -894,7 +873,7 @@ def ajax_save_draft(request):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def drop(request, submission_id):
     # Submission should only be droppable when quest is still not approved
@@ -916,7 +895,7 @@ def drop(request, submission_id):
     return render(request, template_name, {'submission': sub})
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def submission(request, submission_id=None, quest_id=None):
     # sub = QuestSubmission.objects.get(id = submission_id)
@@ -953,7 +932,7 @@ def submission(request, submission_id=None, quest_id=None):
     return render(request, 'quest_manager/submission.html', context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax(request):
     if request.is_ajax() and request.method == "POST":
@@ -975,7 +954,7 @@ def ajax(request):
 #
 ########################
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def flagged_submissions(request):
     flagged_subs = QuestSubmission.objects.flagged(user=request.user)
@@ -990,7 +969,7 @@ def flagged_submissions(request):
     return render(request, "quest_manager/flagged.html", context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def flag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
@@ -1004,7 +983,7 @@ def flag(request, submission_id):
     return redirect("quests:approvals")
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def ajax_flag(request):
     if request.is_ajax() and request.method == "POST":
@@ -1018,7 +997,7 @@ def ajax_flag(request):
         raise Http404
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def unflag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)

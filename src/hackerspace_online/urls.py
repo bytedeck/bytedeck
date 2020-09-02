@@ -48,14 +48,23 @@ urlpatterns += [
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
     url(r'^config/', include('siteconfig.urls', namespace='config')),
+    url(r'^decks/', include('tenant.urls', namespace='decks')),
 
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth
+    url(r'^accounts/password/reset/$',
+        views.CustomPasswordResetView.as_view(),
+        name='account_reset_password'),
+    url(r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',
+        views.CustomPasswordResetFromKeyView.as_view(),
+        name='account_reset_password_from_key'),
     url(r'^accounts/', include('allauth.urls')),
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
+    # Browsers looks for favicon.ico at root, redirect them to proper favicon to prevent constant 404s
+    url(r'^favicon\.ico$', views.FaviconRedirectView.as_view()),
 ]
 
 

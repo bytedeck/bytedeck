@@ -12,7 +12,6 @@ from django.urls import reverse
 from django.utils import timezone
 from jchart import Chart
 from jchart.config import DataSet, rgba
-
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
@@ -157,15 +156,6 @@ class SemesterManager(models.Manager):
         else:
             return SiteConfig.get().active_semester
 
-    def set_active(self, sem_id):
-        # Set all to active = False
-        self.get_queryset().update(active=False)  # note thisdoes not fire post_save/update signals
-
-        # Then set only this one to active=True
-        sem = self.get_queryset().get(id=sem_id)
-        sem.active = True
-        sem.save()
-
     def complete_active_semester(self):
 
         active_sem = self.get_current()
@@ -200,7 +190,6 @@ class Semester(models.Model):
 
     first_day = models.DateField(blank=True, null=True, default=date.today)
     last_day = models.DateField(blank=True, null=True, default=default_end_date)
-    active = models.BooleanField(default=False)
     closed = models.BooleanField(
         default=False,
         help_text="All student courses in this semester have been closed and final marks recorded."
@@ -478,8 +467,8 @@ class CourseStudent(models.Model):
             + ": " + str(self.course) \
             + " " + str(self.grade_fk.value) if self.grade_fk else ""
 
-    def get_absolute_url(self):
-        return reverse('courses:list')
+    # def get_absolute_url(self):
+    #     return reverse('courses:list')
         # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property

@@ -3,24 +3,25 @@ import json
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
-                              redirect, render)
+                              redirect, render, reverse)
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
-
 from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
-from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import CourseStudentForm
 from .models import CourseStudent, Rank, Semester
 
 
 # Create your views here.
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
@@ -52,39 +53,27 @@ def mark_calculations(request, user_id=None):
     return render(request, template_name, context)
 
 
-class RankList(AllowNonPublicViewMixin, ListView):
+class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Rank
 
 
-class CourseStudentList(AllowNonPublicViewMixin, ListView):
+@method_decorator(staff_member_required, name='dispatch')
+class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
+    form_class = CourseStudentForm
+    template_name = 'courses/coursestudent_form.html'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        user = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        kwargs['instance'] = CourseStudent(user=user)
+        return kwargs
+
+    def get_success_url(self):
+        return reverse('profiles:profile_detail', args=(self.object.user.profile.id, ))
 
 
-@allow_non_public_view
-@staff_member_required
-def add_course_student(request, user_id):
-    if int(user_id) > 0:
-        user = get_object_or_404(User, pk=user_id)
-    else:
-        user = None
-
-    form = CourseStudentForm(request.POST or None)
-
-    if form.is_valid():
-        new_course_student = form.save(commit=False)
-        new_course_student.user = user
-        new_course_student.save()
-        # messages.success(request, ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user)))
-        return redirect('profiles:profile_detail', pk=user.profile.id)
-
-    context = {
-        "user": user,
-        "form": form,
-    }
-    return render(request, 'courses/coursestudent_form.html', context)
-
-
-class CourseStudentCreate(AllowNonPublicViewMixin, SuccessMessageMixin, CreateView):
+class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
@@ -96,23 +85,10 @@ class CourseStudentCreate(AllowNonPublicViewMixin, SuccessMessageMixin, CreateVi
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
 
-        # def get_initial(self):
-        #     data = { 'user': self.request.user }
-        #     return data
 
-        # def form_valid(self, form):
-        #     form.instance.user = self.request.user
-        #     return super(CourseStudentCreate, self).form_valid(form)
-
-
-#
-
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def end_active_semester(request):
-    if not request.user.is_superuser:
-        return HttpResponse(status=401)
-
     sem = Semester.objects.complete_active_semester()
     semester_warnings = {
         Semester.CLOSED: 'Semester is already closed, no action taken.',
@@ -128,7 +104,7 @@ def end_active_semester(request):
     return redirect('config:site_config_update_own')
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
     if user_id == 0:

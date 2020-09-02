@@ -8,13 +8,13 @@ from django.shortcuts import (HttpResponseRedirect, get_object_or_404,
                               redirect, render)
 
 from notifications.signals import notify
-from tenant.views import allow_non_public_view
+from tenant.views import non_public_only_view
 
 from .forms import CommentForm
 from .models import Comment
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def unflag(request, id):
     comment = get_object_or_404(Comment, pk=id)
@@ -22,7 +22,7 @@ def unflag(request, id):
     return redirect(comment.path)
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def delete(request, id, template_name='comments/confirm_delete.html'):
     comment = get_object_or_404(Comment, pk=id)
@@ -33,7 +33,7 @@ def delete(request, id, template_name='comments/confirm_delete.html'):
     return render(request, template_name, {'object': comment})
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required
 def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
@@ -56,7 +56,7 @@ def flag(request, id):
     return redirect(comment.path)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def comment_thread(request, id):
     comment = get_object_or_404(Comment, id=id)
@@ -69,7 +69,7 @@ def comment_thread(request, id):
     return render(request, "comments/comment_thread.html", context)
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def comment_create(request):
     if request.method == "POST" and request.user.is_authenticated:

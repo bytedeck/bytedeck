@@ -20,4 +20,23 @@
 
 {% endfor %}
 </table>
+
+{% if notifications.paginator.num_pages > 1 %}
+<ul class="pagination pagination-centered">
+    {% if notifications.has_previous %}
+        <li><a href="{% url 'notifications:list' %}?page=1"><<</a></li>
+        <li><a href="{% url 'notifications:list' %}?page={{ notifications.previous_page_number }}"><</a></li>
+    {% endif %}
+
+    {% for i in notifications.paginator.page_range %}
+        <li {% if notifications.number == i %} class="active" {% endif %}><a href="{% url 'notifications:list' %}?page={{i}}">{{i}}</a></li>
+    {% endfor %}
+
+    {% if notifications.has_next %}
+        <li><a href="{% url 'notifications:list' %}?page={{ notifications.next_page_number }}">></a></li>
+        <li><a href="{% url 'notifications:list' %}?page={{ notifications.paginator.num_pages }}">>></a></li>
+    {% endif %}
+</ul>
+{% endif %}
+
 {% endblock %}

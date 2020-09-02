@@ -2,10 +2,10 @@ from django.shortcuts import render
 
 from .models import VideoResource
 from utilities.forms import VideoForm
-from tenant.views import allow_non_public_view
+from tenant.views import non_public_only_view
 
 
-@allow_non_public_view
+@non_public_only_view
 def videos(request):
     videos = VideoResource.objects.all()
     form = VideoForm(request.POST or None, request.FILES or None)

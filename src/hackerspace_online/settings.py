@@ -62,6 +62,8 @@ SHARED_APPS = (
 
     'django.contrib.sites',
 
+    'captcha',
+
     'grappelli',
     'crispy_forms',
     'bootstrap_datepicker_plus',
@@ -145,6 +147,9 @@ INSTALLED_APPS = (
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
+
+    # https://pypi.org/project/django-recaptcha/
+    'captcha',
 
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
@@ -272,7 +277,7 @@ CELERY_TASKS_BUNCH_SIZE = 10
 
 # allowed delay between conditions met updates for all users:
 # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
-CONDITIONS_UPDATE_COUNTDOWN = 60 * 1  
+CONDITIONS_UPDATE_COUNTDOWN = 60 * 1
 
 
 # DATABASES #######################################################
@@ -281,7 +286,7 @@ POSTGRES_HOST = env('POSTGRES_HOST', default='127.0.0.1')  # os.environ.get('POS
 POSTGRES_PORT = env('POSTGRES_PORT')
 POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
 POSTGRES_USER = env('POSTGRES_USER')
-POSTGRES_PASSWORD = env('POSTGRES_PASSWORD')
+POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
 DATABASES = {
     'default': {
@@ -298,13 +303,14 @@ DATABASE_ROUTERS = (
     'tenant_schemas.routers.TenantSyncRouter',
 )
 
+
 # EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
 EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
 
 EMAIL_HOST = env('EMAIL_HOST', default=None)
-EMAIL_HOST_USER = env('EMAIL_HOST', default=None)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default=None)
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default=None)
 
 EMAIL_PORT = env('EMAIL_PORT', default=587)
@@ -316,8 +322,9 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 admins_raw = env('ADMINS', default=[])
 if admins_raw:
     # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
-    ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')] 
+    ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')]
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
+EMAIL_SUBJECT_PREFIX = env('EMAIL_SUBJECT_PREFIX', default='[Bytedeck Dev] ')
 
 
 # STATIC AND MEDIA ###########################
@@ -333,7 +340,7 @@ MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_upload
 STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
 
 STATICFILES_DIRS = env(
-    'STATICFILES_DIRS', 
+    'STATICFILES_DIRS',
     default=(
         os.path.join(BASE_DIR, "static"),
         # '/var/www/static/',
@@ -348,6 +355,13 @@ SITE_ID = 1
 GRAPPELLI_CLEAN_INPUT_TYPES = False
 
 
+# PUBLIC TENANT ##############################
+
+DEFAULT_SUPERUSER_USERNAME = env('DEFAULT_SUPERUSER_USERNAME')
+DEFAULT_SUPERUSER_PASSWORD = env('DEFAULT_SUPERUSER_PASSWORD')
+DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.com')
+
+
 # TENANTS ###############################################################
 
 TENANT_MODEL = "tenant.Tenant"
@@ -356,8 +370,20 @@ TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
 TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
-# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant. 
+# The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
 SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+
+
+# RECAPTCHA #######################################################
+
+recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
+if recaptcha_keys_available:
+    RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
+    RECAPTCHA_PRIVATE_KEY = env('RECAPTCHA_PRIVATE_KEY')
+else:
+    # Google provides test keys which are set as the default for RECAPTCHA_PUBLIC_KEY and RECAPTCHA_PRIVATE_KEY.
+    # These cannot be used in production since they always validate to true and a warning will be shown on the reCAPTCHA.
+    pass
 
 
 # AUTHENTICATION ##################################################
@@ -390,7 +416,7 @@ LOGIN_URL = 'account_login'
 # ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username, 
+# Specifies the login method to use – whether the user logs in by entering their username,
 # e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
@@ -404,12 +430,12 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # The user is required to hand over an e-mail address when signing up.
 ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
 # Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
-# the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified 
+# the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified
 # e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
 # ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
-# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only – 
+# The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only –
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
@@ -524,6 +550,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
         # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
+        os.path.join(STATIC_URL, 'js/summernote-classes.js'),
     ),
 
     # Codemirror as codeview
@@ -580,12 +607,22 @@ SUMMERNOTE_CONFIG = {
 
 }
 
+# django-rseized
+DJANGORESIZED_DEFAULT_QUALITY = 90
+DJANGORESIZED_DEFAULT_SIZE = [256, 256]
+DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
+
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
 if DEBUG:
 
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
+    # Google provides default keys in development that always validate, but results in this error:
+    # captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+    # use of the Google test keys and will not behave as expected in a production environment
+    SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]

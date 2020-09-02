@@ -1,0 +1,80 @@
+{% load static %}
+{% load crispy_forms_tags %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css" integrity="sha384-r4NyP46KrjDleawBgD5tp8Y7UzmLA05oM1iAEQ17CSuDqnUK2+k9luXQOfXJCJ4I" crossorigin="anonymous">
+
+    <title>Create New Deck</title>
+  </head>
+  <body>
+  <div class="container" style="max-width: 960px;">
+    <h3>Create New Deck</h3>
+    <form method="post">{% csrf_token %}
+        {{ form | crispy }}
+        <input id="submitBtn" type="submit" value="Create">
+    </form>
+
+    <!-- Optional JavaScript -->
+    <!-- Popper.js first, then Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/js/bootstrap.min.js" integrity="sha384-oesi62hOLfzrys4LxRF63OJCXdXDipiYWBnvTl9Y9/TRlw5xlKIEHpNyvvDShgf/" crossorigin="anonymous"></script>
+  </div>
+
+  <!-- Modal progress bar window -->
+  <div class="modal fade" id="modalProgress" aria-labelledby="modalProgressLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalProgressLabel">Generating the deck: <strong><span id="urlSpan" ></span></strong></h5>
+        </div>
+        <div class="modal-body">
+          <p>This may take a moment.</p>
+          <div class="progress">
+            <div class="progress-bar progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var progressModal = new bootstrap.Modal(document.getElementById('modalProgress'))
+    document.getElementById("submitBtn").addEventListener("click", function(){
+      // Allow a delay before showing the progress bar.  This prevents it from flashing up when the form invalidates.
+      setTimeout(function() {
+        // set the new deck url in the title
+        tenantName = document.getElementById('id_name').value;
+        document.getElementById('urlSpan').innerHTML = tenantName + ".bytedeck.com";
+
+        progressModal.show();
+        animateProgressBar();
+      }, 500);
+    }); 
+
+    // h/t to https://codepen.io/-1117/pen/zYxbqxO
+    current_progress = 0,
+    step = 0.1; // the smaller this is the slower the progress bar
+
+    function animateProgressBar(progressModal) {
+      interval = setInterval(function() {
+          current_progress += step;
+          progress = Math.round(Math.atan(current_progress) / (Math.PI / 2) * 100 * 1000) / 1000;
+          bar = document.getElementsByClassName("progress-bar")[0];
+          bar.style.width = progress + "%";
+          bar.setAttribute("aria-valueno", progress);
+          if (progress >= 100){
+              clearInterval(interval);
+          }
+      }, 100);
+    }
+  </script>
+
+  </body>
+</html>
+

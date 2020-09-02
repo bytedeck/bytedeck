@@ -1,16 +1,14 @@
-from mock import patch
+from datetime import date, datetime, timedelta
 
-from datetime import datetime, timedelta, date
-from django.utils import timezone
+from courses.models import (Block, Course, CourseStudent, ExcludedDate, Grade,
+                            MarkRange, Rank, Semester)
 from django.contrib.auth import get_user_model
-from django.shortcuts import reverse
-
-from model_bakery import baker
+from django.utils import timezone
 from freezegun import freeze_time
-from tenant_schemas.test.cases import TenantTestCase
-
-from courses.models import MarkRange, Course, Semester, Block, Rank, Grade, ExcludedDate, CourseStudent
+from mock import patch
+from model_bakery import baker
 from siteconfig.models import SiteConfig
+from tenant_schemas.test.cases import TenantTestCase
 
 User = get_user_model()
 
@@ -63,7 +61,7 @@ class SemesterModelManagerTest(TenantTestCase):
         self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
         self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
         self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
-    
+
     def test_get_current(self):
         """ Get's the current semester as defined by SiteConfig """
         self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
@@ -71,17 +69,6 @@ class SemesterModelManagerTest(TenantTestCase):
     def test_get_current_as_queryset(self):
         """ Get's the current semester object in a quesryset  """
         self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [repr(SiteConfig.get().active_semester)])
-
-    def test_set_active(self):
-        """ Only one active semester, so should also set all others to active=False  """
-        current_sem = SiteConfig.get().active_semester
-        self.assertTrue(current_sem.active)
-        Semester.objects.set_active(self.semester1.id)
-        self.semester1.refresh_from_db()
-        self.assertTrue(self.semester1.active)
-        # previous active semester is now not
-        current_sem.refresh_from_db()
-        self.assertFalse(current_sem.active)
 
     def test_complete_active_semester(self):
         """ set current semester to closed and do lots of stuff..  """
@@ -188,7 +175,7 @@ class SemesterModelTest(TenantTestCase):
 
     def test_get_interim2_date(self):
         self.assertEqual(self.semester.get_interim2_date(), self.semester.get_date(0.75))
-    
+
     def test_get_final_date(self):
         self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
 
@@ -245,8 +232,8 @@ class CourseStudentModelTest(TenantTestCase):
         self.assertIsInstance(self.course_student, CourseStudent)
         # self.assertEqual(str(self.course), self.course.title)
 
-    def test_course_student_get_absolute_url(self):
-        self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
+    # def test_course_student_get_absolute_url(self):
+    #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
     @patch('courses.models.Semester.fraction_complete')
     def test_calc_mark(self, fraction_complete):
@@ -281,14 +268,14 @@ class CourseStudentModelTest(TenantTestCase):
 
 
 class BlockModelTest(TenantTestCase):
-    
+
     def test_default_object_created(self):
         """ A data migration should make a default block """
         self.assertTrue(Block.objects.filter(block="Default").exists())
 
 
 class RankModelTest(TenantTestCase):
-    
+
     def test_default_object_created(self):
         """ A data migration should make default objects for this model """
         self.assertTrue(Rank.objects.filter(name="Digital Noob").exists())
@@ -296,7 +283,7 @@ class RankModelTest(TenantTestCase):
 
 
 class GradeModelTest(TenantTestCase):
-    
+
     def test_default_object_created(self):
         """ A data migration should make default objects for this model """
         self.assertTrue(Grade.objects.filter(name="12").exists())

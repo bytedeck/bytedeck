@@ -15,10 +15,10 @@ from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
-from tenant.views import AllowNonPublicViewMixin, allow_non_public_view
+from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 
-class ProfileList(AllowNonPublicViewMixin, UserPassesTestMixin, ListView):
+class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
 
@@ -82,7 +82,7 @@ class ProfileListCurrent(ProfileList):
 #         return super(ProfileCreate, self).form_valid(form)
 
 
-class ProfileDetail(AllowNonPublicViewMixin, DetailView):
+class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
     model = Profile
 
     @method_decorator(login_required)
@@ -127,7 +127,7 @@ class ProfileDetail(AllowNonPublicViewMixin, DetailView):
         return context
 
 
-class ProfileUpdate(AllowNonPublicViewMixin, UpdateView):
+class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = Profile
     form_class = ProfileForm
     template_name = 'profile_manager/form.html'
@@ -157,7 +157,7 @@ class ProfileUpdateOwn(ProfileUpdate):
         return self.request.user.profile
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required(login_url='/')
 def recalculate_current_xp(request):
     profiles_qs = Profile.objects.all_for_active_semester()
@@ -178,22 +178,22 @@ def tour_complete(request):
     return redirect('quests:quests')
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required(login_url='/')
-def GameLab_toggle(request, profile_id):
+def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
-    profile.game_lab_transfer_process_on = not profile.game_lab_transfer_process_on
+    profile.not_earning_xp = not profile.not_earning_xp
     profile.save()
     return redirect_to_previous_page(request)
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required(login_url='/')
 def comment_ban_toggle(request, profile_id):
     return comment_ban(request, profile_id, toggle=True)
 
 
-@allow_non_public_view
+@non_public_only_view
 @staff_member_required(login_url='/')
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)

@@ -22,7 +22,7 @@
     <div class="panel accordian
       {% if s.id == active_id %} active{% endif %}
       {% if object.sticky %}panel-info
-      {% elif s.game_lab_transfer %}panel-muted
+      {% elif s.do_not_grant_xp %}panel-muted
       {% else %}panel-default{% endif %}">
       <div class="panel-heading accordian accordian-trigger panel-heading-tall
         {% if s.id == active_id %} active {% endif %}"
@@ -83,6 +83,9 @@
     {% include "quest_manager/pagination_controls.html" %}
   {% endwith %}
 
+{% elif user.block_set.count == 0 %}
+  <p>You are not assigned as the teacher for any blocks yet.</p>
+  <button>Join a block</button>
 {% else %}
   <p>None.</p>
 {% endif %}

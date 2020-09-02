@@ -5,7 +5,7 @@ from django import forms
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
-from hackerspace_online.forms import CustomSignupForm
+from hackerspace_online.forms import CustomSignupForm, PublicContactForm
 
 User = get_user_model()
 
@@ -62,3 +62,23 @@ class CustomSignUpFormTest(TenantTestCase):
         self.assertRedirects(response, reverse('quests:quests'))
         user = User.objects.get(username="username")
         self.assertEqual(user.first_name, "firsttest")
+
+
+class PublicContactFormTest(TenantTestCase):
+
+    def setUp(self):
+        pass
+
+    def test_init(self):
+        PublicContactForm()
+
+    def test_valid_data(self):
+        form = PublicContactForm(
+            data={
+                'name': 'First Last',
+                'email': 'test@example.com',
+                'message': 'Test Message',
+                'g-recaptcha-response': 'PASSED',
+            }
+        )
+        self.assertTrue(form.is_valid())

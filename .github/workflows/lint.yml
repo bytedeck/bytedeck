@@ -1,0 +1,37 @@
+name: Flake8
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    name: Lint with Flake8
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Install dependencies
+      run:  pip install flake8
+    - name: Setup flake8 annotations
+      uses: rbialon/flake8-annotations@v1
+    - name: Lint
+      run: |
+        pip install flake8
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 src --count --show-source --statistics
+
+# jobs:
+#   lint:
+#     name: Lint with Flake8
+#     runs-on: ubuntu-18.04
+#     steps:
+#     - uses: actions/checkout@v2
+#     - uses: tonybajan/flake8-check-action@v1.0.0
+#       with:
+#         path: src
+#         select: E,F,W
+#         ignore: W291,E216,W504,W503,E126,W293
+#         maxlinelength: 150
+#         repotoken: ${{ secrets.GITHUB_TOKEN }}

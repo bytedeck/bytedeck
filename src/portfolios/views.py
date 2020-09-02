@@ -12,16 +12,16 @@ from django.views.generic import ListView, CreateView, DetailView, UpdateView, D
 
 from comments.models import Document
 from portfolios.models import Portfolio, Artwork
-from tenant.views import allow_non_public_view, AllowNonPublicViewMixin
+from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from portfolios.forms import PortfolioForm, ArtworkForm
 
 
-class PortfolioList(AllowNonPublicViewMixin, LoginRequiredMixin, ListView):
+class PortfolioList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Portfolio
     template_name = 'portfolios/list.html'
 
 
-class PortfolioCreate(AllowNonPublicViewMixin, LoginRequiredMixin, CreateView):
+class PortfolioCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Portfolio
     form_class = PortfolioForm
     template_name = 'portfolios/form.html'
@@ -40,7 +40,7 @@ class PortfolioCreate(AllowNonPublicViewMixin, LoginRequiredMixin, CreateView):
         return context
 
 
-class PortfolioDetail(AllowNonPublicViewMixin, LoginRequiredMixin, DetailView):
+class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Portfolio
 
     def dispatch(self, *args, **kwargs):
@@ -52,7 +52,7 @@ class PortfolioDetail(AllowNonPublicViewMixin, LoginRequiredMixin, DetailView):
             raise Http404("Sorry, this portfolio isn't shared!")
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def detail(request, pk=None):
     if pk is None:
@@ -80,7 +80,7 @@ def public(request, uuid):
     return render(request, 'portfolios/public.html', {"p": p})
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def edit(request, pk=None):
     # portfolio pk is portfolio.user.id
@@ -112,7 +112,7 @@ def edit(request, pk=None):
 #
 ######################################
 
-class ArtworkCreate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageMixin, CreateView):
+class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
@@ -144,7 +144,7 @@ class ArtworkCreate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageM
             raise Http404("Sorry, this isn't your portfolio!")
 
 
-class ArtworkUpdate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageMixin, UpdateView):
+class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
@@ -170,7 +170,7 @@ class ArtworkUpdate(AllowNonPublicViewMixin, LoginRequiredMixin, SuccessMessageM
             raise Http404("Sorry, this isn't your art!")
 
 
-class ArtworkDelete(AllowNonPublicViewMixin, LoginRequiredMixin, DeleteView):
+class ArtworkDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     model = Artwork
 
     def get_success_url(self):
@@ -204,7 +204,7 @@ def is_acceptable_vid_type(filename):
     return ext in vid_ext_list
 
 
-@allow_non_public_view
+@non_public_only_view
 @login_required
 def art_add(request, doc_id):
     doc = get_object_or_404(Document, id=doc_id)
