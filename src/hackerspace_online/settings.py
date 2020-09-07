@@ -255,15 +255,6 @@ CACHES = {
 
 SELECT2_CACHE_BACKEND = 'default'
 
-# django.test.override_settings does not simply work as expected.
-# overriding settings here instead
-if 'test' in sys.argv:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'test-loc'
-        }
-    }
 
 # I18N AND L10N ####################################################################
 
@@ -664,7 +655,16 @@ if DEBUG:
 
 TESTING = 'test' in sys.argv
 if TESTING:
-    # Use weaker password hasher for speeding up tests (when tested)
+    # Use weaker password hasher for speeding up tests
     PASSWORD_HASHERS = [
         'django.contrib.auth.hashers.MD5PasswordHasher',
     ]
+
+    # django.test.override_settings does not simply work as expected.
+    # overriding settings here instead
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test-loc'
+        }
+    }
