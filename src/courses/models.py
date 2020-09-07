@@ -226,8 +226,8 @@ class Semester(models.Model):
         else:
             last_day = self.last_day
         count = numpy.busday_count(self.first_day, last_day, holidays=excluded_days)
-        if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here. 
-            count += 1 
+        if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here.
+            count += 1
         return count
 
     def excluded_days(self):
@@ -257,7 +257,7 @@ class Semester(models.Model):
         return self.last_day
 
     def get_date(self, fraction_complete):
-        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded
         after a fraction of the semester is over """
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
@@ -375,7 +375,7 @@ class CourseStudentQuerySet(models.query.QuerySet):
 
 class CourseStudentManager(models.Manager):
     def get_queryset(self):
-        return CourseStudentQuerySet(self.model, using=self._db)
+        return CourseStudentQuerySet(self.model, using=self._db).select_related('course')
 
     def all_for_user_semester(self, user, semester):
         return self.get_queryset().get_user(user).get_semester(semester)

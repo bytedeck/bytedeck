@@ -46,7 +46,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
 
 class ProfileListCurrent(ProfileList):
-    """This view only displays currently enrolled students in its list, as opposed to 
+    """This view only displays currently enrolled students in its list, as opposed to
     all students ever.  Student's shouldn't be able to view all students ever, only their
     current colleagues.
 
