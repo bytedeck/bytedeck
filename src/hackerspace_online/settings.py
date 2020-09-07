@@ -252,8 +252,18 @@ CACHES = {
         'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
+
 SELECT2_CACHE_BACKEND = 'default'
 
+# django.test.override_settings does not simply work as expected.
+# overriding settings here instead
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test-loc'
+        }
+    }
 
 # I18N AND L10N ####################################################################
 
