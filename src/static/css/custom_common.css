@@ -410,6 +410,10 @@ ol > ol > ol {
     overflow-wrap: break-word;
 }
 
+.announcement-action-btns {
+    margin: 10px 0;
+}
+
 /*********** Bootstrap BADGES **************************/
 
 .badge.list-group-item-badge {
