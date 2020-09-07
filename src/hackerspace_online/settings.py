@@ -387,6 +387,15 @@ else:
     pass
 
 
+# Google provides default keys in development that always validate, but results in this error:
+#  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+#  use of the Google test keys and will not behave as expected in a production environment
+# 
+# Silencing the error allows us to setup an environment (otherwise the error will stop the app)
+# The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
+SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
+
+
 # AUTHENTICATION ##################################################
 
 AUTHENTICATION_BACKENDS = (
@@ -619,11 +628,6 @@ DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
 if DEBUG:
 
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
-
-    # Google provides default keys in development that always validate, but results in this error:
-    # captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
-    # use of the Google test keys and will not behave as expected in a production environment
-    SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
