@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.core.cache import cache
 from django.templatetags.static import static
 from django.urls import reverse
+from django.utils.timezone import localtime
 
 from freezegun import freeze_time
 from model_bakery import baker
@@ -72,27 +73,29 @@ class SiteConfigModelTest(TenantTestCase):
 
     def test_SiteConfig_get_caches(self):
         """ SiteConfig should be in cache """
-        cached_config = cache.get(SiteConfig.cache_key)
+        cached_config = cache.get(SiteConfig.cache_key())
 
         self.assertIsNotNone(cached_config)
         self.assertEqual(self.config, cached_config)
 
     def test_SiteConfig_save_sets_new_cache_properly(self):
         """ SiteConfig.save should invalidate previous cache and set newer cache """
-        old_cache = cache.get(SiteConfig.cache_key)
+        old_cache = cache.get(SiteConfig.cache_key())
 
         new_site_name = 'My New Site Name'
         self.config.site_name = new_site_name
         self.config.save()
 
-        new_cache = cache.get(SiteConfig.cache_key)
+        new_cache = cache.get(SiteConfig.cache_key())
         self.assertNotEqual(old_cache.site_name, new_cache.site_name)
 
-    # def test_SiteConfig_cache_expires(self):
-    #     """ SiteConfig cache should expire after a certain period """
+    def test_SiteConfig_cache_expires(self):
+        """ SiteConfig cache should expire after a certain period """
 
-    #     self.assertIsNotNone(cache.get(SiteConfig.cache_key))
+        # Cache should not be empty as of this moment
+        self.assertIsNotNone(cache.get(SiteConfig.cache_key()))
 
-    #     cache_time_expiration = datetime.now() + timedelta(days=1)
-    #     with freeze_time(cache_time_expiration, tz_offset=0):
-    #         self.assertIsNone(cache.get(SiteConfig.cache_key))
+        # Cache should now expire
+        cache_time_expiration = localtime() + timedelta(days=1)
+        with freeze_time(cache_time_expiration, tz_offset=0):
+            self.assertIsNone(cache.get(SiteConfig.cache_key()))

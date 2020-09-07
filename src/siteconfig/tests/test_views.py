@@ -46,7 +46,7 @@ class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
 
-        old_cache = cache.get(SiteConfig.cache_key)
+        old_cache = cache.get(SiteConfig.cache_key())
 
         data = model_to_dict(old_cache)
         del data['banner_image']
@@ -61,11 +61,11 @@ class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
         self.client.post(reverse('config:site_config_update_own'), data=data)
 
         # Current cache is still using the old cache because SiteConfig.get is not called yet
-        self.assertEqual(old_cache, cache.get(SiteConfig.cache_key))
+        self.assertEqual(old_cache, cache.get(SiteConfig.cache_key()))
 
         # SiteConfig.get() should be using new cache since `SiteConfig.save` method was called
         self.assertEqual(SiteConfig.get().site_name, new_site_name)
 
         # After calling SiteConfig.get(), cache should not be equal to the old cache
         # Comparing the `site_name` since Django's Model.__eq__ is comparing `pk`
-        self.assertNotEqual(old_cache.site_name, cache.get(SiteConfig.cache_key).site_name)
+        self.assertNotEqual(old_cache.site_name, cache.get(SiteConfig.cache_key()).site_name)

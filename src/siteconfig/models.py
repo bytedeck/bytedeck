@@ -181,9 +181,8 @@ class SiteConfig(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
-        cache.set(SiteConfig.cache_key, self, 3600)
+        cache.set(SiteConfig.cache_key(), self, 3600)
 
-    @property
     @classmethod
     def cache_key(cls):
         return f'{connection.schema_name}-siteconfig'
@@ -197,11 +196,11 @@ class SiteConfig(models.Model):
         """
 
         if connection.schema_name != get_public_schema_name():
-            siteconfig = cache.get(cls.cache_key)
+            siteconfig = cache.get(cls.cache_key())
 
             if not siteconfig:
                 siteconfig = cls.objects.select_related('deck_ai', 'active_semester').get()
-                cache.set(cls.cache_key, siteconfig, 3600)
+                cache.set(cls.cache_key(), siteconfig, 3600)
 
             return siteconfig
 
