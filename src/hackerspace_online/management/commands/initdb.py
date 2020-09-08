@@ -74,7 +74,7 @@ class Command(BaseCommand):
         print('\n** Updating Sites object...')
         site = Site.objects.first()
         site.domain = settings.ROOT_DOMAIN
-        site.name = settings.ROOT_DOMAIN
+        site.name = settings.ROOT_DOMAIN[:45]  # Can be too long if using an AWS public DNS
         site.save()
 
         print("\nSites object")
