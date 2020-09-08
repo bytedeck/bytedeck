@@ -59,7 +59,7 @@ class Command(BaseCommand):
 
         print('\n** Creating `public` Tenant object...')
         public_tenant, created = Tenant.objects.get_or_create(
-            domain_url='localhost',
+            domain_url=settings.ROOT_DOMAIN,
             schema_name='public',
             name='public'
         )
@@ -73,8 +73,8 @@ class Command(BaseCommand):
                     
         print('\n** Updating Sites object...')
         site = Site.objects.first()
-        site.domain = 'localhost'
-        site.name = 'localhost'
+        site.domain = settings.ROOT_DOMAIN
+        site.name = settings.ROOT_DOMAIN
         site.save()
 
         print("\nSites object")

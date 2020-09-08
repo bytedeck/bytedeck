@@ -60,7 +60,7 @@ This will create your docker containers and initialize the database by running m
 1. Open a terminal
 2. Move into the project directory:
 `cd ~/Developer/bytedeck`
-3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize
+3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize.  If you are not running the app locally (e.g. production), then be sure to set DOMAIN_ROOT to the FQDN.
 `cp .env.example .env`
 4. Build the containers (db, redis, celery, and celery-beat):
 `docker-compose build`

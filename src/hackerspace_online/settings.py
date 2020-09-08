@@ -30,8 +30,11 @@ environ.Env.read_env(os.path.join(project_root(), '.env'))
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
+ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
-ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
