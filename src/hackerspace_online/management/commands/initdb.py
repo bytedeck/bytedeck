@@ -1,10 +1,10 @@
-from subprocess import check_output
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from django.db import connections
+from django.db.utils import OperationalError
 
 from tenant.models import Tenant
 from tenant.signals import initialize_tenant_with_data
@@ -21,11 +21,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        # Check if the database container is running
-        docker_ps = check_output(["docker", "ps"], text=True)
-        if "db" not in docker_ps:
-            print(docker_ps)
-            print("I can't find the `db` container.  Are you sure it's running?")
+        # Check if we are connected to the database
+        try:
+            connections['default'].cursor()
+        except OperationalError:
+            print("I can't connect to the database.  Are you sure it's running?")
             print("Try `docker-compose up -d db` then give it a few seconds to boot up")
             print("Bailing...")
             return
