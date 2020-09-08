@@ -1,8 +1,11 @@
+from subprocess import check_output
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+
 from tenant.models import Tenant
 from tenant.signals import initialize_tenant_with_data
 from tenant_schemas.models import TenantMixin
@@ -18,6 +21,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
+        # Check if the database container is running
+        docker_ps = check_output(["docker", "ps"], text=True)
+        if "db" not in docker_ps:
+            print(docker_ps)
+            print("I can't find the `db` container.  Are you sure it's running?")
+            print("Try `docker-compose up -d db` then give it a few seconds to boot up")
+            print("Bailing...")
+            return
+
         print('\n** Running initial migrations on the public schema...')
         call_command("migrate_schemas", "--shared")
 
@@ -25,7 +37,7 @@ class Command(BaseCommand):
         print('\n** Creating superuser...')
         if User.objects.filter(username=settings.DEFAULT_SUPERUSER_USERNAME).exists():
             print('A superuser with username `{username}` already exists'.format(username=settings.DEFAULT_SUPERUSER_USERNAME))
-            print('Will not proceed with the rest of the initialization.')
+            print('Bailing...')
             return
 
         User.objects.create_superuser(
