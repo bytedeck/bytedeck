@@ -1,7 +1,5 @@
 from datetime import date, datetime, timedelta
 
-import numpy
-from colorful.fields import RGBColorField
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
@@ -10,8 +8,12 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
+
+import numpy
+from colorful.fields import RGBColorField
 from jchart import Chart
 from jchart.config import DataSet, rgba
+
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
@@ -294,6 +296,18 @@ class Semester(models.Model):
         dt = datetime.combine(d, datetime.max.time())
         # make timezone aware
         return timezone.make_aware(dt, timezone.get_default_timezone())
+
+    def reset_students_xp_cached(self):
+
+        from profile_manager.models import Profile
+        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile', flat=True)
+        profile_ids = set(profile_ids)
+        profiles = Profile.objects.filter(id__in=profile_ids)
+
+        for profile in profiles:
+            profile.xp_cached = 0
+
+        Profile.objects.bulk_update(profiles, ['xp_cached'])
 
 
 class DateType(models.Model):

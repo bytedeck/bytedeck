@@ -98,6 +98,7 @@ def end_active_semester(request):
         'success': 'Semester {sem} has been closed.'.format(sem=sem),
     }
 
+    sem.reset_students_xp_cached()
     Announcement.objects.archive_announcements()
 
     messages.warning(
