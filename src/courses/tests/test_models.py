@@ -114,7 +114,7 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(self.semester_end, tz_offset=0):
             self.assertTrue(self.semester.is_open())
 
-        # Timezone problems?   
+        # Timezone problems?
 
     def test_num_days(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
@@ -165,7 +165,7 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total * 100
             percent_complete = self.semester.percent_complete()
-            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)   
+            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)
 
     def test_get_interim1_date(self):
         self.assertEqual(self.semester.get_interim1_date(), self.semester.get_date(0.25))
@@ -180,14 +180,14 @@ class SemesterModelTest(TenantTestCase):
         self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
 
     def test_get_date(self):
-        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded
         after a fraction of the semester is over """
         self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
         self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
         self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
 
     def test_get_datetime_by_days_since_start(self):
-        """ 5 days since start of semester should fall on 6 Sep 2019, 
+        """ 5 days since start of semester should fall on 6 Sep 2019,
         6 days should push through weekend and land on 9 Sep 2019 """
         dt = self.semester.get_datetime_by_days_since_start(5)
         expected = timezone.make_aware(datetime(2019, 9, 6, 23, 59, 59, 999999), timezone.get_default_timezone())
@@ -196,6 +196,20 @@ class SemesterModelTest(TenantTestCase):
         dt = self.semester.get_datetime_by_days_since_start(6)
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
+
+    def test_reset_students_xp_cached(self):
+        """Students' xp_cached should be set to 0."""
+        student = baker.make(User)
+        course = baker.make(Course)
+        active_semester = SiteConfig.get().active_semester
+
+        student.profile.xp_cached = 100
+        student.profile.save()
+
+        baker.make(CourseStudent, user=student, course=course, semester=active_semester)
+
+        active_semester.reset_students_xp_cached()
+        self.assertEqual(student.profile.xp_cached, 0)
 
 
 class CourseModelTest(TenantTestCase):
