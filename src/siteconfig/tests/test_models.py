@@ -80,14 +80,18 @@ class SiteConfigModelTest(TenantTestCase):
 
     def test_SiteConfig_save_sets_new_cache_properly(self):
         """ SiteConfig.save should invalidate previous cache and set newer cache """
-        old_cache = cache.get(SiteConfig.cache_key())
+        old_config_cache = cache.get(SiteConfig.cache_key())
 
         new_site_name = 'My New Site Name'
         self.config.site_name = new_site_name
         self.config.save()
 
-        new_cache = cache.get(SiteConfig.cache_key())
-        self.assertNotEqual(old_cache.site_name, new_cache.site_name)
+        # Verify SiteConfig.get() is using new cache
+        new_config_cache = SiteConfig.get()
+        self.assertNotEqual(old_config_cache.site_name, new_config_cache.site_name)
+
+        # Cache should be set after calling SiteConfig.get()
+        self.assertEqual(cache.get(SiteConfig.cache_key()).site_name, new_config_cache.site_name)
 
     def test_SiteConfig_cache_expires(self):
         """ SiteConfig cache should expire after a certain period """

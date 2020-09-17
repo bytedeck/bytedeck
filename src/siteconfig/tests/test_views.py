@@ -60,11 +60,16 @@ class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.post(reverse('config:site_config_update_own'), data=data)
 
-        # Current cache is still using the old cache because SiteConfig.get is not called yet
-        self.assertEqual(old_cache, cache.get(SiteConfig.cache_key()))
+        # Cache should be empty at the moment since it was recently deleted via signal
+        self.assertIsNone(cache.get(SiteConfig.cache_key()))
 
-        # SiteConfig.get() should be using new cache since `SiteConfig.save` method was called
-        self.assertEqual(SiteConfig.get().site_name, new_site_name)
+        # Call SiteConfig.get() so it sets the cache
+        siteconfig = SiteConfig.get()
+
+        # Cache should not be empty
+        self.assertIsNotNone(cache.get(SiteConfig.cache_key()))
+        # and returns the updated SiteConfig
+        self.assertEqual(siteconfig.site_name, new_site_name)
 
         # After calling SiteConfig.get(), cache should not be equal to the old cache
         # Comparing the `site_name` since Django's Model.__eq__ is comparing `pk`
