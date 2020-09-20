@@ -1,19 +1,21 @@
-from comments.models import Comment
-
 from django.conf import settings
-from django.urls import reverse
 from django.db import models
 from django.db.models import Q
+from django.db.models.signals import pre_delete
+from django.urls import reverse
 from django.utils import timezone
 
+from comments.models import Comment
 from notifications.models import deleted_object_receiver
-from django.db.models.signals import pre_delete
 
 
 class AnnouncementQuerySet(models.query.QuerySet):
     def released(self):
         # "__lte" appended to the object means less than or equal to
         return self.filter(datetime_released__lte=timezone.now())
+
+    def not_archived(self):
+        return self.filter(archived=False)
 
     def not_draft(self):
         return self.filter(draft=False)
@@ -27,7 +29,7 @@ class AnnouncementManager(models.Manager):
         return AnnouncementQuerySet(self.model, using=self._db)
 
     def get_active(self):
-        return self.get_queryset().order_by('-sticky', '-datetime_released')
+        return self.get_queryset().not_archived().order_by('-sticky', '-datetime_released')
 
     def get_for_students(self):
         return self.get_active().not_draft().not_expired().released()
@@ -56,6 +58,7 @@ class Announcement(models.Model):
                                 help_text="note that announcements previously saved as drafts will only send out a  \
                                 notification if they are published using the Publish button on the Announcements main \
                                 page")
+    archived = models.BooleanField(default=False)
 
     objects = AnnouncementManager()
 
