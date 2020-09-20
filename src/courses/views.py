@@ -15,6 +15,7 @@ from django.views.generic.edit import CreateView
 from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from announcements.models import Announcement
 
 from .forms import CourseStudentForm
 from .models import CourseStudent, Rank, Semester
@@ -96,6 +97,8 @@ def end_active_semester(request):
              until they are approved or returned",
         'success': 'Semester {sem} has been closed.'.format(sem=sem),
     }
+
+    Announcement.objects.archive_announcements()
 
     messages.warning(
         request,

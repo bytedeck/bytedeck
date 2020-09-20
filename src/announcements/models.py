@@ -34,6 +34,15 @@ class AnnouncementManager(models.Manager):
     def get_for_students(self):
         return self.get_active().not_draft().not_expired().released()
 
+    def archive_announcements(self):
+
+        announcements = self.get_queryset().not_archived()
+
+        for announcement in announcements:
+            announcement.archived = True
+
+        Announcement.objects.bulk_update(announcements, ['archived'])
+
 
 class Announcement(models.Model):
     title = models.CharField(max_length=80)
