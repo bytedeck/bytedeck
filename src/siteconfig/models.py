@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import connection, models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
@@ -178,11 +180,6 @@ class SiteConfig(models.Model):
             self.active_semester = get_object_or_404(Semester, id=semester)
         self.save()
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-
-        cache.set(SiteConfig.cache_key(), self, 3600)
-
     @classmethod
     def cache_key(cls):
         return f'{connection.schema_name}-siteconfig'
@@ -205,3 +202,24 @@ class SiteConfig(models.Model):
             return siteconfig
 
         return None
+
+
+@receiver(post_save, sender=User)
+@receiver(post_save, sender=SiteConfig)
+@receiver(post_save, sender='courses.Semester')
+def invalidate_siteconfig_cache_signal(sender, instance, **kwargs):
+    """
+    Whenever a `SiteConfig`, `Semester`, or `User` object is saved, we should invalidate the SiteConfig cache.
+    """
+
+    config = cache.get(SiteConfig.cache_key())
+
+    if not config:
+        return
+
+    for obj in (config, config.active_semester, config.deck_ai):
+        # Only invalidate the cache when the instance we updated is the current one set in SiteConfig
+        if instance == obj:
+            cache.delete(SiteConfig.cache_key())
+            break
+    # cache.delete(SiteConfig.cache_key())
