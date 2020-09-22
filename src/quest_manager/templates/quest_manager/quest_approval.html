@@ -11,12 +11,12 @@
 {% block heading_inner %}{{ heading }}
     {% if submitted_tab_active %}
       {% if show_all_blocks_button %}
-      <div class="btn-group">
-          <a href="{% url 'quests:submitted' %}"
-             class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
-          <a href="{% url 'quests:submitted_all' %}"
-             class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
-      </div>
+        <div class="btn-group">
+            <a href="{% url 'quests:submitted' %}"
+               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
+            <a href="{% url 'quests:submitted_all' %}"
+               class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+        </div>
       {% endif %}
     {% endif %}
     {% if not past_approvals_all == None %}
