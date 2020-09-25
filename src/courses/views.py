@@ -6,16 +6,16 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
-from django.shortcuts import (Http404, HttpResponse, get_object_or_404,
-                              redirect, render, reverse)
+from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic import ListView
 from django.views.generic.edit import CreateView
+
+from announcements.models import Announcement
 from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
-from announcements.models import Announcement
 
 from .forms import CourseStudentForm
 from .models import CourseStudent, Rank, Semester
@@ -97,6 +97,9 @@ def end_active_semester(request):
              until they are approved or returned",
         'success': 'Semester {sem} has been closed.'.format(sem=sem),
     }
+
+    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL):
+        sem.reset_students_xp_cached()
 
     Announcement.objects.archive_announcements()
 
