@@ -609,16 +609,10 @@ def approvals(request, quest_id=None):
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
-    blocks = Block.objects.select_related('current_teacher').values_list('current_teacher', 'block')
-    grouped_blocks = {}
     show_all_blocks_button = False
 
-    # Group by {teacher : [ blocks ]}
-    for block in blocks:
-        grouped_blocks.setdefault(block[0], []).append(block[1])
-
     # Display My Blocks / All buttons when Block objects are assigned to atleast two different users / teachers
-    if len(grouped_blocks.keys()) > 1:
+    if len(Block.objects.grouped_teachers_blocks().keys()) > 1:
         show_all_blocks_button = True
 
     context = {

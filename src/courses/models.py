@@ -317,6 +317,20 @@ class DateType(models.Model):
         return self.date_type
 
 
+class BlockManager(models.Manager):
+
+    def grouped_teachers_blocks(self):
+        blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'block')
+        grouped = {}
+
+        # Group by {teacher : [ blocks ]}
+        for block in blocks:
+            teacher, blk = block
+            grouped.setdefault(teacher, []).append(blk)
+
+        return grouped
+
+
 class Block(models.Model):
     block = models.CharField(max_length=50, unique=True)
     start_time = models.TimeField(blank=True, null=True)
@@ -325,6 +339,8 @@ class Block(models.Model):
                                         null=True, blank=True,
                                         limit_choices_to={'is_staff': True},
                                         on_delete=models.SET_NULL)
+
+    objects = BlockManager()
 
     def __str__(self):
         return self.block
