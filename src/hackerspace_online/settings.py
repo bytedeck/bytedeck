@@ -55,6 +55,8 @@ SHARED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
@@ -92,6 +94,8 @@ TENANT_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
@@ -142,8 +146,8 @@ INSTALLED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    # 'allauth.socialaccount.providers.google',
-    # 'allauth.socialaccount.providers.facebook',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
@@ -412,15 +416,45 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # AllAuth Configuration
-# SOCIALACCOUNT_PROVIDERS = \
-#     {'facebook':
-#          {'SCOPE': ['email', 'public_profile'],
-#           'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
-#           'METHOD': 'oauth2',
-#           # 'LOCALE_FUNC': 'path.to.callable',
-#           'VERIFIED_EMAIL': False,
-#           'VERSION': 'v2.3'}
-#      }
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+
+    },
+    'facebook':
+       {'METHOD': 'oauth2',
+        'SCOPE': ['email','public_profile', 'user_friends'],
+        'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
+        'FIELDS': [
+            'id',
+            'email',
+            'name',
+            'first_name',
+            'last_name',
+            'verified',
+            'locale',
+            'timezone',
+            'link',
+            'gender',
+            'updated_time'],
+        'EXCHANGE_TOKEN': True,
+        'LOCALE_FUNC': lambda request: 'en_US',
+        'VERIFIED_EMAIL': False,
+        'VERSION': 'v8.0'}
+        # 'facebook':
+    #      {'SCOPE': ['email', 'public_profile'],
+    #       'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
+    #       'METHOD': 'oauth2',
+    #       # 'LOCALE_FUNC': 'path.to.callable',
+    #       'VERIFIED_EMAIL': False,
+    #       'VERSION': 'v2.3'}
+}
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'

@@ -67,7 +67,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             return
         if not change:
             obj.schema_name = get_schema_name(obj.name)
-            obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
+            obj.domain_url = "%s.%s.com" % (obj.name.lower(), Site.objects.get(id=1).domain)
         
         obj.save()
 
