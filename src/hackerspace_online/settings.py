@@ -630,7 +630,17 @@ DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
 
 if DEBUG:
 
+    import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
+    # Solves an issue where django-debug-toolbar is not showing when running inside a docker container
+    # See: https://gist.github.com/douglasmiranda/9de51aaba14543851ca3#gistcomment-2916867
+    # get ip address for docker host
+    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+    for ip in ips:
+        # replace last octet in IP with .1
+        ip = '{}.1'.format(ip.rsplit('.', 1)[0])
+        INTERNAL_IPS.append(ip)
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
@@ -656,6 +666,10 @@ if DEBUG:
         'debug_toolbar.panels.logging.LoggingPanel',
         'debug_toolbar.panels.redirects.RedirectsPanel',
     ]
+
+    # DEBUG_TOOLBAR_CONFIG = {
+    #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
+    # }
 
 
 # TESTING ##################################################
