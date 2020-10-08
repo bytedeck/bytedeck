@@ -4,9 +4,10 @@ from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
+
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement

@@ -40,7 +40,7 @@ WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
 SHARED_APPS = (
-    'tenant_schemas',
+    'django_tenants',
     'tenant',
     'django.contrib.contenttypes',
 
@@ -119,11 +119,10 @@ TENANT_APPS = (
 
 
 INSTALLED_APPS = (
-    'tenant_schemas',
-    'tenant.apps.TenantConfig',
-
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
+    'django_tenants',
+    'tenant.apps.TenantConfig',
 
     # default apps
     'django.contrib.admin',
@@ -197,7 +196,7 @@ INSTALLED_APPS = (
 )
 
 MIDDLEWARE = [
-    'tenant_schemas.middleware.TenantMiddleware',
+    'django_tenants.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
@@ -245,14 +244,14 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
-        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
+        'KEY_FUNCTION': 'django_tenants.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key'
     },
     'select2': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'cache_table',
         'TIMEOUT': None,
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
+        'KEY_FUNCTION': 'django_tenants.cache.make_key'
     }
 }
 
@@ -294,7 +293,7 @@ POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
 DATABASES = {
     'default': {
-        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': POSTGRES_DB_NAME,
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
@@ -304,7 +303,7 @@ DATABASES = {
 }
 
 DATABASE_ROUTERS = (
-    'tenant_schemas.routers.TenantSyncRouter',
+    'django_tenants.routers.TenantSyncRouter',
 )
 
 
@@ -369,13 +368,14 @@ DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.
 # TENANTS ###############################################################
 
 TENANT_MODEL = "tenant.Tenant"
+TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
 TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
 TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
-SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 
 
 # RECAPTCHA #######################################################
@@ -393,7 +393,7 @@ else:
 # Google provides default keys in development that always validate, but results in this error:
 #  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
-# 
+#
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
 SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']

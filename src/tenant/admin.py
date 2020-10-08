@@ -1,11 +1,11 @@
 from django import forms
 from django.contrib import admin, messages
 from django.db import connection
-from django.contrib.sites.models import Site
 
-from tenant_schemas.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name
 
-from tenant.models import Tenant
+from tenant.models import Tenant, TenantDomain
+from tenant.utils import generate_schema_name
 
 
 class PublicSchemaOnlyAdminAccessMixin:
@@ -30,6 +30,21 @@ class NonPublicSchemaOnlyAdminAccessMixin:
         return connection.schema_name != get_public_schema_name()
 
 
+class TenantDomainInline(admin.TabularInline):
+    model = TenantDomain
+    readonly_fields = ('domain', 'is_primary')
+    extra = 0
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 class TenantAdminForm(forms.ModelForm):
 
     class Meta:
@@ -41,7 +56,7 @@ class TenantAdminForm(forms.ModelForm):
         # has already validated the model field at this point
         if name == "public":
             raise forms.ValidationError("The public tenant is restricted and cannot be edited")
-        elif self.instance.schema_name and self.instance.schema_name != get_schema_name(name):
+        elif self.instance.schema_name and self.instance.schema_name != generate_schema_name(name):
             # if the schema already exists, then can't change the name
             raise forms.ValidationError("The name cannot be changed after the tenant is created")
         else:
@@ -49,31 +64,18 @@ class TenantAdminForm(forms.ModelForm):
             # finally, check that there isn't a schema on the db that doesn't have a tenant object
             # and thus doesn't care about name validation/uniqueness.
             pass
-        
+
         return name
 
 
-def get_schema_name(tenant_name):
-    return tenant_name.replace('-', '_').lower()
-    
-
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
+    list_display = ('schema_name', 'primary_domain_url', 'name', 'desc', 'created_on')
     form = TenantAdminForm
-
-    def save_model(self, request, obj, form, change):
-        if obj.name.lower() == "public":
-            # Shouldn't get here due to the form validation via clean_name. So uneccesary? 
-            return
-        if not change:
-            obj.schema_name = get_schema_name(obj.name)
-            obj.domain_url = "%s.%s" % (obj.name.lower(), Site.objects.get(id=1).domain)
-        
-        obj.save()
+    inlines = (TenantDomainInline, )
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
-            and the schema deleted from the db via psql: `DROP SCHEMA scnema_name CASCADE;`. \
+            and the schema deleted from the db via psql: `DROP SCHEMA schema_name CASCADE;`. \
             ignore the success message =D')
 
         # don't delete

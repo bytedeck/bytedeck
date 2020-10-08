@@ -3,13 +3,15 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
-from django.db import connections
+from django.db import connections, transaction
+from django.db.models.signals import post_save
 from django.db.utils import OperationalError
 
+from django_tenants.models import TenantMixin
+from django_tenants.signals import post_schema_sync
+
 from tenant.models import Tenant
-from tenant.signals import initialize_tenant_with_data
-from tenant_schemas.models import TenantMixin
-from tenant_schemas.signals import post_schema_sync
+from tenant.signals import initialize_tenant_with_data, tenant_save_callback
 
 User = get_user_model()
 
@@ -19,6 +21,7 @@ class Command(BaseCommand):
     help = 'Used to initialize the database, creates a Sites object, creates the public Tenant object, and creates a superuser for the public schema/tenant. \
         This should only be run on a fresh db'
 
+    @transaction.atomic
     def handle(self, *args, **options):
 
         # Check if we are connected to the database
@@ -53,24 +56,31 @@ class Command(BaseCommand):
 
         # Create the `public` Tenant object ###############################################
 
-        # Disconnect from the post_schema_sync when creating public tenant since this will 
+        # Disconnect from the post_schema_sync when creating public tenant since this will
         # be the `public` schema and we don't want to initialize tenant specific data
         post_schema_sync.disconnect(initialize_tenant_with_data, sender=TenantMixin)
 
+        # Also disconnect from the tenant_save_callback so it wont create unnecessary domains
+        post_save.disconnect(tenant_save_callback, sender=Tenant)
+
         print('\n** Creating `public` Tenant object...')
         public_tenant, created = Tenant.objects.get_or_create(
-            domain_url=settings.ROOT_DOMAIN,
             schema_name='public',
             name='public'
+        )
+
+        public_tenant.domains.create(
+            domain=settings.ROOT_DOMAIN,
+            is_primary=True
         )
 
         if not created:
             print("\nA schema with the name `public` already existed.  A new one was not created.")
         print("\nPublic Tenant object")
-        print(f" tenant.domain_url: {public_tenant.domain_url}")
+        print(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
         print(f" tenant.schema_name: {public_tenant.schema_name}")
         print(f" tenant.name: {public_tenant.name}")
-                    
+
         print('\n** Updating Sites object...')
         site = Site.objects.first()
         site.domain = settings.ROOT_DOMAIN
@@ -84,3 +94,4 @@ class Command(BaseCommand):
 
         # Connect again
         post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
+        post_save.connect(tenant_save_callback, sender=Tenant)

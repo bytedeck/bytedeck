@@ -1,13 +1,15 @@
 from datetime import timedelta
 
-from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
+
+from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
+
+from courses.models import Semester
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-from tenant_schemas.test.cases import TenantTestCase
 
 User = get_user_model()
 
@@ -19,10 +21,10 @@ class QuestManagerTest(TenantTestCase):
         # get a list all quests created in data migrations
         # convert to list for ease of comparison, and also to force
         #  evaluation before additional quests are created within tests
-        self.initial_quest_list = list(Quest.objects.all())  
+        self.initial_quest_list = list(Quest.objects.all())
         # print(self.initial_quest_list)
         self.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
-        # this includes 6 quests, all visible to students, but only one 
+        # this includes 6 quests, all visible to students, but only one
         # available at the start as the rest have prerequisites.
 
         self.teacher = baker.make(User, username='teacher', is_staff=True)
@@ -30,7 +32,7 @@ class QuestManagerTest(TenantTestCase):
         self.maxDiff = None
 
     def test_quest_qs_exclude_hidden(self):
-        """QuestQuerySet.datetime_available should return all quests that are not 
+        """QuestQuerySet.datetime_available should return all quests that are not
         on a user profile's hidden quest list."""
 
         baker.make(Quest, name='Quest-not-hidden')
@@ -85,7 +87,7 @@ class QuestManagerTest(TenantTestCase):
 
         qs = Quest.objects.order_by('id').datetime_available().values_list('name', flat=True)
         self.assertSetEqual(
-            set(qs), 
+            set(qs),
             set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list)
         )
 
@@ -159,17 +161,17 @@ class QuestManagerTest(TenantTestCase):
 
     # def test_quest_qs_get_list_not_submitted_or_inprogress(self):
     #     """
-    #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that 
-    #     have not been started (in progress or submitted for completion), 
+    #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that
+    #     have not been started (in progress or submitted for completion),
     #     or if it has been completed already, that it is a repeatable quest past the repeat time
-    #     """        
+    #     """
     #     self.make_test_quests_and_submissions_stack()
 
     #     # jump ahead an hour so repeat cooldown is over
     #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
     #         qs = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
     #     self.assertListEqual(
-    #         list(qs.values_list('name', flat=True)), 
+    #         list(qs.values_list('name', flat=True)),
     #         ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
     #     )
 
@@ -194,7 +196,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertSetEqual(
             set(qs.values_list('name', flat=True)),
             set(
-                ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress'] 
+                ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
                 + self.initial_quest_name_list
             )
         )
@@ -245,7 +247,7 @@ class QuestManagerTest(TenantTestCase):
         Quest                   sub     .completed   .semester
         Quest-inprogress-sem2   Y       False        2
         Quest-completed-sem2    Y       True         2
-        Quest-not-started       N       NA           NA          
+        Quest-not-started       N       NA           NA
         Quest-inprogress        Y       False        1
         Quest-completed         Y       True         1
         Quest-1hr-cooldown      Y       True         1
@@ -292,7 +294,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         self.assertListEqual(list(qs), [first.id])
 
     def test_quest_submission_qs_block_if_needed(self):
-        """QuestSubmissionQuerySet.block_if_needed: 
+        """QuestSubmissionQuerySet.block_if_needed:
         if there are blocking quests, only return them.  Otherwise, return full qs """
         first = baker.make(QuestSubmission)
 

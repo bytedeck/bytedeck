@@ -5,9 +5,9 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.timezone import localtime
 
+from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
 
 from siteconfig.models import SiteConfig
 

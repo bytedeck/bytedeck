@@ -1,4 +1,4 @@
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
 
 from quest_manager.models import Quest
 

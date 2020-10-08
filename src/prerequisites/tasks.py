@@ -1,20 +1,18 @@
 import logging
 import traceback
 
-from django.core.cache import cache
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import transaction
 from django.db.utils import OperationalError
 
 from tenant_schemas_celery.task import TenantTask
 
-from hackerspace_online.celery import app
-
 from courses.models import CourseStudent
-from quest_manager.models import Quest
+from hackerspace_online.celery import app
 from prerequisites.models import Prereq, PrereqAllConditionsMet
-
+from quest_manager.models import Quest
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +35,7 @@ class TransactionAwareTask(TenantTask):
             logger.error(traceback.format_exc())
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_conditions_for_quest', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
 def update_conditions_for_quest(self, quest_id, start_from_user_id):
     """Cycles through all relevant users and adds this quest to their cache of available quests (PrereqAllConditionsMet), if they meet the prereqs,
     or removes it if they don't. This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
@@ -74,7 +72,7 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     for user in users:
         try:
             quest_prereq_cache, created = PrereqAllConditionsMet.objects.get_or_create(
-                user=user, 
+                user=user,
                 model_name=Quest.get_model_name(),
             )
         except PrereqAllConditionsMet.MultipleObjectsReturned:
@@ -88,11 +86,11 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
 
         if Prereq.objects.all_conditions_met(quest, user):
             quest_prereq_cache.add_id(quest.id)
-        else: 
+        else:
             quest_prereq_cache.remove_id(quest.id)
 
     else:
-        # finished the previous bunch, call the next bunch recursively 
+        # finished the previous bunch, call the next bunch recursively
         # or maybe there were no users in the bunch... check that too
         if user:
             # user is the last user that was updated, increment by 1
@@ -107,7 +105,8 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
                     kwargs={'quest_id': quest.id, 'start_from_user_id': minimum_user_id}
                 )
 
-@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
 def update_quest_conditions_for_user(self, user_id):
     user = User.objects.filter(id=user_id).first()
     if not user:
@@ -118,7 +117,7 @@ def update_quest_conditions_for_user(self, user_id):
     return met_list.id
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES) # noqa
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
 def update_quest_conditions_all_users(self, start_from_user_id):
     """Cycles through all quests for all users to update the cache of available quests (PreqAllConditionsMet)
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
@@ -136,7 +135,7 @@ def update_quest_conditions_all_users(self, start_from_user_id):
     users = CourseStudent.objects.all_users_for_active_semester()
     users = users.order_by('id').filter(id__gte=start_from_user_id)
 
-    users = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE]) # noqa
+    users = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])  # noqa
     for uid in users:
         update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
 

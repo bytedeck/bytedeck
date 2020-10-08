@@ -1,11 +1,12 @@
 # import json
 
 from django.apps import AppConfig
+
 # from django.utils import timezone
 
 
 # from django_celery_beat.models import CrontabSchedule, PeriodicTask
-# from tenant_schemas.utils import get_tenant_model, tenant_context
+# from django_tenants.utils import get_tenant_model, tenant_context
 
 
 class NotificationsConfig(AppConfig):
@@ -21,7 +22,7 @@ class NotificationsConfig(AppConfig):
 
     #     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
     #         with tenant_context(tenant):
-                
+
     #             PeriodicTask.objects.get_or_create(
     #                 crontab=email_notifications_schedule,
     #                 name='Send daily email notifications',
