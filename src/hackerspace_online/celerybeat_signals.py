@@ -13,7 +13,7 @@ from django.dispatch import receiver
 from django.forms import model_to_dict
 
 from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
-from tenant_schemas.utils import get_public_schema_name, schema_context
+from django_tenants.utils import get_public_schema_name, schema_context
 
 PUBLIC_SCHEMA = get_public_schema_name()
 

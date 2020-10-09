@@ -3,9 +3,8 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from django_celery_beat.models import PeriodicTask
 from django_tenants.test.cases import TenantTestCase
-from model_bakery import baker
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context
+from model_bakery import baker
 
 from announcements.models import Announcement
 
