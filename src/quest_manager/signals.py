@@ -1,17 +1,19 @@
 import re
 
-from bs4 import BeautifulSoup
-from django.db.models.signals import pre_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
+from bs4 import BeautifulSoup
+
 from quest_manager.models import Quest
+from quest_manager.tasks import remove_quest_submissions_for_hidden_quest
 
 
 class UglySoup(BeautifulSoup):
     # continuous spaces starting from a new line, ending before (look ahead) to a non-whitespace character
     r = re.compile(r'^( +(?=\S))', re.MULTILINE)
     # match \r\n or \n newlines (preceded by any amount of horizontal whitespace), 20 or more in a row
-    r2 = re.compile(r'([ \t]*(\r\n|\r|\n)){20,}') 
+    r2 = re.compile(r'([ \t]*(\r\n|\r|\n)){20,}')
 
     def insert_before(self, successor):
         pass
@@ -21,7 +23,7 @@ class UglySoup(BeautifulSoup):
 
     def improved_prettify(self, fix_runaway_newlines=False, encoding=None, formatter="minimal", indent_width=4):
         """ Prettify that also indents """
-        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline. 
+        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline.
         # replace whitespace from standard prettify with proper indents
         bs_prettified = self.prettify(encoding, formatter)
         result = self.r.sub(r'\1' * indent_width, bs_prettified)
@@ -35,6 +37,14 @@ class UglySoup(BeautifulSoup):
 @receiver(pre_save, sender=Quest)
 def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
+
+
+@receiver(post_save, sender=Quest)
+def quest_post_save_callback(sender, instance, **kwargs):
+
+    # If a quest has been hidden to students, that's the time we check for any pending submissions and delete them
+    if instance.visible_to_students is False:
+        remove_quest_submissions_for_hidden_quest.apply_async(args=[instance.id], queue='default')
 
 
 def tidy_html(markup, fix_runaway_newlines=False):
