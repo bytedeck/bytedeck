@@ -1,0 +1,35 @@
+{% extends "courses/base.html" %}
+
+{% block head_title %}Courses | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading_inner %}Courses
+{% if request.user.is_staff %}
+  <a class="btn btn-primary" href="{% url 'courses:course_create' %}" role="button">New</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<table class="table table-striped">
+  <tr>
+    <th>Title</th>
+    <th>Icon</th>
+    <th>XP for 100%</th>
+    <th>Active</th>
+    <th>Action</th>
+  </tr>
+  {% for object in object_list %}
+  <tr>
+    <td>{{ object.title }}</td>
+    <td>{% if object.icon %}<img src="{{ object.icon.url }}" width="50" height="50">{% endif %}</td>
+    <td>{{ object.xp_for_100_percent }}</td>
+    <td>{{ object.active }}</td>
+    <td><a href="{% url 'courses:course_update' object.id %}">Edit</a> | <a href="{% url 'courses:course_delete' object.id %}">Delete</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
+
+{% block js %}{% endblock %}
+

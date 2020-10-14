@@ -1,0 +1,18 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} Delete Course {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this announcement?<p>
+  <div class="well">
+    <p>Course ID: {{object.id}}</p>
+    <p>Title: {{object.title}}</p>
+    <p>XP for 100%: {{object.xp_for_100_percent}}</p>
+  </div>
+  <a href="{% url 'courses:course_list' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}
+
