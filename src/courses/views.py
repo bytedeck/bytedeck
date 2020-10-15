@@ -17,8 +17,8 @@ from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import CourseStudentForm, SemesterForm
-from .models import Course, CourseStudent, Rank, Semester
+from .forms import BlockForm, CourseStudentForm, SemesterForm
+from .models import Block, Course, CourseStudent, Rank, Semester
 
 
 # Create your views here.
@@ -163,6 +163,45 @@ class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Block
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
+    model = Block
+    form_class = BlockForm
+    success_url = reverse_lazy('courses:block_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Block'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    model = Block
+    form_class = BlockForm
+    success_url = reverse_lazy('courses:block_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Block'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Block
+    success_url = reverse_lazy('courses:block_list')
 
 
 @non_public_only_view

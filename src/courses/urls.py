@@ -15,6 +15,12 @@ urlpatterns = [
     path('semesters/add/', views.SemesterCreate.as_view(), name='semester_create'),
     path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
 
+    # Blocks
+    path('blocks/', views.BlockList.as_view(), name='block_list'),
+    path('blocks/add/', views.BlockCreate.as_view(), name='block_create'),
+    path('blocks/<pk>/edit/', views.BlockUpdate.as_view(), name='block_update'),
+    path('blocks/<pk>/delete/', views.BlockDelete.as_view(), name='block_delete'),
+
     # Course
     path('list/', views.CourseList.as_view(), name='course_list'),
     path('add/', views.CourseCreate.as_view(), name='course_create'),

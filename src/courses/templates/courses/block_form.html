@@ -1,0 +1,20 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block head %}
+    <!-- need these loaded first for date-time picker and summernote widgets to work -->
+    <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
+    {{ form.media }}
+{% endblock %}
+
+{% block heading %}<i class="fa fa-square pull-right"></i>{{ heading }}
+{% endblock %}
+
+{% block content %}
+<form method="post">{% csrf_token %}
+  {{ form | crispy }}
+  <a href="{% url 'courses:block_list' %}" role="button" class="btn btn-danger">Cancel</a>
+  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
+</form>
+{% endblock %}
