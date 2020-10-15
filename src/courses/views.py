@@ -17,7 +17,7 @@ from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import CourseStudentForm
+from .forms import CourseStudentForm, SemesterForm
 from .models import Course, CourseStudent, Rank, Semester
 
 
@@ -125,6 +125,44 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         kwargs = super(CreateView, self).get_form_kwargs()
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Semester
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+    model = Semester
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
+    model = Semester
+    form_class = SemesterForm
+    success_url = reverse_lazy('courses:semester_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Semester'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    model = Semester
+    form_class = SemesterForm
+    success_url = reverse_lazy('courses:semester_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Semester'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
 
 
 @non_public_only_view

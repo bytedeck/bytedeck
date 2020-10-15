@@ -1,6 +1,7 @@
 from django import forms
 
 from .models import CourseStudent, Semester
+from bootstrap_datepicker_plus import DateTimePickerInput
 
 
 class CourseStudentForm(forms.ModelForm):
@@ -28,3 +29,14 @@ class CourseStudentForm(forms.ModelForm):
         fields = ['semester', 'block', 'course', 'grade_fk']
     #         exclude = ['user', 'active']
     #         # widgets = {'user': forms.HiddenInput()}
+
+
+class SemesterForm(forms.ModelForm):
+
+    class Meta:
+        model = Semester
+        fields = ('first_day', 'last_day')
+        widgets = {
+            'first_day': DateTimePickerInput(format='%Y-%m-%d'),
+            'last_day': DateTimePickerInput(format='%Y-%m-%d'),
+        }

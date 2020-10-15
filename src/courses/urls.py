@@ -9,13 +9,24 @@ app_name = 'courses'
 
 urlpatterns = [
     path('add/<int:user_id>/', views.CourseAddStudent.as_view(), name='add'),
+
+    # Semester
+    path('semesters/', views.SemesterList.as_view(), name='semester_list'),
+    path('semesters/add/', views.SemesterCreate.as_view(), name='semester_create'),
+    path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
+
+    # Course
     path('list/', views.CourseList.as_view(), name='course_list'),
     path('add/', views.CourseCreate.as_view(), name='course_create'),
     path('<pk>/edit/', views.CourseUpdate.as_view(), name='course_update'),
     path('<pk>/delete/', views.CourseDelete.as_view(), name='course_delete'),
     path('<pk>/', views.CourseDetail.as_view(), name='course_detail'),
     path('create/', views.CourseStudentCreate.as_view(), name='create'),
+
+
+    # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),
+
     # DISABLE MARKS
     path('marks', views.mark_calculations, name='my_marks'),
     path('marks/<int:user_id>', views.mark_calculations, name='marks'),
