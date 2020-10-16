@@ -1,14 +1,15 @@
 from datetime import date, datetime, timedelta
 
-from courses.models import (Block, Course, CourseStudent, ExcludedDate, Grade,
-                            MarkRange, Rank, Semester)
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+
 from freezegun import freeze_time
 from mock import patch
 from model_bakery import baker
-from siteconfig.models import SiteConfig
 from tenant_schemas.test.cases import TenantTestCase
+
+from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -54,6 +55,46 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
+
+
+class BlockModelManagerTest(TenantTestCase):
+
+    def test_grouped_teachers_blocks_equals_one(self):
+        """ Should only return 1 group of teachers if regardless of the number of Blocks """
+
+        teacher_admin = User.objects.get(username='admin')
+
+        for _ in range(5):
+            baker.make(Block, current_teacher=teacher_admin)
+
+        group = Block.objects.grouped_teachers_blocks()
+
+        self.assertEqual(len(group.keys()), 1)
+
+    def test_grouped_teachers_blocks_more_than_one(self):
+        """ Should return 3 group of teachers teaching Default, [AB] and [CD] blocks"""
+
+        teacher_admin = User.objects.get(username='admin')
+        teacher1 = baker.make(User, username='teacher1', is_staff=True)
+        teacher2 = baker.make(User, username='teacher2', is_staff=True)
+
+        block_default = Block.objects.get(block='Default')
+        block_a = baker.make(Block, block='A', current_teacher=teacher1)
+        block_b = baker.make(Block, block='B', current_teacher=teacher1)
+        block_c = baker.make(Block, block='C', current_teacher=teacher2)
+        block_d = baker.make(Block, block='D', current_teacher=teacher2)
+
+        group = Block.objects.grouped_teachers_blocks()
+
+        # Should assert to 3 groups
+        self.assertEqual(len(group.keys()), 3)
+
+        # admin teaches default block
+        self.assertListEqual(group[teacher_admin.id], [block_default.block])
+        # teacher1 teaches A and B block
+        self.assertListEqual(group[teacher1.id], [block_a.block, block_b.block])
+        # teacher2 teaches C and D block
+        self.assertListEqual(group[teacher2.id], [block_c.block, block_d.block])
 
 
 class SemesterModelManagerTest(TenantTestCase):
@@ -249,7 +290,7 @@ class CourseStudentModelTest(TenantTestCase):
     # def test_course_student_get_absolute_url(self):
     #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
-    @patch('courses.models.Semester.fraction_complete')
+    @ patch('courses.models.Semester.fraction_complete')
     def test_calc_mark(self, fraction_complete):
         fraction_complete.return_value = 0.5
         course = baker.make(Course, xp_for_100_percent=100)
@@ -267,7 +308,7 @@ class CourseStudentModelTest(TenantTestCase):
         mark = course_student.calc_mark(50)
         self.assertEqual(mark, 50)
 
-    @patch('courses.models.Semester.days_so_far')
+    @ patch('courses.models.Semester.days_so_far')
     def test_xp_per_day_ave(self, days_so_far):
 
         self.student.profile.xp_cached = 120

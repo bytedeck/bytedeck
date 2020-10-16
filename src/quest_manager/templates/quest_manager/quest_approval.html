@@ -10,12 +10,14 @@
 {% load crispy_forms_tags %}
 {% block heading_inner %}{{ heading }}
     {% if submitted_tab_active %}
-    <div class="btn-group">
-        <a href="{% url 'quests:submitted' %}"
-           class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
-        {% comment %}<a href="{% url 'quests:submitted_all' %}"
-          class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>{% endcomment %}
-    </div>
+      {% if show_all_blocks_button %}
+        <div class="btn-group">
+            <a href="{% url 'quests:submitted' %}"
+               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
+            <a href="{% url 'quests:submitted_all' %}"
+               class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+        </div>
+      {% endif %}
     {% endif %}
     {% if not past_approvals_all == None %}
       <div class="btn-group">
@@ -33,9 +35,9 @@
   {% for tab in tab_list %}
     <li role="presentation" {% if tab.active %}class="active" {% endif %}>
       <a href="{{tab.url}}">
-      <!-- <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab"> -->
+        {% comment %} <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab"> {% endcomment %}
         {{tab.name}}
-        <!-- <span class="badge">{{tab.submissions|length}}</span> -->
+        {% comment %} <span class="badge">{{tab.submissions|length}}</span> {% endcomment %}
       </a>
     </li>
   {% endfor %}
