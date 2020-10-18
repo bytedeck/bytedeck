@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='siteconfig',
             name='approve_oldest_first',
-            field=models.BooleanField(default=False, help_text='Check this if you want to have the quest that have been waiting the longed to appear on top of the list.', verbose_name='Sort quests awaiting approval with oldest on top'),
+            field=models.BooleanField(default=False, help_text='Check this if you want to have the quest that have been waiting the longest to appear on top of the list.', verbose_name='Sort quests awaiting approval with oldest on top'),
         ),
         migrations.AlterField(
             model_name='siteconfig',
