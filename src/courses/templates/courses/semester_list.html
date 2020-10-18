@@ -25,7 +25,11 @@
     <td>{{ object.first_day }}</td>
     <td>{{ object.last_day }}</td>
     <td>{{ object.closed }}</td>
-    <td><a href="{% url 'courses:semester_update' object.id %}">Edit</a></td>
+    <td>
+      <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
+        <i class="fa fa-edit"></i>
+      </a>
+    </td>
   </tr>
   {% endfor %}
 </table>

@@ -58,19 +58,16 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Rank
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
-    model = Course
-
-
-class CourseDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Course
 
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('title', 'xp_for_100_percent', 'icon')
+    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
     model = Course
-    # form_class = CourseForm
+    success_url = reverse_lazy('courses:course_list')
 
     def get_context_data(self, **kwargs):
 
@@ -82,8 +79,9 @@ class CourseCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('title', 'xp_for_100_percent', 'icon')
+    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
     model = Course
+    success_url = reverse_lazy('courses:course_list')
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Course'
@@ -144,7 +142,6 @@ class SemesterCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('courses:semester_list')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Create New Semester'
         kwargs['submit_btn_value'] = 'Create'
 

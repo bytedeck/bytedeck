@@ -25,7 +25,14 @@
     <td>{{ object.start_time }}</td>
     <td>{{ object.end_time }}</td>
     <td>{{ object.current_teacher }}</td>
-    <td><a href="{% url 'courses:block_update' object.id %}">Edit</a> | <a href="{% url 'courses:block_delete' object.id %}">Delete</a></td>
+    <td>
+      <a class="btn btn-warning" href="{% url 'courses:block_update' object.id %}" role="button" title="Edit this block">
+        <i class="fa fa-edit"></i>
+      </a>
+      <a class="btn btn-danger" href="{% url 'courses:block_delete' object.id %}" role="button" title="Delete this block">
+        <i class="fa fa-trash-o"></i>
+      </a>
+    </td>
   </tr>
   {% endfor %}
 </table>
