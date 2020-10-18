@@ -172,6 +172,8 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(date(2019, 10, 15), tz_offset=0):
             self.assertEqual(self.semester.num_days(upto_today=True), 20)
 
+        self.assertIsInstance(self.semester.num_days(), int)
+
     def test_num_days_upto_today(self):
         """The number of classes in the semester SO FAR up to today
         """
