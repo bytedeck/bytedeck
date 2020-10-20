@@ -12,14 +12,15 @@ or they could be moved into a `test_urls.py` module.
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+
 from mock import patch
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-from quest_manager.models import Quest, QuestSubmission
 from notifications.models import Notification
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -27,10 +28,11 @@ User = get_user_model()
 
 def create_two_test_files():
     """ returns a list of files for testing form views """
-    from django.core.files.uploadedfile import SimpleUploadedFile
-    # give it a unique name for easier testing, otherwise when re-testing, 
+    # give it a unique name for easier testing, otherwise when re-testing,
     # the name will be appended with stuff because the file already exists
     import uuid
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
     test_filename1 = str(uuid.uuid1().hex) + ".txt"
     test_file1 = SimpleUploadedFile(test_filename1, b"file_content1", 'text/plain')
     test_filename2 = str(uuid.uuid1().hex) + ".txt"
@@ -132,7 +134,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
             self.assertEqual(response.status_code, 404)
 
-        # if the quest has not been started yet, and it's available to the student, 
+        # if the quest has not been started yet, and it's available to the student,
         # (quests created with default settings should be to students, as long as they are registered in a course)
         # then should redirect to the new submission that this view creates
         response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
@@ -140,7 +142,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # check that a submission was created (should only be one at this point, so use `get()`
         sub = self.quest1.questsubmission_set.get(user=self.test_student1)
         # the view's response should redirect to the new submission's page
-        self.assertRedirects(response, sub.get_absolute_url())       
+        self.assertRedirects(response, sub.get_absolute_url())
 
         # try it again
         response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
@@ -148,7 +150,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # check that there is still one (and that another wasn't created)
         self.assertEqual(self.quest1.questsubmission_set.count(), 1)
         # the view should have redirect to the same submission:
-        self.assertRedirects(response, sub.get_absolute_url()) 
+        self.assertRedirects(response, sub.get_absolute_url())
 
 
 class SubmissionViewTests(TenantTestCase):
@@ -394,14 +396,14 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
-        """ Convenience method for posting the complete() view.  
+        """ Convenience method for posting the complete() view.
         If teachers_list is not provided, [self.test_teacher] is used.
         """
         if not teachers_list:
             teachers_list = [self.test_teacher]
         with patch('profile_manager.models.Profile.current_teachers', return_value=teachers_list):
             response = self.client.post(
-                reverse('quests:complete', args=[self.sub.id]), 
+                reverse('quests:complete', args=[self.sub.id]),
                 data={'comment_text': submission_comment, button: True}
             )
         return response
@@ -512,7 +514,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
-    
+
     def test_specific_teacher_to_notify_other_teacher(self):
         """ If a quest has a specific teacher linked to it, they should be notified of completions if
         the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
@@ -595,7 +597,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 1)
 
     def test_comment_button__notifications_comment_when_verification_not_required(self):
-        """ Teacher SHOULD always be notified on comments on already completed quests, 
+        """ Teacher SHOULD always be notified on comments on already completed quests,
         even if verification was not required originally
         """
         self.sub.quest.verification_required = False
@@ -607,7 +609,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 1)
 
     def test_comment_button_specific_teacher_to_notify_own_teacher(self):
-        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        """ If comment is left on an already completed quest that has a specific teacher linked to it,
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
 
         In this case, they are the same teacher, so don't send two notifications!
@@ -619,9 +621,9 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
-    
+
     def test_comment_button_specific_teacher_to_notify_other_teacher(self):
-        """ If comment is left on an already completed quest that has a specific teacher linked to it, 
+        """ If comment is left on an already completed quest that has a specific teacher linked to it,
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
         """
         special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
@@ -659,7 +661,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         test_files = create_two_test_files()
         with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
             response = self.client.post(
-                reverse('quests:complete', args=[self.sub.id]), 
+                reverse('quests:complete', args=[self.sub.id]),
                 data={'comment': True, 'attachments': test_files}
             )
 
@@ -672,14 +674,14 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         comment_files_qs = comment.document_set.all()
         self.assertEqual(comment_files_qs.count(), 2)
 
-        # make sure they are the correct 
+        # make sure they are the correct
         comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
         import os
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
 
     def test_unrecognized_submit_button(self):
-        """ Unrecognized form submit button should 404.  
+        """ Unrecognized form submit button should 404.
         In some views Summernote was causing problems by submitting the form via ajax """
         response = self.post_complete(button="non_existant_button")
         self.assertEqual(response.status_code, 404)
@@ -688,7 +690,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         """ I don't think thie form CAN be invalid... how? None of the fields are required. """
         # with patch('profile_manager.models.Profile.current_teachers', return_value=self.test_teacher):
         #     response = self.client.post(
-        #         reverse('quests:complete', args=[self.sub.id]), 
+        #         reverse('quests:complete', args=[self.sub.id]),
         #         data={}
         #     )
         # # bad form, just rerender
@@ -714,7 +716,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
-            'hours_between_repeats': 0, 
+            'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
             'time_available': "14:30:59",
@@ -879,7 +881,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest, name="new-prereq-quest").id
         self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge', name="new-prereq-badge").id
         response = self.client.post(
-            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}),
             data=self.minimal_valid_form_data
         )
         self.assertRedirects(response, quest_to_update.get_absolute_url())
@@ -892,7 +894,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.minimal_valid_form_data['new_badge_prerequisite'] = ''
 
         response = self.client.post(
-            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), 
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}),
             data=self.minimal_valid_form_data
         )
         self.assertRedirects(response, quest_to_update.get_absolute_url())
@@ -926,7 +928,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
-            'hours_between_repeats': 0, 
+            'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
             'time_available': "14:30:59",
@@ -1045,7 +1047,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.test_student = User.objects.create_user('test_student', password="password")
 
         self.quest1 = baker.make(Quest)
-    
+
     def test_quest_id_provided_to_view(self):
         """
         This test handles the view when accessed via:
@@ -1083,8 +1085,8 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_student_sees_quests_available_outside_course(self):
         self.client.force_login(self.test_student)
         quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
-        response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))  
-        self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')      
+        response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))
+        self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')
 
     def test_show_hidden(self):
         """ Test of:
@@ -1319,7 +1321,7 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_ajax_info_past(self):
         """ Completed and in a past semester
-        
+
         url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past')
         """
         self.submission.mark_completed()
@@ -1329,7 +1331,7 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         # Submission is NOT in current semester (cus setUp doesn't put it there)
-        self.assertEqual(response.status_code, 200)        
+        self.assertEqual(response.status_code, 200)
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
@@ -1357,14 +1359,14 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_quest_is_available(self):
         with patch('quest_manager.models.Quest.is_available', return_value=True):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
-        
+
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
     def test_quest_is_editable(self):
         with patch('quest_manager.models.Quest.is_editable', return_value=True):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
-        
+
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
@@ -1384,7 +1386,7 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotContains(response, "Start Quest")  # Definitely no "Start Quest" button
 
     def test_quest_is_not_available_nor_editable_but_submission_exists(self):
-        """ If they have a submission, it should redirect to that, 
+        """ If they have a submission, it should redirect to that,
         otherwise only display a (preview) version of the quest
         """
 
@@ -1430,7 +1432,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         }
 
         response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]), 
+            reverse('quests:approve', args=[self.sub.id]),
             data=quick_reply_form_data
         )
         self.assertRedirects(response, reverse('quests:approvals'))
@@ -1472,7 +1474,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(badges_earned.count(), 0)
 
         response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]), 
+            reverse('quests:approve', args=[self.sub.id]),
             data=quick_reply_form_data
         )
         self.assertRedirects(response, reverse('quests:approvals'))
@@ -1484,12 +1486,12 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approve_other_teachers_student(self):
         """ When a teacher approves/rejects/comments on another teacher's student
         The student's actual teacher(s) should get notified
-        
-        self.test_teacher is logged in and approving submission in this test, 
+
+        self.test_teacher is logged in and approving submission in this test,
         so create another user as the current teacher
         """
         current_teacher = baker.make(User, is_staff=True)
-        
+
         # ? Can't figure out how to mock this... so I guess need to actually setup the data structures
         # with patch('quest_manager.views.QuestSubmission.user.profile.get_current_teacher_list', return_value=[current_teacher]):
         # with patch('quest_manager.views.Profile.get_current_teacher_list', return_value=[current_teacher]):
@@ -1513,7 +1515,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         # self.test_teacher is logged in in setUp()
         with patch('profile_manager.models.CourseStudent.objects.get_current_teacher_list', return_value=[current_teacher.id]):
             response = self.client.post(
-                reverse('quests:approve', args=[self.sub.id]), 
+                reverse('quests:approve', args=[self.sub.id]),
                 data=quick_reply_form_data
             )
             self.assertRedirects(response, reverse('quests:approvals'))
@@ -1553,7 +1555,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(badges_earned.count(), 0)
 
         response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]), 
+            reverse('quests:approve', args=[self.sub.id]),
             data=staff_form_data
         )
         self.assertRedirects(response, reverse('quests:approvals'))
@@ -1585,7 +1587,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
         # # create a file for testing
         # from django.core.files.uploadedfile import SimpleUploadedFile
-        # # give it a unique name for easier testing, otherwise when re-testing, 
+        # # give it a unique name for easier testing, otherwise when re-testing,
         # # the name will be appended with stuff because the file already exists
         # import uuid
         # test_filename1 = str(uuid.uuid1().hex) + ".txt"
@@ -1610,12 +1612,12 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         comment_files_qs = comment.document_set.all()
         self.assertEqual(comment_files_qs.count(), 2)
 
-        # make sure they are the correct 
+        # make sure they are the correct
         comment_files = list(comment_files_qs)  # evalute qs so we can slice without weirdness
         import os
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
-    
+
     def test_comment_button(self):
         """ The comment button should only leave a comment and not change the status of the submission """
         comment_text = "Lorum Ipsum"
@@ -1625,7 +1627,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         }
 
         response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]), 
+            reverse('quests:approve', args=[self.sub.id]),
             data=quick_reply_form_data
         )
         self.assertRedirects(response, reverse('quests:approvals'))
@@ -1659,7 +1661,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_no_comment_return_button(self):
         """ When a submission is returned without comment, the SiteConfig's blank_return_text should be inserted """
-        
+
         form_data = {'comment_text': "", 'return_button': True}
 
         response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
@@ -1719,8 +1721,8 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.sub = baker.make(QuestSubmission, quest=self.quest)
 
     def test_submitted(self):
-        """ Completed quests awaiting approval for current teacher (teachers are connected by Block) 
-        A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions 
+        """ Completed quests awaiting approval for current teacher (teachers are connected by Block)
+        A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions
         appear here
         """
         with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
@@ -1735,7 +1737,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:submitted'))
 
     def test_submitted_all(self):
-        """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block) 
+        """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block)
         """
         with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
             response = self.client.get(reverse('quests:submitted_all'))
@@ -1799,3 +1801,22 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approved_for_quest_all(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
         pass
+
+    def test_approvals_all_buttons_does_not_exist(self):
+        """ My blocks should not be rendered when there is only one teacher"""
+
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertNotContains(response, 'My blocks')
+
+    def test_approval_all_button_exists(self):
+        """ My blocks button should not be rendered """
+
+        baker.make('courses.Block', block='A', current_teacher=self.current_teacher)
+        baker.make('courses.Block', block='B', current_teacher=self.current_teacher)
+
+        another_teacher = baker.make(User, is_staff=True)
+        baker.make('courses.Block', block='C', current_teacher=another_teacher)
+        baker.make('courses.Block', block='D', current_teacher=another_teacher)
+
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertContains(response, 'My blocks')

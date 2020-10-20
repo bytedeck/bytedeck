@@ -11,10 +11,7 @@ version: '2.2'
 ################################################################################
 
 services:
-  redis: 
-    env_file: .env.production
   web:
-    env_file: .env.production
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&
                       python manage.py migrate_schemas --executor=parallel && 
@@ -26,7 +23,4 @@ services:
       - /var/www/bytedeck/static/:/app/static
     user: $WUID:$WGID
   celery:
-    env_file: .env.production
     user: $WUID:$WGID
-  celery-beat:
-    env_file: .env.production

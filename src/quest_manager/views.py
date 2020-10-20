@@ -1,8 +1,6 @@
 import json
 import uuid
 
-from badges.models import BadgeAssertion
-from comments.models import Comment, Document
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
@@ -14,13 +12,17 @@ from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+
+from badges.models import BadgeAssertion
+from comments.models import Comment, Document
+from courses.models import Block
 from notifications.signals import notify
 from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import (QuestForm, TAQuestForm, SubmissionForm, SubmissionFormStaff,
-                    SubmissionQuickReplyForm)
+from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+                    SubmissionQuickReplyForm, TAQuestForm)
 from .models import Quest, QuestSubmission
 
 User = get_user_model()
@@ -453,8 +455,8 @@ def approve(request, submission_id):
                 action = comment_new
 
             affected_users = [submission.user, ]
-            
-            # if the staff member approving/commenting/retruning the submission isn't 
+
+            # if the staff member approving/commenting/retruning the submission isn't
             # one of the student's teachers then notify the student's teachers too
             # If they have no teachers (e.g. this quest is available outside of a course
             # and the student is not in a course) then nothign will be appended anyway
@@ -607,6 +609,12 @@ def approvals(request, quest_id=None):
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
+    show_all_blocks_button = False
+
+    # Display My Blocks / All buttons when Block objects are assigned to atleast two different users / teachers
+    if len(Block.objects.grouped_teachers_blocks().keys()) > 1:
+        show_all_blocks_button = True
+
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
@@ -615,7 +623,8 @@ def approvals(request, quest_id=None):
         "current_teacher_only": current_teacher_only,
         "past_approvals_all": past_approvals_all,
         "quest": quest,
-        "quick_reply_text": SiteConfig.get().submission_quick_text
+        "quick_reply_text": SiteConfig.get().submission_quick_text,
+        "show_all_blocks_button": show_all_blocks_button
     }
     return render(request, "quest_manager/quest_approval.html", context)
 

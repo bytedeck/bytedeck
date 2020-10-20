@@ -30,8 +30,11 @@ environ.Env.read_env(os.path.join(project_root(), '.env'))
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
+ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
-ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
@@ -252,6 +255,7 @@ CACHES = {
         'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
+
 SELECT2_CACHE_BACKEND = 'default'
 
 
@@ -384,6 +388,15 @@ else:
     # Google provides test keys which are set as the default for RECAPTCHA_PUBLIC_KEY and RECAPTCHA_PRIVATE_KEY.
     # These cannot be used in production since they always validate to true and a warning will be shown on the reCAPTCHA.
     pass
+
+
+# Google provides default keys in development that always validate, but results in this error:
+#  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+#  use of the Google test keys and will not behave as expected in a production environment
+# 
+# Silencing the error allows us to setup an environment (otherwise the error will stop the app)
+# The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
+SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
@@ -619,11 +632,6 @@ if DEBUG:
 
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
-    # Google provides default keys in development that always validate, but results in this error:
-    # captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
-    # use of the Google test keys and will not behave as expected in a production environment
-    SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
-
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
     INSTALLED_APPS += (
@@ -654,7 +662,16 @@ if DEBUG:
 
 TESTING = 'test' in sys.argv
 if TESTING:
-    # Use weaker password hasher for speeding up tests (when tested)
+    # Use weaker password hasher for speeding up tests
     PASSWORD_HASHERS = [
         'django.contrib.auth.hashers.MD5PasswordHasher',
     ]
+
+    # django.test.override_settings does not simply work as expected.
+    # overriding settings here instead
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test-loc'
+        }
+    }

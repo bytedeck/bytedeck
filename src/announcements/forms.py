@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from bootstrap_datepicker_plus import DateTimePickerInput
 from django import forms
 from django.utils import timezone
+
+from bootstrap_datepicker_plus import DateTimePickerInput
 from django_summernote.widgets import SummernoteInplaceWidget
 
 from .models import Announcement
@@ -19,7 +20,7 @@ class AnnouncementForm(forms.ModelForm):
 
     class Meta:
         model = Announcement
-        exclude = ['author']
+        exclude = ['author', 'archived']
 
         # SUMMERNOTE:
         # > If you don't like <iframe>, then use inplace widget
