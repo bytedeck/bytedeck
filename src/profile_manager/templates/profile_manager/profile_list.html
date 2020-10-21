@@ -120,7 +120,7 @@
                 <td>{{ object.alias_clipped|default:"-" }}</td>
                 <td>{{ object.grad_year|default:"-" }}</td>
                 <td>
-                  {% for block in object.blocks %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                  {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
                 </td>
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}
                     {{ object.xp_cached }}

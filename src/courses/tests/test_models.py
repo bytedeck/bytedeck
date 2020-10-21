@@ -1,14 +1,15 @@
 from datetime import date, datetime, timedelta
 
-from courses.models import (Block, Course, CourseStudent, ExcludedDate, Grade,
-                            MarkRange, Rank, Semester)
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+
 from freezegun import freeze_time
 from mock import patch
 from model_bakery import baker
-from siteconfig.models import SiteConfig
 from tenant_schemas.test.cases import TenantTestCase
+
+from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -54,6 +55,46 @@ class MarkRangeTestManager(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
+
+
+class BlockModelManagerTest(TenantTestCase):
+
+    def test_grouped_teachers_blocks_equals_one(self):
+        """ Should only return 1 group of teachers if regardless of the number of Blocks """
+
+        teacher_admin = User.objects.get(username='admin')
+
+        for _ in range(5):
+            baker.make(Block, current_teacher=teacher_admin)
+
+        group = Block.objects.grouped_teachers_blocks()
+
+        self.assertEqual(len(group.keys()), 1)
+
+    def test_grouped_teachers_blocks_more_than_one(self):
+        """ Should return 3 group of teachers teaching Default, [AB] and [CD] blocks"""
+
+        teacher_admin = User.objects.get(username='admin')
+        teacher1 = baker.make(User, username='teacher1', is_staff=True)
+        teacher2 = baker.make(User, username='teacher2', is_staff=True)
+
+        block_default = Block.objects.get(block='Default')
+        block_a = baker.make(Block, block='A', current_teacher=teacher1)
+        block_b = baker.make(Block, block='B', current_teacher=teacher1)
+        block_c = baker.make(Block, block='C', current_teacher=teacher2)
+        block_d = baker.make(Block, block='D', current_teacher=teacher2)
+
+        group = Block.objects.grouped_teachers_blocks()
+
+        # Should assert to 3 groups
+        self.assertEqual(len(group.keys()), 3)
+
+        # admin teaches default block
+        self.assertListEqual(group[teacher_admin.id], [block_default.block])
+        # teacher1 teaches A and B block
+        self.assertListEqual(group[teacher1.id], [block_a.block, block_b.block])
+        # teacher2 teaches C and D block
+        self.assertListEqual(group[teacher2.id], [block_c.block, block_d.block])
 
 
 class SemesterModelManagerTest(TenantTestCase):
@@ -114,7 +155,7 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(self.semester_end, tz_offset=0):
             self.assertTrue(self.semester.is_open())
 
-        # Timezone problems?   
+        # Timezone problems?
 
     def test_num_days(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
@@ -165,7 +206,7 @@ class SemesterModelTest(TenantTestCase):
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total * 100
             percent_complete = self.semester.percent_complete()
-            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)   
+            self.assertAlmostEqual(percent_complete, 10 / 21 * 100)
 
     def test_get_interim1_date(self):
         self.assertEqual(self.semester.get_interim1_date(), self.semester.get_date(0.25))
@@ -180,14 +221,14 @@ class SemesterModelTest(TenantTestCase):
         self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
 
     def test_get_date(self):
-        """ Gets the closest date, rolling back if it falls on a weekend or excluded 
+        """ Gets the closest date, rolling back if it falls on a weekend or excluded
         after a fraction of the semester is over """
         self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
         self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
         self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
 
     def test_get_datetime_by_days_since_start(self):
-        """ 5 days since start of semester should fall on 6 Sep 2019, 
+        """ 5 days since start of semester should fall on 6 Sep 2019,
         6 days should push through weekend and land on 9 Sep 2019 """
         dt = self.semester.get_datetime_by_days_since_start(5)
         expected = timezone.make_aware(datetime(2019, 9, 6, 23, 59, 59, 999999), timezone.get_default_timezone())
@@ -196,6 +237,20 @@ class SemesterModelTest(TenantTestCase):
         dt = self.semester.get_datetime_by_days_since_start(6)
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
+
+    def test_reset_students_xp_cached(self):
+        """Students' xp_cached should be set to 0."""
+        student = baker.make(User)
+        course = baker.make(Course)
+        active_semester = SiteConfig.get().active_semester
+
+        student.profile.xp_cached = 100
+        student.profile.save()
+
+        baker.make(CourseStudent, user=student, course=course, semester=active_semester)
+
+        active_semester.reset_students_xp_cached()
+        self.assertEqual(student.profile.xp_cached, 0)
 
 
 class CourseModelTest(TenantTestCase):
@@ -235,7 +290,7 @@ class CourseStudentModelTest(TenantTestCase):
     # def test_course_student_get_absolute_url(self):
     #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
-    @patch('courses.models.Semester.fraction_complete')
+    @ patch('courses.models.Semester.fraction_complete')
     def test_calc_mark(self, fraction_complete):
         fraction_complete.return_value = 0.5
         course = baker.make(Course, xp_for_100_percent=100)
@@ -253,7 +308,7 @@ class CourseStudentModelTest(TenantTestCase):
         mark = course_student.calc_mark(50)
         self.assertEqual(mark, 50)
 
-    @patch('courses.models.Semester.days_so_far')
+    @ patch('courses.models.Semester.days_so_far')
     def test_xp_per_day_ave(self, days_so_far):
 
         self.student.profile.xp_cached = 120

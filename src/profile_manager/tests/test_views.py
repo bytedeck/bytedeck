@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
+
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
@@ -28,6 +30,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
         self.active_sem = SiteConfig.get().active_semester
+
+    def tearDown(self):
+        cache.clear()
 
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """

@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.9.1] 2020-10-20
+* Archive announcements when closing a semester
+* Minor styling fixes
+* Various optimizations and caching
+* [teachers] Only display "all blocks" tab if there is more than one active teacher on the deck
+* [bugfix] Reset XP to 0 when a semester is closed
+* [dev] Move initial data from migration into initdb command
+
 ### [1.9.0] 2020-08-31
 * Forgotten password reset by email
 * Add public landing page for bytedeck.com

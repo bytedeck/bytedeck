@@ -12,11 +12,17 @@
 
 {% block content %}
 <form action="" enctype="multipart/form-data" method="post">{% csrf_token %}
-  <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
-  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+  <div class="announcement-action-btns">
+    <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+  </div>
+
   {{ form|crispy }}
-  <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
-  <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+
+  <div class="announcement-action-btns">
+    <a href="{% url 'announcements:list' %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+  </div>
 </form>
 {% endblock %}
 

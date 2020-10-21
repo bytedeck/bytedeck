@@ -60,27 +60,25 @@ This will create your docker containers and initialize the database by running m
 1. Open a terminal
 2. Move into the project directory:
 `cd ~/Developer/bytedeck`
-3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize
+3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize.  If you are not running the app locally (e.g. production), then be sure to set DOMAIN_ROOT to the FQDN.
 `cp .env.example .env`
 4. Build the containers (db, redis, celery, and celery-beat):
 `docker-compose build`
 5. Start the postgres database container (db) in the background/daemonized (-d)
 `docker-compose up -d db`
-6. For development, let's run the django app in a virtual environment instead of using the web container:
+6. For development, let's run the django app in a local virtual environment instead of using the web container:
    1. Create a python virtual environment (we'll put ours in a venv directory):
    `virtualenv venv --python=python3.8`
    2. Enter the virtual environment:
    `source venv/bin/activate`
    3. Install our requirements:
    `pip install -r requirements.txt`
-   5. Run migrations (this is a special migration command we need to use, *never use the standard `migrate` command!* ):
-   `./src/manage.py migrate_schemas --shared`
-   6. Run the app to make sure you don't get any errors yet, with:
-   `./src/manage.py runserver`
-7. Now that we've migrated, run a management command to create the public tenant and a superuser:
+7. Run a management command to run initial migrations, create the public tenant, superuser, and some other stuff:
 `./src/manage.py initdb`
-8. You should now get a 404 page (until we create a landing page) at http://localhost:8000
-9. But you should be able to log in to the admin site!  http://localhost:8000/admin/
+8. Now run the django development server:  
+`./src/manage.py runserver`
+8. You should now get the page at http://localhost:8000
+9. And you should be able to log in to the admin site at http://localhost:8000/admin/
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 

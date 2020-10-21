@@ -129,6 +129,40 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Student can now see it
         self.assertContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
 
+    def test_archived_announcement(self):
+        """ Archived announcements should not appear in announcements list"""
+        archived_announcement = baker.make(Announcement, archived=True)
+        self.assertTrue(archived_announcement.archived)
+
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Users shouldn't see archived announcements in the list
+        self.assertNotContains(self.client.get(reverse('announcements:list')), archived_announcement.title)
+
+        # set archived to False
+        archived_announcement.archived = False
+        archived_announcement.save()
+
+        # Users can now see it
+        self.assertContains(self.client.get(reverse('announcements:list')), archived_announcement.title)
+
+    def test_announcements_archived_after_semester_close(self):
+        """ All unarchived announcements should be archived when a semester is closed """
+
+        announcements = [baker.make(Announcement, archived=False) for _ in range(5)]
+
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.client.get(reverse('courses:end_active_semester'))
+
+        for announcement in announcements:
+            announcement.refresh_from_db()
+            self.assertTrue(announcement.archived)
+
     # @patch('announcements.views.publish_announcement.apply_async')
     def test_publish_announcement(self):
         draft_announcement = baker.make(Announcement)
@@ -178,16 +212,16 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         # make sure it was submitted with the 'comment_button'
         form_data['comment_button'] = True
         response = self.client.post(
-            reverse('announcements:comment', args=[self.test_announcement.id]), 
+            reverse('announcements:comment', args=[self.test_announcement.id]),
             data=form_data
         )
 
-        # Empty comment strings should be replaced with blank string or we get an error 
+        # Empty comment strings should be replaced with blank string or we get an error
         # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
         # Old code not relevant any more?
         # form_data['comment_text'] = None
         # response = self.client.post(
-        #     reverse('announcements:comment', args=[self.test_announcement.id]), 
+        #     reverse('announcements:comment', args=[self.test_announcement.id]),
         #     data=form_data
         # )
         # self.assertRedirects(response, self.test_announcement.get_absolute_url())
@@ -223,6 +257,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(new_ann.title, "Copy test")
         # if successful, should redirect to the new announcement
         self.assertRedirects(
-            response, 
+            response,
             new_ann.get_absolute_url()
         )
