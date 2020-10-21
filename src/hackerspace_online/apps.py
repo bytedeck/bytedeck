@@ -10,5 +10,6 @@ class HackerspaceConfig(AppConfig):
         from django.contrib.sites.models import Site
         from django.db.models.signals import post_save
         from hackerspace_online.signals import change_domain_urls
+        import hackerspace_online.celerybeat_signals # noqa
 
         post_save.connect(change_domain_urls, sender=Site)

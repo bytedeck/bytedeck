@@ -124,7 +124,7 @@ class SiteConfig(models.Model):
 
     approve_oldest_first = models.BooleanField(
         verbose_name="Sort quests awaiting approval with oldest on top", default=False,
-        help_text="Check this if you want to have the quest that have been waiting the longed to appear on top of the list."
+        help_text="Check this if you want to have the quest that have been waiting the longest to appear on top of the list."
     )
 
     display_marks_calculation = models.BooleanField(
