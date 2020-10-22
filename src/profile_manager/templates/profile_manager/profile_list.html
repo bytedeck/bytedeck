@@ -114,9 +114,9 @@
                 {% endif %}>
 
                 <td><img class="icon-md img-rounded" src="{{ object.get_avatar_url }}" alt="avatar"/></td>
-                <td>{{ object.first_name }}</td>
+                <td>{{ object.user.first_name }}</td>
                 <td>{{ object.get_preferred_name }}</td>
-                <td>{{ object.last_name|default:"-" }}</td>
+                <td>{{ object.user.last_name|default:"-" }}</td>
                 <td>{{ object.alias_clipped|default:"-" }}</td>
                 <td>{{ object.grad_year|default:"-" }}</td>
                 <td>
