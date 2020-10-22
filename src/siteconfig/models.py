@@ -7,6 +7,7 @@ from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
+from redis import exceptions as redis_exceptions
 from tenant_schemas.utils import get_public_schema_name
 
 User = get_user_model()
@@ -212,7 +213,13 @@ def invalidate_siteconfig_cache_signal(sender, instance, **kwargs):
     Whenever a `SiteConfig`, `Semester`, or `User` object is saved, we should invalidate the SiteConfig cache.
     """
 
-    config = cache.get(SiteConfig.cache_key())
+    try:
+        config = cache.get(SiteConfig.cache_key())
+    except redis_exceptions.ConnectionError:
+        # create_superuser is being called via manage.py initdb
+        # This just prevents it from throwing an error when redis is not running
+        # Because we are receiving a post_save from User, we don't want errors to happen
+        config = None
 
     if not config:
         return
