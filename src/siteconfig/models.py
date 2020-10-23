@@ -112,7 +112,7 @@ class SiteConfig(models.Model):
 
     active_semester = models.ForeignKey(
         'courses.Semester',
-        verbose_name="Active Semester", default=get_active_semester, on_delete=models.SET_DEFAULT,
+        verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
         help_text="Your currently active semester.  New semesters can be created from the admin menu."
     )
 
@@ -131,6 +131,9 @@ class SiteConfig(models.Model):
         verbose_name="Display marks calculation page", default=False,
         help_text="Check this if you want to let students view their mark calculations."
     )
+
+    def __str__(self):
+        return self.site_name
 
     def get_absolute_url(self):
         from django.urls import reverse
