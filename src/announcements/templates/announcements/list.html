@@ -34,13 +34,6 @@
     });
 
   </script>
-  <script>
-    // Announcements
-    var announcement_actions = document.querySelectorAll('.announcement-dropdown a')
-    $('.announcement-dropdown a').click((e) => {
-        e.stopPropagation();
-    });
-  </script>
 {% endblock %}
 
 {% block content %}
@@ -78,7 +71,7 @@
         </span>
         <!-- </a> -->
 
-        <div class="dropdown dropdown-hover announcement-dropdown pull-right">
+        <div class="dropdown announcement-dropdown pull-right">
           <a class="dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-ellipsis-v"></i>
