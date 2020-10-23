@@ -4,19 +4,19 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.contrib.messages.views import SuccessMessageMixin
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.urls import reverse_lazy
-from django.shortcuts import render, get_object_or_404, redirect, Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django.contrib.messages.views import SuccessMessageMixin
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from comments.forms import CommentForm
 from comments.models import Comment
 from notifications.signals import notify
-from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from tenant.utils import get_root_url
+from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import AnnouncementForm
 from .models import Announcement
@@ -157,9 +157,9 @@ def copy(request, ann_id):
 @non_public_only_view
 @staff_member_required
 def publish(request, ann_id):
-    announcement = get_object_or_404(Announcement, pk=ann_id)
     publish_announcement.apply_async(args=[request.user.id, ann_id, get_root_url()], queue='default')
-    return redirect(announcement)
+
+    return redirect('announcements:list', ann_id=ann_id)
 
 
 class Create(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateView):
