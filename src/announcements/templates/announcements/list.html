@@ -11,7 +11,7 @@
 {% block js %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
   <script>
-    var permalinks = document.querySelectorAll('.permalink');
+    const permalinks = document.querySelectorAll('.permalink');
 
     permalinks.forEach(function (permalink) {
       permalink.addEventListener("click", function(e) {
@@ -20,18 +20,24 @@
       });
     });
 
-    var clipboard = new ClipboardJS(permalinks, {
+    const clipboard = new ClipboardJS(permalinks, {
       text: function(trigger) {
         return trigger.origin + trigger.getAttribute('data-clipboard-text');
       }
     });
 
-    $('.permalink').tooltip();
-
     clipboard.on('success', function(e) {
       $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
       $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
     });
+
+    // https://stackoverflow.com/a/37406402/3788603
+    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
+      e.stopPropagation();
+      $('.open').removeClass('open');
+      $(this).closest('.dropdown').toggleClass('open');
+    });
+
 
   </script>
 {% endblock %}
