@@ -4,7 +4,7 @@
 
 <!-- Fixed navbar -->
 <nav class="navbar navbar-default navbar-fixed-top"
-{% if request.user.is_authenticated and config.hs_chillax_line_active %}style='{% color_style_from_mark request.user %}'{% endif %}>
+{% if request.user.is_authenticated and config.color_headers_by_mark %}style='{% color_style_from_mark request.user %}'{% endif %}>
     <div class="container-fluid">
         <div class="navbar-header">
             <button type="button" class="navbar-toggle collapsed"
