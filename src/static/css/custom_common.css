@@ -406,6 +406,10 @@ ol > ol > ol {
 
 }
 
+.announcement-dropdown a:hover {
+    color: white;
+}
+
 .announcement-content {
     overflow-wrap: break-word;
 }
