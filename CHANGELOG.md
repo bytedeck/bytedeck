@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.9.2] 2020-10-27
+* [bugfix] File upload too big error message
+* [bugfix] First nad last names in Profile list
+* [bugfix] Prevent active semester from being deleted
+* [bugfix] Fix announcement menu button
+* [bugfix] Fix Mark Ranges to display properly
+* [bugfix] Display announcement date in local time
+* [bugfix] Minor styling corrections
+* [bugfix] Catch redis connection error during initdb
+
 ### [1.9.1] 2020-10-20
 * Archive announcements when closing a semester
 * Minor styling fixes

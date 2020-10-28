@@ -16,9 +16,9 @@ class RestrictedFileFormField(forms.FileField):
         try:
             content_type = file.content_type
             if self.content_types == "All" or content_type in self.content_types:
-                if file._size > self.max_upload_size:
+                if file.size > self.max_upload_size:
                     raise ValidationError('Max filesize is %s. Current filesize %s' % (
-                        filesizeformat(self.max_upload_size), filesizeformat(file._size))
+                        filesizeformat(self.max_upload_size), filesizeformat(file.size))
                     )
             else:
                 raise ValidationError('Filetype not supported. Acceptable filetypes are: %s' % (

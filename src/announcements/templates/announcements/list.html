@@ -11,7 +11,7 @@
 {% block js %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
   <script>
-    var permalinks = document.querySelectorAll('.permalink');
+    const permalinks = document.querySelectorAll('.permalink');
 
     permalinks.forEach(function (permalink) {
       permalink.addEventListener("click", function(e) {
@@ -20,26 +20,25 @@
       });
     });
 
-    var clipboard = new ClipboardJS(permalinks, {
+    const clipboard = new ClipboardJS(permalinks, {
       text: function(trigger) {
         return trigger.origin + trigger.getAttribute('data-clipboard-text');
       }
     });
-
-    $('.permalink').tooltip();
 
     clipboard.on('success', function(e) {
       $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
       $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
     });
 
-  </script>
-  <script>
-    // Announcements
-    var announcement_actions = document.querySelectorAll('.announcement-dropdown a')
-    $('.announcement-dropdown a').click((e) => {
-        e.stopPropagation();
+    // https://stackoverflow.com/a/37406402/3788603
+    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
+      e.stopPropagation();
+      $('.open').removeClass('open');
+      $(this).closest('.dropdown').toggleClass('open');
     });
+
+
   </script>
 {% endblock %}
 
@@ -78,7 +77,7 @@
         </span>
         <!-- </a> -->
 
-        <div class="dropdown dropdown-hover announcement-dropdown pull-right">
+        <div class="dropdown announcement-dropdown pull-right">
           <a class="dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-ellipsis-v"></i>
@@ -105,7 +104,7 @@
         </div>
 
         <span class="announcement-date pull-right">
-          <small>{{object.datetime_released.date|date:'D, N j, Y'}}</small>
+          <small>{{object.datetime_released|date:'D, N j, Y'}}</small>
         </span>
       </h4>
 

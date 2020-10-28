@@ -7,6 +7,7 @@ from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
+from redis import exceptions as redis_exceptions
 from tenant_schemas.utils import get_public_schema_name
 
 User = get_user_model()
@@ -112,7 +113,7 @@ class SiteConfig(models.Model):
 
     active_semester = models.ForeignKey(
         'courses.Semester',
-        verbose_name="Active Semester", default=get_active_semester, on_delete=models.SET_DEFAULT,
+        verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
         help_text="Your currently active semester.  New semesters can be created from the admin menu."
     )
 
@@ -124,13 +125,16 @@ class SiteConfig(models.Model):
 
     approve_oldest_first = models.BooleanField(
         verbose_name="Sort quests awaiting approval with oldest on top", default=False,
-        help_text="Check this if you want to have the quest that have been waiting the longed to appear on top of the list."
+        help_text="Check this if you want to have the quest that have been waiting the longest to appear on top of the list."
     )
 
     display_marks_calculation = models.BooleanField(
         verbose_name="Display marks calculation page", default=False,
         help_text="Check this if you want to let students view their mark calculations."
     )
+
+    def __str__(self):
+        return self.site_name
 
     def get_absolute_url(self):
         from django.urls import reverse
@@ -212,7 +216,13 @@ def invalidate_siteconfig_cache_signal(sender, instance, **kwargs):
     Whenever a `SiteConfig`, `Semester`, or `User` object is saved, we should invalidate the SiteConfig cache.
     """
 
-    config = cache.get(SiteConfig.cache_key())
+    try:
+        config = cache.get(SiteConfig.cache_key())
+    except redis_exceptions.ConnectionError:
+        # create_superuser is being called via manage.py initdb
+        # This just prevents it from throwing an error when redis is not running
+        # Because we are receiving a post_save from User, we don't want errors to happen
+        config = None
 
     if not config:
         return

@@ -149,6 +149,7 @@ class Grade(IsAPrereqMixin, models.Model):
 
 
 class SemesterManager(models.Manager):
+
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
@@ -230,7 +231,8 @@ class Semester(models.Model):
         count = numpy.busday_count(self.first_day, last_day, holidays=excluded_days)
         if numpy.is_busday(last_day, holidays=excluded_days):  # end date is not included, so add here.
             count += 1
-        return count
+        # We want to return an int because a numpty.int64 is not JSON serializable as of the moment
+        return count.item() if hasattr(count, 'item') else count
 
     def excluded_days(self):
         return self.excludeddate_set.all().values_list('date', flat=True)
@@ -308,6 +310,13 @@ class Semester(models.Model):
             profile.xp_cached = 0
 
         Profile.objects.bulk_update(profiles, ['xp_cached'])
+
+    def get_student_mark_list(self, students_only=False):
+        students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
+        mark_list = []
+        for student in students:
+            mark_list.append(student.profile.mark())
+        return mark_list
 
 
 class DateType(models.Model):

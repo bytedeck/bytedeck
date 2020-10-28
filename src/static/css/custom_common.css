@@ -406,6 +406,10 @@ ol > ol > ol {
 
 }
 
+.announcement-dropdown a:hover {
+    color: white;
+}
+
 .announcement-content {
     overflow-wrap: break-word;
 }
@@ -562,7 +566,7 @@ form .panel-body {
 }
 
 #main-container > .alert {
-    margin-bottom: 0px;
+    margin-bottom: 8px;
 }
 
 .alert-block ul {
