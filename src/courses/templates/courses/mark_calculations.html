@@ -77,7 +77,7 @@
           <li>
             The means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
                data-placement="top" data-html="true"
-               data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester, 
+               data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester,
                and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
               <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.user.profile.mark|floatformat }} % </pre>
             ">{{ obj.user.profile.mark|floatformat }}%</a>
@@ -174,22 +174,22 @@
         <tr>
           <td>1st Interim</td>
           <td>25%</td>
-          <td>{{ obj.semester.get_interim1_date }}</td>
+          <td>{{ obj.semester.get_interim1_date|date:"M. j, Y" }}</td>
         </tr>
         <tr>
           <td>Term</td>
           <td>50%</td>
-          <td>{{ obj.semester.get_term_date }}</td>
+          <td>{{ obj.semester.get_term_date|date:"M. j, Y" }}</td>
         </tr>
         <tr>
           <td>2nd Interim</td>
           <td>75%</td>
-          <td>{{ obj.semester.get_interim2_date }}</td>
+          <td>{{ obj.semester.get_interim2_date|date:"M. j, Y" }}</td>
         </tr>
         <tr>
           <td>Final</td>
           <td>100%</td>
-          <td>{{ obj.semester.get_final_date }}</td>
+          <td>{{ obj.semester.get_final_date|date:"M. j, Y" }}</td>
         </tr>
         </tbody>
       </table>
