@@ -49,8 +49,8 @@
             {{ object.title }}</h4>
           </td>
           <td><h4 class="panel-title">
-            <small>{{ object.datetime_released.date|date:'D, N j, Y' }}</small>
-            <div style="display:none;">{{ object.datetime_released.date|date:'Ymd' }}</div> <!-- for sorting -->
+            <small>{{ object.datetime_released|date:'D, N j, Y' }}</small>
+            <div style="display:none;">{{ object.datetime_released|date:'Ymd' }}</div> <!-- for sorting -->
             </h4>
           </td>
         </tr>
@@ -134,7 +134,7 @@
 {#            {% if object.sticky %}<i class="fa fa-exclamation-circle">&nbsp;</i>{% endif %}#}
 {#            {{ object.title }}#}
 {#            <!-- </a> -->#}
-{#            <small class="pull-right">{{ object.datetime_released.date|date:'D, N j, Y' }}</small>#}
+{#            <small class="pull-right">{{ object.datetime_released|date:'D, N j, Y' }}</small>#}
 {#          </h4>#}
 {#        </div>#}
 {#        <div id="collapse{{ object.id }}"#}
