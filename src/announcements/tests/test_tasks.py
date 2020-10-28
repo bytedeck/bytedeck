@@ -1,12 +1,17 @@
-from django.contrib.auth import get_user_model
+from datetime import timedelta
 
+from django.contrib.auth import get_user_model
+from django.db import connection
+from django.utils import timezone
+
+from django_celery_beat.models import PeriodicTask
 from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
-
-from siteconfig.models import SiteConfig
+from tenant_schemas.utils import get_public_schema_name, schema_context
 
 from announcements import tasks
 from announcements.models import Announcement
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -32,8 +37,8 @@ class AnnouncementTasksTests(TenantTestCase):
     def test_send_announcement_emails(self):
         task_result = tasks.send_announcement_emails.apply(
             kwargs={
-                "content": "", 
-                "root_url": "https://example.com", 
+                "content": "",
+                "root_url": "https://example.com",
                 "absolute_url": "/link/to/announcement/"
             }
         )
@@ -50,10 +55,37 @@ class AnnouncementTasksTests(TenantTestCase):
         )
         self.assertTrue(task_result.successful())
 
-        # Make sure the announcement is no longer a draft
+        # Make sure the announcement is no longer a draft and not gonna auto_publish
         # get updated instance of announcement
         no_longer_draft_announcement = Announcement.objects.get(pk=self.announcement.pk)
         self.assertFalse(no_longer_draft_announcement.draft)
+        self.assertFalse(no_longer_draft_announcement.auto_publish)
+
+        task_name = f"Autopublish task for Announcement #{no_longer_draft_announcement.id} on schema {connection.schema_name}"
+        with self.assertRaises(PeriodicTask.DoesNotExist):
+            PeriodicTask.objects.get(name=task_name)
+
+        with self.assertRaises(PeriodicTask.DoesNotExist):
+            with schema_context(get_public_schema_name()):
+                PeriodicTask.objects.get(name=task_name)
+
+    def test_publish_announcement_past_date(self):
+        past_announcement = baker.make(Announcement,
+                                       datetime_released=timezone.now() - timedelta(days=90))
+        self.assertTrue(past_announcement.draft)
+        self.assertFalse(past_announcement.auto_publish)
+
+        task_result = tasks.publish_announcement.apply(
+            kwargs={
+                'user_id': self.test_teacher.id,
+                'announcement_id': past_announcement.id,
+                'root_url': 'https://example.com'
+            }
+        )
+
+        self.assertTrue(task_result.successful())
+        past_announcement.refresh_from_db()
+        self.assertFalse(past_announcement.draft)
 
     def test_send_notifications(self):
 
