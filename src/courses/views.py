@@ -9,16 +9,16 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
-from django.views.generic import ListView
-from django.views.generic.edit import CreateView
+from django.views.generic import DetailView, ListView
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import CourseStudentForm
-from .models import CourseStudent, Rank, Semester
+from .forms import BlockForm, CourseStudentForm, SemesterForm
+from .models import Block, Course, CourseStudent, Rank, Semester
 
 
 # Create your views here.
@@ -59,6 +59,44 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Course
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CourseCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    model = Course
+    success_url = reverse_lazy('courses:course_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Course'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    model = Course
+    success_url = reverse_lazy('courses:course_list')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Course'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Course
+    success_url = reverse_lazy('courses:course_list')
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
@@ -85,6 +123,82 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         kwargs = super(CreateView, self).get_form_kwargs()
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Semester
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+    model = Semester
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
+    model = Semester
+    form_class = SemesterForm
+    success_url = reverse_lazy('courses:semester_list')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Create New Semester'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    model = Semester
+    form_class = SemesterForm
+    success_url = reverse_lazy('courses:semester_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Semester'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Block
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
+    model = Block
+    form_class = BlockForm
+    success_url = reverse_lazy('courses:block_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Block'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    model = Block
+    form_class = BlockForm
+    success_url = reverse_lazy('courses:block_list')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Block'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Block
+    success_url = reverse_lazy('courses:block_list')
 
 
 @non_public_only_view
