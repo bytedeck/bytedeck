@@ -1,0 +1,38 @@
+{% extends "courses/base.html" %}
+
+{% block head_title %}Semesters | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}<i class="fa fa-calendar-o pull-right"></i>Semesters
+  {% if request.user.is_staff %}
+    <a class="btn btn-primary" href="{% url 'courses:semester_create' %}" role="button">New</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<table class="table table-striped">
+  <tr>
+    <th></th>
+    <th>First Day</th>
+    <th>Last Day</th>
+    <th>Closed</th>
+    <th>Action</th>
+  </tr>
+  {% for object in object_list %}
+  <tr>
+    <td>{{ object }}</td>
+    <td>{{ object.first_day }}</td>
+    <td>{{ object.last_day }}</td>
+    <td>{{ object.closed }}</td>
+    <td>
+      <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
+        <i class="fa fa-edit"></i>
+      </a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
+
+{% block js %}{% endblock %}

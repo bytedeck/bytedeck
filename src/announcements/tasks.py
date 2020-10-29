@@ -1,18 +1,17 @@
 from __future__ import absolute_import, unicode_literals
 
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import get_template
 from django.contrib.auth import get_user_model
+from django.core.mail import EmailMultiAlternatives
 from django.shortcuts import get_object_or_404
+from django.template.loader import get_template
 from django.urls import reverse
+from django.utils import timezone
 
-from hackerspace_online.celery import app
-
-from siteconfig.models import SiteConfig
+from announcements.models import Announcement
 from courses.models import CourseStudent
+from hackerspace_online.celery import app
 from notifications.signals import notify
-
-from .models import Announcement
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -44,7 +43,7 @@ def send_announcement_emails(content, root_url, absolute_url):
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({
-        'content': content, 
+        'content': content,
         'absolute_url': absolute_url,
         'root_url': root_url,
         'profile_edit_url': reverse('profiles:profile_edit_own')
@@ -69,7 +68,9 @@ def publish_announcement(user_id, announcement_id, root_url):
     """
     # update model instance
     announcement = get_object_or_404(Announcement, pk=announcement_id)
+    announcement.datetime_released = timezone.now()
     announcement.draft = False
+    announcement.auto_publish = False
     announcement.save()
 
     absolute_url = announcement.get_absolute_url()

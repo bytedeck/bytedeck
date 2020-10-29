@@ -1,10 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+
 from model_bakery import baker
-from siteconfig.models import SiteConfig
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
+
+from courses.models import Block, Course, Semester
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -42,6 +45,20 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:marks', args=[1])
         self.assertRedirectsAdmin('courses:end_active_semester')
         self.assertRedirectsLogin('courses:ajax_progress_chart', args=[1])
+
+        self.assertRedirectsAdmin('courses:semester_list')
+        self.assertRedirectsAdmin('courses:semester_create')
+        self.assertRedirectsAdmin('courses:semester_update', args=[1])
+
+        self.assertRedirectsAdmin('courses:block_list')
+        self.assertRedirectsAdmin('courses:block_create')
+        self.assertRedirectsAdmin('courses:block_update', args=[1])
+        self.assertRedirectsAdmin('courses:block_delete', args=[1])
+
+        self.assertRedirectsAdmin('courses:course_list')
+        self.assertRedirectsAdmin('courses:course_create')
+        self.assertRedirectsAdmin('courses:course_update', args=[1])
+        self.assertRedirectsAdmin('courses:course_delete', args=[1])
         # View from external package.  Need to override view with LoginRequiredMixin if we want to bother
         # self.assertRedirectsLogin('courses:mark_distribution_chart', args=[1])
 
@@ -63,6 +80,20 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Staff access only
         self.assertRedirectsAdmin('courses:add', args=[self.test_student1.id])
         self.assertRedirectsAdmin('courses:end_active_semester')
+
+        self.assertRedirectsAdmin('courses:semester_list')
+        self.assertRedirectsAdmin('courses:semester_create')
+        self.assertRedirectsAdmin('courses:semester_update', args=[1])
+
+        self.assertRedirectsAdmin('courses:block_list')
+        self.assertRedirectsAdmin('courses:block_create')
+        self.assertRedirectsAdmin('courses:block_update', args=[1])
+        self.assertRedirectsAdmin('courses:block_delete', args=[1])
+
+        self.assertRedirectsAdmin('courses:course_list')
+        self.assertRedirectsAdmin('courses:course_create')
+        self.assertRedirectsAdmin('courses:course_update', args=[1])
+        self.assertRedirectsAdmin('courses:course_delete', args=[1])
 
     def test_all_page_status_codes_for_staff(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
@@ -119,6 +150,51 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(add_course_url, data=self.valid_form_data)
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
+
+    def test_CourseList_view(self):
+        """ Admin should be able to view course list """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:course_list'))
+        self.assertEqual(response.status_code, 200)
+
+        # Should contain Default and another one via bake
+        self.assertEqual(response.context['object_list'].count(), 2)
+
+    def test_CourseCreate_view(self):
+        """ Admin should be able to create a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'My Sample Course',
+            'xp_for_100_percent': 2000
+        }
+        response = self.client.post(reverse('courses:course_create'), data=data)
+        self.assertRedirects(response, reverse('courses:course_list'))
+
+        course = Course.objects.get(title=data['title'])
+        self.assertEqual(course.title, data['title'])
+
+    def test_CourseUpdate_view(self):
+        """ Admin should be able to update a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'My Updated Title',
+            'xp_for_100_percent': 1000,
+        }
+        response = self.client.post(reverse('courses:course_update', args=[1]), data=data)
+        self.assertRedirects(response, reverse('courses:course_list'))
+        course = Course.objects.get(id=1)
+        self.assertEqual(course.title, data['title'])
+        self.assertEqual(course.xp_for_100_percent, data['xp_for_100_percent'])
+
+    def test_CourseDelete_view(self):
+        """ Admin should be able to delete a course """
+        self.client.force_login(self.test_teacher)
+
+        before_delete_count = Course.objects.count()
+        response = self.client.post(reverse('courses:course_delete', args=[1]))
+        after_delete_count = Course.objects.count()
+        self.assertRedirects(response, reverse('courses:course_list'))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
 
 
 class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -185,3 +261,82 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # self.assertFalse(form.is_valid())
         self.assertRedirects(response, reverse('quests:quests'))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
+
+
+class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+
+    def test_SemesterList_view(self):
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('courses:semester_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['object_list'].count(), 1)
+
+    def test_SemesterCreate_view(self):
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('courses:semester_create'), data={'first_day': '2020-10-15', 'last_day': '2020-12-15'})
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(Semester.objects.count(), 2)
+
+    def test_SemesterUpdate_view(self):
+        self.client.force_login(self.test_teacher)
+
+        first_day = '2020-10-16'
+        response = self.client.post(reverse('courses:semester_update', args=[1]), data={'first_day': first_day})
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), first_day)
+
+
+class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+
+    def test_BlockList_view(self):
+        """ Admin should be able to view block list """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:block_list'))
+        self.assertEqual(response.status_code, 200)
+
+        # Should contain one block
+        self.assertEqual(response.context['object_list'].count(), 1)
+
+    def test_BlockCreate_view(self):
+        """ Admin should be able to create a block """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'block': 'My Block',
+        }
+
+        response = self.client.post(reverse('courses:block_create'), data=data)
+        self.assertRedirects(response, reverse('courses:block_list'))
+
+        block = Block.objects.get(block=data['block'])
+        self.assertEqual(block.block, data['block'])
+
+    def test_BlockUpdate_view(self):
+        """ Admin should be able to update a block """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'block': 'Updated Block',
+        }
+        response = self.client.post(reverse('courses:block_update', args=[1]), data=data)
+        self.assertRedirects(response, reverse('courses:block_list'))
+        block = Block.objects.get(id=1)
+        self.assertEqual(block.block, data['block'])
+
+    def test_BlockDelete_view(self):
+        """ Admin should be able to delete a block """
+        self.client.force_login(self.test_teacher)
+
+        before_delete_count = Block.objects.count()
+        response = self.client.post(reverse('courses:block_delete', args=[1]))
+        after_delete_count = Block.objects.count()
+        self.assertRedirects(response, reverse('courses:block_list'))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
