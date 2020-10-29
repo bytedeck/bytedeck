@@ -18,6 +18,6 @@ def color_style_from_mark(user):
         else:
             hex_color = mark_range.color_light
 
-        return "background-image: none !importnant; background-color: {} !important;".format(hex_color)
+        return "background-image: none !important; background-color: {} !important;".format(hex_color)
     else:
         return ""
