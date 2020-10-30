@@ -394,10 +394,10 @@ ol > ol > ol {
 /************ ANNOUNCEMENT *******************/
 
 .announcement-dropdown {
-    padding-left: 12px;
-    padding-right: 12px;
-    margin-left: 15px;
-    line-height: 1.39;
+    /* padding-left: 12px; */
+    /* padding-right: 12px; */
+    /* margin-left: 15px; */
+    /* line-height: 1.39; */
 }
 
 .announcement-dropdown a {
@@ -407,7 +407,7 @@ ol > ol > ol {
 }
 
 .announcement-dropdown a:hover {
-    color: white;
+    color: #c8c8c8;
 }
 
 .announcement-content {
