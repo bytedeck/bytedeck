@@ -13,7 +13,6 @@
 {% block content %}
 <table class="table table-striped">
   <tr>
-    <th></th>
     <th>First Day</th>
     <th>Last Day</th>
     <th>Closed</th>
@@ -21,7 +20,6 @@
   </tr>
   {% for object in object_list %}
   <tr>
-    <td>{{ object }}</td>
     <td>{{ object.first_day }}</td>
     <td>{{ object.last_day }}</td>
     <td>{{ object.closed }}</td>
@@ -33,6 +31,26 @@
   </tr>
   {% endfor %}
 </table>
+
+<hr>
+<div class="col-sm-4">
+  <a id="end-semester" href="{% url 'courses:end_active_semester' %}" class="btn btn-danger">End current semester</a>
+</div>
+<div class="col-sm-8">
+  <p>This will permanently record all student marks for the semester.
+    Which means changing or deleting quests, submissions, or badges
+    will no longer affect their marks for that semester.</p>
+</div>
 {% endblock %}
 
-{% block js %}{% endblock %}
+{% block js %}
+
+<script>
+  $('body').on('click', '#end-semester', function(e) {
+      if(!confirm("Are you sure?")) {
+          e.preventDefault();
+          return;
+      }
+  })
+</script>
+{% endblock %}
