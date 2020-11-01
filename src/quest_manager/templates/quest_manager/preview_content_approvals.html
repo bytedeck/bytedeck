@@ -14,9 +14,9 @@
 
 </li>
 <li class="list-group-item list-group-item-info">Submission Instructions</li>
-<li class="list-group-item">{{s.quest.submission_details|safe}}</li>
+<li class="list-group-item clearfix">{{s.quest.submission_details|safe}}</li>
 <li class="list-group-item list-group-item-info">Instructor Notes</li>
-<li class="list-group-item">{{s.quest.instructor_notes|safe}}
+<li class="list-group-item clearfix">{{s.quest.instructor_notes|safe}}
     {% if s.quest.specific_teacher_to_notify %}
         <hr><p>* <b>{{ s.quest.specific_teacher_to_notify }}</b> was notified about this quest submission.</p>
     {% endif %}
