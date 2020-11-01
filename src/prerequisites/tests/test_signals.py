@@ -32,7 +32,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
         badge_assertion = baker.make(BadgeAssertion, user=self.student, do_not_grant_xp=True, semester=sem)
         badge_assertion.do_not_grant_xp = False
         badge_assertion.save()
-        self.assertEqual(task.call_count, 2)
+        self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_quest_summission(self, task):
@@ -42,7 +42,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
         quest_summission = baker.make(QuestSubmission, user=self.student, is_completed=False)
         quest_summission.is_completed = True
         quest_summission.save()
-        self.assertEqual(task.call_count, 2)
+        self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_course_student(self, task):
@@ -50,7 +50,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
             course_student = baker.make(CourseStudent, user=self.student, active=False)
             course_student.active = True
             course_student.save()
-            self.assertEqual(task.call_count, 2)
+            self.assertEqual(task.call_count, 1)
             self.assertEqual(callback.call_count, 2)
 
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
@@ -101,4 +101,4 @@ class PrerequisitesSignalsTest(TenantTestCase):
         baker.make(Prereq, prereq_invert=True, parent_object=quest)  # creation
 
         quest.delete()  # doesn't call task because parent_object no longer exists.
-        self.assertEqual(task.call_count, 1)  
+        self.assertEqual(task.call_count, 1)
