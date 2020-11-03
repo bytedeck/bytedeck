@@ -5,7 +5,8 @@ from django.dispatch import receiver
 
 from badges.models import Badge
 from prerequisites.models import Prereq
-from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_for_user, update_quest_conditions_all_users
+from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
+from quest_manager.models import QuestSubmission
 
 User = get_user_model()
 
@@ -24,8 +25,11 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
     Recalculate what is available to them.
     """
 
-    # Do not proceed updating cache if an instance was just created
-    if kwargs.get('created') is True:
+    # When starting a Quest, it creates a QuestSubmission instance after hitting the start button.
+    # It just puts the Quest to In progress but does not trigger the availability of new Quests.
+    # We don't want to update the student's available quest cache because nothing has been completed
+    # and would just be a waste of resource if compute for new quests
+    if isinstance(instance, QuestSubmission) and kwargs.get('created') is True:
         return
 
     list_of_models = ('BadgeAssertion', 'QuestSubmission', 'CourseStudent')
