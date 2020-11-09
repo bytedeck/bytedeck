@@ -18,5 +18,8 @@
   {{ form | crispy }}
   <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
+  {% if update_via_admin %}
+    <a href="{% url 'admin:courses_semester_change' object.id %}" role="button" class="btn btn-default">via Admin</a>
+  {% endif %}
 </form>
 {% endblock %}
