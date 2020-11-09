@@ -17,16 +17,8 @@
     <div class="col-sm-12">
         <p>
             <a class="btn btn-default"
-               href="/admin/courses/semester/">Semester Admin</a>
+               href="{% url 'admin:courses_semester_add' %}">Semester Admin</a>
         </p>
-    </div>
-    <div class="col-sm-4">
-        <a href="{% url 'courses:end_active_semester' %}" class="btn btn-danger">End current semester</a>
-    </div>
-    <div class="col-sm-8">
-        <p>This will permanently record all student marks for the semester.
-            Which means changing or deleting quests, submissions, or badges
-            will no longer affect their marks for that semester.</p>
     </div>
 </div>
 

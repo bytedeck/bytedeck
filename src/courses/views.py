@@ -158,6 +158,7 @@ class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
         kwargs['heading'] = 'Update Semester'
         kwargs['submit_btn_value'] = 'Update'
+        kwargs['update_via_admin'] = True
 
         return super().get_context_data(**kwargs)
 
