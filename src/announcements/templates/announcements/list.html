@@ -34,8 +34,8 @@
     // https://stackoverflow.com/a/37406402/3788603
     $('.announcement-dropdown .dropdown-toggle').click(function(e) {
       e.stopPropagation();
-      $('.open').removeClass('open');
       $(this).closest('.dropdown').toggleClass('open');
+      $('.annoncement-dropdown .open').removeClass('open');
     });
 
 
@@ -80,7 +80,7 @@
         <div class="dropdown announcement-dropdown pull-right">
           <a class="dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
-            <i class="fa fa-ellipsis-v"></i>
+            <i class="fa fa-fw fa-ellipsis-v"></i>
           </a>
           <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
             {% if request.user.is_staff %}

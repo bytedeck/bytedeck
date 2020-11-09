@@ -268,8 +268,11 @@ a.list-group-item-muted {
     color: #fff !important;;
 }
 
-.multifileinput, .clearablefileinput, input, textarea {
-    color: #c8c8c8;
+.multifileinput,
+.clearablefileinput,
+.select2-selection__rendered,
+input, textarea {
+    color: #c8c8c8 !important;
 }
 
 /* COMMENT and annoucnement higlights */

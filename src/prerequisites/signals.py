@@ -5,7 +5,8 @@ from django.dispatch import receiver
 
 from badges.models import Badge
 from prerequisites.models import Prereq
-from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_for_user, update_quest_conditions_all_users
+from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
+from quest_manager.models import QuestSubmission
 
 User = get_user_model()
 
@@ -23,9 +24,17 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
     """ When a user completes a task (e.g. earns a badge, has a quest submission approved or rejected, or joins a course)
     Recalculate what is available to them.
     """
+
+    # When starting a Quest, it creates a QuestSubmission instance after hitting the start button.
+    # It just puts the Quest to In progress but does not trigger the availability of new Quests.
+    # We don't want to update the student's available quest cache because nothing has been completed
+    # and would just be a waste of resource if compute for new quests
+    if isinstance(instance, QuestSubmission) and kwargs.get('created') is True:
+        return
+
     list_of_models = ('BadgeAssertion', 'QuestSubmission', 'CourseStudent')
     if sender.__name__ in list_of_models:
-        # TODO Since the cache is only for quests (as prereq parent object), only need to send for affected quests, not ALL quests? 
+        # TODO Since the cache is only for quests (as prereq parent object), only need to send for affected quests, not ALL quests?
         update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
 
 
@@ -45,7 +54,7 @@ def update_conditions_met(sender, instance, *args, **kwargs):
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
-    """    
+    """
     if instance.parent_content_type.model == 'quest':
         # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
         # Cover this instance in a post_delete signal receiver for Quest objects.

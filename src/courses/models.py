@@ -267,7 +267,7 @@ class Semester(models.Model):
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
         date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward', holidays=excluded_days)
-        return date_after_fraction
+        return date_after_fraction.item()
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
         """ The date `class days` from the start of the semester

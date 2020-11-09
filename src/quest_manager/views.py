@@ -17,7 +17,6 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
 from notifications.signals import notify
-from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -715,9 +714,6 @@ def complete(request, submission_id):
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
-                    # Immediate/synchronous recalculation of available quests:
-                    # NOW ASYNCH TO PREVENT HUGE DELAYS!
-                    update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
