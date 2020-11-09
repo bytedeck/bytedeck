@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.9.3] 2020-11-08
+* Improve announcement menu button
+* Enhance select2 widget styling for darktheme
+* Semester page updates
+* [bugfix] Date format inconsistancies
+* [bugfix] Quest approval image cutoff
+* [bugfix] Duplicate celery tasks eliminated
+
 ### [1.9.2] 2020-10-27
 * [bugfix] File upload too big error message
 * [bugfix] First nad last names in Profile list
