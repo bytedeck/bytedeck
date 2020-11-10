@@ -47,14 +47,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
         self.assertEqual(task.name, public_task.name)
         self.assertEqual(task.queue, public_task.queue)
 
-        # TODO: Uncomment again when we are using ClockedSchedule and not CrontabSchedule
-        # self.assertEqual(task.clocked.clocked_time, announcement.datetime_released)
-
-        # task should have a schedule date matching the announcement:
-        self.assertEqual(int(task.crontab.hour), announcement.datetime_released.hour)
-        self.assertEqual(int(task.crontab.minute), announcement.datetime_released.minute)
-        self.assertEqual(int(task.crontab.day_of_month), announcement.datetime_released.day)
-        self.assertEqual(int(task.crontab.month_of_year), announcement.datetime_released.month)
+        self.assertEqual(task.clocked.clocked_time, announcement.datetime_released)
 
         # changing the announcement to not be a draft should cause the signal to delete the task
         announcement.draft = False

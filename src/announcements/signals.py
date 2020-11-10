@@ -5,7 +5,7 @@ from django.db import connection
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from django_celery_beat.models import CrontabSchedule, PeriodicTask
+from django_celery_beat.models import ClockedSchedule, PeriodicTask
 
 from siteconfig.models import SiteConfig
 from tenant.utils import get_root_url
@@ -33,29 +33,15 @@ def save_announcement_signal(sender, instance, **kwargs):
             },
         )
 
-        # There is a bug when more than 1 `PeriodicTask` is using a single `ClockedSchedule` instance
-        # So, we will use `CrontabSchedule` instead. Still achieves the same functionality
-        # See issue: https://github.com/celery/django-celery-beat/issues/283
-        # TODO: Revert back to this once the above issue is fixed
-        # schedule, _ = ClockedSchedule.objects.get_or_create(
-        #     clocked_time=instance.datetime_released
-        # )
-
-        schedule, _ = CrontabSchedule.objects.get_or_create(
-            minute=instance.datetime_released.minute,
-            hour=instance.datetime_released.hour,
-            day_of_month=instance.datetime_released.day,
-            month_of_year=instance.datetime_released.month,
-            day_of_week='*',
-            timezone=instance.datetime_released.tzinfo
+        schedule, _ = ClockedSchedule.objects.get_or_create(
+            clocked_time=instance.datetime_released
         )
 
         # PeriodicTask doesn't have an update_or_create() method for some reason, so do it long way
         # https://github.com/celery/django-celery-beat/issues/106
 
         defaults = {
-            # 'clocked': schedule,
-            'crontab': schedule,
+            'clocked': schedule,
             'task': 'announcements.tasks.publish_announcement',
             'queue': 'default',
             'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
