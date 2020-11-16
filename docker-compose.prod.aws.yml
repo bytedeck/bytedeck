@@ -1,0 +1,56 @@
+version: '2.2'
+
+###############################################################################
+#
+# FOR DOCKER-COMPOSE SETTINGS SPECIFIC TO AWS PRODUCTION
+#
+# Run with:
+# `docker-compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d`
+#
+# https://docs.docker.com/compose/extends/
+################################################################################
+
+services:
+  web:
+    build:
+      args:
+        WUID: $WUID
+        WGID: $WGID
+    command: bash -c "cd /app/src/ &&
+                      python manage.py migrate_schemas --shared &&
+                      python manage.py migrate_schemas --executor=parallel &&
+                      python manage.py collectstatic --noinput &&
+                      uwsgi --ini uwsgi.aws.ini"
+    volumes:
+      - .:/app
+      # - media_data:/app/media
+      - static_data:/app/src/static
+      - socket_data:/bytedeck-volume
+    user: $WUID:$WGID
+
+  celery:
+    user: $WUID:$WGID
+
+  nginx:
+    build:
+      context: ./nginx
+      args:
+        WUID: $WUID
+        WGID: $WGID
+    volumes:
+      - socket_data:/bytedeck-volume
+      - static_data:/var/www/bytedeck/static
+      # - media_data:/var/www/bytedeck/media/
+    ports:
+      - "443:8088"
+      - "80:8080"
+    depends_on:
+      - web
+    user: $WUID:$WGID
+
+volumes:
+  socket_data:
+  static_data:
+  # media_data:
+
+
