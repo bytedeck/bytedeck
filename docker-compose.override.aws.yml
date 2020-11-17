@@ -3,7 +3,10 @@ version: '2.2'
 ###############################################################################
 #
 # FOR DOCKER_COMPOSE SETTINGS SPECIFIC TO DEVELOPMENT
-# 
+#
+# This is the AWS equivalent file for current docker-compose.overide.yml
+# (should be renamed to docker-compose.overide.yml once original file is removed)
+#
 # It is run automatically with `docker-compose up` on top of the the settings in docker-compose.yml
 #
 # docker-compose.overide.yml
