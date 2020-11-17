@@ -15,6 +15,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.aws
+      # Enable below when uwsgi-nginx uses unix sock
+      # args:
+      #   WUID: $WUID
+      #   WGID: $WGID
     env_file: .env
     # command: # see docker-compose.overide.yml or docker-compose.prod.yml
     volumes: 
