@@ -4,6 +4,9 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.10.0] 2020-11-17 - AWS
+* [dev] Move to AWS
+
 ### [1.9.3] 2020-11-08
 * Improve announcement menu button
 * Enhance select2 widget styling for darktheme
