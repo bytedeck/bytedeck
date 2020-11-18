@@ -1,6 +1,7 @@
 # Contains secrets
 .env
 .env.production
+.pem
 
 #these files have might have production keys and passwords etc.
 production_*.py
