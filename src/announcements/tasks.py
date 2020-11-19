@@ -34,10 +34,11 @@ def send_notifications(user_id, announcement_id):
 
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
-    users_to_email = User.objects.filter(
-        is_active=True,
-        profile__get_announcements_by_email=True
-    ).exclude(email='').values_list('email', flat=True)
+    users_to_email = (
+        CourseStudent.objects.all_users_for_active_semester()
+                             .filter(profile__get_announcements_by_email=True)
+                             .exclude(email='')
+                             .values_list('email', flat=True))
 
     subject = '{} Announcement'.format(SiteConfig.get().site_name_short)
     text_content = content
