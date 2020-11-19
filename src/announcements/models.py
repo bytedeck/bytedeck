@@ -31,6 +31,9 @@ class AnnouncementManager(models.Manager):
     def get_active(self):
         return self.get_queryset().not_archived().order_by('-sticky', '-datetime_released')
 
+    def get_archived(self):
+        return self.get_queryset().filter(archived=True).order_by('-sticky', '-datetime_released')
+
     def get_for_students(self):
         return self.get_active().not_draft().not_expired().released()
 
