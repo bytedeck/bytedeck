@@ -20,7 +20,7 @@ class AnnouncementForm(forms.ModelForm):
 
     class Meta:
         model = Announcement
-        exclude = ['author', 'archived']
+        exclude = ['author', 'icon']
 
         # SUMMERNOTE:
         # > If you don't like <iframe>, then use inplace widget

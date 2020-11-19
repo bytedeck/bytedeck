@@ -282,3 +282,8 @@ input, textarea {
   50% { background:  black}
   100% { background: inherit }
 }
+
+/* Announcement menu button */
+.announcement-dropdown a{
+    color: rgb(200, 200, 200);
+}
