@@ -6,10 +6,10 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY bytedeck.aws.conf /etc/nginx/sites-available/bytedeck.conf
 
 # SSL details
-COPY cert.pem /etc/letsencrypt/live/bytedeck-temp.com/cert.pem
-COPY chain.pem /etc/letsencrypt/live/bytedeck-temp.com/chain.pem
-COPY fullchain.pem /etc/letsencrypt/live/bytedeck-temp.com/fullchain.pem
-COPY privkey.pem /etc/letsencrypt/live/bytedeck-temp.com/privkey.pem
+COPY cert.pem /etc/letsencrypt/live/bytedeck.com/cert.pem
+COPY chain.pem /etc/letsencrypt/live/bytedeck.com/chain.pem
+COPY fullchain.pem /etc/letsencrypt/live/bytedeck.com/fullchain.pem
+COPY privkey.pem /etc/letsencrypt/live/bytedeck.com/privkey.pem
 COPY ssl-dhparams.pem /etc/letsencrypt/ssl-dhparams.pem
 
 RUN mkdir -p /etc/nginx/sites-enabled/ \
