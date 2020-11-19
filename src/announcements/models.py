@@ -39,7 +39,7 @@ class AnnouncementManager(models.Manager):
 
     def archive_announcements(self):
 
-        announcements = self.get_queryset().not_archived()
+        announcements = self.get_queryset().not_archived().not_draft()
 
         for announcement in announcements:
             announcement.archived = True

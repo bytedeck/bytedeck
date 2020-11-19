@@ -164,9 +164,9 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(self.client.get(reverse('announcements:list')), archived_announcement.title)
 
     def test_announcements_archived_after_semester_close(self):
-        """ All unarchived announcements should be archived when a semester is closed """
+        """ All unarchived (non-draft) announcements should be archived when a semester is closed"""
 
-        announcements = [baker.make(Announcement, archived=False) for _ in range(5)]
+        announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
 
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -177,6 +177,16 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         for announcement in announcements:
             announcement.refresh_from_db()
             self.assertTrue(announcement.archived)
+
+    def test_announcement_draft_not_archived_after_semester_close(self):
+        """ Draft announcements should not be archived when a semester is closed """
+        draft_ann = baker.make(Announcement, archived=False, draft=True)
+
+        self.client.force_login(self.test_teacher)
+        self.client.get(reverse('courses:end_active_semester'))
+        
+        draft_ann.refresh_from_db()
+        self.assertFalse(draft_ann.archived)
 
     # @patch('announcements.views.publish_announcement.apply_async')
     def test_publish_announcement(self):
