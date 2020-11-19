@@ -35,6 +35,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # go home
         self.assertRedirectsLogin('announcements:list')
+        self.assertRedirectsLogin('announcements:archived')
         self.assertRedirectsLogin('announcements:list2')
         self.assertRedirectsLogin('announcements:comment', args=[1])
         self.assertRedirectsLogin('announcements:list', args=[1])
@@ -86,6 +87,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('announcements:list')
         self.assert200('announcements:list2')
+        self.assert200('announcements:archived')
         self.assert200('announcements:list', args=[self.ann_pk])
 
         # Announcement from setup() should appear in the list
@@ -110,6 +112,19 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             response=self.client.post(reverse('announcements:publish', args=[self.ann_pk])),
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
+
+    def test_teachers_have_archive_button(self):
+        self.client.force_login(self.test_teacher)
+        self.assertContains(self.client.get(reverse('announcements:list')), "Archived")
+
+    def test_students_do_not_see_archive_button(self):
+        self.client.force_login(self.test_student1)
+        self.assertNotContains(self.client.get(reverse('announcements:list')), "Archived")
+
+    def test_archived_announcements_visible_on_archived_page(self):
+        self.client.force_login(self.test_teacher)
+        archived_announcement = baker.make(Announcement, archived=True)
+        self.assertContains(self.client.get(reverse('announcements:archived')), archived_announcement.title)
 
     def test_draft_announcement(self):
         draft_announcement = baker.make(Announcement)  # default is draft
