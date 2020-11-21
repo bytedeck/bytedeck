@@ -1,4 +1,5 @@
 {% load static %}
+{% get_static_prefix as STATIC_PREFIX %}
 {% load utility_tags %}
 
 <!-- Font Awesome -->
@@ -43,16 +44,16 @@
 {% if config.get_favicon_url %}
       <link rel="icon" href="{{ config.get_favicon_url }}">
 {% else %}
-      <link rel="icon" type="image/png" sizes="16x16" href="/static/icon/favicon-16x16.png?v=OmKpW3L7mY">
-      <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32x32.png?v=OmKpW3L7mY">
-      <link rel="shortcut icon" href="/static/icon/favicon.ico?v=OmKpW3L7mY">
+      <link rel="icon" type="image/png" sizes="16x16" href="{{ STATIC_PREFIX }}icon/favicon-16x16.png?v=OmKpW3L7mY">
+      <link rel="icon" type="image/png" sizes="32x32" href="{{ STATIC_PREFIX }}icon/favicon-32x32.png?v=OmKpW3L7mY">
+      <link rel="shortcut icon" href="{{ STATIC_PREFIX }}icon/favicon.ico?v=OmKpW3L7mY">
 {% endif %}
 
 <!-- Mobile device icons -->
-<link rel="apple-touch-icon" sizes="180x180" href="/static/icon/apple-touch-icon.png?v=OmKpW3L7mY">
-<link rel="manifest" href="/static/icon/site.webmanifest?v=OmKpW3L7mY">
-<link rel="mask-icon" href="/static/icon/safari-pinned-tab.svg?v=OmKpW3L7mY" color="#5bbad5">
+<link rel="apple-touch-icon" test="" sizes="180x180" href="{{ STATIC_PREFIX }}icon/apple-touch-icon.png?v=OmKpW3L7mY">
+<link rel="manifest" href="{{ STATIC_PREFIX }}icon/site.webmanifest?v=OmKpW3L7mY">
+<link rel="mask-icon" href="{{ STATIC_PREFIX }}icon/safari-pinned-tab.svg?v=OmKpW3L7mY" color="#5bbad5">
 <meta name="msapplication-TileColor" content="#da532c">
-<meta name="msapplication-config" content="/static/icon/browserconfig.xml?v=OmKpW3L7mY">
+<meta name="msapplication-config" content="{{ STATIC_PREFIX }}icon/browserconfig.xml?v=OmKpW3L7mY">
 <meta name="theme-color" content="#ffffff">
 
