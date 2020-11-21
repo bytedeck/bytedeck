@@ -608,7 +608,8 @@ SUMMERNOTE_CONFIG = {
     # If any codemirror settings are defined, it will include codemirror files automatically.
     'css': (
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css',
+        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
         os.path.join(STATIC_URL, 'css/custom_common.css'),
         os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_iframe.css'),
