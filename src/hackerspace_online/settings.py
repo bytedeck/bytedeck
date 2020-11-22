@@ -21,6 +21,42 @@ env = environ.Env(
     ALLOWED_HOSTS=(list)
 )
 
+LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
+
+if not os.path.exists(LOGS_PATH):
+    os.mkdir(LOGS_PATH)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} | {asctime} | {process:d} {thread:d} | {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
+            'filename': os.path.join(LOGS_PATH, 'queries.log'),
+            'formatter': 'verbose',
+        }
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+        },
+    }
+}
+
 project_root = environ.Path(__file__) - 3  # "/"
 PROJECT_ROOT = project_root()
 BASE_DIR = project_root('src')  # "/src/"
@@ -182,7 +218,7 @@ INSTALLED_APPS = (
     'hackerspace_online',
 
     # django storages
-    'storages', 
+    'storages',
 
     # local apps
     'quest_manager',
@@ -346,7 +382,7 @@ if USE_S3:
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
-    
+
     # S3 settings
     AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
     AWS_S3_CUSTOM_DOMAIN = env('CDN_static')
@@ -354,12 +390,12 @@ if USE_S3:
         "ACL": "public-read",
         "CacheControl": "max-age=86400"
     }
-    
+
     # S3 Static Files
     STATICFILES_LOCATION = 'static'
     STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{STATICFILES_LOCATION}/'
     STATICFILES_STORAGE = 'storage.custom_storages.StaticStorage'
-    
+
     # Media Files
 
     # S3 public media files
@@ -371,12 +407,12 @@ if USE_S3:
     # For any implementation in future, Refer https://testdriven.io/blog/storing-django-static-and-media-files-on-amazon-s3/
     PRIVATE_MEDIAFILES_LOCATION = 'private_media'
     PRIVATE_FILE_STORAGE = 'storage.custom_storages.PrivateMediaStorage'
-    
+
 else:
-    
+
     # The absolute path to the directory where `collectstatic` will move the static files to.
     STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
-    
+
     # The absolute path to the directory where uploaded media files will be saved to
     MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
 
@@ -431,7 +467,7 @@ else:
 # Google provides default keys in development that always validate, but results in this error:
 #  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
-# 
+#
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
 SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
