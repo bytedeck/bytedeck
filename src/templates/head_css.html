@@ -1,8 +1,12 @@
 {% load static %}
+{% get_static_prefix as STATIC_PREFIX %}
 {% load utility_tags %}
 
 <!-- Font Awesome -->
-<link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet">
+<!-- <link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet"> -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" 
+      integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" 
+      crossorigin="anonymous">
 
 <!-- Bootstrap -->
 {% if request.user.profile.dark_theme %}
@@ -19,15 +23,18 @@
 <link rel="stylesheet" href="{% static 'css/bootstrap-table-accordion.css' %}" >
 
 <!-- KaTeX for math rendering -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css" 
+      integrity="sha512-qcHPGCptLWeJ7IFKmYe3ep1Zh/qfC5/h0r6hXQ82tJO89niMBx/4OUcYT7NJi6POUUXZUTyJtrCmpKP1u3I/HQ==" 
+      crossorigin="anonymous" />
+
 
 <!-- Custom site-wide styles -->
 {% if request.user.profile.dark_theme %}
-<link href="{% static 'css/custom_slate.css' %}" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_slate.css?v=1.0" rel="stylesheet">
 {% else %}
-<link href="{% static 'css/custom.css' %}" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom.css?v=1.0" rel="stylesheet">
 {% endif %}
-<link href="{% static 'css/custom_common.css' %}" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_common.css?v=1.0" rel="stylesheet">
 <link href="{% static 'css/jquery-packed-img-strip.css' %}" rel="stylesheet">
 
 <!-- Bootstrap DateTimePicker Widget -->
@@ -37,16 +44,16 @@
 {% if config.get_favicon_url %}
       <link rel="icon" href="{{ config.get_favicon_url }}">
 {% else %}
-      <link rel="icon" type="image/png" sizes="16x16" href="/static/icon/favicon-16x16.png?v=OmKpW3L7mY">
-      <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32x32.png?v=OmKpW3L7mY">
-      <link rel="shortcut icon" href="/static/icon/favicon.ico?v=OmKpW3L7mY">
+      <link rel="icon" type="image/png" sizes="16x16" href="{{ STATIC_PREFIX }}icon/favicon-16x16.png?v=OmKpW3L7mY">
+      <link rel="icon" type="image/png" sizes="32x32" href="{{ STATIC_PREFIX }}icon/favicon-32x32.png?v=OmKpW3L7mY">
+      <link rel="shortcut icon" href="{{ STATIC_PREFIX }}icon/favicon.ico?v=OmKpW3L7mY">
 {% endif %}
 
 <!-- Mobile device icons -->
-<link rel="apple-touch-icon" sizes="180x180" href="/static/icon/apple-touch-icon.png?v=OmKpW3L7mY">
-<link rel="manifest" href="/static/icon/site.webmanifest?v=OmKpW3L7mY">
-<link rel="mask-icon" href="/static/icon/safari-pinned-tab.svg?v=OmKpW3L7mY" color="#5bbad5">
+<link rel="apple-touch-icon" test="" sizes="180x180" href="{{ STATIC_PREFIX }}icon/apple-touch-icon.png?v=OmKpW3L7mY">
+<link rel="manifest" href="{{ STATIC_PREFIX }}icon/site.webmanifest?v=OmKpW3L7mY">
+<link rel="mask-icon" href="{{ STATIC_PREFIX }}icon/safari-pinned-tab.svg?v=OmKpW3L7mY" color="#5bbad5">
 <meta name="msapplication-TileColor" content="#da532c">
-<meta name="msapplication-config" content="/static/icon/browserconfig.xml?v=OmKpW3L7mY">
+<meta name="msapplication-config" content="{{ STATIC_PREFIX }}icon/browserconfig.xml?v=OmKpW3L7mY">
 <meta name="theme-color" content="#ffffff">
 
