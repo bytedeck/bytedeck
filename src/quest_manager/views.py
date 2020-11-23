@@ -859,15 +859,19 @@ def skipped(request, quest_id):
 def ajax_save_draft(request):
     if request.is_ajax() and request.POST:
 
+        response_data = {
+            'result': 'No changes',
+        }
+
         submission_comment = request.POST.get('comment')
         submission_id = request.POST.get('submission_id')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
-        sub.draft_text = submission_comment
-        sub.save()
 
-        response_data = {}
-        response_data['result'] = 'Draft saved'
+        if sub.draft_text != submission_comment:
+            sub.draft_text = submission_comment
+            response_data['result'] = 'Draft saved'
+            sub.save()
 
         return HttpResponse(
             json.dumps(response_data),

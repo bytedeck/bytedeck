@@ -55,9 +55,9 @@
           </a>
           <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
             {% if request.user.is_staff %}
-            <li><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
-            <li><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
-            <li><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
+            <li class="announcement--delete"><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
+            <li class="announcement--edit"><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
+            <li class="announcement--copy"><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
             {% if object.draft %}
               <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
             {% endif %}
@@ -163,6 +163,12 @@
 
     // https://stackoverflow.com/a/37406402/3788603
     $('.announcement-dropdown .dropdown-toggle').click(function(e) {
+      e.stopPropagation();
+      $(this).closest('.dropdown').toggleClass('open');
+      $('.annoncement-dropdown .open').removeClass('open');
+    });
+
+    $('.announcement--delete, .announcement--edit, .announcement--copy').click(function(e) {
       e.stopPropagation();
       $(this).closest('.dropdown').toggleClass('open');
       $('.annoncement-dropdown .open').removeClass('open');
