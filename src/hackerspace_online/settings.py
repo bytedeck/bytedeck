@@ -236,6 +236,7 @@ INSTALLED_APPS = (
 )
 
 MIDDLEWARE = [
+    'hackerspace_online.middleware.ForceDebugCursorMiddleware',
     'tenant_schemas.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
