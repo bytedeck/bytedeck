@@ -180,6 +180,9 @@ INSTALLED_APPS = (
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
 
+    # django storages
+    'storages', 
+
     # local apps
     'quest_manager',
     'profile_manager',
@@ -336,11 +339,46 @@ EMAIL_SUBJECT_PREFIX = env('EMAIL_SUBJECT_PREFIX', default='[Bytedeck Dev] ')
 MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
-# The absolute path to the directory where uploaded media files will be saved to
-MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
+USE_S3 = env('USE_S3', default='0') == '1'
+if USE_S3:
 
-# The absolute path to the directory where `collectstatic` will move the static files to.
-STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
+    # AWS settings
+    AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
+    
+    # S3 settings
+    AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_CUSTOM_DOMAIN = env('CDN_static')
+    AWS_S3_OBJECT_PARAMETERS = {
+        "ACL": "public-read",
+        "CacheControl": "max-age=86400"
+    }
+    
+    # S3 Static Files
+    STATICFILES_LOCATION = 'static'
+    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{STATICFILES_LOCATION}/'
+    STATICFILES_STORAGE = 'storage.custom_storages.StaticStorage'
+    
+    # Media Files
+
+    # S3 public media files
+    PUBLIC_MEDIAFILES_LOCATION = 'public_media'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIAFILES_LOCATION}/'
+    DEFAULT_FILE_STORAGE = 'storage.custom_storages.PublicMediaStorage'
+
+    # S3 private media files
+    # For any implementation in future, Refer https://testdriven.io/blog/storing-django-static-and-media-files-on-amazon-s3/
+    PRIVATE_MEDIAFILES_LOCATION = 'private_media'
+    PRIVATE_FILE_STORAGE = 'storage.custom_storages.PrivateMediaStorage'
+    
+else:
+    
+    # The absolute path to the directory where `collectstatic` will move the static files to.
+    STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
+    
+    # The absolute path to the directory where uploaded media files will be saved to
+    MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
+
 
 STATICFILES_DIRS = env(
     'STATICFILES_DIRS',
@@ -570,7 +608,8 @@ SUMMERNOTE_CONFIG = {
     # If any codemirror settings are defined, it will include codemirror files automatically.
     'css': (
         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-        os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
+        '//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css',
+        # os.path.join(STATIC_URL, 'css/font-awesome.min.css'),
         os.path.join(STATIC_URL, 'css/custom_common.css'),
         os.path.join(STATIC_URL, 'css/custom.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_iframe.css'),

@@ -179,3 +179,8 @@ a.list-group-item-muted {
     50% { background: gold }
     100% { background: inherit }
 }
+
+/* Announcement menu button */
+.announcement-dropdown a{
+    color: #777;
+}

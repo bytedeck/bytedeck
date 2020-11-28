@@ -394,20 +394,16 @@ ol > ol > ol {
 /************ ANNOUNCEMENT *******************/
 
 .announcement-dropdown {
-    /* padding-left: 12px; */
-    /* padding-right: 12px; */
-    /* margin-left: 15px; */
-    /* line-height: 1.39; */
+    margin-left: 15px;
 }
 
-.announcement-dropdown a {
-    color: black;
+/* SEE THEME SPECIFIC STYLESHEET For color */
+.announcement-dropdown a{
     text-shadow: none;
-
 }
 
 .announcement-dropdown a:hover {
-    color: #c8c8c8;
+    color: black;
 }
 
 .announcement-content {

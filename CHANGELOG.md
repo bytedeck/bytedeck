@@ -4,6 +4,26 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.10.1] 2020-11-22
+* Announcement emails only to current students
+* Don't archive draft announcements
+* Add archived announcements tab for teachers view
+* Don't save draft submission comment if not changed
+* [bugfix] Funky announcement menu accordian problem
+* [dev] use public CDN instead of local for several resource
+* [dev] version css to bust cache when changed
+ 
+### [1.10.0] 2020-11-17 - AWS
+* [dev] Move to AWS
+
+### [1.9.3] 2020-11-08
+* Improve announcement menu button
+* Enhance select2 widget styling for darktheme
+* Semester page updates
+* [bugfix] Date format inconsistancies
+* [bugfix] Quest approval image cutoff
+* [bugfix] Duplicate celery tasks eliminated
+
 ### [1.9.2] 2020-10-27
 * [bugfix] File upload too big error message
 * [bugfix] First nad last names in Profile list

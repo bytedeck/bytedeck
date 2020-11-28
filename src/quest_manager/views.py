@@ -17,7 +17,6 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
 from notifications.signals import notify
-from prerequisites.tasks import update_quest_conditions_for_user
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -715,9 +714,6 @@ def complete(request, submission_id):
                 submission.mark_completed()
                 if not submission.quest.verification_required:
                     submission.mark_approved()
-                    # Immediate/synchronous recalculation of available quests:
-                    # NOW ASYNCH TO PREVENT HUGE DELAYS!
-                    update_quest_conditions_for_user.apply_async(args=[request.user.id])
 
             elif 'comment' in request.POST:
                 note_verb = "commented on"
@@ -863,15 +859,19 @@ def skipped(request, quest_id):
 def ajax_save_draft(request):
     if request.is_ajax() and request.POST:
 
+        response_data = {
+            'result': 'No changes',
+        }
+
         submission_comment = request.POST.get('comment')
         submission_id = request.POST.get('submission_id')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
-        sub.draft_text = submission_comment
-        sub.save()
 
-        response_data = {}
-        response_data['result'] = 'Draft saved'
+        if sub.draft_text != submission_comment:
+            sub.draft_text = submission_comment
+            response_data['result'] = 'Draft saved'
+            sub.save()
 
         return HttpResponse(
             json.dumps(response_data),

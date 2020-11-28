@@ -22,35 +22,67 @@ class PrerequisitesSignalsTest(TenantTestCase):
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
 
-    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_badge_assertion(self, task):
-        """Creation of a new badge assertion (granting a badge to a student) should...
-        Updating of a badge assertion should...
-        """
-        sem = baker.make(Semester)  # not sure why model baker doesn't create this automatically
-        badge_assertion = baker.make(BadgeAssertion, user=self.student, do_not_grant_xp=True, semester=sem)
-        badge_assertion.do_not_grant_xp = False
-        badge_assertion.save()
-        self.assertEqual(task.call_count, 2)
+        self.sem = baker.make(Semester)
+        self.badge_assertion = baker.make(BadgeAssertion,
+                                          user=self.student,
+                                          do_not_grant_xp=True,
+                                          semester=self.sem)
+        self.quest_submission = baker.make(QuestSubmission,
+                                           user=self.student,
+                                           is_completed=False)
+
+        self.course_student = baker.make(CourseStudent,
+                                         user=self.student,
+                                         active=False)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_quest_summission(self, task):
-        """Creation of a new quest_submission should...
-        Updating of a quest_submission should...
+    def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_create(self, task):
         """
-        quest_summission = baker.make(QuestSubmission, user=self.student, is_completed=False)
-        quest_summission.is_completed = True
-        quest_summission.save()
-        self.assertEqual(task.call_count, 2)
+        Creation of a new badge assertion (granting a badge to a student) should trigger a signal
+        """
+        baker.make(BadgeAssertion, user=self.student, do_not_grant_xp=True, semester=self.sem)
+        self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_course_student(self, task):
+    def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_update(self, task):
+        """
+        Updating a new badge assertion (granting a badge to a student) should trigger a signal
+        """
+        self.badge_assertion.do_not_grant_xp = False
+        self.badge_assertion.save()
+        self.assertEqual(task.call_count, 1)
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_conditions_met_for_user_triggered_by_quest_summission_on_create(self, task):
+        """
+        Creation of a new quest_submission (when starting a quest) should NOT trigger a signal
+        """
+        baker.make(QuestSubmission, user=self.student, is_completed=False)
+        self.assertEqual(task.call_count, 0)
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_conditions_met_for_user_triggered_by_quest_summission_on_update(self, task):
+        """
+        Updating a quest_submission (when completing a quest) should trigger a signal
+        """
+        self.quest_submission.is_completed = True
+        self.quest_submission.save()
+        self.assertEqual(task.call_count, 1)
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_conditions_met_for_user_triggered_by_course_student_on_create(self, task):
         with patch('profile_manager.models.Profile.xp_invalidate_cache') as callback:
-            course_student = baker.make(CourseStudent, user=self.student, active=False)
-            course_student.active = True
-            course_student.save()
-            self.assertEqual(task.call_count, 2)
-            self.assertEqual(callback.call_count, 2)
+            baker.make(CourseStudent, user=self.student, active=False)
+            self.assertEqual(task.call_count, 1)
+            self.assertEqual(callback.call_count, 1)
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_conditions_met_for_user_triggered_by_course_student_on_update(self, task):
+        with patch('profile_manager.models.Profile.xp_invalidate_cache') as callback:
+            self.course_student.active = True
+            self.course_student.save()
+            self.assertEqual(task.call_count, 1)
+            self.assertEqual(callback.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
     def test_update_prereq_cache_triggered_by_badge(self, task):
@@ -72,7 +104,8 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_cache_triggered_by_non_quest_prereq(self, task):
-        """Creation and Update of a prereq where the parent is not a quest should not trigger a cache update
+        """
+        Creation and Update of a prereq where the parent is not a quest should not trigger a cache update
         """
         badge = baker.make(Badge)
         prereq = baker.make(Prereq, prereq_invert=True, parent_object=badge)  # creation

@@ -31,12 +31,15 @@ class AnnouncementManager(models.Manager):
     def get_active(self):
         return self.get_queryset().not_archived().order_by('-sticky', '-datetime_released')
 
+    def get_archived(self):
+        return self.get_queryset().filter(archived=True).order_by('-sticky', '-datetime_released')
+
     def get_for_students(self):
         return self.get_active().not_draft().not_expired().released()
 
     def archive_announcements(self):
 
-        announcements = self.get_queryset().not_archived()
+        announcements = self.get_queryset().not_archived().not_draft()
 
         for announcement in announcements:
             announcement.archived = True
@@ -55,6 +58,11 @@ class Announcement(models.Model):
         default=False,
         help_text="When set to true, the announcement will publish itself on the date and time indicated."
     )
+    draft = models.BooleanField(
+        default=True,
+        help_text="A new announcement saved as a non-draft will be published and notifications sent.  \
+            Editing a previously saved draft will not send out notifications; use the Publish button on \
+            the Announcements main page.")
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
@@ -63,10 +71,7 @@ class Announcement(models.Model):
     icon = models.ImageField(upload_to='announcement_icons/', null=True, blank=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     datetime_expires = models.DateTimeField(null=True, blank=True, help_text='blank = never')
-    draft = models.BooleanField(default=True,
-                                help_text="note that announcements previously saved as drafts will only send out a  \
-                                notification if they are published using the Publish button on the Announcements main \
-                                page")
+
     archived = models.BooleanField(default=False)
 
     objects = AnnouncementManager()

@@ -86,8 +86,12 @@ def list2(request, ann_id=None):
 @non_public_only_view
 @login_required
 def list(request, ann_id=None, template='announcements/list.html'):
+    archived = '/archived/' in request.path_info
     if request.user.is_staff:
-        object_list = Announcement.objects.get_active()
+        if archived:
+            object_list = Announcement.objects.get_archived()
+        else:
+            object_list = Announcement.objects.get_active()
     else:
         object_list = Announcement.objects.get_for_students()
 
@@ -119,6 +123,7 @@ def list(request, ann_id=None, template='announcements/list.html'):
         'comment_form': comment_form,
         'object_list': object_list,
         'active_id': active_id,
+        'archived': archived,
     }
     return render(request, template, context)
 

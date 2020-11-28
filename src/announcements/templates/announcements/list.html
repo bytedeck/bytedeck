@@ -4,45 +4,16 @@
 
 {% block heading_inner %}Announcements
 {% if request.user.is_authenticated and request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'announcements:create' %}" role="button">New</a>
+  <div class="btn-group">
+    <a class="btn {% if not archived %}btn-primary{% else %}btn-default{% endif %}" href="{% url 'announcements:list' %}" role="button">Current</a>
+    <a class="btn {% if archived %}btn-primary{% else %}btn-default{% endif %}" href="{% url 'announcements:archived' %}" role="button">Archived</a>
+  </div>
+  <a class="btn btn-primary" href="{% url 'announcements:create' %}" role="button"><i class="fa fa-plus-circle"></i> New</a>
 {% endif %}
 {% endblock %}
 
-{% block js %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
-  <script>
-    const permalinks = document.querySelectorAll('.permalink');
-
-    permalinks.forEach(function (permalink) {
-      permalink.addEventListener("click", function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-    });
-
-    const clipboard = new ClipboardJS(permalinks, {
-      text: function(trigger) {
-        return trigger.origin + trigger.getAttribute('data-clipboard-text');
-      }
-    });
-
-    clipboard.on('success', function(e) {
-      $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
-      $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
-    });
-
-    // https://stackoverflow.com/a/37406402/3788603
-    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
-      e.stopPropagation();
-      $(this).closest('.dropdown').toggleClass('open');
-      $('.annoncement-dropdown .open').removeClass('open');
-    });
-
-
-  </script>
-{% endblock %}
-
 {% block content %}
+{% if archived %}<p>Archived Announcements are not visible to students.</p>{% endif %}
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div id="{{object.id}}"
@@ -84,9 +55,9 @@
           </a>
           <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
             {% if request.user.is_staff %}
-            <li><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
-            <li><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
-            <li><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
+            <li class="announcement--delete"><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
+            <li class="announcement--edit"><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
+            <li class="announcement--copy"><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
             {% if object.draft %}
               <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
             {% endif %}
@@ -164,4 +135,45 @@
 </ul>
 {% endif %}
 
+{% endblock %}
+
+
+{% block js %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
+  <script>
+    const permalinks = document.querySelectorAll('.permalink');
+
+    permalinks.forEach(function (permalink) {
+      permalink.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    const clipboard = new ClipboardJS(permalinks, {
+      text: function(trigger) {
+        return trigger.origin + trigger.getAttribute('data-clipboard-text');
+      }
+    });
+
+    clipboard.on('success', function(e) {
+      $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
+      $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
+    });
+
+    // https://stackoverflow.com/a/37406402/3788603
+    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
+      e.stopPropagation();
+      $(this).closest('.dropdown').toggleClass('open');
+      $('.annoncement-dropdown .open').removeClass('open');
+    });
+
+    $('.announcement--delete, .announcement--edit, .announcement--copy').click(function(e) {
+      e.stopPropagation();
+      $(this).closest('.dropdown').toggleClass('open');
+      $('.annoncement-dropdown .open').removeClass('open');
+    });
+
+
+  </script>
 {% endblock %}
