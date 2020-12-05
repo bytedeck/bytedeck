@@ -3,7 +3,6 @@ from django.test import SimpleTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 from tenant_schemas.test.cases import TenantTestCase
-from prerequisites.tasks import update_quest_conditions_for_user
 
 from siteconfig.models import SiteConfig
 

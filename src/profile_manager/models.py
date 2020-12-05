@@ -14,7 +14,6 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from django_resized import ResizedImageField
 from notifications.signals import notify
-from prerequisites.models import PrereqAllConditionsMet
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from tenant_schemas.utils import get_public_schema_name
