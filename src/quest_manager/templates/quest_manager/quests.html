@@ -14,7 +14,7 @@
   {% if request.user.is_staff or request.user.profile.is_TA %}
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
   {% endif %}
-  {% if available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
+  {% if available_tab_active and remove_hidden and request.user.profile.num_hidden_quests and request.user.profile.has_current_course %}
     <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">
       Show Hidden Quests <span class="badge badge-muted">{{ request.user.profile.num_hidden_quests }}</span>
     </a>
