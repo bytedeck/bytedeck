@@ -80,8 +80,6 @@ SHARED_APPS = (
 )
 
 TENANT_APPS = (
-    'django.contrib.contenttypes',
-
     'django.contrib.auth',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -182,7 +180,7 @@ INSTALLED_APPS = (
     'hackerspace_online',
 
     # django storages
-    'storages', 
+    'storages',
 
     # local apps
     'quest_manager',
@@ -346,7 +344,7 @@ if USE_S3:
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
-    
+
     # S3 settings
     AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
     AWS_S3_CUSTOM_DOMAIN = env('CDN_static')
@@ -354,12 +352,12 @@ if USE_S3:
         "ACL": "public-read",
         "CacheControl": "max-age=86400"
     }
-    
+
     # S3 Static Files
     STATICFILES_LOCATION = 'static'
     STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{STATICFILES_LOCATION}/'
     STATICFILES_STORAGE = 'storage.custom_storages.StaticStorage'
-    
+
     # Media Files
 
     # S3 public media files
@@ -371,12 +369,12 @@ if USE_S3:
     # For any implementation in future, Refer https://testdriven.io/blog/storing-django-static-and-media-files-on-amazon-s3/
     PRIVATE_MEDIAFILES_LOCATION = 'private_media'
     PRIVATE_FILE_STORAGE = 'storage.custom_storages.PrivateMediaStorage'
-    
+
 else:
-    
+
     # The absolute path to the directory where `collectstatic` will move the static files to.
     STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
-    
+
     # The absolute path to the directory where uploaded media files will be saved to
     MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
 
@@ -431,7 +429,7 @@ else:
 # Google provides default keys in development that always validate, but results in this error:
 #  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
-# 
+#
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
 SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
