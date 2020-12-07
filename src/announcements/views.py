@@ -95,7 +95,7 @@ def list(request, ann_id=None, template='announcements/list.html'):
     else:
         object_list = Announcement.objects.get_for_students()
 
-    paginator = Paginator(object_list, 15)
+    paginator = Paginator(object_list, 20)
     page = request.GET.get('page')
     active_id = 0
     # we want the page of a specific object
