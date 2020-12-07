@@ -277,11 +277,8 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_archived_announcements_are_paginated(self):
         """2nd page after 20 announcements, and view forwards to announcements on 2nd page
         """
-        # create enough announcements to create a second page
-        oldest_announcement = baker.make(Announcement, archived=True, draft=False)
         # create enough announcements to create a second page, oldest should be on second page
-        announcements_per_page = 20
-        for _ in range(announcements_per_page):
+        for _ in range(21):
             baker.make(Announcement, archived=True, draft=False) 
 
         # Make sure 2nd page exists
@@ -289,7 +286,32 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('announcements:archived'))
         self.assertContains(response, "/announcements/archived/?page=2")
         self.assertNotContains(response, "/announcements/archived/?page=3")
-            
+
+    def test_get_absolute_url_for_archived(self):
+        """get_absolute_url should redirect/load the proper page with the archived announcement"""
+        # create enough announcements to create a second page
+        oldest_announcement = baker.make(Announcement, archived=True, draft=False)
+
+        # not paginated:
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(oldest_announcement.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['archived'], True)
+        self.assertContains(response, oldest_announcement.title)
+
+        # create enough announcements to create a second page, oldest should be on second page
+        for _ in range(20):
+            baker.make(Announcement, archived=True, draft=False) 
+
+        # Make sure the oldest announcement is accessible there
+        response = self.client.get("/announcements/archived/?page=2")
+        self.assertContains(response, oldest_announcement.title)
+
+        # get_absolute_url still works for archived announcements on second page
+        response = self.client.get(oldest_announcement.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, oldest_announcement.title)
+
     def test_announcement_draft_not_archived_after_semester_close(self):
         """ Draft announcements should not be archived when a semester is closed """
         draft_ann = baker.make(Announcement, archived=False, draft=True)
