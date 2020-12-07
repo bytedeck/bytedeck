@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from django_resized import ResizedImageField
 from notifications.signals import notify
-from quest_manager.models import QuestSubmission
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from tenant_schemas.utils import get_public_schema_name
 from utilities.models import RestrictedFileField
@@ -202,9 +202,21 @@ class Profile(models.Model):
     #
     #################################
 
-    def num_hidden_quests(self):
-        hidden_quest_list = self.get_hidden_quests_as_list()
-        return len(hidden_quest_list)
+    def num_hidden_quests(self, available_only=True):
+        """Returns the number of quests a student has placed in their hidden quest list.
+        If available_only is True, then it will not count quests that the student wouldn't be able to see normally
+        in there available quests list
+        """
+        hidden_quest_ids = self.get_hidden_quests_as_list()
+        # convert list of ids as strings to integers so we can use intersection with the conditions_met list
+        hidden_quest_ids = map(int, hidden_quest_ids)
+        if available_only:
+            # remove hidden otherwise there will be nothing left to intersect wtih
+            available_quest_ids = Quest.objects.get_available(self.user, remove_hidden=False).values_list('id', flat=True)
+            # only include quests ids that are in both lists
+            hidden_quest_ids = set(available_quest_ids).intersection(hidden_quest_ids)
+
+        return len(hidden_quest_ids)
 
     def is_quest_hidden(self, quest):
         hidden_quest_list = self.get_hidden_quests_as_list()

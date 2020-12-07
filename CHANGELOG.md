@@ -4,6 +4,13 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.10.2] 2020-12-06
+* [bugfix] Prevent blocking quests from being hideable
+* [bugfix] Proper counting of hidden quests
+* [bugfix] Archived announcement pagination working
+* [bugfix] Overlapping announcement menus
+* [dev] Refactor contenttypes app/table to hopefully fix several bugs
+ 
 ### [1.10.1] 2020-11-22
 * Announcement emails only to current students
 * Don't archive draft announcements
