@@ -8,6 +8,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.urls.base import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -86,7 +87,14 @@ def list2(request, ann_id=None):
 @non_public_only_view
 @login_required
 def list(request, ann_id=None, template='announcements/list.html'):
-    archived = '/archived/' in request.path_info
+
+    active_object = None
+    if ann_id:
+        active_object = get_object_or_404(Announcement, pk=ann_id)
+        archived = active_object.archived
+    else:
+        archived = '/archived/' in request.path_info
+
     if request.user.is_staff:
         if archived:
             object_list = Announcement.objects.get_archived()
@@ -95,17 +103,15 @@ def list(request, ann_id=None, template='announcements/list.html'):
     else:
         object_list = Announcement.objects.get_for_students()
 
-    paginator = Paginator(object_list, 15)
+    paginator = Paginator(object_list, 20)
     page = request.GET.get('page')
-    active_id = 0
+
     # we want the page of a specific object
-    if ann_id is not None:
-        active_obj = get_object_or_404(Announcement, pk=ann_id)
+    if active_object:
         for pg in paginator.page_range:
             object_list = paginator.page(pg)
-            if active_obj in object_list:
+            if active_object in object_list:
                 page = pg
-                active_id = int(ann_id)
                 break
 
     try:
@@ -122,8 +128,9 @@ def list(request, ann_id=None, template='announcements/list.html'):
     context = {
         'comment_form': comment_form,
         'object_list': object_list,
-        'active_id': active_id,
+        'active_id': ann_id,
         'archived': archived,
+        'list_url': reverse('announcements:archived' if archived else 'announcements:list'),
     }
     return render(request, template, context)
 
