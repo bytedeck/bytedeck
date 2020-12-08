@@ -22,8 +22,8 @@ urlpatterns = [
     path('blocks/<pk>/delete/', views.BlockDelete.as_view(), name='block_delete'),
 
     # CourseStudent
-    path('create/', views.CourseStudentCreate.as_view(), name='create'),
-    path('add/<int:user_id>/', views.CourseAddStudent.as_view(), name='add'),
+    path('add/student/', views.CourseStudentCreate.as_view(), name='create'),
+    path('join/<int:user_id>/', views.CourseAddStudent.as_view(), name='join'),
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),
@@ -38,13 +38,8 @@ urlpatterns = [
 
     # Course
     path('list/', views.CourseList.as_view(), name='course_list'),
-    path('add/', views.CourseCreate.as_view(), name='course_create'),
+    path('create/', views.CourseCreate.as_view(), name='course_create'),
     path('<pk>/edit/', views.CourseUpdate.as_view(), name='course_update'),
     path('<pk>/delete/', views.CourseDelete.as_view(), name='course_delete'),
 
-    # url(r'^semester/$', views.semesters, name='semester'),
-    # url(r'^semester/$', views.semesters, name='semester'),
-    # url(r'^create2/$', views.course_student_create, name='create2'),
-    # url(r'^(?P<pk>[0-9]+)/$', views.Detail.as_view(), name='detail'),
-    # url(r'^(?P<pk>[0-9]+)/edit/$', views.Update.as_view(), name='update'),
 ]
