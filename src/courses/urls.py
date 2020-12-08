@@ -29,7 +29,7 @@ urlpatterns = [
     path('ranks/', views.RankList.as_view(), name='ranks'),
 
     # Marks
-    path('marks', views.mark_calculations, name='my_marks'),
+    path('marks/', views.mark_calculations, name='my_marks'),
     path('marks/<int:user_id>', views.mark_calculations, name='marks'),
     path('ajax/progress_chart/<int:user_id>/', views.ajax_progress_chart, name='ajax_progress_chart'),
 
