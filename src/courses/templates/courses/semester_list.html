@@ -16,9 +16,11 @@
 title="This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks for that semester.  It will also archive all announcements.">Close active semester</a>
 <h3>Current Active Semester: {{ config.active_semester }}</h3>
 
-<p>When students join a course it will be connected to the active semester.  
-  The first and last day of the semester are only relevant if you are using the <i>mark malculations</i> page. 
-  (See <a href="{% url 'config:site_config_update_own' %}">Site Configuration</a>)</p>
+<p>When students join a course it will be connected to the active semester.</p>  
+<p>The first and last day of the semester are only relevant if you are using the 
+  <a href="{% url 'courses:my_marks' %}">mark malculations</a> page 
+  (see <a href="{% url 'config:site_config_update_own' %}">site configuration</a>).
+</p>
 
 <table class="table table-striped">
   <tr>
@@ -43,7 +45,6 @@ title="This will permanently record all student XP for the semester. Which means
   {% endfor %}
 </table>
 
-<hr>
 {% endblock %}
 
 {% block js %}
