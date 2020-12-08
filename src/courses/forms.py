@@ -2,7 +2,7 @@ from django import forms
 
 from bootstrap_datepicker_plus import DateTimePickerInput, TimePickerInput
 
-from .models import Block, CourseStudent, Semester
+from .models import Block, Course, CourseStudent, Semester
 
 
 class CourseStudentForm(forms.ModelForm):
@@ -12,6 +12,12 @@ class CourseStudentForm(forms.ModelForm):
         super(CourseStudentForm, self).__init__(*args, **kwargs)
         self.fields['semester'].queryset = Semester.objects.get_current(as_queryset=True)
         self.fields['semester'].empty_label = None
+        
+        # if there is only one option for the fields, then make them default by removing the blank option:
+        if Block.objects.count() == 1:
+            self.fields['block'].empty_label = None
+        if Course.objects.count() == 1:
+            self.fields['course'].empty_label = None
 
     # http://stackoverflow.com/questions/32260785/django-validating-unique-together-constraints-in-a-modelform-with-excluded-fiel/32261039#32261039
     def full_clean(self):
