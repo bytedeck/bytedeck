@@ -1,7 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
-from django.forms.fields import MultipleChoiceField
-from django_select2.forms import Select2Widget, Select2MultipleWidget, ModelSelect2Widget, ModelSelect2MultipleWidget
+from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
 from profile_manager.models import Profile
 from .models import Badge, BadgeAssertion
@@ -30,9 +29,22 @@ class BadgeAssertionForm(forms.ModelForm):
 
         self.fields['user'].queryset = User.objects.order_by('profile')
         # It appears that sometimes a profile does not exist causing this to fail and the user field to not appear
-        self.fields['user'].label_from_instance = lambda obj: "%s -- %s" % (
+        self.fields['user'].label_from_instance = lambda obj: "%s | %s" % (
             obj.profile if hasattr(obj, 'profile') else "", obj.username
         )
+
+
+class ProfileMultiSelectWidget(ModelSelect2MultipleWidget):
+    model = Profile
+    search_fields = [
+        'first_name__istartswith',
+        'last_name__istartswith',
+        'preferred_name__istartswith',
+        'user__username__istartswith',
+    ]
+    
+    def label_from_instance(self, obj):
+        return f"{obj} | {obj.user.username}"
 
 
 class BulkBadgeAssertionForm(forms.Form):
@@ -51,18 +63,5 @@ class BulkBadgeAssertionForm(forms.Form):
         # Goign back to the user just to sort by profile string is...a hack.  How to do that properly?!
         queryset=Profile.objects.all().order_by('user__profile'),
         required=True,
-        widget=ModelSelect2MultipleWidget(
-            model=Profile,
-            search_fields=[
-                'first_name__istartswith',
-                'last_name__istartswith',
-                'preferred_name__istartswith',
-                'user__username__istartswith',
-            ],
-            label_from_instance=lambda obj: "%s -- %s" % (obj, obj.user.username)
-        ),
+        widget=ProfileMultiSelectWidget(),
     )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['students'].label_from_instance = lambda obj: "%s -- %s" % (obj, obj.user.username)
