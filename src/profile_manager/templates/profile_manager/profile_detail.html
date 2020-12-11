@@ -105,7 +105,7 @@
          <h3 class="panel-title">Courses
            {% if request.user.is_staff %}
              &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
-             href="{% url 'courses:add' object.user.id %}" role="button">Add</a>
+             href="{% url 'courses:join' object.user.id %}" role="button">Add</a>
            {% endif %}
          </h3>
        </div>

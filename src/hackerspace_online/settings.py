@@ -21,41 +21,6 @@ env = environ.Env(
     ALLOWED_HOSTS=(list)
 )
 
-LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
-
-if not os.path.exists(LOGS_PATH):
-    os.mkdir(LOGS_PATH)
-
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} | {asctime} | {process:d} {thread:d} | {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
-            'filename': os.path.join(LOGS_PATH, 'queries.log'),
-            'formatter': 'verbose',
-        }
-    },
-    'loggers': {
-        'django.db.backends': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-        },
-    }
-}
 
 project_root = environ.Path(__file__) - 3  # "/"
 PROJECT_ROOT = project_root()
@@ -234,7 +199,6 @@ INSTALLED_APPS = (
 )
 
 MIDDLEWARE = [
-    'hackerspace_online.middleware.ForceDebugCursorMiddleware',
     'tenant_schemas.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
@@ -248,6 +212,48 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
 ]
+
+DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
+
+if DB_LOGS_ENABLED:
+    MIDDLEWARE.insert(0, 'hackerspace_online.middleware.ForceDebugCursorMiddleware')
+    print(MIDDLEWARE)
+    LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
+
+    if not os.path.exists(LOGS_PATH):
+        os.mkdir(LOGS_PATH)
+
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose': {
+                'format': '{levelname} | {asctime} | {process:d} {thread:d} | {message}',
+                'style': '{',
+            },
+        },
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.StreamHandler',
+                'formatter': 'verbose',
+            },
+            'file': {
+                'level': 'DEBUG',
+                'class': 'logging.handlers.TimedRotatingFileHandler',
+                'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
+                'filename': os.path.join(LOGS_PATH, 'queries.log'),
+                'formatter': 'verbose',
+            }
+        },
+        'loggers': {
+            'django.db.backends': {
+                'handlers': ['file'],
+                'level': 'DEBUG',
+            },
+        }
+    }
+
 
 ROOT_URLCONF = 'hackerspace_online.urls'
 
