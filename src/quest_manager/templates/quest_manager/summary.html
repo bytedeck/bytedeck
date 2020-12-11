@@ -1,0 +1,62 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Quest Summary <span class="text-danger">EXPERIMENTAL!</span>{% endblock %}
+
+{% block content %}
+<h3>Quest: <a href="{{quest.get_absolute_url}}">{{ quest }}</a></h3>
+<p>Created: {{quest.datetime_created}} ({{quest.datetime_created|timesince}} ago)</p>
+<p>Last Edited: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</p>
+<p>Last Submission: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</p>
+<p>Total # of submissions: {{ count_total }}</p>
+<p>Approved on first submission: {{ count_first_time }}</p>
+<p>Returned at least once: {{ percent_returned }}%</p>
+<h3>Completion Time Histogram</h3>
+<p>This histogram shows the time between starting the quest and completing it.  
+    The chart only includes submissions that were approved the first time 
+    (if the submission was returned, it is not included here).</p>
+<p>You might see a spike at 0 mins from students who don't hit the "Start" button to start quests and instead complete the work based on the quest preview.</p>
+
+<div id="chart-container"></div>
+    <canvas id="histo-chart" class="img-rounded" style="width: 100%; background-color: white; padding: 10px; "></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2/dist/Chart.min.js"></script>
+<script>
+
+    var config = {
+        type: 'bar',
+        data: {
+            labels: {{ histogram_labels }},
+            datasets: [{
+                label: '# of students completing in this time',
+                data: {{ histogram_values }},
+                barPercentage: 1.0,
+                categoryPercentage: 1.0
+            }]
+        },
+        options: {
+            scales: {
+                xAxes: [{
+                    ticks: {
+                        // fontSize: 8,
+                        labelOffset: -4,
+                        // maxRotation: 0
+                    },
+                    scaleLabel: {
+                        display: true,
+                        labelString: 'Minutes'
+                    }
+                }]
+            }
+        }
+    };
+    
+    window.onload = function() {
+      var ctx = document.getElementById('histo-chart').getContext('2d');
+      window.myHist = new Chart(ctx, config);
+    };
+</script>
+
+{% endblock %}
+

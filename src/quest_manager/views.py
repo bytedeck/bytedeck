@@ -1,16 +1,20 @@
 import json
 import uuid
 
+import numpy as np
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db.models import F, ExpressionWrapper, fields
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from badges.models import BadgeAssertion
@@ -132,6 +136,47 @@ class QuestCopy(QuestCreate):
 
         kwargs['instance'] = new_quest
         return kwargs
+
+
+class QuestSubmissionSummary(DetailView):
+    model = Quest
+    context_object_name = 'quest'
+    template_name = 'quest_manager/summary.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        subs = self.object.questsubmission_set.all()
+        count_total = subs.count()
+        subs = self.object.questsubmission_set.filter(time_returned=None)
+        count_first_time = subs.count()
+        percent_returned = (count_total - count_first_time) / count_total * 100
+
+        duration = ExpressionWrapper(F('time_completed') - F('timestamp'), output_field=fields.DurationField())
+        subs = subs.annotate(time_to_complete=duration)
+        time_list = subs.values_list('time_to_complete', flat=True)
+        minutes_list = [int(t.total_seconds() / 60) for t in time_list]
+        
+        # np_data = self.get_sub_data(subs)
+        histogram_values, histogram_labels = self.get_histogram(minutes_list)
+
+        context['count_total'] = count_total
+        context['count_first_time'] = count_first_time
+        context['percent_returned'] = int(percent_returned)
+        context['submissions'] = subs
+        context['time_list'] = minutes_list
+        context['histogram_values'] = list(histogram_values)
+        context['histogram_labels'] = list(histogram_labels)
+        # context['data'] = np_data
+        return context
+
+    def get_sub_data(self, sub_queryset):
+        vlqs = sub_queryset.values_list()
+        return np.core.records.fromrecords(vlqs, names=[f.name for f in QuestSubmission._meta.fields])
+
+    def get_histogram(self, data_list):
+        bins = range(0, 61, 1)
+        return np.histogram(data_list, bins=bins)
 
 
 @non_public_only_view
