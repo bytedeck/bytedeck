@@ -821,3 +821,13 @@ class QuestSubmission(models.Model):
             return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
         else:
             return None
+
+    def get_minutes_to_complete(self):
+        """Returns the difference in minutes between first_time_complete and the (creation) timestamp.
+        If the submission was returned then return None.
+        """
+        if not self.is_completed or self.is_returned():
+            return None
+
+        minutes = (self.first_time_completed - self.timestamp).total_seconds() / 60
+        return minutes

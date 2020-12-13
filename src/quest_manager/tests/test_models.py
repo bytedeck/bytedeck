@@ -1,3 +1,4 @@
+import datetime
 import re
 from datetime import timedelta
 
@@ -240,3 +241,26 @@ class SubmissionTestModel(TenantTestCase):
         SiteConfig.get().set_active_semester(first_sub.semester.id)
         second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
         self.assertEqual(first_sub, second_sub.get_previous())
+
+    def test_get_minutes_to_complete(self):
+        """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""
+        minutes = 5
+        time_delta = datetime.timedelta(0, minutes * 60)
+        print(time_delta.total_seconds())
+        self.submission.mark_completed()
+
+        # fake the completion time
+        self.submission.first_time_completed = self.submission.timestamp + time_delta
+        self.assertEqual(self.submission.get_minutes_to_complete(), minutes)
+
+    def test_get_minutes_to_complete_if_not_completed(self):
+        """Return None if the submission has not been completed yet."""
+        # the setup submission should not be completed yet, but make sure
+        self.assertFalse(self.submission.is_completed, False)
+        self.assertIsNone(self.submission.get_minutes_to_complete())
+
+    def test_get_minutes_to_complete_if_returned(self):
+        """Return None if the submission has been returned."""
+        # return the sub
+        self.submission.mark_returned()
+        self.assertIsNone(self.submission.get_minutes_to_complete())
