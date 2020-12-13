@@ -27,7 +27,7 @@
 <li class="list-group-item list-group-item-info">Submission Comments 
     <span class="text-muted"> – time to complete quest: {{s.get_minutes_to_complete|floatformat|default:"n/a"}} minutes
         <i class="fa fa-question-circle"
-        title="The difference between the time the quest was started and the time it was initially completed."></i>
+        title="The difference between the time the Start Quest button was clicked and the first time it was Submitted."></i>
     </span>
 </li>
 {% with s.get_comments as target_comments %}

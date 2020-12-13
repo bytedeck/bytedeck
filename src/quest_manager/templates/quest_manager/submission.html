@@ -42,7 +42,12 @@
 
   <div id='submission-comments-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
-      <h3 class="panel-title">Past Submissions and Replies</h3>
+      <h3 class="panel-title">Past Submissions and Replies
+        <small> – time to complete quest: {{s.get_minutes_to_complete|floatformat|default:"n/a"}} minutes
+          <i class="fa fa-question-circle"
+          title="The difference between the time the Start Quest button was clicked and the first time it was Submitted."></i>
+        </small>
+      </h3>
     </div>
     <ul class="list-group">
       {% include "quest_manager/snippets/previous_submission.html" %}
