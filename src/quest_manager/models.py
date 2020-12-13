@@ -826,7 +826,7 @@ class QuestSubmission(models.Model):
         """Returns the difference in minutes between first_time_complete and the (creation) timestamp.
         If the submission was returned then return None.
         """
-        if not self.is_completed or self.is_returned():
+        if not self.first_time_completed:
             return None
 
         minutes = (self.first_time_completed - self.timestamp).total_seconds() / 60

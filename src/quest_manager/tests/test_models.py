@@ -253,14 +253,13 @@ class SubmissionTestModel(TenantTestCase):
         self.submission.first_time_completed = self.submission.timestamp + time_delta
         self.assertEqual(self.submission.get_minutes_to_complete(), minutes)
 
+        #  if quest is returned and resubmitted, should still give same time:
+        self.submission.mark_returned()
+        self.submission.mark_completed()
+        self.assertEqual(self.submission.get_minutes_to_complete(), minutes)
+
     def test_get_minutes_to_complete_if_not_completed(self):
         """Return None if the submission has not been completed yet."""
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
-        self.assertIsNone(self.submission.get_minutes_to_complete())
-
-    def test_get_minutes_to_complete_if_returned(self):
-        """Return None if the submission has been returned."""
-        # return the sub
-        self.submission.mark_returned()
         self.assertIsNone(self.submission.get_minutes_to_complete())
