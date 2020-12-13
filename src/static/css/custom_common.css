@@ -653,6 +653,11 @@ li.file-link {
     margin-bottom: 5px;
 }
 
+.panel-title small {
+    /* default 65% is too small here */
+    font-size: 75%
+}
+
 .panel-body-comments {
     padding: 0px;
 }
