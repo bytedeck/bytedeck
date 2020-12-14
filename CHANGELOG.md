@@ -4,6 +4,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.11.0] 2020-12-13
+* [teachers] Add a summary/metrics page of submission data for each quest, including a histogram of submission times
+* [teachers] Add "Initial time to complete" for to each submission, in minutes
+* [teachers] Improve styling of selection widgets in dark theme
+* [teachers] Upgrade widgets on Badge granting forms
+* Minor improvements to Semester list
+* Minor styling tweaks
+* [bugfix] Remove notification indicator instead of showing 0 after all notifications removed
+* [bugfix] Join a Course form now only displays active courses
+* [bugfix] Don't archive announcements if semester isn't successfully closed
+
 ### [1.10.2] 2020-12-06
 * [bugfix] Prevent blocking quests from being hideable
 * [bugfix] Proper counting of hidden quests
