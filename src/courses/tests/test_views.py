@@ -39,7 +39,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
         self.assertRedirectsLogin('courses:create')
-        self.assertRedirectsAdmin('courses:add', args=[1])
+        self.assertRedirectsAdmin('courses:join', args=[1])
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
@@ -78,7 +78,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert404('courses:ajax_progress_chart', args=[self.test_student1.id])
 
         # Staff access only
-        self.assertRedirectsAdmin('courses:add', args=[self.test_student1.id])
+        self.assertRedirectsAdmin('courses:join', args=[self.test_student1.id])
         self.assertRedirectsAdmin('courses:end_active_semester')
 
         self.assertRedirectsAdmin('courses:semester_list')
@@ -100,7 +100,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # Staff access only
-        self.assert200('courses:add', args=[self.test_student1.id])
+        self.assert200('courses:join', args=[self.test_student1.id])
 
         self.assertRedirects(
             response=self.client.get(reverse('courses:end_active_semester')),
@@ -110,13 +110,13 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_CourseAddStudent_view(self):
         '''Admin can add a student to a course'''
 
-        # Almost similar to `test_CourseStudentCreate_view` but just uses courses:add
+        # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
         # and redirects to profiles:profile_detail
 
         self.client.force_login(self.test_teacher)
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
-        add_course_url = reverse('courses:add', args=[self.test_student1.id])
+        add_course_url = reverse('courses:join', args=[self.test_student1.id])
 
         response = self.client.get(add_course_url)
         self.assertContains(response, 'Adding a course for {student}'.format(student=self.test_student1))

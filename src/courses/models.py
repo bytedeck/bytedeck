@@ -467,10 +467,15 @@ class CourseStudentManager(models.Manager):
         """
         :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
         """
-        courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
-        user_list = courses.values_list('user', flat=True)
-        user_list = set(user_list)  # removes doubles
-        return User.objects.filter(id__in=user_list)
+        try:
+            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
+            user_list = courses.values_list('user', flat=True)
+            user_list = set(user_list)  # removes doubles
+            return User.objects.filter(id__in=user_list)
+        except AttributeError:
+            # The code will run on the public tenant when booting up, throwing an exception because
+            # the public tenant doesn't have a SiteConfig object.
+            return User.objects.none()
 
     # @cached(60*60*12)
     def get_current_teacher_list(self, user):

@@ -1,0 +1,134 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Quest Summary {% endblock %}
+
+{% block content %}
+<h3>Quest: <a href="{{quest.get_absolute_url}}">{{ quest }}</a> ({{quest.xp}} XP)</h3>
+<hr>
+<ul>
+    <li>Created: {{quest.datetime_created}} ({{quest.datetime_created|timesince}} ago)</li>
+    <li>Last Edited: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</li>
+    <li>Last Submission: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</li>
+</ul>
+
+<table class="table table-hover" style="width: 350px;">
+    <tr><td>Total # of submissions:</td><td> {{ count_total }}</td></tr>
+    <tr><td>Approved on first submission:</td><td> {{ count_first_time }}</td></tr>
+    <tr><td>Returned at least once:</td><td> {{ percent_returned }}%</td></tr>
+    <tr><td>Mean completion time:</td><td> {{ mean_minutes|floatformat }} minutes</td></tr>
+    <tr><td>25th Percentile:</td><td> {{ percentile_25 }} minutes</td></tr>
+    <tr><td>50th Percetile (Median):</td><td> {{ median_minutes|floatformat }} minutes</td></tr>
+    <tr><td>75th Percentile:</td><td> {{ percentile_75 }} minutes</td></tr>
+</table>
+
+<h3>Completion Time Histogram</h3>
+
+<div id="chart-container" style="margin-bottom: 10px;">
+    <canvas id="histo-chart" class="img-rounded" style="width: 100%; background-color: white; padding: 10px; "></canvas>
+</div>
+
+<p>This histogram shows the distribution of completion times, which is the difference in minutes 
+    between the time the student hit the start button and the complete button. The chart only includes 
+    submissions that were approved the first time (if the submission was returned, it is not included here).</p>
+<p>Anything longer than 120 minutes was removed from the dataset, as these 
+    likely represent students who did not start and complete the quest in a single sitting.</p>
+
+<!-- <h3>Histogram Options</h3>
+<form id="histoForm">
+    <div class="checkbox">
+        <label>
+          <input id="histoRemoveOutliers" type="checkbox" value="FALSE"> Remove Outliers
+        </label>
+    </div>
+    <div class="form-group">
+        <label for="histoMinTime">Min Time</label>
+        <input name="min" type="number" class="form-control" id="histoMinTime" value="0">
+    </div>
+    <div class="form-group">
+        <label for="histoMaxTime">Max Time</label>
+        <input name="max" type="number" class="form-control" id="histoMaxTime" value="60">
+    </div>
+
+    <btn id="updateChart" class="btn btn-primary" onclick="updateChart()">Update Chart</btn>
+</form> -->
+
+
+{% endblock %}
+
+{% block js %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2/dist/Chart.min.js"></script>
+<script>
+
+function updateChart() {
+    $.ajax({
+        url: "{% url 'quests:ajax_summary_histogram' quest.pk %}",
+        // async: true,
+        // dataType: 'json',
+        type: "GET",
+        data: {
+        //     csrfmiddlewaretoken: "{{ csrf_token }}" // Needed for POST requests only
+            min: $("#histoMinTime").val(),
+            max: $("#histoMaxTime").val(),
+            removeOutliers: $("#histoRemoveOutliers").prop('checked'),
+        }
+    }).done(function (data) {
+        // Get chart context
+        var ctx = document.getElementById('histo-chart').getContext('2d');
+
+        var config = {
+            type: 'bar',
+            data: {
+                labels: data.histogram_labels ,
+                datasets: [{
+                    label: '# of students completing in this time',
+                    data: data.histogram_values,
+                    barPercentage: 1.0,
+                    categoryPercentage: 1.0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    hoverBackgroundColor: 'rgba(0, 0, 0, 0.8)'
+                }],
+            },
+            options: {
+                scales: {
+                    xAxes: [{
+                        ticks: {
+                            // fontSize: 8,
+                            fontColor: '#111',
+                            labelOffset: -4,
+                            // maxRotation: 0
+                        },
+                        scaleLabel: {
+                            display: true,
+                            labelString: 'Minutes',
+                            fontColor: '#111',
+                            fontSize: '16'
+                        }
+                    }],
+                    yAxes: [{
+                        ticks: {
+                            fontColor: '#111',
+                        }, 
+                    }]
+                }
+            }
+        };
+
+        // draw chart
+        window.myHist = new Chart(ctx, config);
+
+    });
+}
+
+
+
+window.onload = function() {
+    updateChart();
+    console.log($("#histoForm"))
+};
+
+</script>
+
+{% endblock %}
+
