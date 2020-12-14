@@ -32,8 +32,7 @@ urlpatterns = [
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
-        name='ajax_info_completed'),
+    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
@@ -73,7 +72,9 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
     url(r'^(?P<quest_id>[0-9]+)/skip/$', views.skipped, name='skip_for_quest'),
 
+    # Quest/Submission Summary Metrics
     path('<int:pk>/summary/', views.QuestSubmissionSummary.as_view(), name='summary'),
+    path('<int:pk>/summary/ajax', views.ajax_summary_histogram, name='ajax_summary_histogram'),
 
     # Submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
