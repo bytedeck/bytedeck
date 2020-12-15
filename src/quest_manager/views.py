@@ -1,6 +1,5 @@
 import json
 import uuid
-import datetime
 
 import numpy as np
 
@@ -15,7 +14,6 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
-from django.utils import timezone
 from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -160,22 +158,10 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         else:
             percent_returned = None
 
-        minutes_list = get_minutes_to_complete_list(self.object)
-        
-        np_data = np.array(minutes_list)
-        # remove values >= 120 minutes
-        np_data = np.sort(np_data[np_data < 120])
-        size = np_data.size
-
         context['count_total'] = count_total
         context['count_first_time'] = count_first_time
         context['percent_returned'] = percent_returned
-        # context['submissions'] = subs
-        context['mean_minutes'] = np.mean(np_data)
-        context['median_minutes'] = np.median(np_data)
-        context['percentile_25'] = np_data[size // 4] if size else None
-        context['percentile_75'] = np_data[size * 3 // 4] if size else None
-        context['time_list'] = minutes_list
+
         return context
 
 
@@ -184,16 +170,31 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
 def ajax_summary_histogram(request, pk):
     if request.is_ajax():
         max = int(request.GET.get("max", 60))
-        min = int(request.GET.get("min", 0))
+        min = int(request.GET.get("min", 1))
 
         quest = get_object_or_404(Quest, pk=pk)
+
         minutes_list = get_minutes_to_complete_list(quest)
 
-        histogram_values, histogram_labels = get_histogram(minutes_list, min, max)
+        np_data = np.array(minutes_list)
+        # remove outliers
+        np_data = np_data[(np_data >= min) & (np_data < max + 1)]
+        # sort values
+        np_data = np.sort(np_data)
 
+        histogram_values, histogram_labels = get_histogram(np_data, min, max)
+
+        size = np_data.size
+        mean = float(np.mean(np_data))
         data = {
             "histogram_values": histogram_values.tolist(),
-            "histogram_labels": histogram_labels.tolist()
+            "histogram_labels": histogram_labels[:-1].tolist(),
+            'count': size,
+            'mean': mean,
+            'percentile_50': int(np.median(np_data)),
+            'percentile_25': int(np_data[size // 4]) if size else None,
+            'percentile_75': int(np_data[size * 3 // 4]) if size else None,
+            
         }
 
         return JsonResponse(data)
@@ -203,22 +204,26 @@ def ajax_summary_histogram(request, pk):
 
 
 def get_histogram(data_list, min, max):
-    # bins = range(0, 60, 1)
+    # step should be 1 until we reach 60, then got to step size 2 for every 60 in the range
     step = (max - min - 1) // 60 + 1 
-    bins = range(min, max + 1, step)
+
+    # max +2:
+    #  +1 because we don't want to cut off at the max, we want to include max as the last step
+    #  +1 because the highest # is the right bin edge
+    bins = range(min, max + 2, step)
     return np.histogram(data_list, bins=bins)
 
 
 def get_minutes_to_complete_list(quest):
     subs = quest.questsubmission_set.filter(time_returned=None).exclude(time_approved=None)
     # bad data before this date:
-    bad_date = timezone.make_aware(datetime.datetime(2016, 9, 1))
-    subs = subs.filter(timestamp__gt=bad_date)
+    # bad_date = timezone.make_aware(datetime.datetime(2016, 9, 1))
+    # subs = subs.filter(timestamp__gt=bad_date)
 
     duration = ExpressionWrapper(F('time_completed') - F('timestamp'), output_field=fields.DurationField())
     subs = subs.annotate(time_to_complete=duration)
     time_list = subs.values_list('time_to_complete', flat=True)
-    minutes_list = [int(t.total_seconds() / 60) for t in time_list]
+    minutes_list = [t.total_seconds() / 60 for t in time_list]
 
     return minutes_list
 
