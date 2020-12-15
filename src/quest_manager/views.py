@@ -151,7 +151,7 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
         count_total = subs.count()
-        subs = self.object.questsubmission_set.filter(time_returned=None)
+        subs = subs.filter(time_returned=None)
         count_first_time = subs.count()
         if count_total > 0:
             percent_returned = int((count_total - count_first_time) / count_total * 100)
