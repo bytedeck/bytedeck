@@ -215,12 +215,10 @@ def get_histogram(data_list, min, max):
 
 
 def get_minutes_to_complete_list(quest):
-    subs = quest.questsubmission_set.filter(time_returned=None).exclude(time_approved=None)
-    # bad data before this date:
-    # bad_date = timezone.make_aware(datetime.datetime(2016, 9, 1))
-    # subs = subs.filter(timestamp__gt=bad_date)
+    # Only approved, never returned quests
+    subs = quest.questsubmission_set.filter(time_returned=None).exclude(first_time_completed=None).exclude(time_approved=None)
 
-    duration = ExpressionWrapper(F('time_completed') - F('timestamp'), output_field=fields.DurationField())
+    duration = ExpressionWrapper(F('first_time_completed') - F('timestamp'), output_field=fields.DurationField())
     subs = subs.annotate(time_to_complete=duration)
     time_list = subs.values_list('time_to_complete', flat=True)
     minutes_list = [t.total_seconds() / 60 for t in time_list]
