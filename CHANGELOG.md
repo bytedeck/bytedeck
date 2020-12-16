@@ -4,6 +4,10 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.11.1] 2020-12-15
+* [teachers] Submission summary page improvements 
+* Minor styling tweaks
+
 ### [1.11.0] 2020-12-13
 * [teachers] Add a summary/metrics page of submission data for each quest, including a histogram of submission times
 * [teachers] Add "Initial time to complete" for to each submission, in minutes

@@ -1,58 +1,102 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Quest Summary {% endblock %}
+{% block heading_inner %}Quest Summary <span class="text-danger">EXPERIMENTAL!</span>{% endblock %}
 
 {% block content %}
 <h3>Quest: <a href="{{quest.get_absolute_url}}">{{ quest }}</a> ({{quest.xp}} XP)</h3>
 <hr>
+<h5>Time Stamps</h5>
 <ul>
     <li>Created: {{quest.datetime_created}} ({{quest.datetime_created|timesince}} ago)</li>
     <li>Last Edited: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</li>
     <li>Last Submission: {{quest.datetime_last_edit}} ({{quest.datetime_last_edit|timesince}} ago)</li>
 </ul>
-
-<table class="table table-hover" style="width: 350px;">
+<h5>Completion Rate</h5>
+<table class="table" style="width: 350px;">
     <tr><td>Total # of submissions:</td><td> {{ count_total }}</td></tr>
     <tr><td>Approved on first submission:</td><td> {{ count_first_time }}</td></tr>
     <tr><td>Returned at least once:</td><td> {{ percent_returned }}%</td></tr>
-    <tr><td>Mean completion time:</td><td> {{ mean_minutes|floatformat }} minutes</td></tr>
-    <tr><td>25th Percentile:</td><td> {{ percentile_25 }} minutes</td></tr>
-    <tr><td>50th Percetile (Median):</td><td> {{ median_minutes|floatformat }} minutes</td></tr>
-    <tr><td>75th Percentile:</td><td> {{ percentile_75 }} minutes</td></tr>
 </table>
 
-<h3>Completion Time Histogram</h3>
+<h3>Completion Times Histogram</h3>
 
+<p>These stats and the histogram only use data between the range of Min and Max as provided in this form
+    <i class="fa fa-question-circle" data-toggle="tooltip"
+        title="The meaning of the data should be interpreted individually for each quest. Use the max and min 
+        values to remove outliers from the stats and histogram."
+    ></i>
+</p>
+<p>
+    <form id="histoForm" class="form-inline" >
+    <!-- <div class="checkbox">
+        <label>
+          <input id="histoRemoveOutliers" type="checkbox" value="FALSE"> Remove Outliers
+        </label>
+    </div> -->
+    <div class="form-group">
+        <label for="histoMinTime">Min</label>
+        <div class="input-group" style="width:175px;">
+            <input name="min" type="number" class="form-control" id="histoMinTime" min="0" value="1">
+            <div class="input-group-addon">minutes</div>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="histoMaxTime">Max</label>
+        <div class="input-group" style="width:175px;">
+            <input name="max" type="number" class="form-control" id="histoMaxTime" min="5" value="60">
+            <div class="input-group-addon">minutes</div>
+        </div>
+    </div>
+
+    <btn id="updateChart" class="btn btn-primary" onclick="updateChart()">Recalculate</btn>
+</form>
+</p>
+<p id="error-text" class="text-danger"></p>
+</p>
+<br>
+<h5>Summary Stats</h5>
+
+<div class="row">
+    <div class="col-sm-6">
+        <table class="table">
+            <tr>
+                <td>Total Count in Range:</td>
+                <td><span id="completion-count">N/A</span></td>
+            </tr>
+            <tr>
+                <td>Mean completion time:</td>
+                <td><span id="completion-mean">N/A</span> min</td>
+            </tr>
+ 
+        </table>
+    </div>
+    <div class="col-sm-6">
+        <table class="table">
+            <tr>
+                <td>25th Percentile:</td>
+                <td><span id="completion-25">N/A</span> min</td>   
+            </tr>
+            <tr>
+                <td>50th Percentile:</td>
+                <td><span id="completion-50">N/A</span> min</td>
+            </tr>
+            <tr>
+                <td>75th Percentile:</td>
+                <td><span id="completion-75">N/A</span> min</td>
+            </tr> 
+        </table>
+    </div>
+</div>
+
+<h5> Histogram</h5>
 <div id="chart-container" style="margin-bottom: 10px;">
     <canvas id="histo-chart" class="img-rounded" style="width: 100%; background-color: white; padding: 10px; "></canvas>
 </div>
 
 <p>This histogram shows the distribution of completion times, which is the difference in minutes 
-    between the time the student hit the start button and the complete button. The chart only includes 
+    between the time the student hit the Start button and the Submit buttons. The chart only includes 
     submissions that were approved the first time (if the submission was returned, it is not included here).</p>
-<p>Anything longer than 120 minutes was removed from the dataset, as these 
-    likely represent students who did not start and complete the quest in a single sitting.</p>
-
-<!-- <h3>Histogram Options</h3>
-<form id="histoForm">
-    <div class="checkbox">
-        <label>
-          <input id="histoRemoveOutliers" type="checkbox" value="FALSE"> Remove Outliers
-        </label>
-    </div>
-    <div class="form-group">
-        <label for="histoMinTime">Min Time</label>
-        <input name="min" type="number" class="form-control" id="histoMinTime" value="0">
-    </div>
-    <div class="form-group">
-        <label for="histoMaxTime">Max Time</label>
-        <input name="max" type="number" class="form-control" id="histoMaxTime" value="60">
-    </div>
-
-    <btn id="updateChart" class="btn btn-primary" onclick="updateChart()">Update Chart</btn>
-</form> -->
-
 
 {% endblock %}
 
@@ -62,6 +106,31 @@
 <script>
 
 function updateChart() {
+    $min = $("#histoMinTime");
+    $max = $("#histoMaxTime");
+    $error = $("#error-text");
+    var min = parseInt($min.val());
+    var max = parseInt($max.val());
+
+    if (min < 0 ) {
+        $min.closest(".form-group").addClass('has-error');
+        $error.html("The Min value must be greater than 0.")
+        return;
+    }
+    else
+        $min.closest(".form-group").removeClass('has-error');
+
+    if (max <= min) {
+        $max.closest(".form-group").addClass('has-error');
+        $error.html("The Max value must be greater than the Min value.")
+        return
+    }
+
+
+    $max.closest(".form-group").removeClass('has-error');
+    $min.closest(".form-group").removeClass('has-error');
+    $error.html("");
+
     $.ajax({
         url: "{% url 'quests:ajax_summary_histogram' quest.pk %}",
         // async: true,
@@ -69,11 +138,17 @@ function updateChart() {
         type: "GET",
         data: {
         //     csrfmiddlewaretoken: "{{ csrf_token }}" // Needed for POST requests only
-            min: $("#histoMinTime").val(),
-            max: $("#histoMaxTime").val(),
-            removeOutliers: $("#histoRemoveOutliers").prop('checked'),
+            min: min,
+            max: max,
         }
     }).done(function (data) {
+        // Update stats tables
+        $("#completion-25").html(data.percentile_25);
+        $("#completion-50").html(data.percentile_50);
+        $("#completion-75").html(data.percentile_75);
+        $("#completion-count").html(data.count);
+        $("#completion-mean").html(data.mean.toFixed(1));
+
         // Get chart context
         var ctx = document.getElementById('histo-chart').getContext('2d');
 
@@ -116,6 +191,10 @@ function updateChart() {
         };
 
         // draw chart
+        if(typeof window.myHist !== 'undefined') {
+            window.myHist.destroy();
+        }
+        
         window.myHist = new Chart(ctx, config);
 
     });
@@ -127,6 +206,10 @@ window.onload = function() {
     updateChart();
     console.log($("#histoForm"))
 };
+
+$(function () {
+  $('[data-toggle="tooltip"]').tooltip()
+})
 
 </script>
 

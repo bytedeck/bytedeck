@@ -24,11 +24,8 @@
 {% with s as submission %}
     {% include "quest_manager/snippets/previous_submission.html" %}
 {% endwith %}
-<li class="list-group-item list-group-item-info">Submission Comments 
-    <span class="text-muted"> – time to complete quest: {{s.get_minutes_to_complete|floatformat|default:"n/a"}} minutes
-        <i class="fa fa-question-circle"
-        title="The difference between the time the Start Quest button was clicked and the first time it was Submitted."></i>
-    </span>
+<li class="list-group-item list-group-item-info">Submission Comments
+    {% include "quest_manager/snippets/time_to_complete_submission.html" %}
 </li>
 {% with s.get_comments as target_comments %}
     {% include "comments/comments.html" %}

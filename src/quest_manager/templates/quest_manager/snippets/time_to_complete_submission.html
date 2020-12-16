@@ -1,0 +1,6 @@
+{% if request.user.is_staff %} 
+<span class="text-muted"> – time to complete quest: {{s.get_minutes_to_complete|floatformat|default:"n/a"}} minutes
+    <i class="fa fa-question-circle" data-toggle="tooltip"
+    title="The difference between the time the Start Quest button was clicked and the first time it was Submitted."></i>
+</span>
+{% endif %}

@@ -42,18 +42,20 @@
 
   <div id='submission-comments-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
-      <h3 class="panel-title">Past Submissions and Replies
-        <small> – time to complete quest: {{s.get_minutes_to_complete|floatformat|default:"n/a"}} minutes
-          <i class="fa fa-question-circle"
-          title="The difference between the time the Start Quest button was clicked and the first time it was Submitted."></i>
-        </small>
-      </h3>
+      <h3 class="panel-title">Past Submissions and Replies</h3>
     </div>
     <ul class="list-group">
+
       {% include "quest_manager/snippets/previous_submission.html" %}
+
+      <li class="list-group-item list-group-item-info">Submission Comments
+        {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+      </li>
+
       {% with submission.get_comments as target_comments %}
         {% include "comments/comments.html" %}
       {% endwith %}
+
     </ul>
   </div>
 
@@ -99,6 +101,9 @@
 {% block js %}
     <script>
         $(document).ready(function() {
+            $('[data-toggle="tooltip"]').tooltip();
+
+
             {% if anchor %}
                 // http://stackoverflow.com/questions/8149155/animate-scrolltop-not-working-in-firefox
                 $('body,html').animate({
@@ -190,8 +195,9 @@
 
     {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
 
-    {% if request.user.is_staff %} {# styling for the badge awarding widget #}
+    {% if request.user.is_staff %}
     <script>
+        // styling for badge awarding widget
         $.fn.select2.defaults.set( "theme", "bootstrap" );
     </script>
     {% endif %}
