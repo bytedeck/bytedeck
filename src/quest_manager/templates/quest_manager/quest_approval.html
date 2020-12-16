@@ -63,6 +63,8 @@ $( document ).ready(function() {
         var textarea = $($(this).data('target')).find('textarea');
         textarea.val(textarea.val() + msg);
     });
+
+    $('[data-toggle="tooltip"]').tooltip();
 });
 </script>
 
