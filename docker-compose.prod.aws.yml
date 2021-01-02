@@ -20,7 +20,6 @@ services:
     volumes:
       - .:/app
       # - static_data:/app/src/static  # use static dir as a fallback for hardcoded urls hitting app directly
-      # (commenting static volume as collectstatic files picking this up instead of S3) 
       # - media_data:/app/media
       # - socket_data:/bytedeck-volume
     user: $WUID:$WGID
@@ -47,9 +46,9 @@ services:
     networks:
       - backend-network
 
-volumes:
-  static_data:
-  # socket_data:
-  # media_data:
+# volumes:
+#  static_data:       # commenting static_data volume as collectstatic cmd picking this up instead of S3 for STATIC_ROOT.
+#  socket_data:
+#  media_data:
 
 
