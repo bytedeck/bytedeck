@@ -142,6 +142,7 @@ def copy(request, ann_id):
     new_ann.pk = None  # autogen a new primary key (quest_id by default)
     new_ann.title = "Copy of " + new_ann.title
     new_ann.draft = True
+    new_ann.archived = False
     new_ann.datetime_released = new_ann.datetime_released + timedelta(days=7)
 
     form = AnnouncementForm(request.POST or None, instance=new_ann)
