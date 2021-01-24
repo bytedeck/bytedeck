@@ -11,6 +11,8 @@ from tenant_schemas.utils import get_public_schema_name, schema_context
 
 from announcements import tasks
 from announcements.models import Announcement
+from announcements.tasks import get_users_to_email
+from courses.models import Course, CourseStudent
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -34,7 +36,28 @@ class AnnouncementTasksTests(TenantTestCase):
             },
         )
 
+    def test_get_users_to_email(self):
+
+        course = baker.make(Course)
+        semester = SiteConfig.get().active_semester
+
+        for i in range(11):
+            is_staff = i % 2 == 0
+            email = f'{i}@bytedeck.com'
+            user = baker.make(User, email=email, is_staff=is_staff)
+            user.profile.get_announcements_by_email = True
+            user.profile.save()
+
+            if not is_staff:
+                baker.make(CourseStudent,
+                           user=user,
+                           course=course,
+                           semester=semester)
+        emails = get_users_to_email()
+        self.assertEqual(len(emails), 11)
+
     def test_send_announcement_emails(self):
+
         task_result = tasks.send_announcement_emails.apply(
             kwargs={
                 "content": "",
