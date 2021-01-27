@@ -8,11 +8,13 @@ from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
+from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget, Select2Widget
+from django_summernote.fields import SummernoteTextFormField
 from django_summernote.widgets import SummernoteInplaceWidget
-from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
-from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
+from utilities.fields import RestrictedFileFormField
+
 from .models import Quest
 
 
@@ -47,6 +49,10 @@ class QuestForm(forms.ModelForm):
         required=False,
     )
 
+    instructions = SummernoteTextFormField(required=False)
+    submission_details = SummernoteTextFormField(required=False)
+    instructor_notes = SummernoteTextFormField(required=False)
+
     class Meta:
         model = Quest
         fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
@@ -73,10 +79,6 @@ class QuestForm(forms.ModelForm):
         }
 
         widgets = {
-            'instructions': SummernoteInplaceWidget(),
-            'submission_details': SummernoteInplaceWidget(),
-            'instructor_notes': SummernoteInplaceWidget(),
-
             'date_available': DatePickerInput(format='%Y-%m-%d'),
 
             'time_available': TimePickerInput(),
@@ -164,7 +166,7 @@ class QuestForm(forms.ModelForm):
                 style="margin-top: 10px;"
             )
         )
-    
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -182,6 +184,7 @@ class QuestForm(forms.ModelForm):
 
 class TAQuestForm(QuestForm):
     """ Modified QuestForm that removes some fields TAs should not be able to set. """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # SET visible to students here to?
