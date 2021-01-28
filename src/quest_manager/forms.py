@@ -1,4 +1,3 @@
-
 from datetime import date
 
 from django import forms
@@ -10,7 +9,6 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget, Select2Widget
 from django_summernote.fields import SummernoteTextFormField
-from django_summernote.widgets import SummernoteInplaceWidget
 
 from badges.models import Badge
 from utilities.fields import RestrictedFileFormField
@@ -49,10 +47,6 @@ class QuestForm(forms.ModelForm):
         required=False,
     )
 
-    instructions = SummernoteTextFormField(required=False)
-    submission_details = SummernoteTextFormField(required=False)
-    instructor_notes = SummernoteTextFormField(required=False)
-
     class Meta:
         model = Quest
         fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
@@ -64,6 +58,12 @@ class QuestForm(forms.ModelForm):
                   'specific_teacher_to_notify', 'blocking',
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
+
+        field_classes = {
+            'instructions': SummernoteTextFormField,
+            'submission_details': SummernoteTextFormField,
+            'instructor_notes': SummernoteTextFormField,
+        }
 
         date_options = {
             'showMeridian': False,
@@ -195,8 +195,7 @@ class TAQuestForm(QuestForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
-
+    comment_text = SummernoteTextFormField(label='', required=False)
     attachments = RestrictedFileFormField(required=False,
                                           max_upload_size=16777216,
                                           widget=forms.ClearableFileInput(attrs={'multiple': True}),

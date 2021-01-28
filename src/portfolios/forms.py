@@ -1,16 +1,17 @@
-from bootstrap_datepicker_plus import DatePickerInput
 from django import forms
-from django_summernote.widgets import SummernoteInplaceWidget
 
-from portfolios.models import Portfolio, Artwork
+from bootstrap_datepicker_plus import DatePickerInput
+from django_summernote.fields import SummernoteTextFormField
+
+from portfolios.models import Artwork, Portfolio
 
 
 class PortfolioForm(forms.ModelForm):
     class Meta:
         model = Portfolio
         fields = ['description', 'listed_locally', 'listed_publicly', ]
-        widgets = {
-            'description': SummernoteInplaceWidget(),
+        field_classes = {
+            'description': SummernoteTextFormField,
         }
 
 
