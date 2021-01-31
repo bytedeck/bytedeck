@@ -1,10 +1,21 @@
 
 /*
-Darkest: #272b30
+Darkest: var(--slate-bg-color)
 Med: #32383e
 Light: #3e444c
 Text: #c8c8c8
 */
+
+:root {
+  --black: black;
+  --almost-black: #1d1f22;
+  --slate-bg-color: #272b30;
+  --slate-primary-ui-color: #32383e;
+  --slate-alt-ui-color: #3e444c;
+  --slate-default-bs-color: #3a3f44;
+  --slate-primary-bs-color: #7a8288;
+  --slate-text-color: #c8c8c8;
+}
 
 h5 {
   color: white;
@@ -12,7 +23,7 @@ h5 {
 
 figure {
     border-color:#0c0d0e;
-    background-color: #272b30;
+    background-color: var(--slate-bg-color);
 }
 
 /* .navbar-fixed-top.chillax {
@@ -27,16 +38,16 @@ figure {
 
 
 #main-container {
-  background-color: #272b30;
+  background-color: var(--slate-bg-color);
   box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.075) ;
 }
 
 body {
-  background-color: #32383e;
+  background-color: var(--slate-primary-ui-color);
 }
 
 .footer {
-  background-color: #32383e;
+  background-color: var(--slate-primary-ui-color);
 }
 
 a {
@@ -72,7 +83,7 @@ b, strong {
 /************ SAMP PRE CODE KBD TAGS **********************/
 
 pre, code {
-  background-color: #3a3f44;
+  background-color: var(--slate-bg-color);
   color: #f5f5f5;
   border: none;
 }
@@ -137,7 +148,7 @@ tr.detail-view{
 .panel-default > .panel-heading.accordian-trigger:hover {
   /*  background-image: linear-gradient(to bottom, #F5F5F5 0px, #E8E8E8 100%);
     background-repeat: repeat-x;*/
-  background-color: #32383e;
+  background-color: var(--slate-primary-ui-color);
 }
 
 .panel-default > .panel-heading.accordian-trigger.active {
@@ -192,7 +203,7 @@ a.list-group-item-muted {
 
 .panel-muted {
   /*color: #999;*/
-  background-color: #3e444c;
+  background-color:var(--slate-alt-ui-color);
   border-color: #111;
   opacity: 0.5;
   /*color: #FFF !important;
@@ -200,16 +211,6 @@ a.list-group-item-muted {
   background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
   background-repeat: repeat-x;
   border-color: #2B669A;*/
-}
-
-/***********Submission ********************************/
-
-.form-control {
-  background-color: #2e3338;
-}
-
-.form-control {
-  color: #c8c8c8;
 }
 
 /***********ACCORDIAN COMMENTS *******************************/
@@ -241,17 +242,24 @@ a.list-group-item-muted {
 
 /********* FORM STUFF **************/
 .form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control  {
-    background-color: #3e444c;
+    background-color:var(--slate-alt-ui-color);
 }
 
-.select2 {
-    width: 100% !important;
+.form-control {
+  color: #c8c8c8;
 }
 
+.form-control, 
+.select2-container--bootstrap .select2-selection {
+  background-color: var(--slate-primary-ui-color) !important; 
+}
+
+.select2-container--bootstrap .select2-search--dropdown .select2-search__field {
+  color: #3e444c !important;
+}
 
 .select2-container--bootstrap .select2-selection {
     color: #c8c8c8 !important;
-    background-color: #3e444c !important;
     border-color: #000000 !important;
 }
 

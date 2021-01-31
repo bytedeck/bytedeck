@@ -11,6 +11,8 @@ from model_bakery import baker
 
 from announcements import tasks
 from announcements.models import Announcement
+from announcements.tasks import get_users_to_email
+from courses.models import Course, CourseStudent
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -34,7 +36,53 @@ class AnnouncementTasksTests(TenantTestCase):
             },
         )
 
+    def test_get_users_to_email(self):
+        """Should return correct list of users to email"""
+
+        course = baker.make(Course)
+        semester = SiteConfig.get().active_semester
+
+        # Student with empty email but wants to receive announcements
+        user_empty_email = baker.make(User, email='')
+        user_empty_email.profile.get_announcements_by_email = True
+        user_empty_email.profile.save()
+        baker.make(CourseStudent, user=user_empty_email, course=course, semester=semester)
+
+        # Teacher with empty email but wants to receive announcements
+        teacher_empty_email = baker.make(User, email='', is_staff=True)
+        teacher_empty_email.profile.get_announcements_by_email = True
+        teacher_empty_email.profile.save()
+
+        # Student with an email but does not want to receive announcement emails
+        student_no_announcement_emails = baker.make(User, email='student_email@bytedeck.com')
+        baker.make(CourseStudent, user=student_no_announcement_emails, course=course, semester=semester)
+
+        # Teacher with an email but does not want to receive announcement emails
+        baker.make(User, email='teacher_email@bytedeck.com', is_staff=True)
+
+        # Inactive student with email and announcements enabled
+        inactive_student = baker.make(User, email='student_inactive@bytedeck.com')
+        inactive_student.profile.get_announcements_by_email = True
+        inactive_student.profile.save()
+        baker.make(CourseStudent, user=inactive_student, course=None, semester=None)
+
+        for i in range(11):
+            is_staff = i % 2 == 0
+            email = f'{i}@bytedeck.com'
+            user = baker.make(User, email=email, is_staff=is_staff)
+            user.profile.get_announcements_by_email = True
+            user.profile.save()
+
+            if not is_staff:
+                baker.make(CourseStudent,
+                           user=user,
+                           course=course,
+                           semester=semester)
+        emails = get_users_to_email()
+        self.assertEqual(len(emails), 11)
+
     def test_send_announcement_emails(self):
+
         task_result = tasks.send_announcement_emails.apply(
             kwargs={
                 "content": "",

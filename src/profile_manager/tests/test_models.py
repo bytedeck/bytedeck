@@ -26,6 +26,9 @@ class ProfileTestModel(TenantTestCase):
         # use baker.make(Semester) it tried to duplicate the pk, using pk=1 again?!
         self.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
 
+    def create_active_course_registration(self):
+        return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+
     def test_profile_creation(self):
         """Profile is automatically created when a user is created in setUp()"""
         self.assertIsInstance(self.user.profile, Profile)
@@ -53,6 +56,7 @@ class ProfileTestModel(TenantTestCase):
         self.assertEqual(self.profile.get_hidden_quests_as_list(), [])
 
     def test_profile_hidden_quests(self):
+        self.create_active_course_registration()
         num_to_hide = 3
         quests_to_hide = baker.make('quest_manager.quest', _quantity=num_to_hide)
         hidden_quest_list = [str(q.pk) for q in quests_to_hide]
@@ -74,14 +78,28 @@ class ProfileTestModel(TenantTestCase):
         self.profile.unhide_quest(quest_hidden.id)
         self.assertFalse(self.profile.is_quest_hidden(quest_hidden))
 
+    def test_num_hidden_quests_doesnt_include_unavailable(self):
+        """If a hidden quest has been made unavailable for some reason (visible=False, etc) then it shouldn't count"""
+        self.create_active_course_registration()
+        quest = baker.make('quest_manager.quest', name='Hide Me')
+
+        # hide a quest and check
+        self.profile.hide_quest(quest.id)
+        self.assertEqual(self.profile.num_hidden_quests(), 1)
+
+        # make the quest invisible and it shouldn't appear in the hidden quest count
+        quest.visible_to_students = False
+        quest.save()
+        self.assertEqual(self.profile.num_hidden_quests(), 0)
+
     def test_profile_current_courses(self):
         # no current courses to start
         self.assertFalse(self.profile.current_courses().exists())
         # add one and test
-        course_registration = baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        course_registration = self.create_active_course_registration()
         self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration)])
         # add a second
-        course_registration2 = baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        course_registration2 = self.create_active_course_registration()
         self.assertQuerysetEqual(
             self.profile.current_courses(),
             [repr(course_registration), repr(course_registration2)]
@@ -89,7 +107,7 @@ class ProfileTestModel(TenantTestCase):
 
     def test_profile_has_current_course(self):
         self.assertFalse(self.profile.has_current_course)
-        baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        self.create_active_course_registration()
         profile = Profile.objects.get(pk=self.profile.id)  # Refresh profile to avoid cached_property
         self.assertTrue(profile.has_current_course)
 
@@ -101,13 +119,13 @@ class ProfileTestModel(TenantTestCase):
 
     def test_profile_blocks(self):
         self.assertIsNone(self.profile.blocks())
-        baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        self.create_active_course_registration()
         self.assertIsNotNone(self.profile.blocks())
         # TODO fully test this with multiple blocks
 
     def test_profile_teachers(self):
         self.assertEqual(list(self.profile.teachers()), [])
-        course_registration = baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        course_registration = self.create_active_course_registration()
         # Still no teachers since no teacher assign to this course's block yet
         # why is this a list of None instead of just empty? SQLite thing?
         self.assertEqual(list(self.profile.teachers()), [None])
@@ -121,7 +139,7 @@ class ProfileTestModel(TenantTestCase):
     def test_profile_current_teachers(self):
         self.assertFalse(self.profile.current_teachers().exists())
 
-        course_registration = baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        course_registration = self.create_active_course_registration()
 
         # Still no teachers since no teacher assign to this course's block yet
         self.assertFalse(self.profile.current_teachers().exists())

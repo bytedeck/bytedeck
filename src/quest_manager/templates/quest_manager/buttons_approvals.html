@@ -27,6 +27,9 @@
     <a title="View past submissions of this quest from other students" class="btn btn-default" role="button"
         target="_blank" href="{% url 'quests:approved_for_quest' s.quest.id %}">
         <i class="fa fa-fw fa-folder-o"></i></a>
+    <a title="View summary data for this quest" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:summary' s.quest.id %}">
+        <i class="fa fa-fw fa-bar-chart"></i></a>
     <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
         title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
         <i class="fa fa-fw fa-share"></i></a>

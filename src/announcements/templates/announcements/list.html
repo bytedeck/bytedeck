@@ -120,17 +120,17 @@
 {% if object_list.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">
     {% if object_list.has_previous %}
-        <li><a href="{% url 'announcements:list' %}?page=1"><<</a></li>
-        <li><a href="{% url 'announcements:list' %}?page={{ object_list.previous_page_number }}"><</a></li>
+        <li><a href="{{ list_url }}?page=1">&lt;&lt;</a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.previous_page_number }}">&lt;</a></li>
     {% endif %}
 
     {% for i in object_list.paginator.page_range %}
-        <li {% if object_list.number == i %} class="active" {% endif %}><a href="{% url 'announcements:list' %}?page={{i}}">{{i}}</a></li>
+        <li {% if object_list.number == i %} class="active" {% endif %}><a href="{{ list_url }}?page={{i}}">{{i}}</a></li>
     {% endfor %}
 
     {% if object_list.has_next %}
-        <li><a href="{% url 'announcements:list' %}?page={{ object_list.next_page_number }}">></a></li>
-        <li><a href="{% url 'announcements:list' %}?page={{ object_list.paginator.num_pages }}">>></a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.next_page_number }}">&gt;</a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.paginator.num_pages }}">&gt;&gt;</a></li>
     {% endif %}
 </ul>
 {% endif %}
@@ -164,14 +164,14 @@
     // https://stackoverflow.com/a/37406402/3788603
     $('.announcement-dropdown .dropdown-toggle').click(function(e) {
       e.stopPropagation();
+      $('.announcement-dropdown.open').removeClass('open');
       $(this).closest('.dropdown').toggleClass('open');
-      $('.annoncement-dropdown .open').removeClass('open');
     });
 
     $('.announcement--delete, .announcement--edit, .announcement--copy').click(function(e) {
       e.stopPropagation();
+      $('.announcement-dropdown.open').removeClass('open');
       $(this).closest('.dropdown').toggleClass('open');
-      $('.annoncement-dropdown .open').removeClass('open');
     });
 
 

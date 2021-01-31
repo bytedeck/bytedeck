@@ -88,8 +88,11 @@
           $unread = $(".notification-badge")
           unread_num = parseInt($unread.html())
           unread_num -= 1
-          $unread.html(unread_num)
-
+          if (unread_num == 0) {
+              $unread.html("")
+          } else {
+              $unread.html(unread_num)
+          }
         }
       });
     }

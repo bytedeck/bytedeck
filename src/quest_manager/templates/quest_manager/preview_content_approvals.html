@@ -24,18 +24,12 @@
 {% with s as submission %}
     {% include "quest_manager/snippets/previous_submission.html" %}
 {% endwith %}
-<li class="list-group-item list-group-item-info">Submission Comments</li>
+<li class="list-group-item list-group-item-info">Submission Comments
+    {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+</li>
 {% with s.get_comments as target_comments %}
     {% include "comments/comments.html" %}
 {% endwith %}
 <li class="list-group-item list-group-item-info">
     Quick Reply Form
 </li>
-
-{#<li class="list-group-item">#}
-{#    <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"#}
-{#          action="{% url 'quests:approve' s.id %}">{% csrf_token %}#}
-{#        {{ quick_reply_form | crispy }}#}
-{#        {% include "quest_manager/buttons_approvals.html" %}#}
-{#    </form>#}
-{#</li>#}

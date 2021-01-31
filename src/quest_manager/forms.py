@@ -1,15 +1,17 @@
-from django_select2.forms import Select2Widget, ModelSelect2Widget
+
 from datetime import date
+
+from django import forms
+from django.core.exceptions import ValidationError
 
 from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
-from django import forms
-from django_select2.forms import ModelSelect2MultipleWidget
 from django_summernote.widgets import SummernoteInplaceWidget
-from utilities.fields import RestrictedFileFormField
+from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
+from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
 from .models import Quest
 
@@ -162,6 +164,20 @@ class QuestForm(forms.ModelForm):
                 style="margin-top: 10px;"
             )
         )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # make sure blocking quests are not hideable
+        blocking = cleaned_data.get('blocking')
+        hideable = cleaned_data.get('hideable')
+
+        if blocking and hideable:
+            # both fields are valid so far and are True
+            raise ValidationError(
+                "Blocking quests cannot be Hideable.  In the Advanced section "
+                "either turn Hidable off or turn Blocking off."
+            )
 
 
 class TAQuestForm(QuestForm):

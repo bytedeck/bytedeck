@@ -208,15 +208,13 @@ def end_active_semester(request):
     sem = Semester.objects.complete_active_semester()
     semester_warnings = {
         Semester.CLOSED: 'Semester is already closed, no action taken.',
-        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester \
-             until they are approved or returned",
-        'success': 'Semester {sem} has been closed.'.format(sem=sem),
+        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester until they are approved or returned",
+        'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0 and announcements have been archived.',
     }
 
     if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL):
         sem.reset_students_xp_cached()
-
-    Announcement.objects.archive_announcements()
+        Announcement.objects.archive_announcements()
 
     messages.warning(
         request,

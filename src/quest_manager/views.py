@@ -1,16 +1,20 @@
 import json
 import uuid
 
+import numpy as np
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db.models import F, ExpressionWrapper, fields
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from badges.models import BadgeAssertion
@@ -132,6 +136,94 @@ class QuestCopy(QuestCreate):
 
         kwargs['instance'] = new_quest
         return kwargs
+
+
+class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
+    model = Quest
+    context_object_name = 'quest'
+    template_name = 'quest_manager/summary.html'
+
+    def test_func(self):
+        return is_staff_or_TA(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        subs = self.object.questsubmission_set.exclude(time_approved=None)
+        count_total = subs.count()
+        subs = subs.filter(time_returned=None)
+        count_first_time = subs.count()
+        if count_total > 0:
+            percent_returned = int((count_total - count_first_time) / count_total * 100)
+        else:
+            percent_returned = None
+
+        context['count_total'] = count_total
+        context['count_first_time'] = count_first_time
+        context['percent_returned'] = percent_returned
+
+        return context
+
+
+@non_public_only_view
+@login_required
+def ajax_summary_histogram(request, pk):
+    if request.is_ajax():
+        max = int(request.GET.get("max", 60))
+        min = int(request.GET.get("min", 1))
+
+        quest = get_object_or_404(Quest, pk=pk)
+
+        minutes_list = get_minutes_to_complete_list(quest)
+
+        np_data = np.array(minutes_list)
+        # remove outliers
+        np_data = np_data[(np_data >= min) & (np_data < max + 1)]
+        # sort values
+        np_data = np.sort(np_data)
+
+        histogram_values, histogram_labels = get_histogram(np_data, min, max)
+
+        size = np_data.size
+        mean = float(np.mean(np_data))
+        data = {
+            "histogram_values": histogram_values.tolist(),
+            "histogram_labels": histogram_labels[:-1].tolist(),
+            'count': size,
+            'mean': mean,
+            'percentile_50': int(np.median(np_data)),
+            'percentile_25': int(np_data[size // 4]) if size else None,
+            'percentile_75': int(np_data[size * 3 // 4]) if size else None,
+            
+        }
+
+        return JsonResponse(data)
+
+    else:
+        raise Http404
+
+
+def get_histogram(data_list, min, max):
+    # step should be 1 until we reach 60, then got to step size 2 for every 60 in the range
+    step = (max - min - 1) // 60 + 1 
+
+    # max +2:
+    #  +1 because we don't want to cut off at the max, we want to include max as the last step
+    #  +1 because the highest # is the right bin edge
+    bins = range(min, max + 2, step)
+    return np.histogram(data_list, bins=bins)
+
+
+def get_minutes_to_complete_list(quest):
+    # Only approved, never returned quests
+    subs = quest.questsubmission_set.filter(time_returned=None).exclude(first_time_completed=None).exclude(time_approved=None)
+
+    duration = ExpressionWrapper(F('first_time_completed') - F('timestamp'), output_field=fields.DurationField())
+    subs = subs.annotate(time_to_complete=duration)
+    time_list = subs.values_list('time_to_complete', flat=True)
+    minutes_list = [t.total_seconds() / 60 for t in time_list]
+
+    return minutes_list
 
 
 @non_public_only_view
