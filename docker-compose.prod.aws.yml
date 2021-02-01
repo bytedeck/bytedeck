@@ -19,7 +19,7 @@ services:
                       uwsgi --ini uwsgi.aws.ini"
     volumes:
       - .:/app
-      - static_data:/app/src/static
+      # - static_data:/app/src/static  # use static dir as a fallback for hardcoded urls hitting app directly
       # - media_data:/app/media
       # - socket_data:/bytedeck-volume
     user: $WUID:$WGID
@@ -33,10 +33,10 @@ services:
       args:
         WUID: $WUID
         WGID: $WGID
-    volumes:
-      - static_data:/var/www/bytedeck/static
-      # - socket_data:/bytedeck-volume
-      # - media_data:/var/www/bytedeck/media/
+    #volumes:
+    #   - static_data:/var/www/bytedeck/static
+    #   - socket_data:/bytedeck-volume
+    #   - media_data:/var/www/bytedeck/media/
     ports:
       - "443:8088"
       - "80:8080"
@@ -46,9 +46,9 @@ services:
     networks:
       - backend-network
 
-volumes:
-  static_data:
-  # socket_data:
-  # media_data:
+# volumes:
+#  static_data:       # commenting static_data volume as collectstatic cmd picking this up instead of S3 for STATIC_ROOT.
+#  socket_data:
+#  media_data:
 
 

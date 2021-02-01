@@ -3,7 +3,7 @@
 
   {% for comment in target_comments %}
     {% if request.user.is_staff or not comment.flagged %}
-      <li class="list-group-item {% if comment.flagged %} list-group-item-danger{% endif %} anchor"
+      <li class="list-group-item {% if comment.flagged %} list-group-item-danger{% endif %} anchor clearfix"
           id="comment-{{comment.id}}">
 
         <img class="icon-md img-rounded pull-left" src="{{comment.user.profile.get_avatar_url}}" alt="avatar"/>

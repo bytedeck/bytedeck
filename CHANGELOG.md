@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.11.2] 2021-01-31
+* Add edit link to quest "General Info" panel at left (Common Data)
+* Tweak styling for code elements in dark theme
+* Remove "Hackerspace" reference in spam clicking message
+* Include teachers in announcements emails
+* Bugfixes:
+  - [#799](https://github.com/bytedeck/bytedeck/issues/799)
+  - [#790](https://github.com/bytedeck/bytedeck/issues/790)
+  - [#788](https://github.com/bytedeck/bytedeck/issues/788)
+
 ### [1.11.1] 2020-12-15
 * [teachers] Submission summary page improvements 
 * Minor styling tweaks
