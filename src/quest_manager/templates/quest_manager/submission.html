@@ -49,7 +49,9 @@
       {% include "quest_manager/snippets/previous_submission.html" %}
 
       <li class="list-group-item list-group-item-info">Submission Comments
-        {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+        {% with submission as s %}
+          {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+        {% endwith %}
       </li>
 
       {% with submission.get_comments as target_comments %}
