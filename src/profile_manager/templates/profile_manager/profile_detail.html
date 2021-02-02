@@ -47,7 +47,7 @@
       </div>
       <div class="panel-body">
 
-        <div class="pull-right"> {{object.xp_since_last_rank}} | {{object.xp_to_next_rank}}</div>
+        <div class="pull-right"> {{object.xp_since_last_rank}} / {{object.xp_to_next_rank}} XP</div>
         <div>Next Rank: {{object.next_rank}} </div>
         <div class="progress progress-xp">
           <div class="progress-bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"
@@ -58,18 +58,16 @@
 
         {% if courses %}
           {% for course in courses %}
-            {% if course.semester.active %}
-              <div class="pull-right"> {{xp_per_course|floatformat:0}} | {{course.course.xp_for_100_percent}} </div>
-              <div>
-                  {{course.course}} {{course.grade_fk}}
+            <div class="pull-right"> {{xp_per_course|floatformat:0}} / {{course.course.xp_for_100_percent}} XP </div>
+            <div>
+                {{course.course}} {{course.grade_fk}}
+            </div>
+            <div class="progress progress-xp"><!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
+              <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
+                  style="width: {% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%;">
+                <span class="sr-only">{% widthratio xp_per_course course.course.xp_for_100_percent 100 %}% Complete</span>
               </div>
-              <div class="progress progress-xp"><!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
-                <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
-                    style="width: {% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%;">
-                  <span class="sr-only">{% widthratio xp_per_course course.course.xp_for_100_percent 100 %}% Complete</span>
-                </div>
-              </div>
-            {% endif %}
+            </div>
           {% endfor %}
         {% else %}
           You have not joined a course yet this semester.
