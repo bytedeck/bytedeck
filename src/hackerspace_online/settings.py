@@ -283,24 +283,28 @@ REDIS_HOST = env('REDIS_HOST', default='127.0.0.1')  # os.environ.get('REDIS_HOS
 REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
 
 CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key',
+    },
+    'select2': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/2',
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
         'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
-        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key'
-    },
-    'select2': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'cache_table',
+        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key',
         'TIMEOUT': None,
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key'
     }
 }
 
-SELECT2_CACHE_BACKEND = 'default'
+SELECT2_CACHE_BACKEND = 'select2'
 
 
 # I18N AND L10N ####################################################################
@@ -749,9 +753,7 @@ if TESTING:
 
     # django.test.override_settings does not simply work as expected.
     # overriding settings here instead
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'test-loc'
-        }
+    CACHES['default'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'test-loc'
     }
