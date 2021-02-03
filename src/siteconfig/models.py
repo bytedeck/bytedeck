@@ -99,6 +99,11 @@ class SiteConfig(models.Model):
         help_text="This text will be inserted when you return a quest without commenting."
     )
 
+    outgoing_email_signature = models.TextField(
+        verbose_name="Outoging Email Signature", blank=True, max_length=512,
+        help_text="Used when your deck sends your announcements and other notifications by email."
+    )
+
     # closed = models.BooleanField(
     #     label="Closed for Maintenance", default=False, null=True, blank=True,
     #     help_text="This is close your site to students"
