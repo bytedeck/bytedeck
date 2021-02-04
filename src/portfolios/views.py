@@ -225,7 +225,7 @@ def art_add(request, doc_id):
         portfolio, created = Portfolio.objects.get_or_create(user=doc_user)
 
         Artwork.create(
-            title=os.path.splitext(filename)[0],
+            title=os.path.splitext(filename)[0][:50],
             image_file=image_file,
             video_file=video_file,
             portfolio=portfolio,
