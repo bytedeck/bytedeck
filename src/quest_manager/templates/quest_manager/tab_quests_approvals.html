@@ -85,7 +85,7 @@
 
 {% elif user.block_set.count == 0 %}
   <p>You are not assigned as the teacher for any blocks yet.</p>
-  <button>Join a block</button>
+  <a class="btn btn-info" href="{% url 'courses:block_list' %}">Join a block</a>
 {% else %}
   <p>None.</p>
 {% endif %}
