@@ -4,6 +4,20 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.11.3] 2021-02-05
+* Add customizable outgoing email signature for announcements etc (Admin > Site Configuration)
+* Change multi-select widget timeout from 3mins to Never [#792](https://github.com/bytedeck/bytedeck/issues/792)
+* Remove report card dates at bottom of Mark Calculations page
+* Improve formatting of avatar and XP bars in profile page
+* Bugfixes:
+  - Fix missing XP value for multi-course students on Mark Calculations page.
+  - [#674](https://github.com/bytedeck/bytedeck/issues/674)
+  - [#805](https://github.com/bytedeck/bytedeck/issues/805)
+  - [#785](https://github.com/bytedeck/bytedeck/issues/785)
+  - [#752](https://github.com/bytedeck/bytedeck/issues/752)
+  - [#761](https://github.com/bytedeck/bytedeck/issues/761)
+  - [#749](https://github.com/bytedeck/bytedeck/issues/749)
+
 ### [1.11.2] 2021-01-31
 * Add edit link to quest "General Info" panel at left (Common Data)
 * Tweak styling for code elements in dark theme

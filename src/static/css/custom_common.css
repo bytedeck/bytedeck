@@ -4,6 +4,23 @@ h5 {
     font-weight: 700;
 }
 
+
+/********* PROFILE PAGE *************/
+
+.bd-profile-row {
+    display: flex;
+}
+
+.bd-profile-avatar-col {
+    width: 170px;
+    height: 170px;
+}
+
+.bd-profile-xp-col {
+    padding-left: 30px;
+    flex: 1;
+}
+
 /********** CUSTOM APPLIED STYLES ***********/
 
 ul.left-aligned, ol.left-aligned {
