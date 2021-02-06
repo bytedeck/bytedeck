@@ -5,14 +5,14 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}Configuration<i class="fa fa-cog pull-right"></i>{% endblock %}
+{% block heading %}Configuration<i class="fa fa-sliders pull-right"></i>{% endblock %}
 {% block content %}
 
 <h3>Site Settings</h3>
 <form method="post" enctype="multipart/form-data">{% csrf_token %}
-    <p><input type="submit" value="Update" class="btn btn-primary"/></p>
+    <p><input type="submit" value="Update" class="btn btn-success"/></p>
    {{ form|crispy }}
-    <input type="submit" value="Update" class="btn btn-primary"/>
+    <input type="submit" value="Update" class="btn btn-success"/>
 </form>
 
 
