@@ -52,13 +52,15 @@ def get_users_to_email():
 
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
-    subject = '{} Announcement'.format(SiteConfig.get().site_name_short)
+    siteconfig = SiteConfig.get()
+    subject = '{} Announcement'.format(siteconfig.site_name_short)
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({
         'content': content,
         'absolute_url': absolute_url,
         'root_url': root_url,
+        'config': siteconfig,
         'profile_edit_url': reverse('profiles:profile_edit_own')
     })
     email_msg = EmailMultiAlternatives(

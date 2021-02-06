@@ -39,12 +39,12 @@
           <li>
             {% if num_courses > 1 %}
               You are a multicourse student currently registered in {{ num_courses }} courses.
-              Your XP must be divided among each of your courses.  This gives you
+              Your <strong>{{user.profile.xp_cached}}</strong> total XP must be divided among each of your courses.  This gives you
               <a tabindex="0" data-toggle="popover" data-trigger="hover"
                  data-placement="top" data-html="true" href="#"
-                 data-content="You have a total of {{ obj.user.profile.xp }} XP
+                 data-content="You have a total of {{ user.profile.xp_cached }} XP
             to be divided among {{ num_courses }} courses: <br/><br/>
-              <pre>{{ obj.user.profile.xp }}/{{ num_courses }} = {{ xp_per_course|floatformat }} XP</pre>
+              <pre>{{ user.profile.xp_cached }}/{{ num_courses }} = {{ xp_per_course|floatformat }} XP</pre>
             ">
                 <strong>{{ xp_per_course|floatformat }}</strong> XP</a> per course.
             {% else %}
@@ -148,7 +148,6 @@
         You are free to chillax if your XP {% if num_courses > 1 %}in all courses{% endif %} is at or above:
           {% if num_courses > 1 %}
               {# Multiply by 2 #}
-{#              {{ obj.semester.chillax_line|floatformat:"0" }}#}
               {% widthratio obj.semester.chillax_line 1 2 %}
           {% else %}
               {{ obj.semester.chillax_line}}
@@ -158,41 +157,6 @@
         The Chillax Line has not started yet.  It will begin the day after 1st Interim marks are taken.
       {% endif %}
       </p> {% endcomment %}
-      <h3>Report Cards</h3>
-      <p>
-        This table shows you the dates that marks will be taken for various report cards:
-      </p>
-      <table class="table">
-        <thead>
-        <tr>
-          <th>Report</th>
-          <th>% Complete</th>
-          <th>Date</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr>
-          <td>1st Interim</td>
-          <td>25%</td>
-          <td>{{ obj.semester.get_interim1_date|date:"M. j, Y" }}</td>
-        </tr>
-        <tr>
-          <td>Term</td>
-          <td>50%</td>
-          <td>{{ obj.semester.get_term_date|date:"M. j, Y" }}</td>
-        </tr>
-        <tr>
-          <td>2nd Interim</td>
-          <td>75%</td>
-          <td>{{ obj.semester.get_interim2_date|date:"M. j, Y" }}</td>
-        </tr>
-        <tr>
-          <td>Final</td>
-          <td>100%</td>
-          <td>{{ obj.semester.get_final_date|date:"M. j, Y" }}</td>
-        </tr>
-        </tbody>
-      </table>
     {% endif %}
 
 {% endblock %}

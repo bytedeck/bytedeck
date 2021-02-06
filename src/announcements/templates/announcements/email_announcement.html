@@ -3,23 +3,25 @@
 <!DOCTYPE html>
 <html>
 <body>
-<p>Hello,</p>
+  <p>Hello,</p>
 
-<p>A new announcement was just published!  To view it in all its proper glory with images and videos and stuff, 
-<a target="_blank" href="{{ root_url }}{{ absolute_url }}">view it online here.</a> 
-I take no responsibility for how the announcement looks in this email!</p>
+  <p>A new announcement was just published!  To view it in all its proper glory with images and videos and stuff,
+  <a target="_blank" href="{{ root_url }}{{ absolute_url }}">view it online here.</a>
+  I take no responsibility for how the announcement looks in this email!</p>
 
-<hr>
+  <hr>
 
-<div>
-{{content|safe}}
-</div>
+  <div>
+  {{content|safe}}
+  </div>
 
-<hr>
+  <hr>
 
-<p>Have a day!</p>
-<p>Love, {{ config.deck_ai }}</p>
+  <p>
+    {% firstof config.outgoing_email_signature config.site_name %}
+  </p>
 
-<p><img alt="[Logo]" src="{{ root_url }}{% site_logo_url %}"></p>
-<p>If you no longer want to receive these emails, <a target="_blank" href="{{root_url}}{{profile_edit_url}}">edit your profile</a>.</p>
+  <p><img alt="[Logo]" src="{{ root_url }}{% site_logo_url %}"></p>
+  <p>If you no longer want to receive these emails, <a target="_blank" href="{{root_url}}{{profile_edit_url}}">edit your profile</a>.</p>
 </body>
+</html>

@@ -5,34 +5,16 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}Configuration<i class="fa fa-cog pull-right"></i>{% endblock %}
+{% block heading %}Configuration<i class="fa fa-sliders pull-right"></i>{% endblock %}
 {% block content %}
 
 <h3>Site Settings</h3>
 <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <p><input type="submit" value="Update" class="btn btn-success"/></p>
    {{ form|crispy }}
-    <input type="submit" value="Update" class="btn btn-primary"/>
+    <input type="submit" value="Update" class="btn btn-success"/>
 </form>
-<p><br></p>
-<hr>
 
-<h3>Management Functions</h3>
-<div class="row">
-    <div class="col-sm-12">
-        <p>
-            <a class="btn btn-default"
-               href="/admin/courses/semester/">Semester Admin</a>
-        </p>
-    </div>
-    <div class="col-sm-4">
-        <a href="{% url 'courses:end_active_semester' %}" class="btn btn-danger">End current semester</a>
-    </div>
-    <div class="col-sm-8">
-        <p>This will permanently record all student marks for the semester.
-            Which means changing or deleting quests, submissions, or badges
-            will no longer affect their marks for that semester.</p>
-    </div>
-</div>
 
 {% endblock %}
 
