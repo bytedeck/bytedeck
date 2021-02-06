@@ -336,7 +336,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
 
     blocking = models.BooleanField(default=False,
                                    help_text="When this quest becomes available, it will block all other "
-                                             "non-blocking quests until this it is completed")
+                                             "non-blocking quests until this one is submitted.")
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
