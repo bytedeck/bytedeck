@@ -1110,4 +1110,4 @@ def unflag(request, submission_id):
     messages.success(request, "Submission <a href='%s'>%s by %s</a> has been unflagged." %
                      (sub.get_absolute_url(), sub.quest_name(), sub.user))
 
-    return redirect("quests:flagged")
+    return redirect("quests:approvals")
