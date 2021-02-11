@@ -132,7 +132,7 @@
                        aria-expanded="false">Admin <span class="caret"></span></a>
                     <ul class="dropdown-menu">
                         <!-- <li class="dropdown-header">Content</li> -->
-                        <li><a href="{% url 'quests:flagged' %}"><i class="fa fa-fw fa-flag-o"></i>&nbsp;Flagged Submissions</a></li>
+                        {% comment %} <li><a href="{% url 'quests:flagged' %}"><i class="fa fa-fw fa-flag-o"></i>&nbsp;Flagged Submissions</a></li> {% endcomment %}
                         <li><a href="{% url 'config:site_config_update_own' %}"><i class="fa fa-fw fa-sliders"></i>&nbsp;Site Configuration</a></li>
                         <li role="separator" class="divider"></li>
                         <li class="dropdown-header">Course Setup</li>
