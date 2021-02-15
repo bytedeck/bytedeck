@@ -194,7 +194,7 @@ def ajax_summary_histogram(request, pk):
             'percentile_50': int(np.median(np_data)),
             'percentile_25': int(np_data[size // 4]) if size else None,
             'percentile_75': int(np_data[size * 3 // 4]) if size else None,
-            
+
         }
 
         return JsonResponse(data)
@@ -205,7 +205,7 @@ def ajax_summary_histogram(request, pk):
 
 def get_histogram(data_list, min, max):
     # step should be 1 until we reach 60, then got to step size 2 for every 60 in the range
-    step = (max - min - 1) // 60 + 1 
+    step = (max - min - 1) // 60 + 1
 
     # max +2:
     #  +1 because we don't want to cut off at the max, we want to include max as the last step
@@ -616,7 +616,7 @@ def approvals(request, quest_id=None):
         Submitted (i.e. awaiting approval)
         Returned
         Approved
-        Skipped
+        Flagged
 
     """
 
@@ -642,12 +642,12 @@ def approvals(request, quest_id=None):
     submitted_submissions = []
     approved_submissions = []
     returned_submissions = []
-    skipped_submissions = []
+    flagged_submissions = []
 
     submitted_tab_active = False
     returned_tab_active = False
     approved_tab_active = False
-    skipped_tab_active = False
+    flagged_tab_active = False
 
     page = request.GET.get('page')
     # if '/submitted/' in request.path_info:
@@ -660,10 +660,10 @@ def approvals(request, quest_id=None):
         approved_submissions = QuestSubmission.objects.all_approved(quest=quest, active_semester_only=active_sem_only)
         approved_tab_active = True
         approved_submissions = paginate(approved_submissions, page)
-    elif '/skipped/' in request.path_info:
-        skipped_submissions = QuestSubmission.objects.all_skipped()
-        skipped_tab_active = True
-        skipped_submissions = paginate(skipped_submissions, page)
+    elif '/flagged/' in request.path_info:
+        flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
+        flagged_tab_active = True
+        flagged_submissions = paginate(flagged_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
         submitted_tab_active = True
         if current_teacher_only:
@@ -691,11 +691,11 @@ def approvals(request, quest_id=None):
                  "time_heading": "Approved",
                  "url": reverse('quests:approved'),
                  },
-                {"name": "Skipped",
-                 "submissions": skipped_submissions,
-                 "active": skipped_tab_active,
+                {"name": "Flagged",
+                 "submissions": flagged_submissions,
+                 "active": flagged_tab_active,
                  "time_heading": "Transferred",
-                 "url": reverse('quests:skipped'),
+                 "url": reverse('quests:flagged'),
                  }, ]
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
