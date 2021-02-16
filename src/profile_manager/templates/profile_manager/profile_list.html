@@ -157,7 +157,7 @@
                       {{ object.user.last_login|date:"y/m/d" }} {{ object.user.last_login|time:"H:i:s"}}
                     </td>
                     <!-- end `last_login_datetime` -->
-                    <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user }}</a></td>
+                    <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
 
                     {#      Admin buttons #}
                     <td>
