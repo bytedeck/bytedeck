@@ -17,7 +17,7 @@ class Command(BaseCommand):
     help = 'Within the specified tenant (or "all") replace all occurances of --find "replace-me" with --replace "" '
 
     # app name, model name as dictionary key and field name as values
-    apps_to_check = ["quest_manager"]
+    apps_to_check = ["quest_manager", "badges"]
     field_types_to_check = [CharField, TextField]
 
     def add_arguments(self, parser):
