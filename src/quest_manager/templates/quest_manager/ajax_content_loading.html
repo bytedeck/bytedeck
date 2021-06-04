@@ -124,6 +124,8 @@
                       else {
                           $(hidden_selector).append("<i class='fa fa-fw'></i> ");
                       }
+
+                      $('div.pack').pack()
                   },
                   error: function (xhr, errmsg, err) {
                       if (xhr.status == 500) {

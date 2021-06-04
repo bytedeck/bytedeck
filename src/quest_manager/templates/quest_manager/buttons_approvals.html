@@ -1,19 +1,29 @@
 <div>
   <div class="btn-group" role="group">
+
     {% if not s.is_approved %}
-    <button type='submit' name='approve_button' class='btn btn-success' 
-        title='APPROVE the quest and grant its XP'>
-        <i class="fa fa-fw fa-check"></i></button>
+      <button type='submit' name='approve_button' class='btn btn-success'
+              title='APPROVE the quest and grant its XP'>
+          <i class="fa fa-fw fa-check"></i>
+      </button>
     {% endif %}
-    <button type='submit' name='comment_button' class='btn btn-primary' 
-        title='COMMENT without approving or returning the quest'>
-        <i class="fa fa-fw fa-comment"></i> </button>
-    <button type='submit' name='return_button' class='btn btn-danger' 
-        title='RETURN this quest to the student without accepting it'>
-        <i class="fa fa-fw fa-times"></i></button>
+
+    <button type='submit' name='comment_button' class='btn btn-primary'
+            title='COMMENT without approving or returning the quest'>
+        <i class="fa fa-fw fa-comment"></i>
+    </button>
+
+    {% if not s.is_returned %}
+      <button type='submit' name='return_button' class='btn btn-danger'
+              title='RETURN this quest to the student without accepting it'>
+        <i class="fa fa-fw fa-times"></i>
+      </button>
+    {% endif %}
+
     <a class="btn btn-warning" data-target="#quick_reply{{s.id}}" id= "btn_quick_text{{s.id}}" role="button"
        title='ADD TEXT: "{{ quick_reply_text }}"'>
-       <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i></a>
+       <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i>
+    </a>
   </div>
   <div class="btn-group" role="group">
 
@@ -33,11 +43,22 @@
     <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
         title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
         <i class="fa fa-fw fa-share"></i></a>
-    <a href="#" class="btn btn-default btn-flag-submission" role="button"
-        title="FLAG this quest for future follow up.  It will appear in your flagged submissions list. This does not leave a comment or approve the quest."
-        data-sub-id="{{s.id}}">
-        <i class="fa fa-fw fa-flag-o" ></i>
-    </a>
+
+      {% if not s.flagged_by %}
+        <a href="#" class="btn btn-default btn-flag-submission" role="button"
+            title="FLAG this quest for future follow up.  It will appear under the flagged tab. This does not leave a comment or approve the quest."
+            data-sub-id="{{s.id}}">
+            <i class="fa fa-fw fa-flag-o" ></i>
+        </a>
+      {% else %}
+        <a href="{% url 'quests:unflag' s.id %}" class="btn btn-default" role="button"
+            title="UNFLAG this quest">
+          <span class="fa-stack fa-sm" style="font-size:0.63em;">
+            <i class="fa fa-flag-o fa-stack-1x"></i>
+            <i class="fa fa-ban fa-stack-2x" style="color: tomato"></i>
+          </span>
+        </a>
+      {% endif %}
     {% endif %}
   </div>
 </div>
