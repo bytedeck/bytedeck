@@ -18,6 +18,15 @@ class BadgeAssertionFormTest(TenantTestCase):
         form = BadgeAssertionForm(data=form_data)
         self.assertTrue(form.is_valid)
 
+    def test_badge_assertion_form_no_xp(self):
+        form_data = {
+            'badge': baker.make('badges.Badge'),
+            'user': baker.make(User),
+            'do_not_grant_xp': True,
+        }
+        form = BadgeAssertionForm(data=form_data)
+        self.assertTrue(form.is_valid)   
+
     def test_bulk_badge_assertion_form(self):
         form_data = {
             'badge': baker.make('badges.Badge'),
