@@ -175,7 +175,7 @@ def assertion_create(request, user_id, badge_id):
 
     if form.is_valid():
         new_ass = form.save(commit=False)
-        BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge)
+        BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
         messages.success(request, ("Badge " + str(new_ass) + " granted to " + str(new_ass.user)))
         return redirect('badges:list')
 
