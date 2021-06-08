@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.11.5] 2021-06-08
+* Add find and replace management command
+* [security] Update dependancy versions (Pillow, psycopg2)
+* [bugfix] Fix "do not grant xp" for badges [#835](https://github.com/bytedeck/bytedeck/issues/835)
+
+### [1.11.4] 2021-02-15
+* Replace "Skipped" tab with much more useful "Flagged" tab
+* [bugfix] Limit username display length in various areas to prevent layout getting messed up
+* [bugfix] Fix broken `pack` css class for evenly distributing images in a row [#814](https://github.com/bytedeck/bytedeck/issues/814)
+
 ### [1.11.3] 2021-02-05
 * Add customizable outgoing email signature for announcements etc (Admin > Site Configuration)
 * Change multi-select widget timeout from 3mins to Never [#792](https://github.com/bytedeck/bytedeck/issues/792)
