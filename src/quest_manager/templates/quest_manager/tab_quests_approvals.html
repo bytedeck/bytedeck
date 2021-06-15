@@ -69,7 +69,10 @@
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ quick_reply_form | crispy }}
-            {% include "quest_manager/buttons_approvals.html" %}
+            <div>
+              {% include "quest_manager/submission_buttons_form.html" %}
+              {% include "quest_manager/submission_buttons_other.html" %}
+            </div>
           </form>
         </li>
 

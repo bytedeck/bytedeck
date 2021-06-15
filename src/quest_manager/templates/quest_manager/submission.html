@@ -29,6 +29,14 @@
 
 {% block content %}
 
+  {% if request.user.is_staff %}
+  {% with submission as s %}
+  <div class="pull-right">
+    {% include "quest_manager/submission_buttons_other.html" %}
+  </div>
+  {% endwith %}
+  {% endif %}
+
   {% if not submission.is_completed %}
     <!-- <div class="pull-right"> -->
         <!-- <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a> -->
@@ -77,7 +85,10 @@
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}
-            {% include "quest_manager/buttons_approvals.html" %}
+          <div>
+            {% include "quest_manager/submission_buttons_form.html" %}
+            {% include "quest_manager/submission_buttons_other.html" %}
+          </div>
           {% endwith %}
         {% else %}
           {% if submission.quest.visible_to_students %}
