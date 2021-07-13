@@ -94,6 +94,8 @@ nosetests.xml
 coverage.xml
 *,cover
 
+# Ignore this comment.
+
 # Translations
 *.mo
 *.pot
