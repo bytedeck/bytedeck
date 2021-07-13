@@ -401,4 +401,4 @@ def post_save_receiver(sender, **kwargs):
             icon=icon,
             verb="granted you a")
 
-# Hehe, Isaac wuz here 
+# Hehe, Isaac wuz here 🪐
