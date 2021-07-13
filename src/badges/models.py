@@ -400,3 +400,6 @@ def post_save_receiver(sender, **kwargs):
             affected_users=[assertion.user, ],
             icon=icon,
             verb="granted you a")
+
+
+# Hehe, Isaac wuz here 🪐
