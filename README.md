@@ -79,7 +79,7 @@ This will create your docker containers and initialize the database by running m
 `./src/manage.py initdb`
 8. Now run the django development server:   
 `./src/manage.py runserver`
-8. You should now get the page at http://localhost:8000
+8. You should now get the page at http://localhost:8000.  Note that the ip/url output by the django server, `0.0.0.0` will not work in this project, because our multitenant architecture requires a domain name, so you need to use `localhost` instead.
 9. And you should be able to log in to the admin site at http://localhost:8000/admin/
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
@@ -101,20 +101,20 @@ If everything has worked so far, you should now be able to create your own byted
 4. Now you should be in your own bytedeck site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
-### TODO: Installing more Sample Data <-- NOT SETUP YET
+### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
-1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated), enter you tenant's name and paste these commands:
+1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated), enter you tenant's name (for example, `hackerspace`) and paste these commands:
     ```
     $ ./src/manage.py tenant_command shell
-    Enter Tenant Schema ('?' to list schemas): my_tenant_name
+    Enter Tenant Schema ('?' to list schemas): hackerspace
 
     In [1]: from hackerspace_online.shell_utils import generate_content
     
     In [2]: generate_content()  
     ```
 
-2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!
+2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.
 3. use Ctrl + D or `exit()` to close the Python shell.
 
 ### Running Tests and Checking Code Style
@@ -152,14 +152,20 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md)
 
 1. Move into your cloned directory. `cd ~/Developer/bytedeck`
-2. Add the upstream remote: `git remote add upstream git@github.com:bytedeck/bytedeck.git`
-3. Pull in changes from the upstream master: `git pull upstream` (in case anything has changed since you cloned it)
-5. Create a new branch: `git checkout -b yourbranchname`
-6. Make your changes and them commit: `git commit -am "Useful description of your changes"`
-7. Make sure your code is up to date again and rebase onto any changes: `git pull upstream --rebase`
-7. Push your branch to your fork of the project: `git push origin yourbranchname`
-8. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
-9. Select your recently pushed branch and create a pull request (you should see a button for this).
+2. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
+3. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
+5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
+6. Write code!
+7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):   
+`./src/manage.py test src --failfast --parallel && flake8 src`
+8. Commit your changes (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:  
+`git commit -am "Useful description of your changes; Closes #123"`
+9. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
+10. Push your branch to your fork of the project on github (the first time you do this, it will create the brnahc on github for you): `git push origin yourbranchname`
+11. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
+12. Select your recently pushed branch and create a pull request (you should see a button for this)
+![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)
+
 10. Complete pull request.
 11. Start work on another feature by checking out the develop branch again: `git checkout develop`
 12. Start again at Step 3 and repeat!
