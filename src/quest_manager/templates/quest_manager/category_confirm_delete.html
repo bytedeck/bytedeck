@@ -1,0 +1,16 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Delete Campaign {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this campaign?  All related submissions will be deleted.<p>
+  <div class="well">
+    <p>Campaign Name: {{object.name}}</p>
+    <p>Campaign ID: {{object.id}}</p>
+  </div>
+  <a href="{% url 'quests:categories' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}
