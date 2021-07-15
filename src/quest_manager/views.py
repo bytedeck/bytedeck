@@ -1,5 +1,7 @@
 import json
 import uuid
+from django.utils.decorators import method_decorator
+from django.views.generic.list import ListView
 
 import numpy as np
 
@@ -7,7 +9,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import F, ExpressionWrapper, fields
 from django.http import HttpResponse, JsonResponse
@@ -26,13 +28,51 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
                     SubmissionQuickReplyForm, TAQuestForm)
-from .models import Quest, QuestSubmission
+from .models import Quest, QuestSubmission, Category
 
 User = get_user_model()
 
 
 def is_staff_or_TA(user):
     return user.is_staff or user.profile.is_TA
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Category
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        
+        kwargs['heading'] = 'Create New Campaign'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Campaign'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Category
+    success_url = reverse_lazy('quests:categories')
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
