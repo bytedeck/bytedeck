@@ -711,6 +711,10 @@ h3.comment-heading {
     margin-top: 5px
 }
 
+.panel-body h3 {
+    margin-top: 25px;
+}
+
 .comment-content img {
     max-width: 100%;
 }
