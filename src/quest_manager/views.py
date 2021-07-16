@@ -75,6 +75,44 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy('quests:categories')
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Category
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        
+        kwargs['heading'] = 'Create New Campaign'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Campaign'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
