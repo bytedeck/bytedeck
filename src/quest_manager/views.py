@@ -36,6 +36,7 @@ User = get_user_model()
 def is_staff_or_TA(user):
     return user.is_staff or user.profile.is_TA
 
+
 @method_decorator(staff_member_required, name='dispatch')
 class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Category
