@@ -10,7 +10,7 @@
     <p>Campaign Name: {{object.name}}</p>
     <p>Campaign ID: {{object.id}}</p>
   </div>
-  <a href="{% url 'quests:categories' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <a href="{% url 'quests:categories'%}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
 {% endblock %}
