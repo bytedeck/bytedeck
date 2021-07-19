@@ -16,7 +16,7 @@ class Portfolio(models.Model):
     description = models.TextField(null=True, blank=True, help_text='A description to display with your portfolio.')
     listed_locally = models.BooleanField(default=False, help_text="Your portfolio will be listed on the Students page "
                                                                   "and other students will be able to see it.")
-    listed_publicly = models.BooleanField(default=False, help_text="Your portfolio can listed publicly by your teacher.")
+    listed_publicly = models.BooleanField(default=False, help_text="Your portfolio can be listed publicly by your teacher.")
 
     def __str__(self):
         return str(self.user)
