@@ -27,7 +27,7 @@
           <li>Repeatable: {% if quest.max_repeats == 0 %}No
                  {% else %}
                    {% if quest.max_repeats == -1 %} Unlimited
-                   {% else %} {{quest.max_repeats}} times max
+                   {% else %} {{quest.max_repeats}} time{{quest.max_repeats|pluralize}} max
                    {% endif %}
                    {% if quest.hours_between_repeats > 0 %}
                    - every {{ quest.hours_between_repeats}} hrs
