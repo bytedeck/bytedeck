@@ -20,7 +20,7 @@ from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from notifications.models import Notification
-from quest_manager.models import Quest, QuestSubmission
+from quest_manager.models import Category, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -1154,11 +1154,96 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # but it should appear when we view all quests
         response = self.client.get(reverse('quests:available_all'))
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
+        
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
+        
+        
+class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
+        self.test_password = "password"
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+        # self.category = baker.make('quests_manager.category', name="testcat")
+        
+    def test_all_page_status_codes_for_anonymous(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+        
+        self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_create')
+        self.assertRedirectsAdmin('quests:category_update', args=[1])
+        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+
+    def test_all_page_status_codes_for_students(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+        self.client.force_login(self.test_student1)
+
+        # Staff access only
+        self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_create')
+        self.assertRedirectsAdmin('quests:category_update', args=[1])
+        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+
+    def test_all_page_status_codes_for_staff(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+        self.client.force_login(self.test_teacher)
+
+        # Staff access only
+        self.assert200('quests:categories')
+
+    def test_CategoryList_view(self):
+        """ Admin should be able to view course list """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:categories'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_CategoryCreate_view(self):
+        
+        """ Admin should be able to create a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'New category',
+            'active': True,
+        }
+        response = self.client.post(reverse('quests:category_create'), data=data)
+        self.assertRedirects(response, reverse('quests:categories'))
+
+        course = Category.objects.get(title=data['title'])
+        self.assertEqual(course.title, data['title'])
+
+    def test_CategoryUpdate_view(self):
+        """ Admin should be able to update a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'My Updated Title',
+            'active': False,
+        }
+        response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
+        self.assertRedirects(response, reverse('quests:categories'))
+        course = Category.objects.get(id=1)
+        self.assertEqual(course.title, data['title'])
+        self.assertEqual(course.active, data['active'])
+
+    def test_CategoryDelete_view(self):
+        """ Admin should be able to delete a course """
+        self.client.force_login(self.test_teacher)
+
+        before_delete_count = Category.objects.count()
+        response = self.client.post(reverse('quests:category_delete', args=[Category.objects.filter(title="Orientation")[0].id]))
+        after_delete_count = Category.objects.count()
+        self.assertRedirects(response, reverse('quests:categories'))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
 
 
 class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
+    
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
 

@@ -91,6 +91,11 @@ urlpatterns = [
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
     # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
+    # Campaigns / Categories
+    path('campaigns/', views.CategoryList.as_view(), name='categories'),
+    path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
+    path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
+    path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
 
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]
