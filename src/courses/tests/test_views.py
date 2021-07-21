@@ -5,11 +5,108 @@ from model_bakery import baker
 from tenant_schemas.test.cases import TenantTestCase
 from tenant_schemas.test.client import TenantClient
 
-from courses.models import Block, Course, Semester
+from courses.models import Block, Course, Semester, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
+
+
+class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
+        self.test_password = "password"
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+    def test_all_rank_page_status_codes_for_anonymous(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+
+        self.assertRedirectsLogin('courses:ranks')
+        self.assertRedirectsAdmin('courses:rank_create')
+        self.assertRedirectsAdmin('courses:rank_update', args=[1])
+        self.assertRedirectsAdmin('courses:rank_delete', args=[1])
+
+    def test_all_rank_page_status_codes_for_students(self):
+        ''' If logged in as student then all views except ranks list view should redirect to home page or admin login '''
+        self.client.force_login(self.test_student1)
+        self.assert200('courses:ranks') 
+
+        # staff access only
+        self.assertRedirectsAdmin('courses:rank_create')
+        self.assertRedirectsAdmin('courses:rank_update', args=[1])
+        self.assertRedirectsAdmin('courses:rank_delete', args=[1])
+
+    def test_all_rank_page_status_codes_for_staff(self):
+        ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
+        self.client.force_login(self.test_teacher)
+
+        self.assert200('courses:ranks') 
+        self.assert200('courses:rank_create')
+        self.assert200('courses:rank_update', args=[1])
+        self.assert200('courses:rank_delete', args=[1])
+
+    def test_RanksList_view(self):
+        """ Admin and students should be able to view ranks. Anonymous users should be asked to login if they attempt to view ranks. """
+
+        # Anonymous user
+        self.assertRedirectsLogin('courses:ranks')
+
+        # student
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('courses:ranks'))
+        self.assertEqual(response.status_code, 200)
+
+        # teacher
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:ranks'))
+        self.assertEqual(response.status_code, 200)
+
+        # Should contain 13 default ranks e.g. Digital Novice, Digital Ameteur II, etc
+        self.assertEqual(response.context['object_list'].count(), 13)
+        
+    def test_RankCreate_view(self):
+        """ Admin should be able to create a rank """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'name': 'My Sample rank',
+            'xp': 23,
+            'fa_icon': 'fa fa-circle-o'
+        }
+        response = self.client.post(reverse('courses:rank_create'), data=data)
+        self.assertRedirects(response, reverse('courses:ranks'))
+
+        rank = Rank.objects.get(name=data['name'])
+        self.assertEqual(rank.name, data['name'])
+
+    def test_RankUpdate_view(self):
+        """ Admin should be able to update a rank """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'name': 'My updated rank',
+            'xp': 23,
+            'fa_icon': 'fa fa-circle-o'
+        }
+        response = self.client.post(reverse('courses:rank_update', args=[1]), data=data)
+        self.assertRedirects(response, reverse('courses:ranks'))
+        rank = Rank.objects.get(id=1)
+        self.assertEqual(rank.name, data['name'])
+        self.assertEqual(rank.xp, data['xp'])
+
+    def test_RankDelete_view(self):
+        """ Admin should be able to delete a rank """
+        self.client.force_login(self.test_teacher)
+
+        before_delete_count = Rank.objects.count()
+        response = self.client.post(reverse('courses:rank_delete', args=[1]))
+        after_delete_count = Rank.objects.count()
+        self.assertRedirects(response, reverse('courses:ranks'))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
 
 
 class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -62,6 +159,8 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # View from external package.  Need to override view with LoginRequiredMixin if we want to bother
         # self.assertRedirectsLogin('courses:mark_distribution_chart', args=[1])
 
+        # Refer to rank specific tests for Rank CRUD views
+
     def test_all_page_status_codes_for_students(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
         self.client.force_login(self.test_student1)
@@ -94,6 +193,8 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsAdmin('courses:course_create')
         self.assertRedirectsAdmin('courses:course_update', args=[1])
         self.assertRedirectsAdmin('courses:course_delete', args=[1])
+
+        # Refer to rank specific tests for Rank CRUD views
 
     def test_all_page_status_codes_for_staff(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
