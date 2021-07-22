@@ -4,7 +4,7 @@
 {% block heading_inner %} {{ heading }} {% endblock %}
 
 {% block content %}
-<form method="post">{% csrf_token %}
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
   {{ form | crispy }}
   <a href="{% url 'courses:ranks' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
