@@ -52,7 +52,7 @@ class QuestForm(forms.ModelForm):
         fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
-                  'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
+                  'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
@@ -119,6 +119,7 @@ class QuestForm(forms.ModelForm):
                 'campaign',
                 'common_data',
                 'max_repeats',
+                'max_xp',
                 'hours_between_repeats',
                 Accordion(
                     AccordionGroup(
@@ -164,7 +165,7 @@ class QuestForm(forms.ModelForm):
                 style="margin-top: 10px;"
             )
         )
-    
+
     def clean(self):
         cleaned_data = super().clean()
 

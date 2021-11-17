@@ -350,6 +350,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
     prereq_or_prereq = GenericRelation(Prereq,
                                        content_type_field='or_prereq_content_type',
                                        object_id_field='or_prereq_object_id')
+    max_xp = models.IntegerField(default=-1, help_text="-1 = unlimited")
 
     objects = QuestManager()
 
@@ -674,11 +675,29 @@ class QuestSubmissionManager(models.Manager):
             return None
 
     def calculate_xp(self, user):
-        total_xp = self.all_approved(user).grant_xp().aggregate(Sum('quest__xp'))
-        xp = total_xp['quest__xp__sum']
-        if xp is None:
-            xp = 0
-        return xp
+        # total_xp = self.all_approved(user).grant_xp().aggregate(Sum('quest__xp'))
+        # xp = total_xp['quest__xp__sum']
+        # if xp is None:
+        #     xp = 0
+        # return xp
+
+        submission_xps = self.all_approved(user).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))
+        total_xp = 0
+
+        for submission_xp in submission_xps:
+
+            if submission_xp['quest__max_xp'] == -1:
+                total_xp += submission_xp['xp_sum']
+                continue
+
+            # Prevent xp going over the maximum gainable xp
+            gainable_xp = submission_xp['xp_sum']
+            if submission_xp['xp_sum'] >= submission_xp['quest__max_xp']:
+                gainable_xp = submission_xp['quest__max_xp']
+
+            total_xp += gainable_xp
+
+        return total_xp
 
     def calculate_xp_to_date(self, user, date):
         # print("submission.calculate_xp_to_date date: " + str(date))
