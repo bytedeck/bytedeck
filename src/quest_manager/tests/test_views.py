@@ -746,6 +746,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -958,6 +959,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -1154,11 +1156,11 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # but it should appear when we view all quests
         response = self.client.get(reverse('quests:available_all'))
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
-        
+
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
-        
-        
+
+
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
@@ -1172,10 +1174,10 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
         # self.category = baker.make('quests_manager.category', name="testcat")
-        
+
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
-        
+
         self.assertRedirectsAdmin('quests:categories')
         self.assertRedirectsAdmin('quests:category_create')
         self.assertRedirectsAdmin('quests:category_update', args=[1])
@@ -1205,7 +1207,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_CategoryCreate_view(self):
-        
+
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -1243,7 +1245,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
-    
+
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
 
