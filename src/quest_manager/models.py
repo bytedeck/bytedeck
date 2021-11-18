@@ -51,6 +51,10 @@ class XPItem(models.Model):
     """
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
+    xp_can_be_entered_by_students = models.BooleanField(
+        default=False,
+        help_text="Allow students to enter a custom XP value for their submission of this quest."
+    )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
@@ -693,7 +697,7 @@ class QuestSubmissionManager(models.Manager):
         """
         Return the number of XP earned by a student for all xp-granting quests that they have completed, up to and including the specified date.
         """
-        submission_xps = self.all_approved(user, up_to_date=date).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))
+        submission_xps = self.all_approved(user, up_to_date=date).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))  # noqa E501
         total_xp = 0
 
         for submission_xp in submission_xps:
@@ -766,6 +770,11 @@ class QuestSubmission(models.Model):
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
     draft_text = models.TextField(null=True, blank=True)
+
+    xp_requested = models.PositiveIntegerField(
+        default=0,
+        help_text='The number of XP you requesting for this quest submission.'
+    )
 
     class Meta:
         ordering = ["time_approved", "time_completed"]
