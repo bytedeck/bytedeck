@@ -60,6 +60,12 @@ class XPItem(models.Model):
                                              'To un-archive a quest, you will need to access it through Site Administration.')
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
+    max_xp = models.IntegerField(
+        default=-1, 
+        help_text="The maximum amount of XP that can be gain by repeating this quest. If the Max Repeats hasn't been hit yet \
+        then quest will continue to appear after this number is reached, but students will no longer \
+        gain XP for completing it; -1 = unlimited"
+    )
     repeat_per_semester = models.BooleanField(
         default=False,
         help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
@@ -350,7 +356,6 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
     prereq_or_prereq = GenericRelation(Prereq,
                                        content_type_field='or_prereq_content_type',
                                        object_id_field='or_prereq_object_id')
-    max_xp = models.IntegerField(default=-1, help_text="-1 = unlimited")
 
     objects = QuestManager()
 
@@ -454,6 +459,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(time_completed__isnull=False)
 
     def grant_xp(self):
+        """Filter the queryset of submissions to only include those that are not skipped, i.e. filter for do_not_grant_xp=False."""
         return self.filter(do_not_grant_xp=False)
 
     def dont_grant_xp(self):
@@ -524,6 +530,9 @@ class QuestSubmissionManager(models.Manager):
         return self.get_queryset(active_semester_only).get_user(user).not_approved()
 
     def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+        """
+        Return a queryset of all approved submissions within the provided parameters.
+        """
         qs = self.get_queryset(active_semester_only,
                                exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False
@@ -675,39 +684,27 @@ class QuestSubmissionManager(models.Manager):
             return None
 
     def calculate_xp(self, user):
-        # total_xp = self.all_approved(user).grant_xp().aggregate(Sum('quest__xp'))
-        # xp = total_xp['quest__xp__sum']
-        # if xp is None:
-        #     xp = 0
-        # return xp
+        """
+        Return the number of XP earned by a student for all xp-granting quests that they have completed so far.
+        """
+        return self.calculate_xp_to_date(user=user, date=None)
 
-        submission_xps = self.all_approved(user).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))
+    def calculate_xp_to_date(self, user, date):
+        """
+        Return the number of XP earned by a student for all xp-granting quests that they have completed, up to and including the specified date.
+        """
+        submission_xps = self.all_approved(user, up_to_date=date).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))
         total_xp = 0
 
         for submission_xp in submission_xps:
 
             if submission_xp['quest__max_xp'] == -1:
                 total_xp += submission_xp['xp_sum']
-                continue
-
-            # Prevent xp going over the maximum gainable xp
-            gainable_xp = submission_xp['xp_sum']
-            if submission_xp['xp_sum'] >= submission_xp['quest__max_xp']:
-                gainable_xp = submission_xp['quest__max_xp']
-
-            total_xp += gainable_xp
+            else:
+                # Prevent xp going over the maximum gainable xp
+                total_xp += min(submission_xp['xp_sum'], submission_xp['quest__max_xp'])
 
         return total_xp
-
-    def calculate_xp_to_date(self, user, date):
-        # print("submission.calculate_xp_to_date date: " + str(date))
-        qs = self.all_approved(user, up_to_date=date).grant_xp()
-
-        total_xp = qs.aggregate(Sum('quest__xp'))
-        xp = total_xp['quest__xp__sum']
-        if xp is None:
-            xp = 0
-        return xp
 
     def user_last_submission_completed(self, user):
         qs = self.get_queryset(True).get_user(user).completed()

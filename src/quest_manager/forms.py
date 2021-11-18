@@ -119,7 +119,6 @@ class QuestForm(forms.ModelForm):
                 'campaign',
                 'common_data',
                 'max_repeats',
-                'max_xp',
                 'hours_between_repeats',
                 Accordion(
                     AccordionGroup(
@@ -143,6 +142,7 @@ class QuestForm(forms.ModelForm):
                     ),
                     AccordionGroup(
                         "Advanced",
+                        'max_xp',
                         'repeat_per_semester',
                         'specific_teacher_to_notify',
                         'blocking',

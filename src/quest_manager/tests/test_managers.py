@@ -397,3 +397,18 @@ class QuestSubmissionManagerTest(TenantTestCase):
         baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=another_semester)
 
         return quest1, quest2
+
+    def test_complete_more_submissions_no_additional_xp(self):
+        """
+        Student can complete quests that are availabe to them multiple times but they cannot earn xp more than the max_xp
+        that can be gained in a repeatable quest
+        """
+        semester = SiteConfig.get().active_semester
+        quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
+        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=semester, is_approved=True, _quantity=3)
+
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
+
+        # Perform additional submission but xp remains the same
+        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)

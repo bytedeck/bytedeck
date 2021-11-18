@@ -424,7 +424,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_student)
 
         self.quest = baker.make(Quest, xp=5)
-        self.quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
@@ -456,22 +455,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, comment)
-
-    def test_complete_more_submissions_no_additional_xp(self):
-        """
-        Student can complete quests that are availabe to them multiple times but they cannot earn xp more than the max_xp
-        that can be gained in a repeatable quest
-        """
-        semester = SiteConfig.get().active_semester
-        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
-        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
-        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
-
-        self.assertEqual(QuestSubmission.objects.calculate_xp(self.test_student), 15)
-
-        # Perform additional submission but xp remains the same
-        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
-        self.assertEqual(QuestSubmission.objects.calculate_xp(self.test_student), 15)
 
     def test_no_comment_verification_not_required(self):
         """ When a quest is automatically approved, it does not require a comment
