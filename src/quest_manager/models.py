@@ -773,7 +773,7 @@ class QuestSubmission(models.Model):
 
     xp_requested = models.PositiveIntegerField(
         default=0,
-        help_text='The number of XP you requesting for this quest submission.'
+        help_text='The number of XP you are requesting for this submission.'
     )
 
     class Meta:

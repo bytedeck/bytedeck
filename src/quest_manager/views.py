@@ -26,7 +26,7 @@ from notifications.signals import notify
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
                     SubmissionQuickReplyForm, TAQuestForm)
 from .models import Quest, QuestSubmission, Category
 
@@ -997,11 +997,13 @@ def ajax_save_draft(request):
 
         submission_comment = request.POST.get('comment')
         submission_id = request.POST.get('submission_id')
+        # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
         if sub.draft_text != submission_comment:
             sub.draft_text = submission_comment
+            # sub.xp_requested = xp_requested
             response_data['result'] = 'Draft saved'
             sub.save()
 
@@ -1055,7 +1057,11 @@ def submission(request, submission_id=None, quest_id=None):
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
         initial = {'comment_text': sub.draft_text}
-        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+        if sub.quest.xp_can_be_entered_by_students:
+            initial['xp_requested'] = sub.quest.xp
+            main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial)
+        else:
+            main_comment_form = SubmissionForm(request.POST or None, initial=initial)
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
