@@ -17,7 +17,8 @@
     <div class="row">
       <div class="col-sm-6">
         <ul class="list-unstyled">
-          <li><h4>XP: {{quest.xp}}</h4></li>
+          <li><h4>XP: {% if quest.xp_can_be_entered_by_students %}? <small>(student entered)</small>{% else %}{{quest.xp}}{% endif %}
+          </h4></li>
           <li>Campaign: {% if quest.campaign %}{{ quest.campaign }} {% else %}-{% endif %}</li>
           <li>Expiry: {{quest.date_expired}}</li>
         </ul>
