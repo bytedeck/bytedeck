@@ -419,10 +419,12 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.test_student = User.objects.create_user('test_student', password="password")
+
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
-        self.quest = baker.make(Quest)
+        self.quest = baker.make(Quest, xp=5)
+        self.quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
@@ -454,6 +456,22 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, comment)
+
+    def test_complete_more_submissions_no_additional_xp(self):
+        """
+        Student can complete quests that are availabe to them multiple times but they cannot earn xp more than the max_xp
+        that can be gained in a repeatable quest
+        """
+        semester = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.test_student), 15)
+
+        # Perform additional submission but xp remains the same
+        baker.make(QuestSubmission, user=self.test_student, quest=self.quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.test_student), 15)
 
     def test_no_comment_verification_not_required(self):
         """ When a quest is automatically approved, it does not require a comment
@@ -746,6 +764,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -958,6 +977,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -1154,11 +1174,11 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # but it should appear when we view all quests
         response = self.client.get(reverse('quests:available_all'))
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
-        
+
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
-        
-        
+
+
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
@@ -1172,10 +1192,10 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
         # self.category = baker.make('quests_manager.category', name="testcat")
-        
+
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
-        
+
         self.assertRedirectsAdmin('quests:categories')
         self.assertRedirectsAdmin('quests:category_create')
         self.assertRedirectsAdmin('quests:category_update', args=[1])
@@ -1205,7 +1225,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_CategoryCreate_view(self):
-        
+
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -1243,7 +1263,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
-    
+
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
 
