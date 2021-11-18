@@ -788,7 +788,10 @@ def complete(request, submission_id):
 
         # form = CommentForm(request.POST or None, wysiwyg=True, label="")
         # form = SubmissionQuickReplyForm(request.POST)
-        form = SubmissionForm(request.POST, request.FILES)
+        if submission.quest.xp_can_be_entered_by_students:
+            form = SubmissionFormCustomXP(request.POST, request.FILES)
+        else:
+            form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
@@ -803,6 +806,9 @@ def complete(request, submission_id):
                     return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
+
+            if submission.quest.xp_can_be_entered_by_students:
+                comment_text += f"<ul><li><b>XP requested: {submission.xp_requested}</b></li></ul>"
 
             comment_new = Comment.objects.create_comment(
                 user=request.user,
