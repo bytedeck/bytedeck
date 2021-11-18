@@ -808,7 +808,8 @@ def complete(request, submission_id):
                     comment_text = "(submitted without comment)"
 
             if submission.quest.xp_can_be_entered_by_students:
-                comment_text += f"<ul><li><b>XP requested: {submission.xp_requested}</b></li></ul>"
+                xp_requested = form.cleaned_data.get('xp_requested')
+                comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
             comment_new = Comment.objects.create_comment(
                 user=request.user,
@@ -849,7 +850,8 @@ def complete(request, submission_id):
                 if form.cleaned_data.get('comment_text') and not submission.quest.verification_required:
                     affected_users.extend(request.user.profile.current_teachers())
 
-                submission.mark_completed()
+                xp_requested = form.cleaned_data.get('xp_requested') if submission.quest.xp_can_be_entered_by_students else 0
+                submission.mark_completed(xp_requested)
                 if not submission.quest.verification_required:
                     submission.mark_approved()
 

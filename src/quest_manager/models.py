@@ -803,7 +803,7 @@ class QuestSubmission(models.Model):
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})
 
-    def mark_completed(self):
+    def mark_completed(self, xp_requested=0):
         self.is_completed = True
         self.time_completed = timezone.now()
         # this is only set the first time, so it can be referenced to
@@ -811,6 +811,7 @@ class QuestSubmission(models.Model):
         if self.first_time_completed is None:
             self.first_time_completed = self.time_completed
         self.draft_text = None  # clear draft stuff
+        self.xp_requested = xp_requested
         self.save()
 
     def mark_approved(self, transfer=False):
