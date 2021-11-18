@@ -49,7 +49,7 @@ class QuestForm(forms.ModelForm):
 
     class Meta:
         model = Quest
-        fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
+        fields = ('name', 'visible_to_students', 'xp', 'xp_enterable_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
@@ -109,6 +109,7 @@ class QuestForm(forms.ModelForm):
             Div(
                 'name',
                 'xp',
+                'xp_enterable_by_students',
                 'visible_to_students',
                 'verification_required',
                 'icon',
