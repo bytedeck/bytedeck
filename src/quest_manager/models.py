@@ -6,6 +6,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
+from django.db.models.functions import Greatest
 # from django.shortcuts import get_object_or_404
 # from django.templatetags.static import static
 from django.urls import reverse
@@ -702,13 +703,17 @@ class QuestSubmissionManager(models.Manager):
         # Get all of the user's XP granting submissions for the active semester
         submissions_qs = self.all_approved(user, up_to_date=date).grant_xp()
         # print("\nSubmission_qs: ", submissions_qs)
-        # submissions_qs = submissions_qs.annotate(xp_to_grant=)
-        submission_xps = submissions_qs.order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp')) 
-        # print("\nSubmission_xps: ", submission_xps)
+
+        # annotate with xp_earned, since xp could come from xp_requested on the submission, or from the quest's xp value
+        # take the greater value (since custom entry have the quest.xp as a minimum)
+        submissions_qs = submissions_qs.annotate(xp_earned=Greatest('quest__xp', 'xp_requested'))
+
+        # sum the xp_earned to prevent going over the max_xp per quest
+        submission_xps = submissions_qs.order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('xp_earned'))
 
         for submission_xp in submission_xps:
 
-            if submission_xp['quest__max_xp'] == -1:
+            if submission_xp['quest__max_xp'] == -1:  # no limit
                 total_xp += submission_xp['xp_sum']
             else:
                 # Prevent xp going over the maximum gainable xp
