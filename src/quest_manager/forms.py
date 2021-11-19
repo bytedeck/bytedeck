@@ -207,9 +207,13 @@ class SubmissionFormCustomXP(SubmissionForm):
     xp_requested = forms.IntegerField(
         label="Requested XP", 
         required=True, 
-        min_value=0,
         help_text="You need to request an XP value for this submission."
     )
+
+    def __init__(self, *args, **kwargs):
+        minimum_xp = kwargs.pop('minimum_xp', 0)
+        super().__init__(*args, **kwargs)
+        self.fields['xp_requested'].widget.attrs['min'] = minimum_xp
 
 
 class SubmissionFormStaff(SubmissionForm):

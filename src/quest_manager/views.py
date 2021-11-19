@@ -1067,7 +1067,7 @@ def submission(request, submission_id=None, quest_id=None):
         initial = {'comment_text': sub.draft_text}
         if sub.quest.xp_can_be_entered_by_students:
             initial['xp_requested'] = sub.quest.xp
-            main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial)
+            main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial, minimum_xp=sub.quest.xp)
         else:
             main_comment_form = SubmissionForm(request.POST or None, initial=initial)
 
