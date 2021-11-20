@@ -34,6 +34,12 @@
                    - every {{ quest.hours_between_repeats}} hrs
                    {% endif %}
                 {% endif %}</li>
+          {% if quest.max_repeats != 0 %}
+          <li>Maximum total XP: {% if quest.max_xp == -1 %} Unlimited
+              {% else %} {{quest.max_xp}}
+              {% endif %}
+          </li>
+          {% endif %}
           <li>Requirements:
                 {% for p in quest.prereqs %}
                   {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
