@@ -47,7 +47,7 @@
             <div class="col-sm-5 col-xs-8">{{q.name}}
               {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
             </div>
-            <div class="col-sm-1 col-xs-2 text-right">{% if q.xp_can_be_entered_by_students %}?{% else %}{{q.xp}}{% endif %}</div>
+            <div class="col-sm-1 col-xs-2 text-right">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</div>
             <div class="col-sm-2 hidden-xs text-center"><small>
               {% if q.campaign %}{{q.campaign}}{% endif %}
             </small></div>

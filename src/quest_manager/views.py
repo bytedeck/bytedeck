@@ -771,8 +771,7 @@ def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
-    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are
-         recalculated directly/synchromously, so that their available quest list is up to date
+    - If the quest is automatically approved, then the submission is also marked as approved
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
@@ -786,9 +785,7 @@ def complete(request, submission_id):
         if 'complete' not in request.POST and 'comment' not in request.POST:
             raise Http404("unrecognized submit button")
 
-        # form = CommentForm(request.POST or None, wysiwyg=True, label="")
-        # form = SubmissionQuickReplyForm(request.POST)
-        if submission.quest.xp_can_be_entered_by_students:
+        if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
             form = SubmissionFormCustomXP(request.POST, request.FILES)
         else:
             form = SubmissionForm(request.POST, request.FILES)
@@ -807,7 +804,7 @@ def complete(request, submission_id):
                 else:
                     comment_text = "(submitted without comment)"
 
-            if submission.quest.xp_can_be_entered_by_students:
+            if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
                 xp_requested = form.cleaned_data.get('xp_requested')
                 comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
@@ -1065,7 +1062,7 @@ def submission(request, submission_id=None, quest_id=None):
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
         initial = {'comment_text': sub.draft_text}
-        if sub.quest.xp_can_be_entered_by_students:
+        if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             initial['xp_requested'] = sub.quest.xp
             main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial, minimum_xp=sub.quest.xp)
         else:
