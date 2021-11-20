@@ -6,6 +6,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
+from django.db.models.functions import Greatest
 # from django.shortcuts import get_object_or_404
 # from django.templatetags.static import static
 from django.urls import reverse
@@ -51,6 +52,10 @@ class XPItem(models.Model):
     """
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
+    xp_can_be_entered_by_students = models.BooleanField(
+        default=False,
+        help_text="Allow students to enter a custom XP value for their submission of this quest. The XP field above becomes the minimum value."
+    )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
@@ -693,12 +698,22 @@ class QuestSubmissionManager(models.Manager):
         """
         Return the number of XP earned by a student for all xp-granting quests that they have completed, up to and including the specified date.
         """
-        submission_xps = self.all_approved(user, up_to_date=date).grant_xp().order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('quest__xp'))
         total_xp = 0
+
+        # Get all of the user's XP granting submissions for the active semester
+        submissions_qs = self.all_approved(user, up_to_date=date).grant_xp()
+        # print("\nSubmission_qs: ", submissions_qs)
+
+        # annotate with xp_earned, since xp could come from xp_requested on the submission, or from the quest's xp value
+        # take the greater value (since custom entry have the quest.xp as a minimum)
+        submissions_qs = submissions_qs.annotate(xp_earned=Greatest('quest__xp', 'xp_requested'))
+
+        # sum the xp_earned to prevent going over the max_xp per quest
+        submission_xps = submissions_qs.order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('xp_earned'))
 
         for submission_xp in submission_xps:
 
-            if submission_xp['quest__max_xp'] == -1:
+            if submission_xp['quest__max_xp'] == -1:  # no limit
                 total_xp += submission_xp['xp_sum']
             else:
                 # Prevent xp going over the maximum gainable xp
@@ -767,6 +782,11 @@ class QuestSubmission(models.Model):
                                    on_delete=models.SET_NULL)
     draft_text = models.TextField(null=True, blank=True)
 
+    xp_requested = models.PositiveIntegerField(
+        default=0,
+        help_text='The number of XP you are requesting for this submission.'
+    )
+
     class Meta:
         ordering = ["time_approved", "time_completed"]
 
@@ -794,7 +814,7 @@ class QuestSubmission(models.Model):
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})
 
-    def mark_completed(self):
+    def mark_completed(self, xp_requested=0):
         self.is_completed = True
         self.time_completed = timezone.now()
         # this is only set the first time, so it can be referenced to
@@ -802,6 +822,7 @@ class QuestSubmission(models.Model):
         if self.first_time_completed is None:
             self.first_time_completed = self.time_completed
         self.draft_text = None  # clear draft stuff
+        self.xp_requested = xp_requested
         self.save()
 
     def mark_approved(self, transfer=False):

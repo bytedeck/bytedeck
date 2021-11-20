@@ -1,8 +1,9 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
+# from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
 from quest_manager.models import Quest, QuestSubmission
@@ -350,65 +351,135 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
 
-    def test_quest_submission_manager_get_queryset_default(self):
-        """QuestSubmissionManager.get_queryset should return all visible not archived quest submissions"""
-        submissions = self.make_test_submissions_stack()
-        SiteConfig.get().set_active_semester(submissions[0].semester.id)
-        qs = QuestSubmission.objects.get_queryset().order_by('id').values_list('id', flat=True)
-        self.assertListEqual(list(qs), [submissions[0].id, submissions[1].id])
+        self.sub1, self.sub2 = self.make_test_submissions_stack()
+        self.active_semester = self.sub1.semester
+        SiteConfig.get().set_active_semester(self.active_semester.id)
 
-    def test_quest_submission_manager_get_queryset_for_active_semester(self):
-        submissions = self.make_test_submissions_stack()
-        SiteConfig.get().set_active_semester(submissions[0].semester.id)
-        qs = QuestSubmission.objects.get_queryset(active_semester_only=True).values_list('id', flat=True)
-        self.assertListEqual(list(qs), [submissions[0].id])
+    def test_get_queryset_default(self):
+        """QuestSubmissionManager.get_queryset by default should return all visible, not archived quest submissions"""
+        qs = QuestSubmission.objects.get_queryset()
+        self.assertQuerysetEqual(qs, [repr(self.sub1), repr(self.sub2)], ordered=False)
 
-    def test_quest_submission_manager_get_queryset_for_all_quests(self):
-        submissions = self.make_test_submissions_stack()
-        SiteConfig.get().set_active_semester(submissions[0].semester.id)
+    def test_get_queryset_for_active_semester(self):
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
+        self.assertQuerysetEqual(qs, [repr(self.sub1)])
+
+    def test_get_queryset_for_all_quests(self):
         qs = QuestSubmission.objects.get_queryset(
             exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
         self.assertEqual(qs.count(), 7)
 
-    def test_quest_submission_manager_all_for_user_quest(self):
+    def test_all_for_user_quest(self):
         """
         QuestSubmissionManager.all_for_user_quest should return all visible not archived quest submissions
         for active semester, given user and quest
         """
-        submissions = self.make_test_submissions_stack()
-        active_semester = submissions[0].semester
-        quest = submissions[0].quest
-        first = baker.make(QuestSubmission, user=self.student, quest=quest, semester=active_semester)
-        SiteConfig.get().set_active_semester(active_semester)
-        qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True).values_list('id', flat=True)
-        self.assertListEqual(list(qs), [first.id])
+        quest = self.sub1.quest
+        first = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
+        qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True)
+        self.assertQuerysetEqual(qs, [repr(first)])
 
     def make_test_submissions_stack(self):
+        """Generate 7 submissions, 3 from one semester and 4 from a different semester, each with different settings
+
+        Returns:
+            [tuple]: the two submissions, one from each semester, where the quest is visible and not archived
+        """
         semester = baker.make(Semester)
         another_semester = baker.make(Semester)
 
-        quest1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=semester)
+        sub1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=True, quest__archived=True, semester=semester)
 
-        quest2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=True, semester=another_semester)
-        baker.make(QuestSubmission, quest__visible_to_students=False, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=True, semester=another_semester)
+        sub2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=True, quest__archived=True, semester=another_semester)
 
-        return quest1, quest2
+        return sub1, sub2
 
-    def test_complete_more_submissions_no_additional_xp(self):
+    def test_calculate_xp(self):
+        """QuestSubmissionManager.calculate_xp should return the correct amount of xp for some approved submissions"""
+
+        # Create some approved submissions
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=3)
+        # There are already some unapproved submissions for this student from the submission stack created in SetUp
+        xp = QuestSubmission.objects.calculate_xp(self.student)
+        self.assertEqual(xp, 13)
+
+    def test_calculate_xp_to_date(self):
+        """QuestSubmissionManager.calculate_xp_to_date should not include xp earned up to and including the date.
+        """
+        # Create some approved submissions from after the `to_date``, should show up in XP
+        baker.make(
+            QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, 
+            quest__xp=10, time_approved=datetime(2017, 10, 13, tzinfo=timezone.utc)
+        )
+        xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
+        self.assertEqual(xp, 0)
+
+        # Approve a sub on the same date and time, should show up in xp calculation
+        baker.make(
+            QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, 
+            quest__xp=3, time_approved=datetime(2017, 10, 12, tzinfo=timezone.utc)
+        )
+        xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
+        self.assertEqual(xp, 3)
+
+    def test_calculate_xp_with_xp_requested(self):
+        """If student can request a custom xp value for a submission, that xp should be properly included
+        """
+        # Create an approved submission
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+
+        # Create a submission with a custom XP value
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=3, xp_requested=5)
+
+        xp = QuestSubmission.objects.calculate_xp(self.student)
+        # Should add the custom_xp value, if any.
+        self.assertEqual(xp, 15)
+
+    def test_calculate_xp_with_max_xp(self):
         """
         Student can complete quests that are availabe to them multiple times but they cannot earn xp more than the max_xp
         that can be gained in a repeatable quest
         """
-        semester = SiteConfig.get().active_semester
         quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
-        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=semester, is_approved=True, _quantity=3)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, 
+            semester=self.active_semester, is_approved=True, _quantity=3
+        )
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
         # Perform additional submission but xp remains the same
-        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=semester, is_approved=True)
+        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True)
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
+
+    def test_calculate_xp_with_xp_requested_and_max_xp(self):
+        """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
+        """
+        # Create an approved submission
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+
+        # Create a repeatable quest with custom xp.
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=17)
+        # submission with a custom XP values
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=8)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=10)
+
+        xp = QuestSubmission.objects.calculate_xp(self.student)
+        # Should be the max_xp value + 10 (17+10) = 27), since request XP 10 + 8 = 18 is greater than the max_xp of 17
+        self.assertEqual(xp, 27)
+
+        # Create a 2nd repeatable quest with custom xp.
+        quest = baker.make(Quest, xp=1, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=3)
+        # submission with a custom XP values
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=1)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=5)
+
+        # despite 1 + 5, should only add 3 xp since max_xp is 3 for this repeatable quest
+        xp = QuestSubmission.objects.calculate_xp(self.student)
+        self.assertEqual(xp, 30)

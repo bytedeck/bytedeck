@@ -246,7 +246,7 @@ class SubmissionTestModel(TenantTestCase):
         """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""
         minutes = 5
         time_delta = datetime.timedelta(0, minutes * 60)
-        print(time_delta.total_seconds())
+        # print(time_delta.total_seconds())
         self.submission.mark_completed()
 
         # fake the completion time
