@@ -596,7 +596,12 @@ class CytoScape(models.Model):
         if len(title) > max_len:
             title = title[:(max_len - 3)] + "..."  # + title[-int(l/2-2):]
         if hasattr(obj, 'xp'):
-            post = " (" + str(obj.xp) + ")"
+            if hasattr(obj, 'xp_can_be_entered_by_students') and obj.xp_can_be_entered_by_students:
+                plus = "+"
+            else:
+                plus = ""
+            post = f" ({str(obj.xp)}{plus})"
+            
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
