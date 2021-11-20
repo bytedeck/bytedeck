@@ -1,5 +1,7 @@
 import json
 import uuid
+from django.utils.decorators import method_decorator
+from django.views.generic.list import ListView
 
 import numpy as np
 
@@ -7,7 +9,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import F, ExpressionWrapper, fields
 from django.http import HttpResponse, JsonResponse
@@ -24,15 +26,53 @@ from notifications.signals import notify
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
                     SubmissionQuickReplyForm, TAQuestForm)
-from .models import Quest, QuestSubmission
+from .models import Quest, QuestSubmission, Category
 
 User = get_user_model()
 
 
 def is_staff_or_TA(user):
     return user.is_staff or user.profile.is_TA
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = Category
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        
+        kwargs['heading'] = 'Create New Campaign'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('title', 'icon', 'active')
+    model = Category
+    success_url = reverse_lazy('quests:categories')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Campaign'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Category
+    success_url = reverse_lazy('quests:categories')
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
@@ -731,8 +771,7 @@ def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
-    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are
-         recalculated directly/synchromously, so that their available quest list is up to date
+    - If the quest is automatically approved, then the submission is also marked as approved
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
@@ -746,9 +785,10 @@ def complete(request, submission_id):
         if 'complete' not in request.POST and 'comment' not in request.POST:
             raise Http404("unrecognized submit button")
 
-        # form = CommentForm(request.POST or None, wysiwyg=True, label="")
-        # form = SubmissionQuickReplyForm(request.POST)
-        form = SubmissionForm(request.POST, request.FILES)
+        if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
+            form = SubmissionFormCustomXP(request.POST, request.FILES)
+        else:
+            form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
@@ -763,6 +803,10 @@ def complete(request, submission_id):
                     return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
+
+            if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
+                xp_requested = form.cleaned_data.get('xp_requested')
+                comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
             comment_new = Comment.objects.create_comment(
                 user=request.user,
@@ -803,7 +847,8 @@ def complete(request, submission_id):
                 if form.cleaned_data.get('comment_text') and not submission.quest.verification_required:
                     affected_users.extend(request.user.profile.current_teachers())
 
-                submission.mark_completed()
+                xp_requested = form.cleaned_data.get('xp_requested') if submission.quest.xp_can_be_entered_by_students else 0
+                submission.mark_completed(xp_requested)
                 if not submission.quest.verification_required:
                     submission.mark_approved()
 
@@ -957,11 +1002,13 @@ def ajax_save_draft(request):
 
         submission_comment = request.POST.get('comment')
         submission_id = request.POST.get('submission_id')
+        # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
         if sub.draft_text != submission_comment:
             sub.draft_text = submission_comment
+            # sub.xp_requested = xp_requested
             response_data['result'] = 'Draft saved'
             sub.save()
 
@@ -1015,7 +1062,11 @@ def submission(request, submission_id=None, quest_id=None):
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
         initial = {'comment_text': sub.draft_text}
-        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+        if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
+            initial['xp_requested'] = sub.quest.xp
+            main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial, minimum_xp=sub.quest.xp)
+        else:
+            main_comment_form = SubmissionForm(request.POST or None, initial=initial)
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")

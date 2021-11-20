@@ -27,6 +27,9 @@ urlpatterns = [
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),
+    path('ranks/create/', views.RankCreate.as_view(), name='rank_create'),
+    path('ranks/<pk>/edit/', views.RankUpdate.as_view(), name='rank_update'),
+    path('ranks/<pk>/delete/', views.RankDelete.as_view(), name='rank_delete'),
 
     # Marks
     path('marks/', views.mark_calculations, name='my_marks'),

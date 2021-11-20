@@ -1,0 +1,26 @@
+  <div class="btn-group" role="group">
+
+    {% if not s.is_approved %}
+      <button type='submit' name='approve_button' class='btn btn-success'
+              title='APPROVE the quest and grant its XP'>
+          <i class="fa fa-fw fa-check"></i>
+      </button>
+    {% endif %}
+
+    <button type='submit' name='comment_button' class='btn btn-primary'
+            title='COMMENT without approving or returning the quest'>
+        <i class="fa fa-fw fa-comment"></i>
+    </button>
+
+    {% if not s.is_returned %}
+      <button type='submit' name='return_button' class='btn btn-danger'
+              title='RETURN this quest to the student without accepting it'>
+        <i class="fa fa-fw fa-times"></i>
+      </button>
+    {% endif %}
+
+    <a class="btn btn-warning" data-target="#quick_reply{{s.id}}" id= "btn_quick_text{{s.id}}" role="button"
+       title='ADD TEXT: "{{ quick_reply_text }}"'>
+       <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i>
+    </a>
+  </div>

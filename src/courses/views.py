@@ -59,6 +59,39 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class RankCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('name', 'xp', 'icon', 'fa_icon')
+    model = Rank
+    success_url = reverse_lazy('courses:ranks')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Rank'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class RankUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('name', 'xp', 'icon', 'fa_icon')
+    model = Rank
+    success_url = reverse_lazy('courses:ranks')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Rank'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class RankDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Rank
+    success_url = reverse_lazy('courses:ranks')
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Course
 

@@ -38,7 +38,9 @@
               <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
             <div class="col-sm-4 col-xs-5">{{s.quest_name}}</div>
-            <div class="col-sm-1 col-xs-2">{{s.quest.xp}}  </div>
+            <div class="col-sm-1 col-xs-2">
+              {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            </div>
             <div class="col-sm-1 hidden-xs">
               {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
             </div>
@@ -69,7 +71,10 @@
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ quick_reply_form | crispy }}
-            {% include "quest_manager/buttons_approvals.html" %}
+            <div>
+              {% include "quest_manager/submission_buttons_form.html" %}
+              {% include "quest_manager/submission_buttons_other.html" %}
+            </div>
           </form>
         </li>
 
