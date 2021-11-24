@@ -717,7 +717,7 @@ class QuestSubmissionManager(models.Manager):
                 total_xp += submission_xp['xp_sum']
             else:
                 # Prevent xp going over the maximum gainable xp
-                total_xp += min(submission_xp['xp_sum'], submission_xp['quest__max_xp'])
+                total_xp += min(submission_xp['xp_sum'], submission_xp['quest__max_xp'] or 0)  # quest__max_xp is None if quest is deleted, so `or 0`
 
         return total_xp
 

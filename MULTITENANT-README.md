@@ -62,4 +62,14 @@ $ bash init_public_schema.sh
 
 _Note: scheman_name_to_dump_in is same as tenant's name._
 
+## Command line only Tasks
+
+### Accessing the django shell
+
+`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "./src/manage.py tenant_command shell"`
+
+
+### Deleting a Tenant
+For security purposes, and to prevent mistakes, deleting a tenant can only be done via command line
+
 

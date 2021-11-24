@@ -11,3 +11,4 @@ flake8>=3.7
 coveralls>=2.0.0,<3.0
 names
 namegenerator
+tblib
