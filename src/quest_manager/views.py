@@ -311,15 +311,26 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     page = request.GET.get('page')
 
-    # need these anyway to count them.
-    # get_available is not a queryset, cant use .count()
+    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
+    completed_submissions = QuestSubmission.objects.all_completed(request.user)
+
+    if request.user.is_staff:
+        available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
+    else:
+        if request.user.profile.has_current_course:
+            available_quests = Quest.objects.get_available(request.user, remove_hidden)
+        else:
+            available_quests = Quest.objects.get_available_without_course(request.user)
+
+    available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
+    in_progress_submissions_count = in_progress_submissions.count()
+    completed_submissions_count = completed_submissions.count()
 
     if in_progress_tab_active:
-        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
     elif completed_tab_active:
-        completed_submissions = QuestSubmission.objects.all_completed(request.user)
+        completed_submissions_count = completed_submissions.count()
         completed_submissions = paginate(completed_submissions, page)
         # available_quests = []
     elif past_tab_active:
@@ -328,16 +339,17 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         # available_quests = []
     elif drafts_tab_active:
         draft_quests = Quest.objects.all_drafts(request.user)
-    else:
-        if request.user.is_staff:
-            available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
-            # num_available = available_quests.count()
-        else:
-            if request.user.profile.has_current_course:
-                available_quests = Quest.objects.get_available(request.user, remove_hidden)
-            # num_available = len(available_quests)
-            else:
-                available_quests = Quest.objects.get_available_without_course(request.user)
+    # else:
+    #     if request.user.is_staff:
+    #         available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
+    #         available_quests_count = available_quests.count()
+    #     else:
+    #         if request.user.profile.has_current_course:
+    #             available_quests = Quest.objects.get_available(request.user, remove_hidden)
+    #             available_quests_count = len(available_quests)
+    #         else:
+    #             available_quests = Quest.objects.get_available_without_course(request.user)
+    #             available_quests_count = available_quests.count()
 
     # paginate or no?
     # available_quests = paginate(available_quests, page)
@@ -349,13 +361,13 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "heading": "Quests",
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
-        # "num_available": num_available,
+        "num_available": available_quests_count,
         "in_progress_submissions": in_progress_submissions,
-        # "num_inprogress": num_inprogress,
+        "num_inprogress": in_progress_submissions_count,
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
         "past_submissions": past_submissions,
-        # "num_completed": num_completed,
+        "num_completed": completed_submissions_count,
         "active_q_id": active_quest_id,
         "available_tab_active": available_tab_active,
         "inprogress_tab_active": in_progress_tab_active,
