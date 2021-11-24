@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
-# from django.test import tag
+from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
 from quest_manager.models import Quest, QuestSubmission
@@ -483,3 +483,32 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # despite 1 + 5, should only add 3 xp since max_xp is 3 for this repeatable quest
         xp = QuestSubmission.objects.calculate_xp(self.student)
         self.assertEqual(xp, 30)
+
+    def test_calculate_xp_with_deleted_quest(self):
+        """This method shouldn't break if a submission's quest has been deleted
+        """
+        # Give student 10 XP
+        baker.make(QuestSubmission, user=self.student, quest__xp=10, semester=self.active_semester, is_approved=True)
+
+        # Another quest that we'll delete
+        quest_5xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest_5xp, 
+            semester=self.active_semester, is_approved=True
+        )
+        
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
+
+        # now delete the quest (submission is still there though!) Shouldn't break!
+        quest_5xp.delete()
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 10)
+
+        # Create a repeatable quest with custom xp.
+        quest_5xp_custom = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=17)
+        # submission with a custom XP values
+        baker.make(QuestSubmission, quest=quest_5xp_custom, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=8)
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 18)
+
+        # now delete the custom_xp quest (submission is still there though!) Shouldn't break!
+        quest_5xp_custom.delete()
+        self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 10)
