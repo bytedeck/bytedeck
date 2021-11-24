@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
-from django.test import tag
+# from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
 from quest_manager.models import Quest, QuestSubmission
