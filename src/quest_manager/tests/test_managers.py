@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
-from django.test import tag
+# from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
 from quest_manager.models import Quest, QuestSubmission
@@ -343,22 +343,15 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-
-class QuestSubmissionQuerysetTest(TenantTestCase):
-
-    def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
+    def test_for_teacher_only(self):
+        """Returned qs should only include sub my students in the teacher's block(s).  Also 
+        add a specific_teacher_to_notify and make sure that one appears too
+        """
 
         self.quest = baker.make(Quest)
         self.active_semester = baker.make(Semester)
         self.sub = baker.make(QuestSubmission, user=self.student, quest=self.quest, semester=self.active_semester)
         SiteConfig.get().set_active_semester(self.active_semester.id)
-
-    def test_for_teacher_only(self):
-        """Returned qs should only include sub my students in the teacher's block(s).  Also 
-        add a specific_teacher_to_notify and make sure that one appears too
-        """
 
         # Needs a course for the student, in a block with the teacher
         block = baker.make('courses.Block', current_teacher=self.teacher)
@@ -380,9 +373,13 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.all()
         self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub), repr(sub2)], ordered=False)
 
-    @tag('do')
     def test_for_teachers_only__with_deleted_quest(self):
         """for_teachers_only shouldn't break if a submission's quest has been deleted"""
+
+        self.quest = baker.make(Quest)
+        self.active_semester = baker.make(Semester)
+        self.sub = baker.make(QuestSubmission, user=self.student, quest=self.quest, semester=self.active_semester)
+        SiteConfig.get().set_active_semester(self.active_semester.id)
 
         # Needs a course for the student, in a block with the teacher
         block = baker.make('courses.Block', current_teacher=self.teacher)
