@@ -1,4 +1,4 @@
-from bootstrap_datepicker_plus import DatePickerInput
+from bootstrap_datepicker_plus.widgets import DatePickerInput
 from django import forms
 from django_summernote.widgets import SummernoteInplaceWidget
 
