@@ -208,7 +208,8 @@ class Comment(models.Model):
 # Document Handler ############################################
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
-    comment = models.ForeignKey(Comment, on_delete=models.SET_NULL, null=True)
+    # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)  
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!
