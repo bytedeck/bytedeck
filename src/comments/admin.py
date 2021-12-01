@@ -11,5 +11,11 @@ class CommentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         model = Comment
 
 
+class DocumentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+
+    class Meta:
+        model = Document
+
+
 admin.site.register(Comment, CommentAdmin)
-admin.site.register(Document)
+admin.site.register(Document, DocumentAdmin)
