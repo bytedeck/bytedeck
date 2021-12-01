@@ -26,7 +26,7 @@ from notifications.signals import notify
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import (QuestForm, SubmissionForm, SubmissionFormStaff,
+from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
                     SubmissionQuickReplyForm, TAQuestForm)
 from .models import Quest, QuestSubmission, Category
 
@@ -311,33 +311,51 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     page = request.GET.get('page')
 
-    # need these anyway to count them.
-    # get_available is not a queryset, cant use .count()
+    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
+    completed_submissions = QuestSubmission.objects.all_completed(request.user)
+
+    if request.user.is_staff:
+        available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
+    else:
+        if request.user.profile.has_current_course:
+            available_quests = Quest.objects.get_available(request.user, remove_hidden)
+        else:
+            available_quests = Quest.objects.get_available_without_course(request.user)
+
+    available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
+
+    in_progress_submissions_count = in_progress_submissions.count()
+    completed_submissions_count = completed_submissions.count()
+
+    draft_quests = Quest.objects.all_drafts(request.user)
+    drafts_count = draft_quests.count()
+
+    past_submissions = QuestSubmission.objects.all_completed_past(request.user)
+    past_submissions_count = past_submissions.count()
 
     if in_progress_tab_active:
-        in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
     elif completed_tab_active:
-        completed_submissions = QuestSubmission.objects.all_completed(request.user)
+        # completed_submissions_count = completed_submissions.count()
         completed_submissions = paginate(completed_submissions, page)
         # available_quests = []
     elif past_tab_active:
-        past_submissions = QuestSubmission.objects.all_completed_past(request.user)
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
-    elif drafts_tab_active:
-        draft_quests = Quest.objects.all_drafts(request.user)
-    else:
-        if request.user.is_staff:
-            available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
-            # num_available = available_quests.count()
-        else:
-            if request.user.profile.has_current_course:
-                available_quests = Quest.objects.get_available(request.user, remove_hidden)
-            # num_available = len(available_quests)
-            else:
-                available_quests = Quest.objects.get_available_without_course(request.user)
+    # elif drafts_tab_active:
+    #     draft_quests = Quest.objects.all_drafts(request.user)
+    # else:
+    #     if request.user.is_staff:
+    #         available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
+    #         available_quests_count = available_quests.count()
+    #     else:
+    #         if request.user.profile.has_current_course:
+    #             available_quests = Quest.objects.get_available(request.user, remove_hidden)
+    #             available_quests_count = len(available_quests)
+    #         else:
+    #             available_quests = Quest.objects.get_available_without_course(request.user)
+    #             available_quests_count = available_quests.count()
 
     # paginate or no?
     # available_quests = paginate(available_quests, page)
@@ -349,13 +367,15 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "heading": "Quests",
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
-        # "num_available": num_available,
+        "num_available": available_quests_count,
         "in_progress_submissions": in_progress_submissions,
-        # "num_inprogress": num_inprogress,
+        "num_inprogress": in_progress_submissions_count,
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
+        "num_drafts": drafts_count,
         "past_submissions": past_submissions,
-        # "num_completed": num_completed,
+        "num_past": past_submissions_count,
+        "num_completed": completed_submissions_count,
         "active_q_id": active_quest_id,
         "available_tab_active": available_tab_active,
         "inprogress_tab_active": in_progress_tab_active,
@@ -771,8 +791,7 @@ def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
-    - If the quest is automatically approved, then the submission is also marked as approved, and available quests are
-         recalculated directly/synchromously, so that their available quest list is up to date
+    - If the quest is automatically approved, then the submission is also marked as approved
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
@@ -786,9 +805,10 @@ def complete(request, submission_id):
         if 'complete' not in request.POST and 'comment' not in request.POST:
             raise Http404("unrecognized submit button")
 
-        # form = CommentForm(request.POST or None, wysiwyg=True, label="")
-        # form = SubmissionQuickReplyForm(request.POST)
-        form = SubmissionForm(request.POST, request.FILES)
+        if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
+            form = SubmissionFormCustomXP(request.POST, request.FILES)
+        else:
+            form = SubmissionForm(request.POST, request.FILES)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
@@ -803,6 +823,10 @@ def complete(request, submission_id):
                     return redirect(origin_path)
                 else:
                     comment_text = "(submitted without comment)"
+
+            if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
+                xp_requested = form.cleaned_data.get('xp_requested')
+                comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
             comment_new = Comment.objects.create_comment(
                 user=request.user,
@@ -843,7 +867,8 @@ def complete(request, submission_id):
                 if form.cleaned_data.get('comment_text') and not submission.quest.verification_required:
                     affected_users.extend(request.user.profile.current_teachers())
 
-                submission.mark_completed()
+                xp_requested = form.cleaned_data.get('xp_requested') if submission.quest.xp_can_be_entered_by_students else 0
+                submission.mark_completed(xp_requested)
                 if not submission.quest.verification_required:
                     submission.mark_approved()
 
@@ -997,11 +1022,13 @@ def ajax_save_draft(request):
 
         submission_comment = request.POST.get('comment')
         submission_id = request.POST.get('submission_id')
+        # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
         if sub.draft_text != submission_comment:
             sub.draft_text = submission_comment
+            # sub.xp_requested = xp_requested
             response_data['result'] = 'Draft saved'
             sub.save()
 
@@ -1055,7 +1082,11 @@ def submission(request, submission_id=None, quest_id=None):
         main_comment_form = SubmissionFormStaff(request.POST or None)
     else:
         initial = {'comment_text': sub.draft_text}
-        main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+        if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
+            initial['xp_requested'] = sub.quest.xp
+            main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial, minimum_xp=sub.quest.xp)
+        else:
+            main_comment_form = SubmissionForm(request.POST or None, initial=initial)
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")

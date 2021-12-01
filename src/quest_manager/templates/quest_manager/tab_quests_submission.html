@@ -41,7 +41,9 @@
               <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
             <div class="col-sm-5 col-xs-8">{{s.quest_name}}</div>
-            <div class="col-sm-1 col-xs-2 text-right">{{s.quest.xp}}  </div>
+            <div class="col-sm-1 col-xs-2 text-right">
+              {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            </div>
             <div class="col-sm-2 hidden-xs"><small>
               {% if s.quest.campaign %}{{ s.quest.campaign }} {% else %}-{% endif %}
             </small></div>

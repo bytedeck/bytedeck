@@ -12,6 +12,7 @@ class QuestFormTest(TenantTestCase):
             "name": "Test Quest",
             "xp": 0,
             "max_repeats": 0,
+            "max_xp": -1,
             "hours_between_repeats": 0,
             "sort_order": 0,
             "date_available": str(timezone.now().date()),
@@ -22,7 +23,7 @@ class QuestFormTest(TenantTestCase):
         """The minimal_valid_data provided in the setup method should be valid!"""
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
-    
+
     def test_hideable_blocking_both_true(self):
         """If a quest is Blocking then it should not validate if it is also Hideable"""
         form_data = self.minimal_valid_data

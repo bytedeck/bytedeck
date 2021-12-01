@@ -49,10 +49,10 @@ class QuestForm(forms.ModelForm):
 
     class Meta:
         model = Quest
-        fields = ('name', 'visible_to_students', 'xp', 'icon', 'short_description',
+        fields = ('name', 'visible_to_students', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
-                  'repeat_per_semester', 'max_repeats', 'hours_between_repeats',
+                  'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
@@ -109,6 +109,7 @@ class QuestForm(forms.ModelForm):
             Div(
                 'name',
                 'xp',
+                'xp_can_be_entered_by_students',
                 'visible_to_students',
                 'verification_required',
                 'icon',
@@ -142,6 +143,7 @@ class QuestForm(forms.ModelForm):
                     ),
                     AccordionGroup(
                         "Advanced",
+                        'max_xp',
                         'repeat_per_semester',
                         'specific_teacher_to_notify',
                         'blocking',
@@ -164,7 +166,7 @@ class QuestForm(forms.ModelForm):
                 style="margin-top: 10px;"
             )
         )
-    
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -199,6 +201,19 @@ class SubmissionForm(forms.Form):
                                           widget=forms.ClearableFileInput(attrs={'multiple': True}),
                                           label="Attach files",
                                           help_text="Hold Ctrl to select multiple files, 16MB limit per file")
+
+
+class SubmissionFormCustomXP(SubmissionForm):
+    xp_requested = forms.IntegerField(
+        label="Requested XP", 
+        required=True, 
+        help_text="You need to request an XP value for this submission."
+    )
+
+    def __init__(self, *args, **kwargs):
+        minimum_xp = kwargs.pop('minimum_xp', 0)
+        super().__init__(*args, **kwargs)
+        self.fields['xp_requested'].widget.attrs['min'] = minimum_xp
 
 
 class SubmissionFormStaff(SubmissionForm):

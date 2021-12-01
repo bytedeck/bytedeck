@@ -1,5 +1,14 @@
 /********** BASIC ELEMENTS ***********/
 
+
+body {
+    /* This is because default bootstrap styling uses Helvetica, but that messes thngs up in Firefox
+    so force Arial for consistancy between Chrome and Firefox
+    see https://github.com/bytedeck/bytedeck/issues/866
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif; */
+    font-family: Arial,sans-serif;
+}
+
 h5 {
     font-weight: 700;
 }
@@ -545,7 +554,8 @@ iframe.summernotewidget.form-control {
 .panel-summernote #div_id_files,
 .panel-summernote #div_id_attachments,
 .panel-summernote #div_id_award,
-.panel-summernote #div_id_awards {
+.panel-summernote #div_id_awards,
+.panel-summernote #div_id_xp_requested {
     margin-left: 15px;
     margin-right: 15px;
 }

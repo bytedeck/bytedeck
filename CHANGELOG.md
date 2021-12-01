@@ -4,6 +4,19 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.12.1] 2021-11-24
+* Add number indicator on quest tabs [#823](https://github.com/bytedeck/bytedeck/issues/823)
+* [bugfix] Deleting quests breaks things [#868](https://github.com/bytedeck/bytedeck/issues/868).
+
+### [1.12.0] 2021-11-20
+* Add option for students to request the amount XP for their submission
+* Add a max_xp option to repeatable quests, so that students can not earn more than this (per seemster)
+* Add buttons to top of submissions for convenience [#701](https://github.com/bytedeck/bytedeck/issues/701)
+* Add views/pages on frontend for Ranks and Campaigns
+* Styling tweaks [#829](https://github.com/bytedeck/bytedeck/issues/829)
+* [bugfix] Courses form icon upload.
+
 ### [1.11.5] 2021-06-08
 * Add find and replace management command
 * [security] Update dependancy versions (Pillow, psycopg2)

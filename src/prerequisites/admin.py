@@ -1,11 +1,11 @@
 from django import forms
 from django.conf import settings
-from django.contrib import admin, messages
+from django.contrib import messages
 from django.contrib.contenttypes.admin import GenericTabularInline
 
-from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
+# from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
-from .models import Prereq, PrereqAllConditionsMet
+from .models import Prereq
 from .tasks import update_quest_conditions_all_users
 
 
@@ -51,15 +51,15 @@ def recalculate_available_quests_for_all_users(modeladmin, request, queryset):
     )
 
 
-class PrereqAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('id', 'parent', '__str__', 'name')
-    actions = [auto_name_selected_prereqs]
+# class PrereqAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+#     list_display = ('id', 'parent', '__str__', 'name')
+#     actions = [auto_name_selected_prereqs]
 
 
-class PrereqAllConditionsMetAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('id', 'user_id', 'model_name')
-    actions = [recalculate_available_quests_for_all_users]
+# class PrereqAllConditionsMetAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+#     list_display = ('id', 'user_id', 'model_name')
+#     actions = [recalculate_available_quests_for_all_users]
 
 
-admin.site.register(Prereq, PrereqAdmin)
-admin.site.register(PrereqAllConditionsMet, PrereqAllConditionsMetAdmin)
+# admin.site.register(Prereq, PrereqAdmin)
+# admin.site.register(PrereqAllConditionsMet, PrereqAllConditionsMetAdmin)

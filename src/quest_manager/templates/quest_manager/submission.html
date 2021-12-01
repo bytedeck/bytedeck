@@ -149,6 +149,7 @@
         function save_draft() {
             $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
             draftComment = $summernoteEditor.html()
+            xpRequested = $('#id_xp_requested').val()
 
             $draftSaveBtn = $('#save-draft-btn')
             old_text = $draftSaveBtn.html()
@@ -172,7 +173,8 @@
                     data : {
                       csrfmiddlewaretoken: "{{ csrf_token }}",
                       comment: draftComment,
-                      submission_id: {{ submission.id }}
+                      submission_id: {{ submission.id }},
+                      xp_requested: xpRequested
                     }, // data sent with the post request
 
                     // handle a successful response
