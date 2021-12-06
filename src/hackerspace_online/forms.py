@@ -7,8 +7,8 @@ from django.utils.translation import gettext_lazy as _
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import ResetPasswordForm, SignupForm
 from allauth.account.utils import filter_users_by_email
-# from captcha.fields import ReCaptchaField
-# from captcha.widgets import ReCaptchaV2Invisible
+from captcha.fields import ReCaptchaField
+from captcha.widgets import ReCaptchaV2Invisible
 
 from siteconfig.models import SiteConfig
 
@@ -53,10 +53,10 @@ class PublicContactForm(forms.Form):
 
     # Not using because our recaptcha key is currently set up for checkbox only
     # and doesn't also support the invisible widget.
-    # captcha = ReCaptchaField(
-    #     label='',
-    #     widget=ReCaptchaV2Invisible
-    # )
+    captcha = ReCaptchaField(
+        label='',
+        widget=ReCaptchaV2Invisible
+    )
 
     def send_email(self):
         email = self.cleaned_data["email"]
