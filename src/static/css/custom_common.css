@@ -1,5 +1,14 @@
 /********** BASIC ELEMENTS ***********/
 
+
+body {
+    /* This is because default bootstrap styling uses Helvetica, but that messes thngs up in Firefox
+    so force Arial for consistancy between Chrome and Firefox
+    see https://github.com/bytedeck/bytedeck/issues/866
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif; */
+    font-family: Arial,sans-serif;
+}
+
 h5 {
     font-weight: 700;
 }

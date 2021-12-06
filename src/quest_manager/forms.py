@@ -4,7 +4,7 @@ from datetime import date
 from django import forms
 from django.core.exceptions import ValidationError
 
-from bootstrap_datepicker_plus import DatePickerInput, TimePickerInput
+from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout

@@ -1,6 +1,6 @@
 from django import forms
 
-from bootstrap_datepicker_plus import DateTimePickerInput, TimePickerInput
+from bootstrap_datepicker_plus.widgets import DateTimePickerInput, TimePickerInput
 
 from .models import Block, Course, CourseStudent, Semester
 

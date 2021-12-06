@@ -323,22 +323,28 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             available_quests = Quest.objects.get_available_without_course(request.user)
 
     available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
+
     in_progress_submissions_count = in_progress_submissions.count()
     completed_submissions_count = completed_submissions.count()
+
+    draft_quests = Quest.objects.all_drafts(request.user)
+    drafts_count = draft_quests.count()
+
+    past_submissions = QuestSubmission.objects.all_completed_past(request.user)
+    past_submissions_count = past_submissions.count()
 
     if in_progress_tab_active:
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
     elif completed_tab_active:
-        completed_submissions_count = completed_submissions.count()
+        # completed_submissions_count = completed_submissions.count()
         completed_submissions = paginate(completed_submissions, page)
         # available_quests = []
     elif past_tab_active:
-        past_submissions = QuestSubmission.objects.all_completed_past(request.user)
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
-    elif drafts_tab_active:
-        draft_quests = Quest.objects.all_drafts(request.user)
+    # elif drafts_tab_active:
+    #     draft_quests = Quest.objects.all_drafts(request.user)
     # else:
     #     if request.user.is_staff:
     #         available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
@@ -366,7 +372,9 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "num_inprogress": in_progress_submissions_count,
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
+        "num_drafts": drafts_count,
         "past_submissions": past_submissions,
+        "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
         "active_q_id": active_quest_id,
         "available_tab_active": available_tab_active,

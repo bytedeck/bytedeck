@@ -4,6 +4,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.12.2] 2021-12-05
+* Add ReCaptcha to contact page to rpevent spam
+* Dependencies update (Datepicker Widget)[#881](https://github.com/bytedeck/bytedeck/issues/881)
+* Bugifxes:
+  - [#880](https://github.com/bytedeck/bytedeck/issues/880)
+  - [#877](https://github.com/bytedeck/bytedeck/issues/877)
+  - [#876](https://github.com/bytedeck/bytedeck/issues/876)
+  - [#865](https://github.com/bytedeck/bytedeck/issues/865)
+  - [#870](https://github.com/bytedeck/bytedeck/issues/870)
+  - [#866](https://github.com/bytedeck/bytedeck/issues/866)
+  - [#867](https://github.com/bytedeck/bytedeck/issues/867)
 
 ### [1.12.1] 2021-11-24
 * Add number indicator on quest tabs [#823](https://github.com/bytedeck/bytedeck/issues/823)

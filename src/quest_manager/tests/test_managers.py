@@ -343,6 +343,64 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
+    def test_for_teacher_only(self):
+        """Returned qs should only include sub my students in the teacher's block(s).  Also 
+        add a specific_teacher_to_notify and make sure that one appears too
+        """
+
+        self.quest = baker.make(Quest)
+        self.active_semester = baker.make(Semester)
+        self.sub = baker.make(QuestSubmission, user=self.student, quest=self.quest, semester=self.active_semester)
+        SiteConfig.get().set_active_semester(self.active_semester.id)
+
+        # Needs a course for the student, in a block with the teacher
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=self.active_semester)
+        qs = QuestSubmission.objects.all()
+
+        # Currently contains the submission from setup.
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub)])
+
+        # Add another submission from a different block, with a different teacher
+        baker.make(QuestSubmission, quest=self.quest, semester=self.active_semester)
+        # Should still only have the originally submission
+        qs = QuestSubmission.objects.all()
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub)])
+
+        # Add another submission from a different block, but this time the quest should notify the teacher
+        sub2 = baker.make(QuestSubmission, semester=self.active_semester, quest__specific_teacher_to_notify=self.teacher)
+        # print(qs.for_teacher_only(self.teacher))
+        qs = QuestSubmission.objects.all()
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub), repr(sub2)], ordered=False)
+
+    def test_for_teachers_only__with_deleted_quest(self):
+        """for_teachers_only shouldn't break if a submission's quest has been deleted"""
+
+        self.quest = baker.make(Quest)
+        self.active_semester = baker.make(Semester)
+        self.sub = baker.make(QuestSubmission, user=self.student, quest=self.quest, semester=self.active_semester)
+        SiteConfig.get().set_active_semester(self.active_semester.id)
+
+        # Needs a course for the student, in a block with the teacher
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=self.active_semester)
+
+        self.quest.delete()
+        qs = QuestSubmission.objects.all()
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
+
+        # Add another submission from a different block, but this time the quest should notify the teacher
+        quest2 = baker.make(Quest, specific_teacher_to_notify=self.teacher)
+        sub2 = baker.make(QuestSubmission, semester=self.active_semester, quest=quest2)
+        qs = QuestSubmission.objects.all()
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>', repr(sub2)], ordered=False)
+
+        # Delete this one too, shouldn't crash!
+        quest2.delete()
+        qs = QuestSubmission.objects.all()
+        # Only has the first deleted sub, because the second one no longer has a quest.specific_teacher_to_notify, so not included.
+        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
+
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestSubmissionManagerTest(TenantTestCase):
@@ -428,7 +486,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
         self.assertEqual(xp, 3)
 
-    def test_calculate_xp_with_xp_requested(self):
+    def test_calculate_xp__with_xp_requested(self):
         """If student can request a custom xp value for a submission, that xp should be properly included
         """
         # Create an approved submission
@@ -441,7 +499,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # Should add the custom_xp value, if any.
         self.assertEqual(xp, 15)
 
-    def test_calculate_xp_with_max_xp(self):
+    def test_calculate_xp__with_max_xp(self):
         """
         Student can complete quests that are availabe to them multiple times but they cannot earn xp more than the max_xp
         that can be gained in a repeatable quest
@@ -458,7 +516,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True)
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
-    def test_calculate_xp_with_xp_requested_and_max_xp(self):
+    def test_calculate_xp__ith_xp_requested_and_max_xp(self):
         """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
         """
         # Create an approved submission
@@ -484,7 +542,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         xp = QuestSubmission.objects.calculate_xp(self.student)
         self.assertEqual(xp, 30)
 
-    def test_calculate_xp_with_deleted_quest(self):
+    def test_calculate_xp__with_deleted_quest(self):
         """This method shouldn't break if a submission's quest has been deleted
         """
         # Give student 10 XP

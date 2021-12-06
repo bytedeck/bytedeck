@@ -1,5 +1,4 @@
 -r requirements-production.txt
-coverage>=5.0.1
 django-debug-toolbar>=2.1
 django-debug-toolbar-template-timings>=0.9
 ipdb>=0.12
@@ -8,7 +7,7 @@ pipdeptree>=0.13.2
 freezegun>=0.3.12
 mock>=2.0,<3.0
 flake8>=3.7
-coveralls>=2.0.0,<3.0
+coveralls  # includes coverage
 names
 namegenerator
 tblib
