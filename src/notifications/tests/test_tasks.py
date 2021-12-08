@@ -87,19 +87,16 @@ class CreateEmailNotificationTasksTest(TenantTestCase):
     def setUp(self):
         self.app = apps.get_app_config('notifications')
 
-    def test_ready_task_is_created(self):
-        """ The email notifcation task should be created in ready() on whent he app starts up"""
-        # DOES NOT HAPPEN ON TEST DB!
-        # This is because the ready() method runs on the default db, before django knows it is testing.
-        # https://code.djangoproject.com/ticket/22002
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 0)
-
-        # try running manually now that we're in testing:
-        self.app.ready()
+    def test_task_is_created_with_new_tenant(self):
+        """ The email notifcation task should be created in ready() on when the app starts up
+        BUT DOES NOT HAPPEN ON TEST DB!
+        This is because the ready() method runs on the default db, before django knows it is testing.
+        https://code.djangoproject.com/ticket/22002
+        However, we also call the method when initializing a new tenant in
+        tenant.initialization.load_initial_tenant_data()
+        """
         tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
         self.assertEqual(tasks.count(), 1)
-        self.assertEqual(tasks[0].headers, json.dumps({"_schema_name": "test"}))
 
         # ready is idempotent, doesn't cause problems running it again, doesn't create a new task:
         self.app.ready()
