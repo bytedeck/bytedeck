@@ -15,7 +15,10 @@ class NotificationsConfig(AppConfig):
 
     def create_email_notification_tasks(self):
         """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
-        saved on the public schema"""
+        saved on the public schema
+        
+        THIS METHOD MUST REMAIN IDEMPOTENT, so that it can be run multiple times without errors
+        """
 
         # https://docs.djangoproject.com/en/3.2/ref/applications/#django.apps.AppConfig.ready
         # Can't import models at the module level, so need to import in the method.
