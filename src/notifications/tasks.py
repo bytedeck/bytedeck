@@ -16,11 +16,17 @@ from .models import Notification
 User = get_user_model()
 
 
+@app.task(name='notifications.tasks.email_notifications_to_users')
+def email_notifications_to_users(root_url):
+
+    notification_emails = get_notification_emails(root_url)
+    connection = mail.get_connection()
+    connection.send_messages(notification_emails)
+    # send_email_notification_tenant.delay(root_url)
+
+
 def get_notification_emails(root_url):
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
-    # If testing with a gmail account, might want this:
-    # if len(users_to_email) > 90:
-    #     print("Gmail is limited to sending 100 emails per day... gonna trim the list!")
     subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
     html_template = get_template('notifications/email_notifications.html')
 
@@ -45,20 +51,3 @@ def get_notification_emails(root_url):
             notification_emails.append(email_msg)
 
     return notification_emails
-
-
-# Not an @app.task with tenant-schemas-celery because this is not a tenant aware task, i.e. we're doing it manually.
-# @app.task(name='notifications.tasks.send_email_notification_tenant')
-# def send_email_notification_tenant(root_url):
-#     notification_emails = get_notification_emails(root_url)
-#     connection = mail.get_connection()
-#     connection.send_messages(notification_emails)
-
-
-@app.task(name='notifications.tasks.email_notifications_to_users')
-def email_notifications_to_users(root_url):
-
-    notification_emails = get_notification_emails(root_url)
-    connection = mail.get_connection()
-    connection.send_messages(notification_emails)
-    # send_email_notification_tenant.delay(root_url)
