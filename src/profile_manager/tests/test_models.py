@@ -152,7 +152,7 @@ class ProfileTestModel(TenantTestCase):
     def test_rank(self):
         """ By default a new user has a rank"""
         default_starting_rank = "Digital Noob"
-        self.assertEqual(self.profile.rank(), default_starting_rank)
+        self.assertEqual(self.profile.rank().name, default_starting_rank)
 
 
 class SmartListTests(SimpleTestCase):

@@ -331,6 +331,21 @@ class BlockModelTest(TenantTestCase):
         self.assertTrue(Block.objects.filter(block="Default").exists())
 
 
+class RankManagerTest(TenantTestCase):
+
+    def setUp(self):
+        pass
+
+    def test_get_rank_0XP(self):
+        """ There is a default rank at 0 XP, and the site doesn't break if that rank is missing """
+        rank_0 = Rank.objects.get_rank(0)
+        self.assertIsNotNone(rank_0)
+
+        # rank_0.delete()
+        # rank_0 = Rank.objects.get_rank(0)
+        # self.assertIsNotNone(rank_0)
+
+
 class RankModelTest(TenantTestCase):
 
     def test_default_object_created(self):
