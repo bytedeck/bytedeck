@@ -149,6 +149,11 @@ class ProfileTestModel(TenantTestCase):
         # print(course_registration)
         # print(self.profile.current_teachers()) # why is this empty?!?!
 
+    def test_rank(self):
+        """ By default a new user has a rank"""
+        default_starting_rank = "Digital Noob"
+        self.assertEqual(self.profile.rank(), default_starting_rank)
+
 
 class SmartListTests(SimpleTestCase):
 
