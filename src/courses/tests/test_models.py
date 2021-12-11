@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta
 
+from django.test import tag
+
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
@@ -329,6 +331,51 @@ class BlockModelTest(TenantTestCase):
     def test_default_object_created(self):
         """ A data migration should make a default block """
         self.assertTrue(Block.objects.filter(block="Default").exists())
+
+
+@tag("do")
+class RankManagerTest(TenantTestCase):
+
+    def setUp(self):
+        pass
+
+    def test_get_rank(self):
+        """ Test that the correct rank is returned for a given XP value"""
+
+        # default ranks are create from 0-1000XP, so test above that range.
+        rank_2000 = baker.make(Rank, xp=2000)
+        rank_3000 = baker.make(Rank, xp=3000)
+        self.assertNotEqual(rank_2000, Rank.objects.get_rank(1999))
+        self.assertEqual(rank_2000, Rank.objects.get_rank(2000))
+        self.assertEqual(rank_2000, Rank.objects.get_rank(2001))
+        self.assertEqual(rank_3000, Rank.objects.get_rank(3000))
+        self.assertEqual(rank_3000, Rank.objects.get_rank(3001))
+     
+    def test_get_rank__0XP_and_deleted(self):
+        """ There is a default rank at 0 XP, and the site doesn't break if that rank is missing """
+        rank_0 = Rank.objects.get_rank(0)
+        self.assertIsNotNone(rank_0)
+
+        rank_0.delete()
+        rank_0 = Rank.objects.get_rank(0)
+        self.assertIsNotNone(rank_0)
+
+    def test_get_next_rank(self):
+        """ Test that the correct rank is returned for a given XP value"""
+
+        # default ranks are create from 0-1000XP, so test above that range.
+        rank_2000 = baker.make(Rank, xp=2000)
+        rank_3000 = baker.make(Rank, xp=3000)
+        self.assertEqual(rank_2000, Rank.objects.get_next_rank(1999))
+        self.assertEqual(rank_3000, Rank.objects.get_next_rank(2000))
+        self.assertEqual(rank_3000, Rank.objects.get_next_rank(2999))
+        self.assertEqual(None, Rank.objects.get_next_rank(3000))
+
+    def test_get_next_rank__when_deleted(self):
+        """Method can handle if ranks were deleted """
+        Rank.objects.all().delete()
+        rank_1000 = Rank.objects.get_next_rank(1000)
+        self.assertIsNone(rank_1000)
 
 
 class RankModelTest(TenantTestCase):
