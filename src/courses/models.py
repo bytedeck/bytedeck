@@ -86,12 +86,25 @@ class RankManager(models.Manager):
         return RankQuerySet(self.model, using=self._db).order_by('xp')
 
     def get_rank(self, user_xp=0):
+        """Return the next closest Rank with an XP value <= user_xp
+        Only allow user_xp values >= 0.  If no Rank is found, then create a Rank at xp=0
+        """
         if user_xp < 0:
             user_xp = 0
-        return self.get_queryset().get_ranks_lte(user_xp).last()
+        
+        rank = self.get_queryset().get_ranks_lte(user_xp).last()
+        if not rank:
+            rank = self.create_zero_rank()
+        return rank
 
     def get_next_rank(self, user_xp=0):
+        """Return the next closest Rank with an XP value > user_xp"""
         return self.get_queryset().get_ranks_gt(user_xp).first()
+        
+    def create_zero_rank(self):
+        zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
+        zero_rank.save()
+        return zero_rank
 
 
 class Rank(IsAPrereqMixin, models.Model):
