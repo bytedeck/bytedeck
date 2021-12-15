@@ -1,7 +1,6 @@
 import json
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.test.utils import tag
 from django_celery_beat.models import PeriodicTask
 
 from model_bakery import baker
@@ -33,7 +32,6 @@ class NotificationTasksTests(TenantTestCase):
             },
         )
 
-    @tag('do')
     def test_get_notification_emails(self):
         """ Test that the correct list of notification emails are generated"""
         root_url = 'https://test.com'

@@ -1,7 +1,5 @@
 from datetime import date, datetime, timedelta
 
-from django.test import tag
-
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
@@ -333,7 +331,6 @@ class BlockModelTest(TenantTestCase):
         self.assertTrue(Block.objects.filter(block="Default").exists())
 
 
-@tag("do")
 class RankManagerTest(TenantTestCase):
 
     def setUp(self):

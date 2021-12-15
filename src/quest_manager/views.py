@@ -34,7 +34,16 @@ User = get_user_model()
 
 
 def is_staff_or_TA(user):
-    return user.is_staff or user.profile.is_TA
+    if user.is_staff:
+        return True
+    
+    try:
+        if user.profile.is_TA:
+            return True
+    except AttributeError:  # probably because the user is not logged in, so AnonymousUser and has no profile
+        pass
+
+    return False
 
 
 @method_decorator(staff_member_required, name='dispatch')

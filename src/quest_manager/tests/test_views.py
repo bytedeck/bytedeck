@@ -11,6 +11,7 @@ or they could be moved into a `test_urls.py` module.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.urls import reverse
 
 from mock import patch
@@ -21,6 +22,7 @@ from tenant_schemas.test.client import TenantClient
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from notifications.models import Notification
 from quest_manager.models import Category, Quest, QuestSubmission
+from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -1951,3 +1953,28 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         response = self.client.get(reverse('quests:approvals'))
         self.assertContains(response, 'My blocks')
+
+
+class Is_staff_or_TA_test(TenantTestCase):
+    """ Test is_staff_or_TA() test_func function """
+
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_is_staff_or_TA___staff(self):
+        """ User is staff, return True """
+        self.user.is_staff = True
+        self.assertTrue(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA___TA(self):
+        """ User is TA returns True"""
+        self.user.profile.is_TA = True
+        self.assertTrue(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA___neither(self):
+        """ User is not staff or TA, returns False """
+        self.assertFalse(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA__anonymous(self):
+        """ Anonymous user returns False"""
+        self.assertFalse(is_staff_or_TA(AnonymousUser()))
