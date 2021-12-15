@@ -4,6 +4,16 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.12.3] 2021-12-14
+* Re-enable email notifications feature
+* Professionalize language [#887](https://github.com/bytedeck/bytedeck/issues/887)
+* [dev] Test coverage reporting to coveralls.io
+* Bugfixes:
+  - [#874](https://github.com/bytedeck/bytedeck/issues/874)
+  - [#862](https://github.com/bytedeck/bytedeck/issues/862)
+  - [#875](https://github.com/bytedeck/bytedeck/issues/875)
+  - [#885](https://github.com/bytedeck/bytedeck/issues/885)
+
 ### [1.12.2] 2021-12-05
 * Add ReCaptcha to contact page to rpevent spam
 * Dependencies update (Datepicker Widget)[#881](https://github.com/bytedeck/bytedeck/issues/881)
