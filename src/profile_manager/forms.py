@@ -12,7 +12,7 @@ class ProfileForm(forms.ModelForm):
         model = Profile
         fields = ['preferred_name', 'preferred_internal_only',
                   'alias', 'avatar', 'grad_year', 'email',
-                  'get_announcements_by_email',  # 'get_notifications_by_email'
+                  'get_announcements_by_email', 'get_notifications_by_email',
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
     def __init__(self, *args, **kwargs):

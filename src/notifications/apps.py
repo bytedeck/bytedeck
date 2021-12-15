@@ -1,36 +1,16 @@
 # import json
-
 from django.apps import AppConfig
-# from django.utils import timezone
-
-
-# from django_celery_beat.models import CrontabSchedule, PeriodicTask
-# from tenant_schemas.utils import get_tenant_model, tenant_context
+from django.db.utils import ProgrammingError
 
 
 class NotificationsConfig(AppConfig):
     name = 'notifications'
 
-    # def ready(self):
-
-    #     email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
-    #         minute='0',
-    #         hour='5',
-    #         timezone=timezone.get_current_timezone()
-    #     )
-
-    #     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
-    #         with tenant_context(tenant):
-                
-    #             PeriodicTask.objects.get_or_create(
-    #                 crontab=email_notifications_schedule,
-    #                 name='Send daily email notifications',
-    #                 task='notifications.tasks.email_notifications_to_users',
-    #                 queue='default',
-    #                 kwargs=json.dumps({  # beat needs json serializable args, so make sure they are
-    #                     'root_url': get_root_url(),
-    #                 }),
-    #                 headers=json.dumps({
-    #                     '_schema_name': tenant.schema_name
-    #                 }),
-    #             )
+    def ready(self):
+        # if the project is already up and running, all the tables should exist and this should run
+        # otherwise, if this is being run for the first time (e.g. testing or new db), this with cause an exception
+        try: 
+            from notifications.tasks import create_email_notification_tasks
+            create_email_notification_tasks()
+        except ProgrammingError:
+            pass

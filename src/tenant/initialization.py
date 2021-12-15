@@ -25,7 +25,10 @@ def load_initial_tenant_data():
     create_initial_grades()
     create_initial_badge_types()
     create_initial_badges()
-    create_orientation_campaign()
+    create_orientation_campaign() 
+
+    from notifications.tasks import create_email_notification_tasks
+    create_email_notification_tasks()  
 
 
 def create_superuser():

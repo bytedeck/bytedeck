@@ -28,12 +28,17 @@
           {% if request.user.is_staff %}
           <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
           <small>
-            ({{comment.user.profile.preferred_full_name}}{% if config.display_marks_calculation %} Current Mark: {{comment.user.profile.mark|floatformat:0}}%{% endif %})
+            ({{comment.user.profile.preferred_full_name}}, 
+            {% if config.display_marks_calculation and not comment.user.is_staff %}
+            Current Mark: {{comment.user.profile.mark|floatformat:0}}%
+            {% elif comment.user.is_staff%} 
+            Teacher
+            {% endif %})
           </small>
           {% else %}
             {% firstof comment.user.profile.alias comment.user %}
           {% endif %}
-          <small>&ndash; {{comment.timestamp|timesince}} ago
+          <small>&mdash; {{comment.timestamp|timesince}} ago
             <a href="{{comment.path}}" title="Link to this comment" class="text-muted"><i class="fa fa-link"></i></a>
           </small>
           {% if comment.flagged %} FLAGGED (students can't see this comment) {% endif %}

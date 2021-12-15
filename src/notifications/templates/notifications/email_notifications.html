@@ -18,7 +18,7 @@
     {% firstof config.outgoing_email_signature config.site_name %}
   </p>
 
-  <p><img alt="[Logo]" src="{{ root_url }}{% site_logo_url %}"></p>
+  <p><img alt="[Logo]" src="{% site_logo_url %}"></p>
   <p>If you no longer want to receive these emails, <a target="_blank" href="{{root_url}}{{profile_edit_url}}">edit your profile</a>.</p>
 </body>
 </html>
