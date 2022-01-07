@@ -23,7 +23,9 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 # from django.contrib.contenttypes import generic
 
 
-class Category(models.Model):
+class Category(IsAPrereqMixin, models.Model):
+    """ Used to group quests into 'Campaigns' 
+    """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -34,6 +36,26 @@ class Category(models.Model):
 
     def __str__(self):
         return self.title
+
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        """
+        The prerequisite is met if all quests in the campaign have been completed by the user
+        param num_required: not used.
+        """
+
+        # get all the quests in this campaign/category
+        quests = self.quest_set.all()
+
+        # get all approved submissions of these quests for this user
+        # remove duplicates with distinct so only one submission per quest is counted 
+        # (there could be more than one submission if there are repeatable quests in the campaign)
+        submissions = QuestSubmission.objects.all_approved(active_semester_only=False).filter(quest__in=quests).distinct('quest')
+
+        return quests.count() == submissions.count()
+
+    @staticmethod
+    def autocomplete_search_fields():  # for grapelli prereq selection
+        return ("title__icontains",)
 
 
 class CommonData(models.Model):

@@ -227,7 +227,7 @@ class PrereqModelTest(TenantTestCase):
         """There are 6 models that implement the IsAPrereqMixin
         """
         cts = Prereq.all_registered_content_types()
-        self.assertEqual(cts.count(), 6)
+        self.assertEqual(cts.count(), 7)
 
 
 class PrereqAllConditionsMetModelTest(TenantTestCase):

@@ -85,6 +85,13 @@ class IsAPrereqMixin:
     Classes using this mixin need to implement
     the method: condition_met_as_prerequisite(user, num_required)
     and have a field "name", or override the autocomplete_search_fields() class method
+
+    Steps to add a new prerequisite model:
+
+    1. add IsAPrereqMixin to the class (this will automatically regsiter the model as a prerequisite)
+    2. if the model does not have a name field, then override the autocomplete_search_fields() method (see implementation below
+    3. implement the `condition_met_as_prerequisite(user, num_required)` method to the model class
+    
     """
 
     # TODO: Can I force implementing models to define this method?
