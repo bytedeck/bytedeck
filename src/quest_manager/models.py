@@ -47,9 +47,11 @@ class Category(IsAPrereqMixin, models.Model):
         quests = self.quest_set.all()
 
         # get all approved submissions of these quests for this user
+        submissions = QuestSubmission.objects.all_approved(active_semester_only=False).filter(quest__in=quests)
+        
         # remove duplicates with distinct so only one submission per quest is counted 
         # (there could be more than one submission if there are repeatable quests in the campaign)
-        submissions = QuestSubmission.objects.all_approved(active_semester_only=False).filter(quest__in=quests).distinct('quest')
+        submissions = submissions.order_by('quest_id').distinct('quest')
 
         return quests.count() == submissions.count()
 

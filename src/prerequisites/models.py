@@ -94,7 +94,6 @@ class IsAPrereqMixin:
     
     """
 
-    # TODO: Can I force implementing models to define this method?
     def condition_met_as_prerequisite(self, user, num_required):
         """
         Defines what it means for the user to meet this prerequisite.  For this Mixin to be any use, the implementing
@@ -104,7 +103,7 @@ class IsAPrereqMixin:
         :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
 
         """
-        raise NotImplementedError
+        raise NotImplementedError(f"{self.__class__.__name__} model must implement a condition_met_as_prerequisite() method")
 
     def is_used_prereq(self):
         """
