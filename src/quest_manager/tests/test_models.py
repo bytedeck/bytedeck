@@ -27,6 +27,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
 
         user = baker.make('user')
+        user2 = baker.make('user')
 
         # create some quests as part of the test campaign
         quest1_repeatable = baker.make(Quest, campaign=self.category, max_repeats=-1)  # repeatable
@@ -43,9 +44,12 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         baker.make(QuestSubmission, quest=quest1_repeatable, user=user, is_completed=True, is_approved=True)
         self.assertFalse(self.category.condition_met_as_prerequisite(user))
 
-        # create a quest submission for the second quest, no they should meet the prereq
+        # create a quest submission for the second quest, now they should meet the prereq
         baker.make(QuestSubmission, quest=quest2, user=user, is_completed=True, is_approved=True)
         self.assertTrue(self.category.condition_met_as_prerequisite(user))
+
+        # But other random user still doesn't meet prereq
+        self.assertFalse(self.category.condition_met_as_prerequisite(user2))
 
 
 class CommonDataTestModel(TenantTestCase):
