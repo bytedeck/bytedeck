@@ -148,6 +148,10 @@ class CytoElement(models.Model):
         """Anything that is not an edge.  Includes compound nodes (i.e. campaigns/Categories)"""
         return not self.is_edge()
 
+    def is_parent(self):
+        """This node represents a campaign, and is the parent of a compound node"""
+        return CytoElement.objects.filter(data_parent=self).exists() 
+
     def json_dict(self):
         """ Returns a json serializable python dictionary representing this element as a djcytoscape node or edge
         resulting in something like:
@@ -266,11 +270,17 @@ class TempCampaign(object):
             self.nodes.append(new_node)
 
     def add_reliant(self, node_id, reliant_node_id):
+        """ Adds nodes the the temp campaign for later cleanup
+
+        Args:
+            node_id (int): the source node that is in this campaign
+            reliant_node_id (int): the target node that has the source as a prerequisite.  This node also be in the campaign, or may not. 
+        """
         node = self.get_node(node_id)
         node.reliant_node_ids.append(reliant_node_id)
     
     def add_campaign_reliant(self, reliant_node_id):
-        """ Nodes that are directly reliant on the Campaign, i.e. this campaign is a prereq"""
+        """ Add nodes that are directly reliant on the Campaign, i.e. this campaign is a prereq"""
         self.campaign_reliant_node_ids.append(reliant_node_id)
 
     def get_last_node(self):
@@ -673,7 +683,7 @@ class CytoScape(models.Model):
         """
         self.campaign_list = []
 
-    def get_temp_campaign(self, campaign_id):
+    def get_temp_campaign(self, campaign_id) -> TempCampaign:
         for campaign in self.campaign_list:
             try:
                 if campaign.node_id == campaign_id:
@@ -835,7 +845,7 @@ class CytoScape(models.Model):
                     # defaults={'attribute': value},
                 )    
                         
-    def add_reliant(self, source_obj, source_node):
+    def find_reliant_objects_and_add_target_nodes(self, source_obj, source_node: CytoElement):
         """ Recursivly connect nodes together with edges.  Starts at the top and works down through all objects
         that rely on the source_obj as a prerequisite.
 
@@ -850,24 +860,33 @@ class CytoScape(models.Model):
         target_nodes are nodes created from reliant objects (objects that rely on the source_obj as a prerequisite)
         """
         reliant_objects = source_obj.get_reliant_objects(exclude_NOT=True)
+
         for obj in reliant_objects:
             # source_node
             #  > reliant obj1 (target node 1)
             #  > reliant obj2 (target node 2)
             #  > ...
 
-            # create the new reliant node if it doesn't already exist
+            # create or get the node represented by the reliant object
             target_node, node_created = self.create_node_from_object(obj)
 
-            # if mother node is in a campaign/parent, add new_node as a reliant in the temp_campaign
+            # if source node is in a compound node (has a parent / campaign), add target_node as a reliant in the temp_campaign
             if source_node.data_parent:
-                temp_campaign = self.get_temp_campaign(source_node.data_parent.id)
+                temp_campaign: TempCampaign = self.get_temp_campaign(source_node.data_parent.id)
                 temp_campaign.add_reliant(source_node.id, target_node.id)
+            
+            # if the source node is ITSELF a campaign (parent of a compound node)
+            if source_node.is_parent(): 
+                temp_campaign: TempCampaign = self.get_temp_campaign(source_node.id)
+                temp_campaign.add_campaign_reliant(target_node.id)
 
             # add new_node to a campaign/compound/parent, if required
             campaign_obj, campaign_node, campaign_node_created = self.add_to_campaign(obj, target_node, source_node)
+
+            # If this is the first time this campaign has been encountered, then check if IT has any reliant objects
             if campaign_node_created:
-                self.add_reliant(campaign_obj, campaign_node)
+                self.find_reliant_objects_and_add_target_nodes(campaign_obj, campaign_node)
+                # these nodes need to be added to the temp_campaigncampaign_reliant_node_ids for later cleanup
 
             # add a class to alternate prerequisites edges so they can be styled differently if desired
             if obj.has_or_prereq() or obj.has_inverted_prereq():
@@ -906,9 +925,9 @@ class CytoScape(models.Model):
 
             # recursive, continue adding if this is a new node, and not a closing node
             if node_created and not self.is_transition_node(target_node):
-                self.add_reliant(obj, target_node)
+                self.find_reliant_objects_and_add_target_nodes(obj, target_node)
 
-    def is_transition_node(self, node):
+    def is_transition_node(self, node: CytoElement):
         """
         :return: True if node.label begins with the tilde '~' or contains an astrix '*'
         """
@@ -940,7 +959,7 @@ class CytoScape(models.Model):
 
         # Add nodes reliant on the first_node, this is recursive and will generate all nodes until endpoints reached
         # Endpoints... not sure yet, but probably quests starting with '~' tilde character, or add a new field?
-        self.add_reliant(self.initial_content_object, first_node)
+        self.find_reliant_objects_and_add_target_nodes(self.initial_content_object, first_node)
 
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
         self.fix_nonsequential_campaign_edges()
