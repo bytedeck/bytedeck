@@ -160,6 +160,13 @@ class IsAPrereqMixinTest(TenantTestCase):
         reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=False)
         self.assertEqual(len(reliant_objects), 1)
 
+    def test_all_registered_models_implement_required_methods(self):
+        """ All models that inherit from this mixin should implement the condition_met_as_prerequisite() method """
+        for ct in Prereq.all_registered_content_types():
+            # If the method is not implemented, then NotImplementedError is thrown
+            instance = baker.make(ct.model_class())
+            instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
+
 
 class PrereqModelTest(TenantTestCase):
     def setUp(self):
@@ -227,7 +234,7 @@ class PrereqModelTest(TenantTestCase):
         """There are 6 models that implement the IsAPrereqMixin
         """
         cts = Prereq.all_registered_content_types()
-        self.assertEqual(cts.count(), 6)
+        self.assertEqual(cts.count(), 7)
 
 
 class PrereqAllConditionsMetModelTest(TenantTestCase):
