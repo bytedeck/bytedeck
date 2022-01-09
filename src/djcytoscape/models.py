@@ -243,12 +243,9 @@ class TempCampaign(object):
     """
 
     def __init__(self, parent_node_id):
-        self.node_id = parent_node_id
-        # self.child_node_ids = []  # Quests in the campaign
-        # self.reliant_node_ids = []  # Quests that rely on completion of quests in the campaign
-        # self.prereq_node_ids = []  # External quests that are required for quests in the campaign
-        # self.internal_prereq_node_ids = []
-        self.nodes = []  # a list of TempCampaignNodes in the Campaign
+        self.node_id = parent_node_id  # Campaigns are parent/compound nodes
+        self.campaign_reliant_node_ids = []
+        self.nodes = []  # a list of TempCampaignNodes (representing quests) in the Campaign
 
     def __str__(self):
         tmp_str = "Parent: " + str(self.node_id)
@@ -271,13 +268,10 @@ class TempCampaign(object):
     def add_reliant(self, node_id, reliant_node_id):
         node = self.get_node(node_id)
         node.reliant_node_ids.append(reliant_node_id)
-
-    # def add_prereq(self, prereq_node_id):
-    #     # prereqs can't be in the campaign already, so check:
-    #     if prereq_node_id not in self.child_node_ids:
-    #         self.prereq_node_ids.append(prereq_node_id)
-    #     else:
-    #         self.internal_prereq_node_ids.append(prereq_node_id)
+    
+    def add_campaign_reliant(self, reliant_node_id):
+        """ Nodes that are directly reliant on the Campaign, i.e. this campaign is a prereq"""
+        self.campaign_reliant_node_ids.append(reliant_node_id)
 
     def get_last_node(self):
         return self.nodes[-1]
@@ -285,26 +279,11 @@ class TempCampaign(object):
     def get_first_node(self):
         return self.nodes[0]
 
-    # def get_first_prereq_id(self):
-    #     return self.prereq_node_ids[0]
-
-    # def get_last_reliant_id(self):
-    #     if self.reliant_node_ids:
-    #         return self.reliant_node_ids[-1]
-    #     else:
-    #         return None
-
     def get_node(self, node_id):
         for node in self.nodes:
             if node.id == node_id:
                 return node
         return None
-    #
-    # def get_next_node_id(self, current_node_id):
-    #     current_node = self.get_node(current_node_id)
-    #     next_loc = self.nodes.index(current_node) + 1
-    #     if len(self.nodes) > next_loc:
-    #         return self.nodes[next_loc].id
 
     def get_next_node(self, current_node):
         next_loc = self.nodes.index(current_node) + 1
@@ -351,16 +330,6 @@ class TempCampaign(object):
                 common_reliant_ids.append(reliant_id)
         return common_reliant_ids
 
-        # num_children = len(self.child_node_ids)
-        #
-        # reliant_on_all_ids = []
-        # for reliant_id in set(self.reliant_node_ids):  # set( myList ) contains only unique values
-        #     count = self.reliant_node_ids.count(reliant_id)
-        #     if count == num_children:  # if all children point to the reliant node, consider it reliant
-        #                                # on the campaign
-        #         reliant_on_all_ids.append(reliant_id)
-        # return reliant_on_all_ids
-
     def get_common_prereq_node_ids(self):
         """
         :return: return nodes that are a prerequisite to ALL nodes within the campaign, excluded form requirement of
@@ -382,17 +351,6 @@ class TempCampaign(object):
                 common_prereq_ids.append(prereq_id)
         return common_prereq_ids
 
-        # for prereq_id in set(self.prereq_node_ids):
-        #     count = self.prereq_node_ids.count(prereq_id)
-        #     count_internal = len(self.internal_prereq_node_ids)
-        #     print(count)
-        #     print(count_internal)
-        #     print(num_children)
-        #     # if all children require this prereq (or an internal), consider it a prereq for the campaign
-        #     if count + count_internal == num_children:
-        #         prereq_for_all_ids.append(prereq_id)
-        # return prereq_for_all_ids
-
     def is_non_sequential(self):
         # If there is at least one common prereq node
         return self.get_common_prereq_node_ids() is True
@@ -408,9 +366,9 @@ class CytoScapeManager(models.Manager):
         scape.save()
 
         # generate starting node
-        mother_node = CytoElement(scape=scape, group=CytoElement.NODES, )
-        mother_node.save()
-        node_list = [mother_node]
+        source_node = CytoElement(scape=scape, group=CytoElement.NODES, )
+        source_node.save()
+        node_list = [source_node]
         count = 1
         while node_list and count < size:
             current_node = random.choice(node_list)
@@ -420,7 +378,7 @@ class CytoScapeManager(models.Manager):
             if split < .10:
                 children = random.randint(1, 3)  # 1 to 3
 
-            if current_node is mother_node:
+            if current_node is source_node:
                 children = 10
             if split < 90:  # create the target nodes, connect them to source, add them to list
                 for i in range(0, children):
@@ -724,21 +682,26 @@ class CytoScape(models.Model):
                 pass
         return None
 
-    def add_to_campaign(self, obj, node, mother_node):
+    def add_to_campaign(self, obj, target_node, source_node):
         """
         Checks if obj is in a campaign, if so, gets or creates the campaign_node (Parent/compound node)
-        and adds is as the parent node.  Also registers the node and parent with the TempCampaign (for edges later)
-        :param mother_node: prereq node
-        :param obj:
-        :param node: node of the object
+        and adds it as the parent (compound) node.  Also registers the target_node and source_node with the TempCampaign (for edges later)
+        :param source_node: node representing the target_node's prereq
+        :param obj: the django object currently being processed, represented by the target_node
+        :param target_node: node of the reliant object, obj
         :return: campaign_node = None if obj isn't part of a campaign, otherwise = the campaign_node (i.e. parent_node)
         campaign_created = False if obj is in campaign, but the campaign was created by an earlier node
         """
         # If part of a campaign, create parent and add to "parent" node, i.e. compound node
         campaign_node = None
+        campaign = None
         campaign_created = False
+
+        # Check if the obj has a campaign attribute, currently only Quest objects have this, but obj could be a Badge or other prereq model
         if hasattr(obj, 'campaign') and obj.campaign is not None:
-            # parent_name = str(obj.campaign)
+            campaign = obj.campaign
+
+            # Create a node for this campaign (or get it if it already exists)
             campaign_node, campaign_created = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
@@ -746,20 +709,20 @@ class CytoScape(models.Model):
                 classes="campaign",
                 # defaults={'attribute': value},
             )
-            # Add parent
-            node.data_parent = campaign_node
-            node.save()
 
-            # TempCampaign utility
+            # Add a parent (i.e. campaign) to the target node (to form a compound node)
+            target_node.data_parent = campaign_node
+            target_node.save()
+
+            # TempCampaign utility for cleaning up the edges and making the resulting map look good, after the entire map is built
             if campaign_created:
                 self.campaign_list.append(TempCampaign(campaign_node.id))
-            temp_campaign = self.get_temp_campaign(campaign_node.id)
-            # temp_campaign.add_child(node.id)
-            # TODO: Nodes might be present multiple times through different mothers?  check and combine
-            temp_campaign.add_node(node.id, mother_node.id)
-            # temp_campaign.add_prereq(mother_node.id)
+            temp_campaign = self.get_temp_campaign(campaign_node.id)  # not a Django model, so custom method
 
-        return campaign_node, campaign_created
+            # TODO: Nodes might be present multiple times through different source nodes?  check and combine
+            temp_campaign.add_node(target_node.id, source_node.id)
+
+        return campaign, campaign_node, campaign_created
 
     def fix_nonsequential_campaign_edges(self):
         """
@@ -767,14 +730,17 @@ class CytoScape(models.Model):
         (i.e. all quests are available concurrently) we need to:
          1. add invisible edges joining the quests
          2. remove edges between common prereqs and quests
-         3. remove edges between quests and common reliants
-         4. add edges between common prereqs and campaign/compound/parent node
-         5. add edges between campaign/compound/parent node and common reliants
-         6. add invisible edge (for structure) from prereqs to first node
-         7. add invisible edge (for structure) from last node to reliants
+         3. add edges between common prereqs and campaign/compound/parent node
+         4. add invisible edge (for structure) from prereqs to first node
+         5. (deprecated) remove edges between quests and common reliants
+         6. (deprecated) add edges between campaign/compound/parent node and common reliants
+         7. (deprecated) add invisible edge (for structure) from last node to common reliants
+         8. add invisible edge (for structure) from last node to campaign reliants
         """
 
         for campaign in self.campaign_list:
+
+            last_node = campaign.get_last_node()
 
             common_prereq_ids = campaign.get_common_prereq_node_ids()
             if common_prereq_ids:  # then non-sequential campaign
@@ -804,7 +770,7 @@ class CytoScape(models.Model):
                                                           data_target_id=quest_node.id)
                             edge_node.delete()
 
-                    # 4. add edges between common prereqs and campaign/compound/parent node
+                    # 3. add edges between common prereqs and campaign/compound/parent node
                     CytoElement.objects.get_or_create(
                         scape=self,
                         group=CytoElement.EDGES,
@@ -813,7 +779,7 @@ class CytoScape(models.Model):
                         # defaults={'attribute': value},
                     )
 
-                    # 6. add invisible edge (for structure) from prereqs to first node
+                    # 4. add invisible edge (for structure) from prereqs to first node
                     CytoElement.objects.get_or_create(
                         scape=self,
                         group=CytoElement.EDGES,
@@ -822,12 +788,13 @@ class CytoScape(models.Model):
                         defaults={'classes': 'hidden', }
                     )
 
-                last_node = campaign.get_last_node()
+                # TODO this should no longer be required now that Campaigns can be set as prerequisites
+                # TODO but will break old maps / prereq setups if removed
                 reliant_node_ids = campaign.get_common_reliant_node_ids()
                 if reliant_node_ids:
                     for reliant_node_id in reliant_node_ids:
 
-                        # 3 remove edges between quests and common reliants
+                        # 5 remove edges between quests and common reliants
                         for quest_node in campaign.nodes:
                             # we already know all quests have this reliant node in common, so the edges should all exist
                             # unless it has an internal reliant...
@@ -837,7 +804,7 @@ class CytoScape(models.Model):
                                                               data_target_id=reliant_node_id)
                                 edge_node.delete()
 
-                        # 5. add edges between campaign/compound/parent node and common reliants
+                        # 6. add edges between campaign/compound/parent node and common reliants
                         CytoElement.objects.get_or_create(
                             scape=self,
                             group=CytoElement.EDGES,
@@ -855,25 +822,52 @@ class CytoScape(models.Model):
                             defaults={'classes': 'hidden', }
                             # defaults={'attribute': value},
                         )
+            
+            # 8. add invisible edge (for structure) from last node to campaign reliants
+            # TODO actually add nodes to the campaign_reliant_nodes_ids list!!!!
+            for reliant_node_id in campaign.campaign_reliant_node_ids:
+                CytoElement.objects.get_or_create(
+                    scape=self,
+                    group=CytoElement.EDGES,
+                    data_source_id=last_node.id,
+                    data_target_id=reliant_node_id,
+                    defaults={'classes': 'hidden', }
+                    # defaults={'attribute': value},
+                )    
+                        
+    def add_reliant(self, source_obj, source_node):
+        """ Recursivly connect nodes together with edges.  Starts at the top and works down through all objects
+        that rely on the source_obj as a prerequisite.
 
-    def add_reliant(self, current_obj, mother_node):
-        reliant_objects = current_obj.get_reliant_objects(exclude_NOT=True)
+        source_obj: the current django object being processed (could be any mappable prerequisite, such as a Quest, Badge, or Campaign)
+        source_node: the cytoscape node representing the source_obj
+
+        Other names:
+        parent node is confusing, but refers to the compound nodes that group other nodes together (i.e. campaigns)
+        variables with names such as data_parent, parent_node, etc, are Campaigns that a quest might be in. 
+        In graph terms these are called parent nodes or compound nodes
+
+        target_nodes are nodes created from reliant objects (objects that rely on the source_obj as a prerequisite)
+        """
+        reliant_objects = source_obj.get_reliant_objects(exclude_NOT=True)
         for obj in reliant_objects:
-            # mother_node
-            #  > obj (reliant node 1)
-            #  > obj (reliant node 2)
+            # source_node
+            #  > reliant obj1 (target node 1)
+            #  > reliant obj2 (target node 2)
             #  > ...
 
             # create the new reliant node if it doesn't already exist
-            new_node, created = self.create_node_from_object(obj)
+            target_node, node_created = self.create_node_from_object(obj)
 
             # if mother node is in a campaign/parent, add new_node as a reliant in the temp_campaign
-            if mother_node.data_parent:
-                temp_campaign = self.get_temp_campaign(mother_node.data_parent.id)
-                temp_campaign.add_reliant(mother_node.id, new_node.id)
+            if source_node.data_parent:
+                temp_campaign = self.get_temp_campaign(source_node.data_parent.id)
+                temp_campaign.add_reliant(source_node.id, target_node.id)
 
             # add new_node to a campaign/compound/parent, if required
-            self.add_to_campaign(obj, new_node, mother_node)
+            campaign_obj, campaign_node, campaign_node_created = self.add_to_campaign(obj, target_node, source_node)
+            if campaign_node_created:
+                self.add_reliant(campaign_obj, campaign_node)
 
             # add a class to alternate prerequisites edges so they can be styled differently if desired
             if obj.has_or_prereq() or obj.has_inverted_prereq():
@@ -886,8 +880,8 @@ class CytoScape(models.Model):
             CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.EDGES,
-                data_source=mother_node,
-                data_target=new_node,
+                data_source=source_node,
+                data_target=target_node,
                 defaults=defaults,
             )
 
@@ -902,8 +896,8 @@ class CytoScape(models.Model):
                     CytoElement.objects.get_or_create(
                         scape=self,
                         group=CytoElement.EDGES,
-                        data_source=new_node,
-                        data_target=new_node,
+                        data_source=target_node,
+                        data_target=target_node,
                         defaults={
                             'label': label,
                             'classes': 'repeat-edge',
@@ -911,8 +905,8 @@ class CytoScape(models.Model):
                     )
 
             # recursive, continue adding if this is a new node, and not a closing node
-            if created and not self.is_transition_node(new_node):
-                self.add_reliant(obj, new_node)
+            if node_created and not self.is_transition_node(target_node):
+                self.add_reliant(obj, target_node)
 
     def is_transition_node(self, node):
         """
@@ -939,15 +933,14 @@ class CytoScape(models.Model):
     def calculate_nodes(self,):
 
         # Create the starting node from the initial quest, and a link back to the parent map if there is one
-        # mother_node, created = self.create_node_from_object(self.initial_content_object, initial_node=True)
-        mother_node = self.create_first_node(self.initial_content_object)
+        first_node = self.create_first_node(self.initial_content_object)
 
         # Temp campaign list used to track funky edges required for compound nodes to display properly with dagre
         self.init_temp_campaign_list()
 
-        # Add nodes reliant on the mother_node, this is recursive and will generate all nodes until endpoints reached
+        # Add nodes reliant on the first_node, this is recursive and will generate all nodes until endpoints reached
         # Endpoints... not sure yet, but probably quests starting with '~' tilde character, or add a new field?
-        self.add_reliant(self.initial_content_object, mother_node)
+        self.add_reliant(self.initial_content_object, first_node)
 
         # Add those funky edges for proper display of compound (parent) nodes in cyto dagre layout
         self.fix_nonsequential_campaign_edges()
