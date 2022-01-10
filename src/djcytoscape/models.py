@@ -12,6 +12,8 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from quest_manager.models import Category
+
 
 def clean_JSON(dirty_json_str):
     """ Takes a poorly formatted JSON string and cleans it up a bit:
@@ -559,17 +561,21 @@ class CytoScape(models.Model):
             pre = "Badge: "
         elif type(obj) is Rank:
             pre = "Rank: "
+            
         title = pre + str(obj)
         # shorten the end
         if len(title) > max_len:
             title = title[:(max_len - 3)] + "..."  # + title[-int(l/2-2):]
+
         if hasattr(obj, 'xp'):
             if hasattr(obj, 'xp_can_be_entered_by_students') and obj.xp_can_be_entered_by_students:
                 plus = "+"
             else:
                 plus = ""
             post = f" ({str(obj.xp)}{plus})"
-            
+        elif type(obj) is Category:
+            post = f" ({str(obj.xp_sum())} XP)"
+
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
@@ -715,7 +721,7 @@ class CytoScape(models.Model):
             campaign_node, campaign_created = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
-                label=str(obj.campaign),
+                label=CytoScape.generate_label(obj.campaign),
                 classes="campaign",
                 # defaults={'attribute': value},
             )
