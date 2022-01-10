@@ -665,6 +665,11 @@ class CytoScape(models.Model):
         else:
             img_url = "none"
 
+        # check for map transition
+        map_transition = False
+        if hasattr(obj, 'map_transition'):
+            map_transition = obj.map_transition
+
         new_node, created = CytoElement.objects.get_or_create(
             scape=self,
             group=CytoElement.NODES,
@@ -674,6 +679,7 @@ class CytoScape(models.Model):
                       'id_styles': "'background-image': '" + img_url + "'",
                       'classes': type(obj).__name__,
                       'href': obj.get_absolute_url(),
+                      'is_transition': map_transition,
                      }
         )
 
@@ -934,11 +940,15 @@ class CytoScape(models.Model):
                 self.find_reliant_objects_and_add_target_nodes(obj, target_node)
 
     def is_transition_node(self, node: CytoElement):
-        """
-        :return: True if node.label begins with the tilde '~' or contains an astrix '*'
+        """ A transition node represents an obj.map_transition attribute set to True (saved in node.is_transition_)
+        DEPRECATED: Also return True if node.label begins with the tilde '~' or contains an astrix '*'
+        But only do this if autobreaking is turned on
         """
         if self.autobreak:
-            return node.label[0] == "~" or "*" in node.label
+            if node.is_transition:
+                return True
+            else:
+                return node.label[0] == "~" or "*" in node.label
         else:
             return False
 

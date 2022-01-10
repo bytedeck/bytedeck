@@ -378,6 +378,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
                                    help_text="When this quest becomes available, it will block all other "
                                              "non-blocking quests until this one is submitted.")
 
+    map_transition = models.BooleanField(
+        default=False, 
+        help_text='Break maps at this quest. This quest will link to a new map.'
+    )
+
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
                                     content_type_field='parent_content_type',
@@ -813,7 +818,6 @@ class QuestSubmission(models.Model):
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
     draft_text = models.TextField(null=True, blank=True)
-
     xp_requested = models.PositiveIntegerField(
         default=0,
         help_text='The number of XP you are requesting for this submission.'
