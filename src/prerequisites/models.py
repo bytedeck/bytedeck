@@ -117,7 +117,7 @@ class IsAPrereqMixin:
         """
         return Prereq.objects.all_reliant_on(self, exclude_NOT=exclude_NOT)
 
-    def get_reliant_objects(self, active_only=True, exclude_NOT=False):
+    def get_reliant_objects(self, active_only=True, exclude_NOT=False, sort=False):
         """
         :return: a list containing the objects that require this as a prereq
         """
@@ -132,7 +132,9 @@ class IsAPrereqMixin:
                     if parent_obj.active:
                         reliant_objects.append(parent_obj)
                 else:
-                    reliant_objects.append(parent_obj)
+                    reliant_objects.append(parent_obj)     
+        if sort:
+            reliant_objects = sorted(reliant_objects, key=str)
         return reliant_objects
 
     # to help with the prerequisite choices:

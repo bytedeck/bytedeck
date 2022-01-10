@@ -51,6 +51,19 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         # But other random user still doesn't meet prereq
         self.assertFalse(self.category.condition_met_as_prerequisite(user2))
 
+    def test_xp_sum(self):
+        """ Test that the XP sum of all quests in a campaign is returned correctly """
+
+        # create some quests as part of the test campaign
+        baker.make(Quest, campaign=self.category, xp=1)  # included in sum
+        baker.make(Quest, campaign=self.category, xp=2)  # included in sum
+        baker.make(Quest, xp=4)  # NOT included in sum because n a different campaign
+        baker.make(Quest, visible_to_students=False, xp=8)  # NOT included in sum becuase not visible
+        baker.make(Quest, archived=True, xp=16)  # NOT included in sum becase archived
+
+        # check that the XP sum is correct
+        self.assertEqual(self.category.xp_sum(), 3)    
+
 
 class CommonDataTestModel(TenantTestCase):
     def setUp(self):
