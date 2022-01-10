@@ -126,12 +126,12 @@ class IsAPrereqMixinTest(TenantTestCase):
 
     def test_get_reliant_qs(self):
         reliant = self.quest_prereq.get_reliant_qs()
+        
         self.assertListEqual(list(reliant), list(Prereq.objects.all_reliant_on(self.quest_prereq)))
 
     def test_get_reliant_objects(self):
         reliant_objects = self.quest_prereq.get_reliant_objects()
         self.assertListEqual(list(reliant_objects), [self.quest_parent])
-
         # try adding another, this time as an OR
         Prereq.objects.create(
             parent_object=self.quest_prereq2,
@@ -142,7 +142,7 @@ class IsAPrereqMixinTest(TenantTestCase):
         reliant_objects = self.quest_prereq.get_reliant_objects()
         self.assertListEqual(list(reliant_objects), [self.quest_parent, self.quest_prereq2])
 
-    def test_get_reliant_objects_exclude_NOT(self):
+    def test_get_reliant_objects__exclude_NOT(self):
         reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
         self.assertListEqual(list(reliant_objects), [self.quest_parent])
 
@@ -159,6 +159,28 @@ class IsAPrereqMixinTest(TenantTestCase):
 
         reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=False)
         self.assertEqual(len(reliant_objects), 1)
+
+    def test_get_reliant_objects__sort(self):
+        """ Test that get_reliant_objects(sort=True) returns a list where the objects are sorted alphabetically by str() """
+
+        # Setup creates self.quest_prereq relying on self.quest_parent.  
+        # Add some more reliant quests to be sorted.
+        quest_A = baker.make('quest_manager.Quest', name="A")
+        quest_z = baker.make('quest_manager.Quest', name="z")
+        quest_Z = baker.make('quest_manager.Quest', name="Z")
+        Prereq.objects.create(parent_object=quest_Z, prereq_object=self.quest_prereq)
+        Prereq.objects.create(parent_object=quest_z, prereq_object=self.quest_prereq)
+        Prereq.objects.create(parent_object=quest_A, prereq_object=self.quest_prereq)
+
+        # throw in a Badge
+        badge_B = baker.make('badges.Badge', name="B")
+        badge_1 = baker.make('badges.Badge', name="1")
+        Prereq.objects.create(parent_object=badge_B, prereq_object=self.quest_prereq)
+        Prereq.objects.create(parent_object=badge_1, prereq_object=self.quest_prereq)
+
+        reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True, sort=True)
+        # Note lowercase comes after uppercase in the defaults alphanumeric sort
+        self.assertListEqual(reliant_objects, [badge_1, quest_A, badge_B, quest_Z, self.quest_parent, quest_z])
 
     def test_all_registered_models_implement_required_methods(self):
         """ All models that inherit from this mixin should implement the condition_met_as_prerequisite() method """

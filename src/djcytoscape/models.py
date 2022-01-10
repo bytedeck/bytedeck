@@ -865,7 +865,7 @@ class CytoScape(models.Model):
 
         target_nodes are nodes created from reliant objects (objects that rely on the source_obj as a prerequisite)
         """
-        reliant_objects = source_obj.get_reliant_objects(exclude_NOT=True)
+        reliant_objects = source_obj.get_reliant_objects(exclude_NOT=True, sort=True)
 
         for obj in reliant_objects:
             # source_node
