@@ -37,6 +37,11 @@ class Category(IsAPrereqMixin, models.Model):
     def __str__(self):
         return self.title
 
+    def xp_sum(self):
+        """ Returns the total XP available from completing all visible quests in this campaign.
+        Repeating quests are only counted once."""
+        return self.quest_set.all().visible().not_archived().aggregate(Sum('xp'))['xp__sum']
+
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
         The prerequisite is met if all quests in the campaign have been completed by the user
