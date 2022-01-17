@@ -113,21 +113,35 @@ class PublicTenantTestAdminPublic(TenantTestCase):
 
 class TenantAdminFormTest(TenantTestCase):
 
+    def setUp(self):
+        self.form_data = {
+            'name': 'test',  # This is the name of the already existing test tenant
+            # 'owner_full_name': None,
+            # 'owner_email': None,
+            'max_active_users': 50, 
+            'max_quests': 100,
+            # 'paid_until': None,
+            # 'trial_end_date': None
+        }
+
     def test_public_tenant_not_editable(self):
-        form = TenantAdminForm({"name": "public"})
+        self.form_data["name"] = "public"
+        form = TenantAdminForm(self.form_data)
         self.assertFalse(form.is_valid())
 
     def test_new_non_public_tenant_valid(self):
-        form = TenantAdminForm({"name": "non-public"})
+        self.form_data["name"] = "non-public"
+        form = TenantAdminForm(self.form_data)
         self.assertTrue(form.is_valid())
 
     def test_existing_non_public_tenant_valid(self):
         """ test tenant already exists as a part of the TenantTestCase """
-        form = TenantAdminForm({"name": "test"})
+        form = TenantAdminForm(self.form_data)
         self.assertTrue(form.is_valid())
 
     def test_cant_change_existing_name(self):
         # test tenant already exists and is connected in TenantTestCase
-        form = TenantAdminForm({"name": "nottest"})
+        self.form_data["name"] = "nottest"
+        form = TenantAdminForm(self.form_data)
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertFalse(form.is_valid())
