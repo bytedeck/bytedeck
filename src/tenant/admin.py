@@ -34,7 +34,7 @@ class TenantAdminForm(forms.ModelForm):
 
     class Meta:
         model = Tenant
-        fields = ['name']
+        fields = ['name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
 
     def clean_name(self):
         name = self.cleaned_data["name"]
@@ -58,7 +58,7 @@ def get_schema_name(tenant_name):
     
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('schema_name', 'domain_url', 'name', 'desc', 'created_on')
+    list_display = ('schema_name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date')
     form = TenantAdminForm
 
     def save_model(self, request, obj, form, change):
