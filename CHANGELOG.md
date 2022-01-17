@@ -4,6 +4,13 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.13.0] 2022-01-16 - Mostly Map Stuff
+* Campaigns can now be prerequisites [#890](https://github.com/bytedeck/bytedeck/issues/890)
+* Add campaign XP to maps [#819](https://github.com/bytedeck/bytedeck/issues/819)
+* Sort unordered campaign maps alphabetically [#793](https://github.com/bytedeck/bytedeck/issues/793)
+* Add map transition field to Quests and Badges [#574](https://github.com/bytedeck/bytedeck/issues/574)
+* [bytedeck admin] Add new fields to Tenant model [#897](https://github.com/bytedeck/bytedeck/issues/897)
+
 ### [1.12.3] 2021-12-14
 * Re-enable email notifications feature
 * Professionalize language [#887](https://github.com/bytedeck/bytedeck/issues/887)
