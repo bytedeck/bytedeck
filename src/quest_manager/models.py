@@ -23,7 +23,9 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 # from django.contrib.contenttypes import generic
 
 
-class Category(models.Model):
+class Category(IsAPrereqMixin, models.Model):
+    """ Used to group quests into 'Campaigns' 
+    """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -34,6 +36,33 @@ class Category(models.Model):
 
     def __str__(self):
         return self.title
+
+    def xp_sum(self):
+        """ Returns the total XP available from completing all visible quests in this campaign.
+        Repeating quests are only counted once."""
+        return self.quest_set.all().visible().not_archived().aggregate(Sum('xp'))['xp__sum']
+
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        """
+        The prerequisite is met if all quests in the campaign have been completed by the user
+        param num_required: not used.
+        """
+
+        # get all the quests in this campaign/category
+        quests = self.quest_set.all()
+
+        # get all approved submissions of these quests for this user
+        submissions = QuestSubmission.objects.all_approved(user=user, active_semester_only=False).filter(quest__in=quests)
+        
+        # remove duplicates with distinct so only one submission per quest is counted 
+        # (there could be more than one submission if there are repeatable quests in the campaign)
+        submissions = submissions.order_by('quest_id').distinct('quest')
+
+        return quests.count() == submissions.count()
+
+    @staticmethod
+    def autocomplete_search_fields():  # for grapelli prereq selection
+        return ("title__icontains",)
 
 
 class CommonData(models.Model):
@@ -348,6 +377,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
     blocking = models.BooleanField(default=False,
                                    help_text="When this quest becomes available, it will block all other "
                                              "non-blocking quests until this one is submitted.")
+
+    map_transition = models.BooleanField(
+        default=False, 
+        help_text='Break maps at this quest. This quest will link to a new map.'
+    )
 
     # What does this do to help us?
     prereq_parent = GenericRelation(Prereq,
@@ -784,7 +818,6 @@ class QuestSubmission(models.Model):
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
     draft_text = models.TextField(null=True, blank=True)
-
     xp_requested = models.PositiveIntegerField(
         default=0,
         help_text='The number of XP you are requesting for this submission.'

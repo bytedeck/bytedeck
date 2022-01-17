@@ -53,6 +53,7 @@ class QuestForm(forms.ModelForm):
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
+                  'map_transition',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
@@ -143,6 +144,7 @@ class QuestForm(forms.ModelForm):
                     ),
                     AccordionGroup(
                         "Advanced",
+                        'map_transition',
                         'max_xp',
                         'repeat_per_semester',
                         'specific_teacher_to_notify',
