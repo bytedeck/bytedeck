@@ -15,7 +15,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/ubuntu/bytedeck
 # WorkingDirectory=/usr/share/nginx/hackerspace
-ExecStart=/usr/bin/docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml up -d
+ExecStart=/usr/bin/docker-compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d
 ExecStop=/usr/bin/docker-compose down
 TimeoutStartSec=0
 

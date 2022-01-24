@@ -3,8 +3,8 @@ version: '2.2'
 ###############################################################################
 #
 # FOR DOCKER_COMPOSE SETTINGS SPECIFIC TO DEVELOPMENT
-# 
-# It is run automatically with `docker-compose up` on top of the the settings in docker-compose.yml
+#
+# run automatically with `docker-compose up` on top of the the settings in docker-compose.yml
 #
 # docker-compose.overide.yml
 # https://docs.docker.com/compose/extends/
@@ -12,16 +12,70 @@ version: '2.2'
 
 services:
   db:
+    build: ./postgresql
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - backend-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
     - 5432:5432  # Expose port so app can connect to db when developing locally with `./src/manage.py [runserver|test src]
+  
   redis:
+    image: "redis:5.0-alpine"
+    env_file: .env
+    sysctls:
+      # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
+      net.core.somaxconn: 512
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
     ports:
     - 6379:6379  # Expose port so app can connect to redis when developing locally with `./src/manage.py [runserver|test src]
+
   web:
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
+      REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&  
                       python manage.py migrate_schemas --executor=parallel && 
                       python manage.py runserver 0.0.0.0:8000"   # no need for uwsgi in development, this is easier
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  
+  celery:
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
+      REDIS_HOST: redis  # takes precendent over .env file
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    environment:
+      POSTGRES_HOST: db  # takes precendent over .env file
+      REDIS_HOST: redis  # takes precendent over .env file
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   pg-admin:
     image: dpage/pgadmin4
@@ -33,3 +87,7 @@ services:
         condition: service_healthy
     ports:
       - "8080:80"
+
+volumes:
+  postgres_data:
+  redis_data:
