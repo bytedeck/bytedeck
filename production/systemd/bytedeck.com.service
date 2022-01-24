@@ -1,0 +1,23 @@
+# /etc/systemd/system/bytedeck.com.service
+
+[Unit]
+Description=Docker Compose Application Service for ByteDeck.com
+Requires=docker.service
+After=docker.service
+
+[Service]
+User=ubuntu
+Group=docker
+# Client Env Vars
+Environment=WGID=999
+Environment=WUID=1000
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/bytedeck
+# WorkingDirectory=/usr/share/nginx/hackerspace
+ExecStart=/usr/bin/docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml up -d
+ExecStop=/usr/bin/docker-compose down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

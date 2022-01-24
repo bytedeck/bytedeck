@@ -1,0 +1,17 @@
+# /etc/systemd/system/redis-host-setup.service
+# Used to resolve several warnings when running dockerized redis:
+# # WARNING you have Transparent Huge Pages (THP) support enabled in your kernel. This will create latency and memory usage issues with Redis. To fix this issue run the command 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' as root, and add it to your /etc/rc.local in order to retain the setting after a reboot. Redis must be restarted after THP is disabled.
+# # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+
+[Unit]
+Description=Setup host system for dockerized Redis, including: disable THP; set overcommit_memory
+Documentation=https://redis.io/topics/admin; https://github.com/docker-library/redis/issues/55#issuecomment-317584715; https://github.com/docker-library/redis/issues/19
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "/bin/echo 'never' > /sys/kernel/mm/transparent_hugepage/enabled"
+ExecStart=/bin/sh -c "/bin/echo 'never' > /sys/kernel/mm/transparent_hugepage/defrag"
+ExecStart=/sbin/sysctl vm.overcommit_memory=1
+
+[Install]
+WantedBy=multi-user.target
