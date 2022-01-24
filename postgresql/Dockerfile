@@ -1,2 +1,2 @@
-FROM postgres:9.5-alpine 
+FROM postgres:12.7-alpine
 COPY scripts scripts
