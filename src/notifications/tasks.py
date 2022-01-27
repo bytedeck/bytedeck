@@ -7,7 +7,7 @@ from django.core import mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 from django.utils import timezone
-from tenant_schemas.utils import get_tenant_model
+from django_tenants.utils import get_tenant_model
 
 from hackerspace_online.celery import app
 # from celery import shared_task
@@ -42,7 +42,7 @@ def get_notification_emails(root_url):
 
         if unread_notifications:
             text_content = str(unread_notifications)
-            
+
             html_content = html_template.render({
                 'user': user,
                 'notifications': unread_notifications,
@@ -59,7 +59,7 @@ def get_notification_emails(root_url):
 def create_email_notification_tasks():
     """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
     saved on the public schema
-    
+
     THIS METHOD MUST REMAIN IDEMPOTENT, so that it can be run multiple times without errors
     """
 

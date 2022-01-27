@@ -2,7 +2,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
-from tenant_schemas.test.cases import TenantTestCase
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name, schema_context
 
 from tenant.models import Tenant, check_tenant_name
 
@@ -14,21 +15,25 @@ class TenantModelTest(TenantTestCase):
     def setUp(self):
         # TenantTestCase comes with a `self.tenant` already, but let make another so we can test development
         # stuff on localhost domain
-        self.tenant_localhost = Tenant(
-            domain_url='my-dev-schema.localhost',
-            schema_name='my_development_schema',
-            name='my_name'
-        )
-        
+        with schema_context(get_public_schema_name()):
+            self.tenant_localhost = Tenant(
+                schema_name='my_development_schema',
+                name='my_name'
+            )
+            self.tenant_localhost.save()
+            domain = self.tenant_localhost.get_primary_domain()
+            domain.domain = 'my-dev-schema.localhost'
+            domain.save()
+
     def test_tenant_test_case(self):
         """ From docs: https://django-tenant-schemas.readthedocs.io/en/latest/test.html
-        If you want a test to happen at any of the tenant’s domain, you can use the test case TenantTestCase. 
-        It will automatically create a tenant for you, set the connection’s schema to tenant’s schema and 
+        If you want a test to happen at any of the tenant’s domain, you can use the test case TenantTestCase.
+        It will automatically create a tenant for you, set the connection’s schema to tenant’s schema and
         make it available at `self.tenant`
         """
         self.assertIsInstance(self.tenant, Tenant)
-        # self.assertEqual(self.tenant.name, self.tenant.schema_name)
-        self.assertEqual(str(self.tenant), '%s - %s' % (self.tenant.schema_name, self.tenant.domain_url))
+        self.assertEqual(self.tenant.schema_name, 'test')
+        self.assertEqual(str(self.tenant), '%s - %s' % (self.tenant.schema_name, self.tenant.primary_domain_url))
 
     def test_tenant_creation(self):
         self.assertIsInstance(self.tenant_localhost, Tenant)
@@ -39,7 +44,7 @@ class TenantModelTest(TenantTestCase):
 
 
 class CheckTenantNameTest(SimpleTestCase):
-    """ A tenant's name is used for both the schema_name and as the subdomain in the 
+    """ A tenant's name is used for both the schema_name and as the subdomain in the
     tenant's domain_url field, so {name} it must be valid for a schema and a url.
     """
 
@@ -50,25 +55,25 @@ class CheckTenantNameTest(SimpleTestCase):
         self.assertRaises(ValidationError, check_tenant_name, 'tenant@')
 
     def test_number_start_invalid(self):
-        self.assertRaises(ValidationError, check_tenant_name, '9tenant')      
+        self.assertRaises(ValidationError, check_tenant_name, '9tenant')
 
     def test_uppercase_invalid(self):
-        self.assertRaises(ValidationError, check_tenant_name, 'Tenant')     
+        self.assertRaises(ValidationError, check_tenant_name, 'Tenant')
 
     def test_start_dash_invalid(self):
-        self.assertRaises(ValidationError, check_tenant_name, '-tenant')  
-    
+        self.assertRaises(ValidationError, check_tenant_name, '-tenant')
+
     def test_end_dash_invalid(self):
-        self.assertRaises(ValidationError, check_tenant_name, 'tenant-')  
+        self.assertRaises(ValidationError, check_tenant_name, 'tenant-')
 
     def test_multidash_invalid(self):
-        self.assertRaises(ValidationError, check_tenant_name, 'ten--ant')  
-    
+        self.assertRaises(ValidationError, check_tenant_name, 'ten--ant')
+
     def test_mid_dash_valid(self):
-        check_tenant_name('ten-ant')  
+        check_tenant_name('ten-ant')
 
     def test_multi_mid_dash_valid(self):
         check_tenant_name('ten-an-t')
 
     def test_mid_number_valid(self):
-        check_tenant_name('t3nan4') 
+        check_tenant_name('t3nan4')

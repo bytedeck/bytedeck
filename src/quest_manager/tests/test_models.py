@@ -2,16 +2,18 @@ import datetime
 import re
 from datetime import timedelta
 
-from courses.models import Semester
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
+
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
+
+from courses.models import Semester
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
@@ -147,7 +149,7 @@ class QuestTestModel(TenantTestCase):
         quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
         quest_infinite_repeat = baker.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
         quest_repeat_1hr = baker.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
-        quest_semester_repeat = baker.make(Quest, name="quest-semester-repeatable", max_repeats=1, 
+        quest_semester_repeat = baker.make(Quest, name="quest-semester-repeatable", max_repeats=1,
                                            repeat_per_semester=True)
         quest_semester = baker.make(Quest, name="quest-semester", max_repeats=0, repeat_per_semester=True)
 

@@ -1,10 +1,12 @@
 from django.contrib.auth import get_user_model
 
-from tenant_schemas.test.cases import TenantTestCase
-# from tenant_schemas.test.client import TenantClient
+from django_tenants.test.cases import TenantTestCase
 
-from hackerspace_online.shell_utils import generate_students, generate_quests
+from hackerspace_online.shell_utils import generate_quests, generate_students
 from quest_manager.models import Quest
+
+# from django_tenants.test.client import TenantClient
+
 
 User = get_user_model()
 

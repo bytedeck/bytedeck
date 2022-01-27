@@ -3,10 +3,10 @@ from datetime import date, datetime, timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from mock import patch
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
 
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from siteconfig.models import SiteConfig
@@ -292,7 +292,7 @@ class CourseStudentModelTest(TenantTestCase):
     # def test_course_student_get_absolute_url(self):
     #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
-    @ patch('courses.models.Semester.fraction_complete')
+    @patch('courses.models.Semester.fraction_complete')
     def test_calc_mark(self, fraction_complete):
         fraction_complete.return_value = 0.5
         course = baker.make(Course, xp_for_100_percent=100)
@@ -310,7 +310,7 @@ class CourseStudentModelTest(TenantTestCase):
         mark = course_student.calc_mark(50)
         self.assertEqual(mark, 50)
 
-    @ patch('courses.models.Semester.days_so_far')
+    @patch('courses.models.Semester.days_so_far')
     def test_xp_per_day_ave(self, days_so_far):
 
         self.student.profile.xp_cached = 120

@@ -2,13 +2,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
-
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 from djcytoscape.models import CytoScape
+from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 from .test_models import generate_real_primary_map
 
@@ -101,7 +100,7 @@ class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=anyone.username, password="password")
         self.assertTrue(success)
 
-        # Access the primary map view    
+        # Access the primary map view
         self.assert200('djcytoscape:primary')
 
         # Should have generated the "Main" map
@@ -125,10 +124,10 @@ class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_regenerate_with_deleted_object(self):
         bad_map = CytoScape.objects.create(
-            name="bad map", 
-            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'), 
+            name="bad map",
+            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
-        ) 
+        )
         self.assertRedirects(
             response=self.client.get(reverse('djcytoscape:regenerate', args=[bad_map.id])),
             expected_url=reverse('djcytoscape:primary'),
@@ -142,10 +141,10 @@ class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_regenerate_all_with_bad_map(self):
         CytoScape.objects.create(
-            name="bad map", 
-            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'), 
+            name="bad map",
+            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
-        ) 
+        )
         self.assertRedirects(
             response=self.client.get(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),

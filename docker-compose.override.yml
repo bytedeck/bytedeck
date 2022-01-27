@@ -26,7 +26,7 @@ services:
       retries: 5
     ports:
     - 5432:5432  # Expose port so app can connect to db when developing locally with `./src/manage.py [runserver|test src]
-  
+
   redis:
     image: "redis:5.0-alpine"
     env_file: .env
@@ -44,19 +44,21 @@ services:
     - 6379:6379  # Expose port so app can connect to redis when developing locally with `./src/manage.py [runserver|test src]
 
   web:
+    stdin_open: true
+    tty: true   # Enabled together with stdin_open so it won't raise an error when we are in pdb mode. Attach using `docker attach $(docker-compose ps -q web)`
     environment:
       POSTGRES_HOST: db  # takes precendent over .env file
       REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd /app/src/ &&
-                      python manage.py migrate_schemas --shared &&  
-                      python manage.py migrate_schemas --executor=parallel && 
+                      python manage.py migrate_schemas --shared &&
+                      python manage.py migrate_schemas --executor=multiprocessing &&
                       python manage.py runserver 0.0.0.0:8000"   # no need for uwsgi in development, this is easier
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-  
+
   celery:
     environment:
       POSTGRES_HOST: db  # takes precendent over .env file

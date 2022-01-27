@@ -1,9 +1,11 @@
 import uuid
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 from badges.models import Badge, BadgeAssertion, BadgeType
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
@@ -150,7 +152,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # test: assertion_create()
         form_data = {
             'badge': self.test_badge.id,
-            'user': self.test_student1.id 
+            'user': self.test_student1.id
         }
 
         response = self.client.post(

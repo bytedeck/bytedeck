@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from django.db.models import Case, F, Value, When
 
-from tenant_schemas.utils import schema_context
+from django_tenants.utils import schema_context
 
 from tenant.models import Tenant
 

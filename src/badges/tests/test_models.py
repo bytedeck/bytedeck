@@ -1,13 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from model_bakery.recipe import Recipe
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
+from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
 from siteconfig.models import SiteConfig
-from badges.models import Badge, BadgeAssertion, BadgeType, BadgeSeries, BadgeRarity
 
 User = get_user_model()
 
@@ -183,7 +183,7 @@ class BadgeAssertionTestModel(TenantTestCase):
             self.student,
             baker.make(Badge),
         )
-        self.assertIsInstance(new_assertion, BadgeAssertion) 
+        self.assertIsInstance(new_assertion, BadgeAssertion)
 
     def test_badge_assertion_manager_xp_to_date(self):
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
