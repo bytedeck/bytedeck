@@ -28,19 +28,19 @@ class Command(BaseCommand):
         try:
             connections['default'].cursor()
         except OperationalError:
-            print("I can't connect to the database.  Are you sure it's running?")
-            print("Try `docker-compose up -d db` then give it a few seconds to boot up")
-            print("Bailing...")
+            self.stdout.write("I can't connect to the database.  Are you sure it's running?")
+            self.stdout.write("Try `docker-compose up -d db` then give it a few seconds to boot up")
+            self.stdout.write(self.style.NOTICE("Bailing..."))
             return
 
-        print('\n** Running initial migrations on the public schema...')
+        self.stdout.write('\n** Running initial migrations on the public schema...')
         call_command("migrate_schemas", "--shared")
 
         # Create super user on the public schema ###############################################
-        print('\n** Creating superuser...')
+        self.stdout.write('\n** Creating superuser...')
         if User.objects.filter(username=settings.DEFAULT_SUPERUSER_USERNAME).exists():
-            print('A superuser with username `{username}` already exists'.format(username=settings.DEFAULT_SUPERUSER_USERNAME))
-            print('Bailing...')
+            self.stdout.write(self.style.NOTICE(f'A superuser with username `{settings.DEFAULT_SUPERUSER_USERNAME}` already exists'))
+            self.stdout.write(self.style.NOTICE("Bailing..."))
             return
 
         User.objects.create_superuser(
@@ -49,10 +49,10 @@ class Command(BaseCommand):
             password=settings.DEFAULT_SUPERUSER_PASSWORD
         )
 
-        print("Superuser")
-        print(f" username: {settings.DEFAULT_SUPERUSER_USERNAME}")
-        print(f" password: {settings.DEFAULT_SUPERUSER_PASSWORD}")
-        print(f" email: {settings.DEFAULT_SUPERUSER_EMAIL}")
+        self.stdout.write("Superuser")
+        self.stdout.write(f" username: {settings.DEFAULT_SUPERUSER_USERNAME}")
+        self.stdout.write(f" password: {settings.DEFAULT_SUPERUSER_PASSWORD}")
+        self.stdout.write(f" email: {settings.DEFAULT_SUPERUSER_EMAIL}")
 
         # Create the `public` Tenant object ###############################################
 
@@ -63,7 +63,7 @@ class Command(BaseCommand):
         # Also disconnect from the tenant_save_callback so it wont create unnecessary domains
         post_save.disconnect(tenant_save_callback, sender=Tenant)
 
-        print('\n** Creating `public` Tenant object...')
+        self.stdout.write(self.style.SUCCESS('\n** Creating `public` Tenant object...'))
         public_tenant, created = Tenant.objects.get_or_create(
             schema_name='public',
             name='public'
@@ -75,22 +75,23 @@ class Command(BaseCommand):
         )
 
         if not created:
-            print("\nA schema with the name `public` already existed.  A new one was not created.")
-        print("\nPublic Tenant object")
-        print(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
-        print(f" tenant.schema_name: {public_tenant.schema_name}")
-        print(f" tenant.name: {public_tenant.name}")
+            self.stdout.write(self.style.NOTICE('\nA schema with the name `public` already existed.  A new one was not created.'))
 
-        print('\n** Updating Sites object...')
+        self.stdout.write(self.style.SUCCESS('\nPublic Tenant object'))
+        self.stdout.write(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
+        self.stdout.write(f" tenant.schema_name: {public_tenant.schema_name}")
+        self.stdout.write(f" tenant.name: {public_tenant.name}")
+
+        self.stdout.write(self.style.SUCCESS('\n** Updating Sites object...'))
         site = Site.objects.first()
         site.domain = settings.ROOT_DOMAIN
         site.name = settings.ROOT_DOMAIN[:45]  # Can be too long if using an AWS public DNS
         site.save()
 
-        print("\nSites object")
-        print(f" site.domain: {site.domain}")
-        print(f" site.name: {site.name}")
-        print(f" site.id: {site.id}")
+        self.stdout.write("\nSites object")
+        self.stdout.write(f" site.domain: {site.domain}")
+        self.stdout.write(f" site.name: {site.name}")
+        self.stdout.write(f" site.id: {site.id}")
 
         # Connect again
         post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
