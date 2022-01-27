@@ -159,6 +159,11 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
                   "when importing from that other system, it will update this badge too. "
                   "Otherwise do not edit this or it will break existing links!"
     )
+
+    map_transition = models.BooleanField(
+        default=False, 
+        help_text='Break maps at this badge.  This badge will link to a new map.'
+    )
     # hours_between_repeats = models.PositiveIntegerField(default = 0)
     # date_available = models.DateField(default=timezone.now())
     # time_available = models.TimeField(default=time().min) # midnight

@@ -18,11 +18,53 @@ from siteconfig.models import SiteConfig
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
-        self.category = baker.make(Category)
+        self.category = baker.make(Category, title="Test Campaign")
 
-    def test_badge_type_creation(self):
+    def test_category_type_creation(self):
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
+
+    def test_condition_met_as_prerequisite(self):
+        """ Test that all unique quests in a campaign are completed before the campaign is considered completed
+        for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
+
+        user = baker.make('user')
+        user2 = baker.make('user')
+
+        # create some quests as part of the test campaign
+        quest1_repeatable = baker.make(Quest, campaign=self.category, max_repeats=-1)  # repeatable
+        quest2 = baker.make(Quest, campaign=self.category) 
+
+        # user should not meet the prerequisite at this point (no quests completed)
+        self.assertFalse(self.category.condition_met_as_prerequisite(user))
+
+        # create and complete a quest submission for the first quest, still doesn't meet prereq
+        baker.make(QuestSubmission, quest=quest1_repeatable, user=user, is_completed=True, is_approved=True)
+        self.assertFalse(self.category.condition_met_as_prerequisite(user))
+
+        # complete the repeatable quest a second time, category prereq should still not be met
+        baker.make(QuestSubmission, quest=quest1_repeatable, user=user, is_completed=True, is_approved=True)
+        self.assertFalse(self.category.condition_met_as_prerequisite(user))
+
+        # create a quest submission for the second quest, now they should meet the prereq
+        baker.make(QuestSubmission, quest=quest2, user=user, is_completed=True, is_approved=True)
+        self.assertTrue(self.category.condition_met_as_prerequisite(user))
+
+        # But other random user still doesn't meet prereq
+        self.assertFalse(self.category.condition_met_as_prerequisite(user2))
+
+    def test_xp_sum(self):
+        """ Test that the XP sum of all quests in a campaign is returned correctly """
+
+        # create some quests as part of the test campaign
+        baker.make(Quest, campaign=self.category, xp=1)  # included in sum
+        baker.make(Quest, campaign=self.category, xp=2)  # included in sum
+        baker.make(Quest, xp=4)  # NOT included in sum because n a different campaign
+        baker.make(Quest, visible_to_students=False, xp=8)  # NOT included in sum becuase not visible
+        baker.make(Quest, archived=True, xp=16)  # NOT included in sum becase archived
+
+        # check that the XP sum is correct
+        self.assertEqual(self.category.xp_sum(), 3)    
 
 
 class CommonDataTestModel(TenantTestCase):
@@ -248,7 +290,7 @@ class SubmissionTestModel(TenantTestCase):
         """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""
         minutes = 5
         time_delta = datetime.timedelta(0, minutes * 60)
-        print(time_delta.total_seconds())
+        # print(time_delta.total_seconds())
         self.submission.mark_completed()
 
         # fake the completion time

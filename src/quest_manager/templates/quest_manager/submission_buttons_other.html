@@ -1,0 +1,36 @@
+  <div class="btn-group" role="group">
+
+    <a title="View the FULL DETAILS of this quest and the full comment form"  class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:submission' s.id %}">
+        <i class="fa fa-fw fa-file-text-o"></i></a>
+    {% if s.quest %}
+    <a title="Quick link to EDIT this quest in case an error or typo" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:quest_update' s.quest.id %}">
+        <i class="fa fa-fw fa-pencil"></i></a>
+    <a title="View past submissions of this quest from other students" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:approved_for_quest' s.quest.id %}">
+        <i class="fa fa-fw fa-folder-o"></i></a>
+    <a title="View summary data for this quest" class="btn btn-default" role="button"
+        target="_blank" href="{% url 'quests:summary' s.quest.id %}">
+        <i class="fa fa-fw fa-bar-chart"></i></a>
+    <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
+        title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
+        <i class="fa fa-fw fa-share"></i></a>
+
+      {% if not s.flagged_by %}
+        <a href="#" class="btn btn-default btn-flag-submission" role="button"
+            title="FLAG this quest for future follow up.  It will appear under the flagged tab. This does not leave a comment or approve the quest."
+            data-sub-id="{{s.id}}">
+            <i class="fa fa-fw fa-flag-o" ></i>
+        </a>
+      {% else %}
+        <a href="{% url 'quests:unflag' s.id %}" class="btn btn-default" role="button"
+            title="UNFLAG this quest">
+          <span class="fa-stack fa-sm" style="font-size:0.63em;">
+            <i class="fa fa-flag-o fa-stack-1x"></i>
+            <i class="fa fa-ban fa-stack-2x" style="color: tomato"></i>
+          </span>
+        </a>
+      {% endif %}
+    {% endif %}
+  </div>

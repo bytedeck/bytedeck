@@ -6,19 +6,20 @@
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-star pull-right"></i>Ranks
   {% if request.user.is_staff %}
-    <a class="btn btn-primary" href="/admin/courses/rank/" role="button">Edit</a>
+    <a class="btn btn-primary" href="{% url 'courses:rank_create' %}" role="button">New</a>
   {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-sm-6">
     <table class="table table-striped">
       <tr>
         <th></th>
         <th>Rank</th>
         <th>XP</th>
         <th>Quest Map</th>
+        {% if request.user.is_staff %}
+        <th>Action</th>
+        {% endif %}
       </tr>
       {% for object in object_list %}
         <tr>
@@ -30,11 +31,20 @@
             <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>
             {% endif %}
           </td>
+          {% if request.user.is_staff %}
+          
+            <td>
+            <a class="btn btn-warning" href="{% url 'courses:rank_update' object.id %}" role="button" title="Edit this rank">
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-danger" href="{% url 'courses:rank_delete' object.id %}" role="button" title="Delete this rank" style="margin-left: 3px">
+              <i class="fa fa-trash-o"></i>
+            </a>
+          </td>
+          {% endif %}
         </tr>
       {% endfor %}
     </table>
-  </div>
-</div>
 {% endblock %}
 
 {% block js %}{% endblock %}

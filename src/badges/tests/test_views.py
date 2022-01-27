@@ -30,7 +30,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = SiteConfig.get().active_semester
 
-        self.test_badge = baker.make(Badge, )
+        self.test_badge = baker.make(Badge, xp=5)
         self.test_badge_type = baker.make(BadgeType)
         self.test_assertion = baker.make(BadgeAssertion)
 
@@ -174,6 +174,27 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # shouldn't exist anymore now that we deleted it!
         with self.assertRaises(BadgeAssertion.DoesNotExist):
             BadgeAssertion.objects.get(id=new_assertion.id)
+
+    def test_assertion_create_no_xp(self):
+        """Don't grant XP for this badge assertion"""
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # No XP granted for this badge
+        form_data = {
+            'badge': self.test_badge.id,
+            'user': self.test_student1.id, 
+            'do_not_grant_xp': True,
+        }
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data=form_data
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+        
+        new_assertion = BadgeAssertion.objects.latest('timestamp')
+        self.assertEqual(new_assertion.do_not_grant_xp, True)
 
     def test_bulk_assertion_create(self):
         # log in a teacher

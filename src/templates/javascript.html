@@ -12,8 +12,9 @@
 
 <script src="{% static 'js/custom.js' %}"></script>
 
-<script src="{% static 'js/jquery-double-submission.js' %}"></script>
-<script src="{% static 'js/jquery-packed-img-strip.js' %}"></script>
+<script src="{% static 'js/jquery-double-submission.js' %}?v=1.1"></script>
+<script src="{% static 'js/jquery-packed-img-strip.js' %}?v=1.0"></script>
+
 
 <script>
     $(function() {
@@ -153,7 +154,7 @@
                  // INSERT NOTIFICATION ITEMS HERE (as <li>)
                 <li><a href="/notifications/"> View All Notifications</a></li>
               </ul>
-            </li> 
+            </li>
             */
 
             if(count!=0) {
@@ -162,8 +163,8 @@
               // Add a menu item and remove button for each notification
               $(data.notifications).each(function(){
                 if (this.removable) {
-                  remove_link = "<a class='notification-mark-read' title='Remove' href='#' data-id='" + 
-                                this.id + 
+                  remove_link = "<a class='notification-mark-read' title='Remove' href='#' data-id='" +
+                                this.id +
                                 "'><i class='fa fa-times fa-fw text-muted'></i></a>";
                   $menu_item = $("<li class='dropdown-horizontal-group'>"+ this.link + remove_link + "</li>");
                 }

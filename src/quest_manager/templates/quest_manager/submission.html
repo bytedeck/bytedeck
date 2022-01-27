@@ -29,6 +29,14 @@
 
 {% block content %}
 
+  {% if request.user.is_staff %}
+  {% with submission as s %}
+  <div class="pull-right">
+    {% include "quest_manager/submission_buttons_other.html" %}
+  </div>
+  {% endwith %}
+  {% endif %}
+
   {% if not submission.is_completed %}
     <!-- <div class="pull-right"> -->
         <!-- <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a> -->
@@ -49,7 +57,9 @@
       {% include "quest_manager/snippets/previous_submission.html" %}
 
       <li class="list-group-item list-group-item-info">Submission Comments
-        {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+        {% with submission as s %}
+          {% include "quest_manager/snippets/time_to_complete_submission.html" %}
+        {% endwith %}
       </li>
 
       {% with submission.get_comments as target_comments %}
@@ -75,7 +85,10 @@
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}
-            {% include "quest_manager/buttons_approvals.html" %}
+          <div>
+            {% include "quest_manager/submission_buttons_form.html" %}
+            {% include "quest_manager/submission_buttons_other.html" %}
+          </div>
           {% endwith %}
         {% else %}
           {% if submission.quest.visible_to_students %}
@@ -136,6 +149,7 @@
         function save_draft() {
             $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
             draftComment = $summernoteEditor.html()
+            xpRequested = $('#id_xp_requested').val()
 
             $draftSaveBtn = $('#save-draft-btn')
             old_text = $draftSaveBtn.html()
@@ -159,7 +173,8 @@
                     data : {
                       csrfmiddlewaretoken: "{{ csrf_token }}",
                       comment: draftComment,
-                      submission_id: {{ submission.id }}
+                      submission_id: {{ submission.id }},
+                      xp_requested: xpRequested
                     }, // data sent with the post request
 
                     // handle a successful response

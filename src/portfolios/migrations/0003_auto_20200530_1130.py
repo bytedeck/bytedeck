@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='portfolio',
             name='listed_publicly',
-            field=models.BooleanField(default=False, help_text='Your portfolio can listed publicly by your teacher.'),
+            field=models.BooleanField(default=False, help_text='Your portfolio can be listed publicly by your teacher.'),
         ),
     ]

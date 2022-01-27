@@ -12,6 +12,7 @@ class QuestFormTest(TenantTestCase):
             "name": "Test Quest",
             "xp": 0,
             "max_repeats": 0,
+            "max_xp": -1,
             "hours_between_repeats": 0,
             "sort_order": 0,
             "date_available": str(timezone.now().date()),

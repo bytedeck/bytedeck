@@ -3,7 +3,7 @@ from datetime import datetime
 from django import forms
 from django.utils import timezone
 
-from bootstrap_datepicker_plus import DateTimePickerInput
+from bootstrap_datepicker_plus.widgets import DateTimePickerInput
 from django_summernote.widgets import SummernoteInplaceWidget
 
 from .models import Announcement

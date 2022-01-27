@@ -81,14 +81,14 @@
             <th data-sortable='true' data-field='last_sub' data-sort-name='last_sub_datetime'>
                 Last Quest
             </th>
-            <th data-field='last_sub_datetime' data-visible='false'></th>
+            <th data-field='last_sub_datetime' data-switchable='false' data-visible='false'></th>
             <!-- End sorting group -->
 
             <!-- Uses `last_login_datetime` for sorting-->
             <th data-sortable='true' data-field='last_login' data-sort-name='last_login_datetime'>
               Last Login
             </th>
-            <th data-field='last_login_datetime' data-visible='false'></th>
+            <th data-field='last_login_datetime' data-switchable='false' data-visible='false'></th>
             <!-- End sorting group -->
 
             <th data-sortable='true' data-field='username'>
@@ -157,7 +157,7 @@
                       {{ object.user.last_login|date:"y/m/d" }} {{ object.user.last_login|time:"H:i:s"}}
                     </td>
                     <!-- end `last_login_datetime` -->
-                    <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user }}</a></td>
+                    <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
 
                     {#      Admin buttons #}
                     <td>

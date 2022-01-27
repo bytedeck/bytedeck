@@ -85,9 +85,15 @@ class IsAPrereqMixin:
     Classes using this mixin need to implement
     the method: condition_met_as_prerequisite(user, num_required)
     and have a field "name", or override the autocomplete_search_fields() class method
+
+    Steps to add a new prerequisite model:
+
+    1. add IsAPrereqMixin to the class (this will automatically regsiter the model as a prerequisite)
+    2. if the model does not have a name field, then override the autocomplete_search_fields() method (see implementation below
+    3. implement the `condition_met_as_prerequisite(user, num_required)` method to the model class
+    
     """
 
-    # TODO: Can I force implementing models to define this method?
     def condition_met_as_prerequisite(self, user, num_required):
         """
         Defines what it means for the user to meet this prerequisite.  For this Mixin to be any use, the implementing
@@ -97,7 +103,7 @@ class IsAPrereqMixin:
         :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
 
         """
-        raise NotImplementedError
+        raise NotImplementedError(f"{self.__class__.__name__} model must implement a condition_met_as_prerequisite() method")
 
     def is_used_prereq(self):
         """
@@ -111,7 +117,7 @@ class IsAPrereqMixin:
         """
         return Prereq.objects.all_reliant_on(self, exclude_NOT=exclude_NOT)
 
-    def get_reliant_objects(self, active_only=True, exclude_NOT=False):
+    def get_reliant_objects(self, active_only=True, exclude_NOT=False, sort=False):
         """
         :return: a list containing the objects that require this as a prereq
         """
@@ -126,7 +132,9 @@ class IsAPrereqMixin:
                     if parent_obj.active:
                         reliant_objects.append(parent_obj)
                 else:
-                    reliant_objects.append(parent_obj)
+                    reliant_objects.append(parent_obj)     
+        if sort:
+            reliant_objects = sorted(reliant_objects, key=str)
         return reliant_objects
 
     # to help with the prerequisite choices:

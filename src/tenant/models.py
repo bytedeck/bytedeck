@@ -38,6 +38,27 @@ class Tenant(TenantMixin):
     )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
+    owner_full_name = models.CharField(
+        max_length=255, blank=True, null=True, 
+        help_text="The owner of this deck."
+    )
+    owner_email = models.EmailField(null=True, blank=True)
+    max_active_users = models.SmallIntegerField(
+        default=40,
+        help_text="The maximum number of users that can be active on this deck; -1 = unlimited."
+    )
+    max_quests = models.SmallIntegerField(
+        default=100,
+        help_text="The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited."
+    )
+    trial_end_date = models.DateField(
+        blank=True, null=True,
+        help_text="The date when the trial period ends. Blank or a date in the past means the deck is not in trial mode."
+    )
+    paid_until = models.DateField(
+        blank=True, null=True,
+        help_text="If the deck is not in trial mode, then the deck will become inaccessable to students after this date."
+    )
 
     def __str__(self):
         return f'{self.schema_name} - {self.primary_domain_url}'

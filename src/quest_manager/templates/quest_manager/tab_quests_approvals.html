@@ -3,7 +3,7 @@
     > SUBMITTED (tab_quests_approvals.html)
     > RETURNED (tab_quests_approvals.html)
     > APPROVED (tab_quests_approvals.html)
-    > SKIPPED (tab_quests_approvals.html)
+    > FLAGGED (tab_quests_approvals.html)
 -->
 
 {% load crispy_forms_tags %}
@@ -15,7 +15,7 @@
     <div class="col-sm-1 col-xs-2">XP</div>
     <div class="col-sm-1 hidden-xs">Blocks</div>
     <div class="col-sm-2 col-xs-3">User</div>
-    <div class="col-sm-3 hidden-xs">{{tab.time_heading}}</div>
+    <div class="col-sm-2 hidden-xs">Status</div>
   </div>
   <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
   {% for s in tab.submissions %}
@@ -38,11 +38,13 @@
               <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
             </div>
             <div class="col-sm-4 col-xs-5">{{s.quest_name}}</div>
-            <div class="col-sm-1 col-xs-2">{{s.quest.xp}}  </div>
+            <div class="col-sm-1 col-xs-2">
+              {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            </div>
             <div class="col-sm-1 hidden-xs">
               {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
             </div>
-            <div class="col-sm-2 col-xs-3">{{s.user}} <br />
+            <div class="col-sm-2 col-xs-3">{{s.user.username|truncatechars:14}} <br />
               <small>{{ s.user.profile.preferred_full_name }}</small>
              </div>
             <div class="col-sm-3 hidden-xs">
@@ -69,7 +71,10 @@
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ quick_reply_form | crispy }}
-            {% include "quest_manager/buttons_approvals.html" %}
+            <div>
+              {% include "quest_manager/submission_buttons_form.html" %}
+              {% include "quest_manager/submission_buttons_other.html" %}
+            </div>
           </form>
         </li>
 
@@ -85,7 +90,7 @@
 
 {% elif user.block_set.count == 0 %}
   <p>You are not assigned as the teacher for any blocks yet.</p>
-  <button>Join a block</button>
+  <a class="btn btn-info" href="{% url 'courses:block_list' %}">Join a block</a>
 {% else %}
   <p>None.</p>
 {% endif %}

@@ -1,11 +1,17 @@
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.db import connection
 
 from django_tenants.utils import get_public_schema_name
+from django_tenants.utils import tenant_context
+
+from quest_manager.models import Quest
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
+
+User = get_user_model()
 
 
 class PublicSchemaOnlyAdminAccessMixin:
@@ -49,7 +55,7 @@ class TenantAdminForm(forms.ModelForm):
 
     class Meta:
         model = Tenant
-        fields = ['name']
+        fields = ['name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
 
     def clean_name(self):
         name = self.cleaned_data["name"]
@@ -69,7 +75,13 @@ class TenantAdminForm(forms.ModelForm):
 
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('schema_name', 'primary_domain_url', 'name', 'desc', 'created_on')
+    list_display = (
+        'schema_name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date',
+        'active_user_count', 'quest_count'
+    )
+    list_filter = ('paid_until', 'trial_end_date')
+    search_fields = ['schema_name', 'owner_full_name', 'owner_email']
+
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
 
@@ -84,6 +96,17 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Disable delete button and admin action
         return False
+
+    def quest_count(self, obj):
+        if obj.name != get_public_schema_name():
+            with tenant_context(obj):
+                return Quest.objects.filter(archived=False).count()
+        else:
+            return None
+
+    def active_user_count(self, obj):
+        with tenant_context(obj):
+            return User.objects.filter(is_active=True).count()
 
 
 admin.site.register(Tenant, TenantAdmin)

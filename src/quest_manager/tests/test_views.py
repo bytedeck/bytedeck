@@ -11,6 +11,7 @@ or they could be moved into a `test_urls.py` module.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -20,7 +21,8 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from notifications.models import Notification
-from quest_manager.models import Quest, QuestSubmission
+from quest_manager.models import Category, Quest, QuestSubmission
+from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -94,7 +96,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 302)
+        # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
@@ -418,10 +421,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.test_student = User.objects.create_user('test_student', password="password")
+
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
-        self.quest = baker.make(Quest)
+        self.quest = baker.make(Quest, xp=5)
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
@@ -745,6 +749,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -957,6 +962,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
             # these fields are required but they have defaults
             'xp': 0,
             'max_repeats': 0,
+            'max_xp': -1,
             'hours_between_repeats': 0,
             'sort_order': 0,
             'date_available': "2006-10-25",
@@ -1153,11 +1159,96 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # but it should appear when we view all quests
         response = self.client.get(reverse('quests:available_all'))
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
+
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
 
 
+class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
+        self.test_password = "password"
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+        # self.category = baker.make('quests_manager.category', name="testcat")
+
+    def test_all_page_status_codes_for_anonymous(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+
+        self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_create')
+        self.assertRedirectsAdmin('quests:category_update', args=[1])
+        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+
+    def test_all_page_status_codes_for_students(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+        self.client.force_login(self.test_student1)
+
+        # Staff access only
+        self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_create')
+        self.assertRedirectsAdmin('quests:category_update', args=[1])
+        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+
+    def test_all_page_status_codes_for_staff(self):
+        ''' If not logged in then all views should redirect to home page or admin login '''
+        self.client.force_login(self.test_teacher)
+
+        # Staff access only
+        self.assert200('quests:categories')
+
+    def test_CategoryList_view(self):
+        """ Admin should be able to view course list """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:categories'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_CategoryCreate_view(self):
+
+        """ Admin should be able to create a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'New category',
+            'active': True,
+        }
+        response = self.client.post(reverse('quests:category_create'), data=data)
+        self.assertRedirects(response, reverse('quests:categories'))
+
+        course = Category.objects.get(title=data['title'])
+        self.assertEqual(course.title, data['title'])
+
+    def test_CategoryUpdate_view(self):
+        """ Admin should be able to update a course """
+        self.client.force_login(self.test_teacher)
+        data = {
+            'title': 'My Updated Title',
+            'active': False,
+        }
+        response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
+        self.assertRedirects(response, reverse('quests:categories'))
+        course = Category.objects.get(id=1)
+        self.assertEqual(course.title, data['title'])
+        self.assertEqual(course.active, data['active'])
+
+    def test_CategoryDelete_view(self):
+        """ Admin should be able to delete a course """
+        self.client.force_login(self.test_teacher)
+
+        before_delete_count = Category.objects.count()
+        response = self.client.post(reverse('quests:category_delete', args=[Category.objects.filter(title="Orientation")[0].id]))
+        after_delete_count = Category.objects.count()
+        self.assertRedirects(response, reverse('quests:categories'))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
+
+
 class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
+
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
 
@@ -1720,11 +1811,13 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
             url(r'^approvals/returned/$', views.approvals, name='returned'),
             url(r'^approvals/approved/$', views.approvals, name='approved'),
-            url(r'^approvals/skipped/$', views.approvals, name='skipped'),
-            # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
-            # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'), # Not used
+            url(r'^approvals/flagged/$', views.approvals, name='flagged'),
             url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
             url(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
+            # Unused:
+            # url(r'^approvals/skipped/$', views.approvals, name='skipped'),
+            # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
+            # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'), # Not used
             # url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'), # Not used
     """
 
@@ -1759,7 +1852,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
         self.assertTrue(response.context['submitted_tab_active'])  # ? Is this used anymore?
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][0]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -1772,7 +1865,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:submitted_all'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][0]['active'])
         self.assertFalse(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -1784,7 +1877,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:returned'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][1]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -1797,22 +1890,33 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:approved'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][2]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
 
-    def test_skipped(self):
-        with patch('quest_manager.views.QuestSubmission.objects.all_skipped', return_value=[self.sub]):
-            response = self.client.get(reverse('quests:skipped'))
+    def test_flagged(self):
+        with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][3]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
-        self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:skipped'))
+        self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:flagged'))
+
+    # def test_skipped(self):
+    #     with patch('quest_manager.views.QuestSubmission.objects.all_skipped', return_value=[self.sub]):
+    #         response = self.client.get(reverse('quests:skipped'))
+    #     self.assertEqual(response.status_code, 200)
+    #     self.assertContains(response, str(self.sub))
+    #     # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+    #     self.assertTrue(response.context['tab_list'][3]['active'])
+    #     self.assertTrue(response.context['current_teacher_only'])
+    #     self.assertIsNone(response.context['quest'])
+    #     self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:skipped'))
 
     def test_approved_for_quest(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
@@ -1821,7 +1925,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:approved_for_quest', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][2]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertEqual(response.context['quest'], self.quest)
@@ -1849,3 +1953,28 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         response = self.client.get(reverse('quests:approvals'))
         self.assertContains(response, 'My blocks')
+
+
+class Is_staff_or_TA_test(TenantTestCase):
+    """ Test is_staff_or_TA() test_func function """
+
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_is_staff_or_TA___staff(self):
+        """ User is staff, return True """
+        self.user.is_staff = True
+        self.assertTrue(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA___TA(self):
+        """ User is TA returns True"""
+        self.user.profile.is_TA = True
+        self.assertTrue(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA___neither(self):
+        """ User is not staff or TA, returns False """
+        self.assertFalse(is_staff_or_TA(self.user))
+
+    def test_is_staff_or_TA__anonymous(self):
+        """ Anonymous user returns False"""
+        self.assertFalse(is_staff_or_TA(AnonymousUser()))

@@ -4,6 +4,81 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.13.0] 2022-01-16 - Mostly Map Stuff
+* Campaigns can now be prerequisites [#890](https://github.com/bytedeck/bytedeck/issues/890)
+* Add campaign XP to maps [#819](https://github.com/bytedeck/bytedeck/issues/819)
+* Sort unordered campaign maps alphabetically [#793](https://github.com/bytedeck/bytedeck/issues/793)
+* Add map transition field to Quests and Badges [#574](https://github.com/bytedeck/bytedeck/issues/574)
+* [bytedeck admin] Add new fields to Tenant model [#897](https://github.com/bytedeck/bytedeck/issues/897)
+
+### [1.12.3] 2021-12-14
+* Re-enable email notifications feature
+* Professionalize language [#887](https://github.com/bytedeck/bytedeck/issues/887)
+* [dev] Test coverage reporting to coveralls.io
+* Bugfixes:
+  - [#874](https://github.com/bytedeck/bytedeck/issues/874)
+  - [#862](https://github.com/bytedeck/bytedeck/issues/862)
+  - [#875](https://github.com/bytedeck/bytedeck/issues/875)
+  - [#885](https://github.com/bytedeck/bytedeck/issues/885)
+
+### [1.12.2] 2021-12-05
+* Add ReCaptcha to contact page to rpevent spam
+* Dependencies update (Datepicker Widget)[#881](https://github.com/bytedeck/bytedeck/issues/881)
+* Bugifxes:
+  - [#880](https://github.com/bytedeck/bytedeck/issues/880)
+  - [#877](https://github.com/bytedeck/bytedeck/issues/877)
+  - [#876](https://github.com/bytedeck/bytedeck/issues/876)
+  - [#865](https://github.com/bytedeck/bytedeck/issues/865)
+  - [#870](https://github.com/bytedeck/bytedeck/issues/870)
+  - [#866](https://github.com/bytedeck/bytedeck/issues/866)
+  - [#867](https://github.com/bytedeck/bytedeck/issues/867)
+
+### [1.12.1] 2021-11-24
+* Add number indicator on quest tabs [#823](https://github.com/bytedeck/bytedeck/issues/823)
+* [bugfix] Deleting quests breaks things [#868](https://github.com/bytedeck/bytedeck/issues/868).
+
+### [1.12.0] 2021-11-20
+* Add option for students to request the amount XP for their submission
+* Add a max_xp option to repeatable quests, so that students can not earn more than this (per seemster)
+* Add buttons to top of submissions for convenience [#701](https://github.com/bytedeck/bytedeck/issues/701)
+* Add views/pages on frontend for Ranks and Campaigns
+* Styling tweaks [#829](https://github.com/bytedeck/bytedeck/issues/829)
+* [bugfix] Courses form icon upload.
+
+### [1.11.5] 2021-06-08
+* Add find and replace management command
+* [security] Update dependancy versions (Pillow, psycopg2)
+* [bugfix] Fix "do not grant xp" for badges [#835](https://github.com/bytedeck/bytedeck/issues/835)
+
+### [1.11.4] 2021-02-15
+* Replace "Skipped" tab with much more useful "Flagged" tab
+* [bugfix] Limit username display length in various areas to prevent layout getting messed up
+* [bugfix] Fix broken `pack` css class for evenly distributing images in a row [#814](https://github.com/bytedeck/bytedeck/issues/814)
+
+### [1.11.3] 2021-02-05
+* Add customizable outgoing email signature for announcements etc (Admin > Site Configuration)
+* Change multi-select widget timeout from 3mins to Never [#792](https://github.com/bytedeck/bytedeck/issues/792)
+* Remove report card dates at bottom of Mark Calculations page
+* Improve formatting of avatar and XP bars in profile page
+* Bugfixes:
+  - Fix missing XP value for multi-course students on Mark Calculations page.
+  - [#674](https://github.com/bytedeck/bytedeck/issues/674)
+  - [#805](https://github.com/bytedeck/bytedeck/issues/805)
+  - [#785](https://github.com/bytedeck/bytedeck/issues/785)
+  - [#752](https://github.com/bytedeck/bytedeck/issues/752)
+  - [#761](https://github.com/bytedeck/bytedeck/issues/761)
+  - [#749](https://github.com/bytedeck/bytedeck/issues/749)
+
+### [1.11.2] 2021-01-31
+* Add edit link to quest "General Info" panel at left (Common Data)
+* Tweak styling for code elements in dark theme
+* Remove "Hackerspace" reference in spam clicking message
+* Include teachers in announcements emails
+* Bugfixes:
+  - [#799](https://github.com/bytedeck/bytedeck/issues/799)
+  - [#790](https://github.com/bytedeck/bytedeck/issues/790)
+  - [#788](https://github.com/bytedeck/bytedeck/issues/788)
+
 ### [1.11.1] 2020-12-15
 * [teachers] Submission summary page improvements 
 * Minor styling tweaks

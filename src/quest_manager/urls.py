@@ -54,7 +54,8 @@ urlpatterns = [
     url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
     url(r'^approvals/returned/$', views.approvals, name='returned'),
     url(r'^approvals/approved/$', views.approvals, name='approved'),
-    url(r'^approvals/skipped/$', views.approvals, name='skipped'),
+    url(r'^approvals/flagged/$', views.approvals, name='flagged'),
+    # url(r'^approvals/skipped/$', views.approvals, name='skipped'),
     # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
     # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'),  # Not used
     url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
@@ -88,8 +89,13 @@ urlpatterns = [
     # Flagged submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
-    url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
+    # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
+    # Campaigns / Categories
+    path('campaigns/', views.CategoryList.as_view(), name='categories'),
+    path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
+    path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
+    path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
 
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]

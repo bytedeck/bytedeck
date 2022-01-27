@@ -1,0 +1,18 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} Delete Rank {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this rank?<p>
+  <div class="well">
+    <p>Name: {{object.name}}</p>
+    <p>XP: {{object.xp}}</p>
+    <p>Icon: {{object.icon}}</p>
+    <p>fa_icon: {{object.fa_icon}}</p>
+  </div>
+  <a href="{% url 'courses:ranks' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}
