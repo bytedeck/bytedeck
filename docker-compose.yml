@@ -14,7 +14,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.aws
+      dockerfile: Dockerfile
       # Enable below when uwsgi-nginx uses unix sock
       # args:
       #   WUID: $WUID
@@ -32,7 +32,7 @@ services:
   celery:
     build:
       context: .
-      dockerfile: Dockerfile.aws
+      dockerfile: Dockerfile
     env_file: .env
     command: bash -c "cd src &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
@@ -44,7 +44,7 @@ services:
   celery-beat:
     build:
       context: .
-      dockerfile: Dockerfile.aws
+      dockerfile: Dockerfile
     env_file: .env
     command: bash -c "cd src &&
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
