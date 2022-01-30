@@ -1,7 +1,5 @@
 # import re
 
-from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Rank
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
@@ -12,11 +10,15 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
+
 from django_resized import ResizedImageField
+from django_tenants.utils import get_public_schema_name
+
+from badges.models import BadgeAssertion
+from courses.models import CourseStudent, Rank
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-from tenant_schemas.utils import get_public_schema_name
 from utilities.models import RestrictedFileField
 
 

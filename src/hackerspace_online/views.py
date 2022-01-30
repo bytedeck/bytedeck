@@ -7,7 +7,7 @@ from django.views.generic.base import RedirectView
 from django.views.generic.edit import FormView
 
 from allauth.account.views import PasswordResetFromKeyView, PasswordResetView
-from tenant_schemas.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name
 
 from siteconfig.models import SiteConfig
 from tenant.views import PublicOnlyViewMixin, non_public_only_view

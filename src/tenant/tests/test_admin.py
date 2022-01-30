@@ -3,22 +3,22 @@
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
-from tenant_schemas.test.cases import TenantTestCase
-# from tenant_schemas.test.client import TenantClient
-from tenant_schemas.utils import tenant_context
+from django_tenants.test.cases import TenantTestCase
+# from django_tenants.test.client import TenantClient
+from django_tenants.utils import tenant_context
 
-from tenant.models import Tenant
 from tenant.admin import TenantAdmin, TenantAdminForm
+from tenant.models import Tenant
 
 
 class NonPublicTenantAdminTest(TenantTestCase):
     """For testing non-public tenants
 
     TenantTestCase comes with a `self.tenant`
-    
+
     From docs: https://django-tenant-schemas.readthedocs.io/en/latest/test.html
-        If you want a test to happen at any of the tenant’s domain, you can use the test case TenantTestCase. 
-        It will automatically create a tenant for you, set the connection’s schema to tenant’s schema and 
+        If you want a test to happen at any of the tenant’s domain, you can use the test case TenantTestCase.
+        It will automatically create a tenant for you, set the connection’s schema to tenant’s schema and
         make it available at `self.tenant`
 
     """
@@ -35,9 +35,9 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     """TenantTestCase comes with a tenant: tenant.test.com"""
 
     ###############################################################################
-    # Not sure why this doesn't work, but seems like TenantTestCase is 
+    # Not sure why this doesn't work, but seems like TenantTestCase is
     # stops using the test databse and is looking for the real databse? or something...
-    # So it fails on TravisCI where there is no database names `postgress` 
+    # So it fails on TravisCI where there is no database names `postgress`
     ###############################################################################
     # fixtures = ['tenant/tenants.json']
 
@@ -53,7 +53,6 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     def setUp(self):
         # create the public schema
         self.public_tenant = Tenant(
-            domain_url='localhost',
             schema_name='public',
             name='public'
         )
@@ -64,8 +63,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         with tenant_context(self.public_tenant):
             non_public_tenant = Tenant(
                 name="Non-Public",  # Not a valid name, but not validated in this test
-                domain_url='non-public.localhost'
-            )  
+            )
 
             # public tenant should be able to create new tenant/schemas
             self.tenant_model_admin.save_model(obj=non_public_tenant, request=None, form=None, change=None)
@@ -97,7 +95,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         #     client.force_login(test_teacher)
         #     response = client.get(reverse('quests:quests'))
         #     self.assertEqual(response.status_code, 200)
-        
+
     def test_public_tenant_admin_save_new_tenant_with_bad_names(self):
 
         with tenant_context(self.public_tenant):

@@ -1,13 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase
+
+from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
-from tenant_schemas.test.cases import TenantTestCase
-
-from siteconfig.models import SiteConfig
 
 from courses.models import Semester
 from profile_manager.models import Profile, smart_list
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 

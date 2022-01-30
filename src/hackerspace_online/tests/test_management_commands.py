@@ -1,4 +1,3 @@
-# from tenant_schemas.test.cases import TenantTestCase
 from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
@@ -37,7 +36,7 @@ class FindReplaceTest(TestCase):
         # for tenant in Tenant.objects.all():
         #     print(tenant.name)
         # # print(tenants)
-        # # # requires 
+        # # # requires
         # # pass
         # out = self.call_command(self.tenant.name)
         # print(out)

@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
+
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
@@ -45,7 +46,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
         self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
 
-        self.assertRedirects(  
+        self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
             expected_url=reverse('notifications:list'),
         )
@@ -63,7 +64,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
         self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
 
-        self.assertRedirects(  
+        self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
             expected_url=reverse('notifications:list'),
         )

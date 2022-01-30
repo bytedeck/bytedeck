@@ -2,7 +2,8 @@ import functools
 
 from django import template
 from django.db import connection
-from tenant_schemas.utils import get_public_schema_name
+
+from django_tenants.utils import get_public_schema_name
 
 from siteconfig.models import SiteConfig
 from utilities.models import MenuItem

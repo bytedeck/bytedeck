@@ -5,9 +5,9 @@ from django.db import connection
 from django.utils import timezone
 
 from django_celery_beat.models import PeriodicTask
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.utils import get_public_schema_name, schema_context
 
 from announcements import tasks
 from announcements.models import Announcement

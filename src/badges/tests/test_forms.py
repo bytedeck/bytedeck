@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 
+from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
 
 from badges.forms import BadgeAssertionForm, BulkBadgeAssertionForm
 
@@ -33,4 +33,4 @@ class BadgeAssertionFormTest(TenantTestCase):
             'students': [baker.make(User).profile, baker.make(User).profile]
         }
         form = BulkBadgeAssertionForm(data=form_data)
-        self.assertTrue(form.is_valid)    
+        self.assertTrue(form.is_valid)

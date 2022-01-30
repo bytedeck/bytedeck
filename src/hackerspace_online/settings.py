@@ -41,7 +41,7 @@ WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
 SHARED_APPS = (
-    'tenant_schemas',
+    'django_tenants',
     'tenant',
     'django.contrib.contenttypes',
 
@@ -118,11 +118,10 @@ TENANT_APPS = (
 
 
 INSTALLED_APPS = (
-    'tenant_schemas',
-    'tenant.apps.TenantConfig',
-
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
+    'django_tenants',
+    'tenant.apps.TenantConfig',
 
     # default apps
     'django.contrib.admin',
@@ -199,7 +198,7 @@ INSTALLED_APPS = (
 )
 
 MIDDLEWARE = [
-    'tenant_schemas.middleware.TenantMiddleware',
+    'django_tenants.middleware.TenantMiddleware',
     # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
@@ -289,8 +288,8 @@ CACHES = {
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
-        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key',
+        'KEY_FUNCTION': 'django_tenants.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
     },
     'select2': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -298,8 +297,8 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
-        'KEY_FUNCTION': 'tenant_schemas.cache.make_key',
-        'REVERSE_KEY_FUNCTION': 'tenant_schemas.cache.reverse_key',
+        'KEY_FUNCTION': 'django_tenants.cache.make_key',
+        'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
         'TIMEOUT': None,
     }
 }
@@ -342,7 +341,7 @@ POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
 DATABASES = {
     'default': {
-        'ENGINE': 'tenant_schemas.postgresql_backend',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': POSTGRES_DB_NAME,
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
@@ -352,7 +351,7 @@ DATABASES = {
 }
 
 DATABASE_ROUTERS = (
-    'tenant_schemas.routers.TenantSyncRouter',
+    'django_tenants.routers.TenantSyncRouter',
 )
 
 
@@ -452,13 +451,14 @@ DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.
 # TENANTS ###############################################################
 
 TENANT_MODEL = "tenant.Tenant"
+TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
 TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
 TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
-SILENCED_SYSTEM_CHECKS = ['tenant_schemas.W003']
+SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 
 
 # RECAPTCHA #######################################################
@@ -714,7 +714,17 @@ DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
 
 if DEBUG:
 
+    import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
+
+    # Solves an issue where django-debug-toolbar is not showing when running inside a docker container
+    # See: https://gist.github.com/douglasmiranda/9de51aaba14543851ca3#gistcomment-2916867
+    # get ip address for docker host
+    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+    for ip in ips:
+        # replace last octet in IP with .1
+        ip = '{}.1'.format(ip.rsplit('.', 1)[0])
+        INTERNAL_IPS.append(ip)
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
@@ -740,6 +750,10 @@ if DEBUG:
         'debug_toolbar.panels.logging.LoggingPanel',
         'debug_toolbar.panels.redirects.RedirectsPanel',
     ]
+
+    # DEBUG_TOOLBAR_CONFIG = {
+    #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
+    # }
 
 
 # TESTING ##################################################

@@ -1,16 +1,16 @@
 import functools
 
-from django.db import connection
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.sites.models import Site
+from django.db import connection
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
 
-from tenant_schemas.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name
 
-from .models import Tenant
 from .forms import TenantForm
+from .models import Tenant
 
 
 def public_only_view(f):

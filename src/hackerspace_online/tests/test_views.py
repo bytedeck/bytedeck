@@ -3,10 +3,10 @@ from django.core import mail
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name
 from mock import patch
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
-from tenant_schemas.utils import get_public_schema_name
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
