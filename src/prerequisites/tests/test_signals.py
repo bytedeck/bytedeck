@@ -1,10 +1,10 @@
 from django.contrib.auth import get_user_model
 
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from mock import patch
 from model_bakery import baker
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.test.client import TenantClient
 
 from badges.models import Badge, BadgeAssertion
 from courses.models import CourseStudent, Semester

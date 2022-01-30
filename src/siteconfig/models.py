@@ -7,8 +7,8 @@ from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 
+from django_tenants.utils import get_public_schema_name
 from redis import exceptions as redis_exceptions
-from tenant_schemas.utils import get_public_schema_name
 
 User = get_user_model()
 

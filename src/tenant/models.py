@@ -3,11 +3,11 @@ import re
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from tenant_schemas.models import TenantMixin
+from django_tenants.models import DomainMixin, TenantMixin
 
 
 def check_tenant_name(name):
-    """ A tenant's name is used for both the schema_name and as the subdomain in the 
+    """ A tenant's name is used for both the schema_name and as the subdomain in the
     tenant's domain_url field, so {name} it must be valid for a schema and a url.
     """
     if not re.match(re.compile(r'^[a-z]'), name):
@@ -30,7 +30,7 @@ class Tenant(TenantMixin):
     # tenant = Tenant(domain_url='test.localhost', schema_name='test', name='Test')
     name = models.CharField(
         max_length=62,  # max length of a postgres schema name is 62
-        unique=True, 
+        unique=True,
         validators=[check_tenant_name],
         help_text="The name of your deck, for example the name `example` would give you the site: `example.bytedeck.com` \n\
         The name may only include lowercase letters, numbers, and dashes. \
@@ -61,10 +61,21 @@ class Tenant(TenantMixin):
     )
 
     def __str__(self):
-        return '%s - %s' % (self.schema_name, self.domain_url)  
+        return f'{self.schema_name} - {self.primary_domain_url}'
+
+    def save(self, *args, **kwargs):
+        from tenant.utils import generate_schema_name
+        if not self.schema_name:
+            self.schema_name = generate_schema_name(self.name)
+
+        super().save(*args, **kwargs)
+
+    @property
+    def primary_domain_url(self):
+        return self.get_primary_domain().domain
 
     def get_root_url(self):
-        """ 
+        """
         Returns the root url of the tenant in the form of:
         scheme://[subdomain.]domain[.topleveldomain][:port]
 
@@ -74,13 +85,19 @@ class Tenant(TenantMixin):
         - "hackerspace.bytedeck.com"
         - "hackerspace.localhost:8000"
         """
-        if 'localhost' in self.domain_url:  # Development
-            return "http://{}:8000".format(self.domain_url)
+
+        domain_url = self.get_primary_domain().domain
+        if 'localhost' in domain_url:  # Development
+            return "http://{}:8000".format(domain_url)
         else:  # Production
-            return "https://{}".format(self.domain_url)
+            return "https://{}".format(domain_url)
 
     @classmethod
     def get(cls):
         """ Used to access the Tenant object for the current connection """
         from django.db import connection
         return Tenant.objects.get(schema_name=connection.schema_name)
+
+
+class TenantDomain(DomainMixin):
+    pass

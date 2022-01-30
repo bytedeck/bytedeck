@@ -8,7 +8,7 @@ from django.db.models.fields import CharField, Field, TextField
 from django.db.models.functions import Replace
 # from django.db.models import Case, F, Value, When
 
-from tenant_schemas.utils import schema_context
+from django_tenants.utils import schema_context
 
 from tenant.models import Tenant
 
@@ -26,8 +26,8 @@ class Command(BaseCommand):
         parser.add_argument('tenants', nargs='+', help='A space separated list of tenants, or all')
 
         # Named (optional) arguments
-        parser.add_argument('--find', action='store', nargs='?', help='The next string to be replaced')  
-        parser.add_argument('--replace', action='store', nargs='?', default='', help='The text that will replace the find string')  
+        parser.add_argument('--find', action='store', nargs='?', help='The next string to be replaced')
+        parser.add_argument('--replace', action='store', nargs='?', default='', help='The text that will replace the find string')
 
     def handle(self, *args, **options):
 
@@ -43,7 +43,7 @@ class Command(BaseCommand):
         else:
             # Note that this will cause mispelled tenant names to be ignored.
             # Would be better if mispelled names were caught and reported to the user
-            # For now, just hope they notice since the loop below prints all the 
+            # For now, just hope they notice since the loop below prints all the
             # tenants that are recognized
             tenants = Tenant.objects.filter(name__in=tenant_names)
 

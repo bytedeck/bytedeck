@@ -5,8 +5,8 @@ from django.forms import model_to_dict
 from django.utils import timezone
 
 from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
-from tenant_schemas.test.cases import TenantTestCase
-from tenant_schemas.utils import get_public_schema_name, schema_context
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name, schema_context
 
 PUBLIC_SCHEMA = get_public_schema_name()
 
