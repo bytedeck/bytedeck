@@ -11,41 +11,15 @@ version: '2.2'
 
 services:
 
-  db:
-    build: ./postgresql
-    env_file: .env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    networks:
-      - backend-network
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    
-  redis:
-    image: "redis:5.0-alpine"
-    env_file: .env
-    sysctls:
-      # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
-      net.core.somaxconn: 512
-    networks:
-      - backend-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 1s
-      timeout: 3s
-      retries: 30
-
   web:
-    #restart: unless-stopped
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Enable below when uwsgi-nginx uses unix sock
+      # args:
+      #   WUID: $WUID
+      #   WGID: $WGID
     env_file: .env
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
     # command: # see docker-compose.overide.yml or docker-compose.prod.yml
     volumes: 
       - .:/app
@@ -54,51 +28,30 @@ services:
     networks:
       - backend-network
       - frontend-network
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   celery:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file: .env
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online worker -l info -c 3 -Q default"
     volumes:
       - .:/app
     networks:
       - backend-network
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   celery-beat:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file: .env
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
     command: bash -c "cd src &&
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
     networks:
       - backend-network
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-volumes:
-  postgres_data:
-  redis_data:
 
 networks:
   frontend-network:

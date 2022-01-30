@@ -21,8 +21,8 @@ django-select2>=6.3.1,<6.4
 django-summernote>=0.8.11.6,<0.9
 django-url-or-relative-url-field>=0.1.1,<0.2
 django-resized>=0.3.11,<0.4
-numpy>=1.18.0,<1.19
-Pillow>=8.2,<9
+numpy>=1.21,<1.22
+Pillow>=9.0.0,<9.1
 psycopg2-binary==2.8.6
 python-memcached>=1.58,<2.0
 tenant-schemas-celery==0.3.0

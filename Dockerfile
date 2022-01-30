@@ -57,8 +57,13 @@ ENV PYTHONUNBUFFERED 1
 COPY ./requirements-production.txt requirements-production.txt
 COPY ./requirements.txt requirements.txt
 RUN pip install -r requirements.txt
-
 ######################################################
+
+# Enable below when uwsgi-nginx uses unix sock
+# RUN mkdir /bytedeck-volume
+# ARG WUID
+# ARG WGID
+# RUN chown -R ${WUID}:${WGID} /bytedeck-volume
 
 # Set working directory for subsequent RUN ADD COPY CMD instructions
 COPY . /app/
