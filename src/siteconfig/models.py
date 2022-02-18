@@ -134,8 +134,17 @@ class SiteConfig(models.Model):
     )
 
     display_marks_calculation = models.BooleanField(
-        verbose_name="Display marks calculation page", default=False,
-        help_text="Check this if you want to let students view their mark calculations."
+        verbose_name="Use mark percentages", default=False,
+        help_text='By default, the site only uses XP.  Check this if you also want to use percentages for student marks. \
+            The conversion of XP to a percentage depends on several other settings in your deck.  \
+            <a href="https://github.com/bytedeck/bytedeck/wiki/Using-Mark-Percentages" target="_blank">See here</a> for a full explanation. '
+    )
+
+    cap_marks_at_100_percent = models.BooleanField(
+        verbose_name="Cap marks at 100%", default=False,
+        help_text="By default, if a student has more than the expected XP in their course \
+            (for the amount of time that has passed in the semester so far) their mark will show greater than 100%.  \
+            Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
     )
 
     def __str__(self):
