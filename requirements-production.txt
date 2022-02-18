@@ -1,11 +1,11 @@
-django-tenants>=3.1,<3.2
+django-tenants>=3.4,<3.5
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.8,<4.9
 celery>=4.4,<5.0
-Django>=2.2.9,<2.3
+Django>=3.2,<3.3
 django-allauth>=0.41.0,<0.42
 django-bootstrap-datepicker-plus>=3.0.6,<3.1
-django-celery-beat>=1.5.0,<1.6
+django-celery-beat>=2.2,<2.3
 django-colorful>=1.3,<2.0
 django-crispy-forms>=1.8.1,<1.9
 django-datetime-widget>=0.9.3,<1.0
@@ -16,11 +16,12 @@ django-import-export>=2.0,<2.1
 # https://github.com/django-import-export/django-import-export/issues/1064
 tablib==0.14.0
 django-jchart>=0.4.2,<0.5
-django-redis>=4.10.0,<4.11
+django-redis>=5.2.0,<5.3
 django-select2>=6.3.1,<6.4
-django-summernote>=0.8.11.6,<0.9
+django-summernote>=0.8,<0.9
 django-url-or-relative-url-field>=0.1.1,<0.2
 django-resized>=0.3.11,<0.4
+django-utils-six==2.0
 numpy>=1.21,<1.22
 Pillow>=9.0.0,<9.1
 psycopg2-binary>=2.8.6,<2.9
@@ -29,5 +30,4 @@ tenant-schemas-celery>=0.3,<0.4
 future>=0.18.2,<0.19
 django-environ>=0.4.5,<0.5
 django-recaptcha>=2.0.6,<2.1
-boto3==1.16.18
-django-storages==1.10.1
+django-storages>=1.12,<1.13
