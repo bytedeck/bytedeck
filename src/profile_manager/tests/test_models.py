@@ -1,5 +1,6 @@
+from unittest.mock import Mock, PropertyMock, patch
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -27,7 +28,7 @@ class ProfileTestModel(TenantTestCase):
         self.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
 
     def create_active_course_registration(self):
-        return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem)
+        return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem, course=baker.make('courses.Course'))
 
     def test_profile_creation(self):
         """Profile is automatically created when a user is created in setUp()"""
@@ -153,6 +154,54 @@ class ProfileTestModel(TenantTestCase):
         """ By default a new user has a rank"""
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
+    
+    def test_mark__no_courses(self):
+        """A student not in any current courses should return None"""
+        # the test profile shouldn't be in any courses yet, but sanity check here
+        self.assertFalse(self.profile.current_courses().exists())
+        self.assertIsNone(self.profile.mark())
+    
+    @patch('profile_manager.models.Profile.current_courses')
+    def test_mark__single_course(self, mock_current_courses):     
+        mock_coursestudent = Mock()
+        mock_coursestudent.calc_mark.return_value = 125
+        mock_current_courses.return_value = [mock_coursestudent]
+        self.assertEqual(self.profile.mark(), 125)
+    
+    @patch('profile_manager.models.Profile.current_courses')
+    def test_mark__multiple_courses(self, mock_current_courses):
+        mock_coursestudent1 = Mock()
+        mock_coursestudent1.calc_mark.return_value = 87
+        # The mark() method currently only checks the length of the list, and only uses the first course
+        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
+        self.assertEqual(self.profile.mark(), 87 / 2)
+
+    @patch('profile_manager.models.Profile.current_courses')
+    def test_mark__cap_100(self, mock_current_courses):
+        """Test that mark() caps at 100 if that SiteConfig option is set"""
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = True
+        config.save()
+
+        mock_coursestudent1 = Mock()
+        mock_coursestudent1.calc_mark.return_value = 125
+
+        # The mark() method currently only checks the length of the list, and only uses the first course
+        mock_current_courses.return_value = [mock_coursestudent1]
+        self.assertEqual(self.profile.mark(), 100)
+
+        # Add a second course, should not be capped anymore
+        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
+        self.assertEqual(self.profile.mark(), 125 / 2)
+
+        # What if both are over 100?
+        mock_coursestudent1.calc_mark.return_value = 225
+        self.assertEqual(self.profile.mark(), 100)
+
+        # NEED TO RETURN SiteConfig object back to original state for other tests!
+        config.cap_marks_at_100_percent = False
+        config.save()
+
 
 
 class SmartListTests(SimpleTestCase):
