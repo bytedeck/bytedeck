@@ -1,6 +1,6 @@
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -201,7 +201,6 @@ class ProfileTestModel(TenantTestCase):
         # NEED TO RETURN SiteConfig object back to original state for other tests!
         config.cap_marks_at_100_percent = False
         config.save()
-
 
 
 class SmartListTests(SimpleTestCase):
