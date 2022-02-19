@@ -32,7 +32,10 @@ RUN apt-get install -y build-essential
 #https://stackoverflow.com/questions/21669354/rebuild-uwsgi-with-pcre-support
 RUN apt-get install -y libpcre3 libpcre3-dev
 
-RUN pip install uwsgi
+RUN python3 -m pip install --upgrade pip
+
+# Why isn't this in requirements?!  Move it there?
+RUN python3 -m pip install uwsgi 
 
 # Clean up
 RUN apt-get autoremove -y \
@@ -56,7 +59,7 @@ ENV PYTHONUNBUFFERED 1
 # https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
 COPY ./requirements-production.txt requirements-production.txt
 COPY ./requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+RUN python3 -m pip install -r requirements.txt
 ######################################################
 
 # Enable below when uwsgi-nginx uses unix sock
