@@ -30,4 +30,5 @@ tenant-schemas-celery>=2.0,<2.1
 future>=0.18.2,<0.19
 django-environ>=0.4.5,<0.5
 django-recaptcha>=2.0.6,<2.1
+boto3>=1.21,<1.22
 django-storages>=1.12,<1.13
