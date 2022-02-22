@@ -63,13 +63,15 @@
                 Block
             </th>
             <th data-sortable='true' data-field='xp'
-                {% if request.user.is_staff %}data-visible="false"{% endif %}>
+                {% if request.user.is_staff and config.display_marks_calculation %}data-visible="false"{% endif %}>
                 XP
             </th>
+            {% if config.display_marks_calculation %}
             <th data-sortable='true' data-field='mark' data-formatter="%s%"
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 Mark
             </th>
+            {% endif %}
             <th data-sortable='true' data-field='portfolio'
                 {% if request.user.is_staff %}data-visible="false"{% endif %}>
                 Portfolio
@@ -85,7 +87,7 @@
             <!-- End sorting group -->
 
             <!-- Uses `last_login_datetime` for sorting-->
-            <th data-sortable='true' data-field='last_login' data-sort-name='last_login_datetime'>
+            <th data-sortable='true' data-field='last_login' data-sort-name='last_login_datetime' data-visible="false">
               Last Login
             </th>
             <th data-field='last_login_datetime' data-switchable='false' data-visible='false'></th>
@@ -126,7 +128,9 @@
                     {{ object.xp_cached }}
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
+                {% if config.display_marks_calculation %}
                 <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                {% endif %}
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
                         <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
