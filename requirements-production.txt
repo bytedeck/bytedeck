@@ -1,7 +1,7 @@
 django-tenants>=3.4,<3.5
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.8,<4.9
-celery>=4.4,<5.0
+celery>=5.2,<5.3
 Django>=3.2,<3.3
 django-allauth>=0.41.0,<0.42
 django-bootstrap-datepicker-plus>=3.0.6,<3.1
@@ -12,7 +12,7 @@ django-datetime-widget>=0.9.3,<1.0
 django-embed-video>=1.1.2,<1.2
 django-grappelli>=2.13.3,<2.14
 django-import-export>=2.0,<2.1
-#freeze tablib to 0.14.0 until django-import-export fixes its own dependancies
+#freeze tablib to 0.14.0 until django-import-export fixes its own dependencies
 # https://github.com/django-import-export/django-import-export/issues/1064
 tablib==0.14.0
 django-jchart>=0.4.2,<0.5
@@ -26,9 +26,10 @@ numpy>=1.21,<1.22
 Pillow>=9.0.0,<9.1
 psycopg2-binary>=2.8.6,<2.9
 python-memcached>=1.58,<2.0
-tenant-schemas-celery>=0.3,<0.4
+tenant-schemas-celery>=2.0,<2.1
 future>=0.18.2,<0.19
 django-environ>=0.4.5,<0.5
 django-recaptcha>=2.0.6,<2.1
+boto3>=1.21,<1.22
 django-storages>=1.12,<1.13
 boto3>=1.21,<2.0
