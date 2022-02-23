@@ -276,6 +276,9 @@ TEMPLATES = [
     },
 ]
 
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+
+
 # REDIS AND CACHES #################################################
 
 REDIS_HOST = env('REDIS_HOST', default='127.0.0.1')  # os.environ.get('REDIS_HOST', '127.0.0.1')

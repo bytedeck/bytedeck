@@ -30,6 +30,10 @@ By the end, you should be able to run docker's test image:
 Add yourself to the docker group:  
 `sudo usermod -aG docker $USER`
 
+#### Make sure you have Python3.8
+
+Using a different version of Python will probably give you errors when installing the dependancies due to slight changes between versions:    
+`sudo apt install python3.8`
 
 ### Getting the Code
 
@@ -66,15 +70,15 @@ This will create your docker containers and initialize the database by running m
 `docker-compose build`
 5. Start the postgres database container (db) in the background/daemonized (-d)  
 `docker-compose up -d db`
-6. OPTIONAL: For development, we can run the django app in a local virtual environment instead of using the web container:
+6. OPTIONAL: For development, we can run the django app in a local virtual environment (venv) instead of using the web container, however if this gives you any issues, just run everything in a container with docker-compose (explained below)
    1. Create a python virtual environment (we'll put ours in a venv directory):  
-   `python3 -m venv venv --prompt bytedeck`
+   `python3.8 -m venv venv --prompt bytedeck`
    1. Enter the virtual environment:  
    `source venv/bin/activate`
    1. Install wheel to prevent errors (why isn't this included in the new venv module?)   
-   `python3 -m pip install wheel`
+   `python -m pip install wheel`
    1. Install our requirements:  
-   `python3 -m pip install -r requirements.txt`
+   `python -m pip install -r requirements.txt`
 7. Run a management command to run initial migrations, create the public tenant, superuser, and some other stuff:  
    * using venv: `./src/manage.py initdb`
    * using docker: `docker-compose run web bash -c "./src/manage.py initdb"` 
@@ -125,15 +129,17 @@ New tenants will come with some basic initial data already installed, but if you
 ### Running Tests and Checking Code Style
 You can run tests either locally, or through the web container:
 1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):  
-`./src/manage.py test src && flake8 src`
-2. Or run via the web container (assuming it's running. If not, change `exec` to `run`)  
-`docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`
-3. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:  
+   * using venv: `./src/manage.py test src && flake8 src`
+   * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+2. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:  
 `./src/manage.py test src --parallel --failfast && flake8 src`
 
 ### Further Development
 After you've got everything set up, you can just run the whole project with:   
 `docker-compose up`
+
+And stop it with:   
+`docker-compose down`
 
 or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:  
 `docker-compose up -d db redis celery celery-beat -d`  

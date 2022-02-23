@@ -312,10 +312,14 @@ class Profile(models.Model):
         return xp
 
     def mark(self):
-        # course = CourseStudent.objects.current_course(self.user)
         courses = self.current_courses()
+        cap_at_100 = SiteConfig.get().cap_marks_at_100_percent
         if courses:
-            return courses[0].calc_mark(self.xp_cached) / len(courses)
+            mark = courses[0].calc_mark(self.xp_cached) / len(courses)
+            if cap_at_100:
+                return min(mark, 100)
+            else:
+                return mark
         else:
             return None
 

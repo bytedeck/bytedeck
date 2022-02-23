@@ -7,6 +7,7 @@
 {% if request.user.is_authenticated and config.color_headers_by_mark %}style='{% color_style_from_mark request.user %}'{% endif %}>
     <div class="container-fluid">
         <div class="navbar-header">
+            <!-- mobile Hamburger menu, right side-->
             <button type="button" class="navbar-toggle collapsed"
                     data-toggle="collapse" data-target="#navbar"
                     aria-expanded="false" aria-controls="navbar">
@@ -16,142 +17,176 @@
                 <span class="icon-bar"></span>
             </button>
 
+            <!-- Site icon, left side -->
             <a title="Home" class="navbar-brand" href="{% url 'home' %}">
                 <img alt="Logo" src="{% site_logo_url %}">
             </a>
 
             {% if request.user.is_authenticated %}
-            <!-- mobile main menu button (has to be after brand to stay to its right)-->
+            <!-- mobile Main menu button (has to be after brand to stay to its right)-->
             <button type="button" class="navbar-toggle collapsed mobile-main-menu pull-left btn-mobile-navbar btn-mobile-navbar-left"
                     data-toggle="collapse" data-target="#mobile-main-menu-dropdown"
                     aria-expanded="false" aria-controls="mobile-main-menu-dropdown">
                 <span class="sr-only">Toggle main menu</span><!-- These prevent unwanted whitespace
-                --><i class="fa fa-fw fa-shield"></i>
+                --><i class="fa fa-fw fa-ellipsis-v fa-lg"></i>
             </button>
 
-            <!-- mobile notifications button -->
+            <!-- mobile Notifications button -->
             <button type="button" class="navbar-toggle notification-toggle collapsed btn-mobile-navbar"
                     data-toggle="collapse" data-target="#mobile-notification-dropdown"
                     aria-expanded="false" aria-controls="mobile-notification-dropdown"><!-- These prevent unwanted whitespace
-                --><span class="sr-only">Toggle notifications</span><!--
-                --><i class="fa fa-bell"></i><!--
-                --><span class="badge alert-danger notification-badge"></span><!--
-            --></button>
+            --><span class="sr-only">Toggle notifications</span><!--
+            --><i class="fa fa-bell"></i><!--
+            --><span class="badge alert-danger notification-badge"></span><!--
+        --></button>
 
-                {% if not request.user.is_staff %}
-                <!-- mobile XP -->
-                <div class="visible-xs-inline navbar-mobile-xp-container">
-                    <ul class="nav navbar-nav navbar-mobile-xp">
-                        <li>
-                            {% comment %} # DISABLE MARKS {% endcomment %}
-                            {% comment %} <a href="{% url 'courses:marks' request.user.id %}" {% endcomment %}
-                            <a href="#" title="The Mark Calculations page is currently disabled, sorry!"
-                            class="navbar-text-large-container">XP:
-                                <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-                {% endif %}
-            {% endif %}
+            {% if request.user.is_staff %}
+            <!-- mobile Admin button -->
+            <button type="button" class="navbar-toggle admin-toggle collapsed btn-mobile-navbar"
+                    data-toggle="collapse" data-target="#mobile-admin-dropdown"
+                    aria-expanded="false" aria-controls="mobile-admin-dropdown"><!-- These prevent unwanted whitespace
+            --><span class="sr-only">Toggle admin menu</span><!--
+            --><span>Admin&nbsp;<span class="caret"></span></span><!--
+        --></button>
 
+            {% else %} <!-- student -->
+            <!-- mobile XP -->
+            <div class="visible-xs-inline navbar-mobile-xp-container">
+                <ul class="nav navbar-nav navbar-mobile-xp">
+                    <li>
+                        {% comment %} # DISABLE MARKS {% endcomment %}
+                        {% comment %} <a href="{% url 'courses:marks' request.user.id %}" {% endcomment %}
+                        <a href="#" title="The Mark Calculations page is currently disabled, sorry!"
+                        class="navbar-text-large-container">XP:
+                            <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %} <!-- Staff -->
+            {% endif %} <!-- Authenticated -->
 
         </div> <!-- navbar-header -->
 
-        <div class="visible-xs-block mobile-notification-dropdown-container">
+        <!-- mobile admin drop-down menu items -->
+        <div class="visible-xs-block mobile-dropdown-container">
+            <div id="mobile-admin-dropdown" class="navbar-collapse collapse">
+                <ul class="nav navbar-nav admin-dropdown  navbar-mobile-dropdown">
+                    {% include 'navbar-fixed-admin-snippet.html' %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- mobile notifications drop-down menu items -->
+        <div class="visible-xs-block mobile-dropdown-container">
             <div id="mobile-notification-dropdown" class="navbar-collapse collapse">
                 <ul class="nav navbar-nav notification-dropdown">
                 </ul>
             </div>
-
         </div>
 
+        <!-- mobile main (left side) drop-down menu items -->
         <div id="mobile-main-menu-dropdown" class="navbar-collapse collapse navbar-left">
             <ul class="nav navbar-nav main-menu-dropdown">
                 {% if request.user.is_authenticated %}
-                 <li class="dropdown dropdown-hover">
-                    <a href="#" class="dropdown-toggle"
-                       data-toggle="dropdown" role="button" aria-haspopup="true"
-                       aria-expanded="false">
-                        <i class="fa fa-shield fa-fw"></i>
-                        <span class="visible-xs-inline">Quests</span>
-                        <span class="caret"></span>
+                <li>
+                    <a title="Quests" href="{% url 'quests:quests' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-shield fa-fw"></i>
+                            <span class="">Quests</span>
+                        </div>
+                        <div class="hidden-xs">
+                            <i class="fa fa-shield fa-fw"></i>
+                        </div>
                     </a>
-                    <ul class="dropdown-menu">
-                        <!-- <li class="dropdown-header">Content</li> -->
-                        <li><a href="{% url 'quests:quests' %}">Available</a></li>
-                        <li><a href="{% url 'quests:inprogress' %}">In Progress</a></li>
-                        <li><a href="{% url 'quests:completed' %}">Completed</a></li>
-                        {% if request.user.profile.has_past_courses %}
-                            <li><a href="{% url 'quests:past' %}">Past Courses</a></li>
-                        {% endif %}
-                        {% if request.user.profile.is_TA or request.user.is_staff %}
-                        <li role="separator" class="divider"></li>
-                        <li><a href="{% url 'quests:drafts' %}">Drafts</a></li>
-                        {% endif %}
-                    </ul>
                 </li>
                 <li>
-                    <a title="Badges" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>
-                    <span class="visible-xs-inline">Badges</span></a>
+                    <a title="Badges" href="{% url 'badges:list' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-certificate fa-fw"></i>
+                            <span>Badges</span>
+                        </div>
+                        <div class="hidden-xs">
+                            <i class="fa fa-certificate fa-fw"></i>
+                        </div>
+                    </a>
                 </li>
                 <li>
-                    <a title="Quest Maps" href="{% url 'maps:primary' %}"><i class="fa fa-map-signs fa-fw"></i>
-                    <span class="visible-xs-inline">Maps</span></a>
+                    <a title="Maps" href="{% url 'maps:primary' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-map-signs fa-fw"></i>
+                            <span>Maps</span>
+                        </div>
+                        <div class="hidden-xs">
+                            <i class="fa fa-map-signs fa-fw"></i>
+                        </div>
+                    </a>
                 </li>
                 <li>
-                    <a title="Announcements" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i>
-                    <span class="visible-xs-inline">Announcements</span></a>
+                    <a title="Announcements" href="{% url 'announcements:list' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-newspaper-o fa-fw"></i>
+                            <span>Announcements</span>
+                        </div>
+                        <div class="hidden-xs">
+                            <i class="fa fa-newspaper-o fa-fw"></i>
+                        </div>
+                    </a>
+                </li>
+                <li class="visible-xs-block">
+                    <a title="Students" href="{% url 'profiles:profile_list_current' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-users fa-fw"></i>
+                            <span>Students</span>
+                        </div>
+                    </a>
+                </li>
+                <li class="visible-xs-block">
+                    <a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-user fa-fw"></i>
+                            <span>Profile</span>
+                        </div>
+                    </a>
+                </li>
+                <li class="visible-xs-block">
+                    <a title="Portfolio" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-picture-o fa-fw"></i>
+                            <span>Portfolio</span>
+                        </div>
+                    </a>
                 </li>
                 {% endif %}
                 {% if request.user.is_staff %}
                 <li class="visible-xs-block">
-                    <a title="Students" href="{% url 'profiles:profile_list_current' %}">
-                        <i class="fa fa-users fa-fw"></i>
-                    <span class="visible-xs-inline">Students</span>
-                    </a>
-                </li>
-                <li class="visible-xs-block">
-                    <a title="Quest Approvals" href="{% url 'quests:approvals' %}">
-                        <i class="fa fa-shield fa-fw fa-shield fa-rotate-180"></i>
-                    <span class="visible-xs-inline">Approvals</span>
+                    <a title="Approvals" href="{% url 'quests:approvals' %}">
+                        <div class="navbar-mobile-dropdown-item visible-xs-block">
+                            <i class="fa fa-shield fa-rotate-180 fa-fw"></i>
+                            <span>Approvals</span>
+                        </div>
                     </a>
                 </li>
                 {% endif %}
             </ul>
         </div>
 
-
+        <!-- Collapsable Menu buttons and items -->
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav navbar-right">
                 {% if request.user.is_authenticated %}
                 {% if request.user.is_staff %}
-                <li class="dropdown dropdown-hover">
-                    <a href="#" class="dropdown-toggle"
+                <!-- Non-mobile Admin Menu-->
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle hidden-xs"
                        data-toggle="dropdown" role="button" aria-haspopup="true"
                        aria-expanded="false">Admin <span class="caret"></span></a>
                     <ul class="dropdown-menu">
-                        <!-- <li class="dropdown-header">Content</li> -->
-                        {% comment %} <li><a href="{% url 'quests:flagged' %}"><i class="fa fa-fw fa-flag-o"></i>&nbsp;Flagged Submissions</a></li> {% endcomment %}
-                        <li><a href="{% url 'config:site_config_update_own' %}"><i class="fa fa-fw fa-sliders"></i>&nbsp;Site Configuration</a></li>
-                        <li role="separator" class="divider"></li>
-                        <li class="dropdown-header">Course Setup</li>
-                        <li><a href="{% url 'courses:ranks' %}"><i class="fa fa-fw fa-star"></i>&nbsp;Ranks</a></li>
-                        <li><a href="{% url 'quests:categories' %}"><i class="fa fa-fw fa-compass"></i>&nbsp;Campaigns</a></li>
-                        <li><a href="{% url 'courses:block_list' %}"><i class="fa fa-fw fa-square"></i>&nbsp;Blocks/Sections</a></li>
-                        <li><a href="{% url 'courses:course_list' %}"><i class="fa fa-fw fa-book"></i>&nbsp;Courses</a></li>
-                        <li><a href="{% url 'courses:semester_list' %}"><i class="fa fa-fw fa-calendar-o"></i>&nbsp;Semesters</a></li>
-                        <li role="separator" class="divider"></li>
-                        <li class="dropdown-header">Database</li>
-                        <li><a href="/admin"><i class="fa fa-fw fa-database"></i>&nbsp;Site Administration</a></li>
-                        <li role="separator" class="divider"></li>
-                        <li class="dropdown-header">ByteDeck</li>
-                        <li><a href="https://github.com/bytedeck/bytedeck/blob/develop/CHANGELOG.md"><i class="fa fa-fw fa-history"></i>&nbsp;Changelog</a></li>
-                        <li><a title="Ask a question, report a bug, or request a feature!" href="mailto:contact@bytedeck.com"><i class="fa fa-fw fa-envelope-o"></i>&nbsp;Contact</a></li>
-                        <!-- <li class="dropdown-header">Debug</li> -->
+                        {% include 'navbar-fixed-admin-snippet.html' %}
                     </ul>
                 </li>
                 {% else %}
+                <!-- Students XP & Rank -->
                 <li id="menu-xp" class="hidden-xs navbar-xp">
                     {% url 'courses:marks' request.user.id as marks_url %}
                     <a
@@ -162,22 +197,8 @@
                     </a>
                 </li>
                 {% endif %}
-                <li id="profile">
-                     <a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
-                        <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
-                    </a><!-- removes whitespace
-                 -->
-                </li>
-                {% if not request.user.is_staff %}
-                <li>
-                    <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
-                        <i class="{{request.user.profile.rank.fa_icon}}"></i>
-                        <span class="visible-xs-inline-block">&nbsp;&nbsp;{{request.user.profile.rank}}</span>
-                    </a>
-                </li>
-                {% endif %}
-
-                <!-- only show this in wide view, this is repeated above for the mobile collapsed menu -->
+                <!-- All users Profile-->
+                <!-- Non-mobile notifications drop-down items -->
                 <li id='notifications-menu' class="dropdown hidden-xs">
                     <a title="Notifications" href="#"
                        class="dropdown-toggle notification-toggle" data-toggle="dropdown"
@@ -188,12 +209,26 @@
                     <ul class="dropdown-menu notification-dropdown" id="notification-dropdown">
                     </ul>
                 </li>
-
-                <li id="extras-menu" class="dropdown dropdown-hover">
+                <li id="profile">
+                     <a title="Profile" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
+                        <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
+                    </a><!-- removes whitespace
+                 --></li>
+                
+                {% if not request.user.is_staff %}
+                <li>
+                    <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
+                        <i class="{{request.user.profile.rank.fa_icon}}"></i>
+                        <span class="visible-xs-inline-block">&nbsp;&nbsp;{{request.user.profile.rank}}</span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                <li id="extras-menu" class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">
                         <i class="fa fa-bars hidden-xs"></i><!--
-                     --><span class="visible-xs-block">More <span class="caret"></span></span>
+                     --><span class="visible-xs-block">Links <span class="caret"></span></span>
                     </a>
                     <ul class="dropdown-menu">
                         {% menu_list %}
@@ -201,11 +236,13 @@
                             <li role="separator" class="divider"></li>
                             <li><a href="/admin/utilities/menuitem/"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a></li>
                         {% endif %}
+                        <li role="separator" class="divider visible-xs-block"></li>
                     </ul>
                 </li>
+
                 <li><a href="{% url 'account_logout' %}">Sign Out</a></li>
                 {% else %}
-
+                <!-- Unauthenticated -->
                 <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
                 {% endif %}
             </ul>
