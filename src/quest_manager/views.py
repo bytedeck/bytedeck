@@ -36,7 +36,7 @@ User = get_user_model()
 def is_staff_or_TA(user):
     if user.is_staff:
         return True
-    
+
     try:
         if user.profile.is_TA:
             return True
@@ -58,7 +58,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('quests:categories')
 
     def get_context_data(self, **kwargs):
-        
+
         kwargs['heading'] = 'Create New Campaign'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -930,6 +930,10 @@ def complete(request, submission_id):
 @non_public_only_view
 @login_required
 def start(request, quest_id):
+
+    if not request.user.profile.has_current_course and not request.user.is_staff:
+        return redirect('quest_manager:quests')
+
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
