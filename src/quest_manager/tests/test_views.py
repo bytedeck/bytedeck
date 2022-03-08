@@ -131,6 +131,13 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
+        # student should be redirected to the quests page since they are not enrolled in a course
+        response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+        self.assertRedirects(response, reverse('quests:available'))
+
+        # Enroll the student to a course
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+
         # if the quest is unavailable to the student, then should get a 404 if there is no submission started yet
         # but we don't care about implementation of `is_available()` here, so just patch it to return False
         with patch('quest_manager.models.Quest.is_available', return_value=False):
