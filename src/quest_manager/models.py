@@ -24,7 +24,7 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 
 
 class Category(IsAPrereqMixin, models.Model):
-    """ Used to group quests into 'Campaigns' 
+    """ Used to group quests into 'Campaigns'
     """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
@@ -53,8 +53,8 @@ class Category(IsAPrereqMixin, models.Model):
 
         # get all approved submissions of these quests for this user
         submissions = QuestSubmission.objects.all_approved(user=user, active_semester_only=False).filter(quest__in=quests)
-        
-        # remove duplicates with distinct so only one submission per quest is counted 
+
+        # remove duplicates with distinct so only one submission per quest is counted
         # (there could be more than one submission if there are repeatable quests in the campaign)
         submissions = submissions.order_by('quest_id').distinct('quest')
 
@@ -95,7 +95,7 @@ class XPItem(models.Model):
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     max_xp = models.IntegerField(
-        default=-1, 
+        default=-1,
         help_text="The maximum amount of XP that can be gain by repeating this quest. If the Max Repeats hasn't been hit yet \
         then quest will continue to appear after this number is reached, but students will no longer \
         gain XP for completing it; -1 = unlimited"
@@ -379,7 +379,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
                                              "non-blocking quests until this one is submitted.")
 
     map_transition = models.BooleanField(
-        default=False, 
+        default=False,
         help_text='Break maps at this quest. This quest will link to a new map.'
     )
 
@@ -531,7 +531,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
             pk_sub_list = [
                 sub.pk for sub in self
                 if (
-                    teacher.pk in sub.user.profile.teachers() or 
+                    teacher.pk in sub.user.profile.teachers() or
                     (sub.quest.specific_teacher_to_notify == teacher if sub.quest else False)  # will error if quest has been deleted
                 )
             ]
@@ -680,6 +680,11 @@ class QuestSubmissionManager(models.Manager):
         else:
             return 0
 
+    def last_submission(self, user, quest):
+        qs = self.all_for_user_quest(user, quest, False).order_by('ordinal')
+
+        return qs.last()
+
     def quest_is_available(self, user, quest):
         """
         :return: True if the quest should appear on the user's available quests tab
@@ -713,7 +718,12 @@ class QuestSubmissionManager(models.Manager):
         # this logic should probably be removed from this location?
         # When would I want to return None that isn't already handled?
         if self.not_submitted_or_inprogress(user, quest):
-            ordinal = self.num_submissions(user, quest) + 1
+            last_submission = self.last_submission(user, quest)
+            if last_submission:
+                ordinal = last_submission.ordinal + 1
+            else:
+                ordinal = 1
+
             new_submission = QuestSubmission(
                 quest=quest,
                 user=user,

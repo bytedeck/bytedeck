@@ -33,7 +33,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
         # create some quests as part of the test campaign
         quest1_repeatable = baker.make(Quest, campaign=self.category, max_repeats=-1)  # repeatable
-        quest2 = baker.make(Quest, campaign=self.category) 
+        quest2 = baker.make(Quest, campaign=self.category)
 
         # user should not meet the prerequisite at this point (no quests completed)
         self.assertFalse(self.category.condition_met_as_prerequisite(user))
@@ -64,7 +64,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         baker.make(Quest, archived=True, xp=16)  # NOT included in sum becase archived
 
         # check that the XP sum is correct
-        self.assertEqual(self.category.xp_sum(), 3)    
+        self.assertEqual(self.category.xp_sum(), 3)
 
 
 class CommonDataTestModel(TenantTestCase):
@@ -237,6 +237,27 @@ class QuestTestModel(TenantTestCase):
         sub_semester.mark_completed()
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
+
+    def test_correct_ordinal_submission(self):
+        student = baker.make('user')
+        quest = baker.make(Quest, max_repeats=-1)
+
+        # ordinal should be 1
+        submission1 = QuestSubmission.objects.create_submission(student, quest)
+        submission1.mark_completed()
+        self.assertEqual(submission1.ordinal, 1)
+
+        # ordinal should be 2
+        submission2 = QuestSubmission.objects.create_submission(student, quest)
+        submission2.mark_completed()
+        self.assertEqual(submission2.ordinal, 2)
+
+        # Delete the first submission
+        submission1.delete()
+
+        # ordinal should be 3 since the last ordinal is 2 even though submission1 has been deleted
+        submission3 = QuestSubmission.objects.create_submission(student, quest)
+        self.assertEqual(submission3.ordinal, 3)
 
 
 class SubmissionTestModel(TenantTestCase):
