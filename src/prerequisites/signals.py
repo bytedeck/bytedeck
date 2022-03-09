@@ -50,8 +50,8 @@ def update_conditions_met(sender, instance, *args, **kwargs):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
-@receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_conditions_met_for_quest_without_prereq")
-def update_conditions_met_for_quest_without_prereq(sender, instance, *args, **kwargs):
+@receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quest_without_prereqs")
+def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest does not contain any prerequisites
     """
