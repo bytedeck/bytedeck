@@ -931,9 +931,6 @@ def complete(request, submission_id):
 @login_required
 def start(request, quest_id):
 
-    if not request.user.profile.has_current_course and not request.user.is_staff:
-        return redirect('quest_manager:quests')
-
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
