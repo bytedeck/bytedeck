@@ -353,6 +353,25 @@ class SubmissionViewTests(TenantTestCase):
         # TODO: should redirect, not 404?
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
 
+    def test_submission_xp_entered_remains_even_when_submission_returned(self):
+
+        # log in a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.quest1.xp_can_be_entered_by_students = True
+        self.quest1.save()
+
+        self.sub1.xp_requested = 50
+        self.sub1.save()
+
+        # Return submission
+        self.sub1.mark_returned()
+
+        response = self.client.get(self.sub1.get_absolute_url())
+
+        self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
+
     def test_ajax_save_draft_has_changes(self):
         """Should save if there are changes in the draft text"""
         # loging required for this view
