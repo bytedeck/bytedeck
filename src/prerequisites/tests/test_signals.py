@@ -93,6 +93,16 @@ class PrerequisitesSignalsTest(TenantTestCase):
         badge.save()  # update
         self.assertEqual(task.call_count, 2)
 
+    @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
+    def test_update_cache_triggered_by_quest_without_prereqs(self, task):
+        """
+        Creation and Update of a Quest without a prerequisite should trigger a cache update
+        """
+        quest = baker.make(Quest)   # creation
+        quest.verification_required = False
+        quest.save()  # update
+        self.assertEqual(task.call_count, 2)
+
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_prereq_cache_triggered_by_quest(self, task):
         """Creation and Update of a quest should not trigger a cache update, only when a prereq is added to the quest (covered elsewhere).
