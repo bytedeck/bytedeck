@@ -1483,6 +1483,16 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
+    def test_quest_preview_is_available_to_student_without_course(self):
+        self.client.force_login(self.test_student)
+
+        quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
+
+        with patch('profile_manager.models.Profile.has_current_course', return_value=False):
+            response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))
+
+        self.assertTrue(response.context['available'])
+
     def test_quest_is_editable(self):
         with patch('quest_manager.models.Quest.is_editable', return_value=True):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
