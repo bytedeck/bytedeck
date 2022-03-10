@@ -22,7 +22,7 @@ class Command(BaseCommand):
 
         # Update their usernaems to lowercase
         count = User.objects.filter(username__in=unique_usernames).update(username=Lower('username'))
-        self.stdout.write(self.style.SUCCESS(f'Updated {count} users!\n'))
+        self.stdout.write(self.style.SUCCESS(f'Updated {count} users!'))
 
         # Display users that have multiple usernames e.g. Student vs studenT vs STudenT
         # Since we have to take action for those accounts that have different cases
@@ -30,4 +30,4 @@ class Command(BaseCommand):
         if non_unique_users:
             self.stdout.write(self.style.NOTICE('List of users with multiple usernames: \n'))
             for user in non_unique_users:
-                print(user, user.id, user.username)
+                self.stdout.write(f"{user}, {user.id}, {user.username}")
