@@ -538,7 +538,10 @@ ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
-ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
+ACCOUNT_FORMS = {
+    'signup': 'hackerspace_online.forms.CustomSignupForm',
+    'login': 'hackerspace_online.forms.CustomLoginForm',
+}
 # ACCOUNT_LOGOUT_ON_GET #(=False)
 # Determines whether or not the user is automatically logged out by a mere GET request. See documentation for the LogoutView for details.
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
