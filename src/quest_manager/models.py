@@ -173,9 +173,17 @@ class XPItem(models.Model):
     def is_available(self, user):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
         Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
-        return self.active and \
-            QuestSubmission.objects.not_submitted_or_inprogress(user, self) and \
-            Prereq.objects.all_conditions_met(self, user)
+
+        available = (
+            self.active
+            and QuestSubmission.objects.not_submitted_or_inprogress(user, self)
+            and Prereq.objects.all_conditions_met(self, user)
+        )
+
+        if available and not user.profile.has_current_course:
+            return self.available_outside_course
+
+        return available
 
     def is_repeatable(self):
         return self.max_repeats != 0

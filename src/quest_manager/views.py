@@ -930,6 +930,7 @@ def complete(request, submission_id):
 @non_public_only_view
 @login_required
 def start(request, quest_id):
+
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
