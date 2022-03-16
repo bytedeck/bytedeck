@@ -15,19 +15,22 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
 
-        # First let's take all users that have 0 duplicates
-        users = User.objects.values('username').annotate(existing_count=models.Count(Lower('username')))
+        # Let's take a list of users that have duplicate usernames
+        users = User.objects.values(lowercase_username=Lower('username')).annotate(existing_count=models.Count('lowercase_username'))
+        duplicate_usernames = users.filter(existing_count__gt=1).values_list('lowercase_username', flat=True)
 
-        unique_usernames = users.filter(existing_count=1).values_list('username', flat=True)
+        duplicate_users_qs = models.Q()
+        for username in duplicate_usernames:
+            duplicate_users_qs |= models.Q(username__icontains=username)
 
-        # Update their usernaems to lowercase
-        count = User.objects.filter(username__in=unique_usernames).update(username=Lower('username'))
+        count = User.objects.exclude(duplicate_users_qs).update(username=Lower('username'))
+
         self.stdout.write(self.style.SUCCESS(f'Updated {count} users!'))
 
         # Display users that have multiple usernames e.g. Student vs studenT vs STudenT
         # Since we have to take action for those accounts that have different cases
-        non_unique_users = User.objects.filter(~models.Q(username__in=unique_usernames))
-        if non_unique_users:
-            self.stdout.write(self.style.NOTICE('List of users with multiple usernames: \n'))
-            for user in non_unique_users:
-                self.stdout.write(f"{user}, {user.id}, {user.username}")
+        duplicate_users = User.objects.filter(duplicate_users_qs)
+        if duplicate_users.exists():
+            self.stdout.write(self.style.NOTICE('List of users with multiple usernames:'))
+            for user in duplicate_users:
+                self.stdout.write(f"user_id: {user.id}, username: {user.username}")
