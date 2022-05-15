@@ -4,6 +4,24 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.14.1] 2022-05-14
+* Make usernames case insensitive (more mobile friendly due to auto-capitalization on phones)
+* Add loading indicator to Notifications drop down [#896](https://github.com/bytedeck/bytedeck/issues/896)
+* Bugfixes:
+  - Fix loophole allowing students to start quests without a course via maps [#892](https://github.com/bytedeck/bytedeck/issues/892)
+  - Trigger a recalculation of available quests for all students when a new quest is created without prereqs [#936](https://github.com/bytedeck/bytedeck/issues/936)
+  - Returned quests remembers  XP value entered by student [#915](https://github.com/bytedeck/bytedeck/issues/915)
+  - Remove app from prerequisite name [#944](https://github.com/bytedeck/bytedeck/issues/944)
+
+### [1.14.0] 2022-02-21
+* New Site Config option to limit displayed marks to 100%
+* Improved mobile menus (bigger fonts, better organized)
+* Change contact menu item to link to Github Discussions
+* Dependancy upgrades:
+  * Upgrade Django to 3.2 LTS (support to Apr 2024)
+  * Upgrade Celery to V5 (mostly a security fix)
+  * Upgrade various minor dependancies
+
 ### [1.13.0] 2022-01-16 - Mostly Map Stuff
 * Campaigns can now be prerequisites [#890](https://github.com/bytedeck/bytedeck/issues/890)
 * Add campaign XP to maps [#819](https://github.com/bytedeck/bytedeck/issues/819)

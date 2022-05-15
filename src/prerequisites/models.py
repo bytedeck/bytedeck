@@ -341,7 +341,7 @@ class Prereq(IsAPrereqMixin, models.Model):
         s = ""
         if self.prereq_invert:
             s += "NOT "
-        s += "(" + str(self.prereq_content_type) + ") "
+        s += "(" + self.prereq_content_type.name + ") "
         s += str(self.get_prereq())
         if self.prereq_count > 1:
             s += " x" + str(self.prereq_count)
@@ -349,7 +349,7 @@ class Prereq(IsAPrereqMixin, models.Model):
             s += " OR "
             if self.or_prereq_invert:
                 s += "NOT "
-            s += "(" + str(self.or_prereq_content_type) + ") "
+            s += "(" + self.or_prereq_content_type.name + ") "
             s += str(self.get_or_prereq())
             if self.or_prereq_count > 1:
                 s += " x" + str(self.or_prereq_count)
