@@ -60,6 +60,9 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
         self.test_student2 = baker.make(User)
 
+        # put the student in a course in the active semester
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=SiteConfig.get().active_semester)
+
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
 
@@ -140,6 +143,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # if the quest has not been started yet, and it's available to the student,
         # (quests created with default settings should be to students, as long as they are registered in a course)
         # then should redirect to the new submission that this view creates
+
         response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
 
         # check that a submission was created (should only be one at this point, so use `get()`
@@ -352,6 +356,25 @@ class SubmissionViewTests(TenantTestCase):
 
         # TODO: should redirect, not 404?
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
+
+    def test_submission_xp_entered_remains_even_when_submission_returned(self):
+
+        # log in a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        self.quest1.xp_can_be_entered_by_students = True
+        self.quest1.save()
+
+        self.sub1.xp_requested = 50
+        self.sub1.save()
+
+        # Return submission
+        self.sub1.mark_returned()
+
+        response = self.client.get(self.sub1.get_absolute_url())
+
+        self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
 
     def test_ajax_save_draft_has_changes(self):
         """Should save if there are changes in the draft text"""
@@ -1481,6 +1504,16 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
 
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['available'])
+
+    def test_quest_preview_is_available_to_student_without_course(self):
+        self.client.force_login(self.test_student)
+
+        quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
+
+        with patch('profile_manager.models.Profile.has_current_course', return_value=False):
+            response = self.client.get(quest_avail_outside_course.get_absolute_url())
+
         self.assertTrue(response.context['available'])
 
     def test_quest_is_editable(self):

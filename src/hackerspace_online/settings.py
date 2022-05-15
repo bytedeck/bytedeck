@@ -512,7 +512,7 @@ AUTHENTICATION_BACKENDS = (
 LOGIN_REDIRECT_URL = '/'
 # https://stackoverflow.com/questions/44571373/python-3-6-django1-10-login-required-decorator-redirects-to-link-with-missing/44571408#44571408
 LOGIN_URL = 'account_login'
-# ACCOUNT_ADAPTER #(=”allauth.account.adapter.DefaultAccountAdapter”)
+ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
 # Specifies the login method to use – whether the user logs in by entering their username,
@@ -538,13 +538,17 @@ ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
 # Used to override forms, for example: {‘login’: ‘myapp.forms.LoginForm’}
-ACCOUNT_FORMS = {'signup': 'hackerspace_online.forms.CustomSignupForm'}
+ACCOUNT_FORMS = {
+    'signup': 'hackerspace_online.forms.CustomSignupForm',
+    'login': 'hackerspace_online.forms.CustomLoginForm',
+}
 # ACCOUNT_LOGOUT_ON_GET #(=False)
 # Determines whether or not the user is automatically logged out by a mere GET request. See documentation for the LogoutView for details.
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 # Determines whether or not the user is automatically logged out after changing the password. See documentation for Django’s session invalidation
 #  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
+ACCOUNT_PRESERVE_USERNAME_CASING = False
 
 
 #################################

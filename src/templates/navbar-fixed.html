@@ -207,6 +207,12 @@
                      --><span id="notification_badge" class="badge alert-danger notification-badge"></span>
                     </a>
                     <ul class="dropdown-menu notification-dropdown" id="notification-dropdown">
+                        <li>
+                            <a href="{% url 'notifications:list' %}"><i class="fa fa-lg fa-fw fa-spinner fa-pulse"></i>
+                                Loading notifications...
+                                <!-- via AJAX from javascript.html -->
+                            </a>
+                        </li>
                     </ul>
                 </li>
                 <li id="profile">

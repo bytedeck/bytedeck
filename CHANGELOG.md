@@ -4,6 +4,15 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.14.0] 2022-02-21
+* New Site Config option to limit displayed marks to 100%
+* Improved mobile menus (bigger fonts, better organized)
+* Change contact menu item to link to Github Discussions
+* Dependancy upgrades:
+  * Upgrade Django to 3.2 LTS (support to Apr 2024)
+  * Upgrade Celery to V5 (mostly a security fix)
+  * Upgrade various minor dependancies
+
 ### [1.13.0] 2022-01-16 - Mostly Map Stuff
 * Campaigns can now be prerequisites [#890](https://github.com/bytedeck/bytedeck/issues/890)
 * Add campaign XP to maps [#819](https://github.com/bytedeck/bytedeck/issues/819)

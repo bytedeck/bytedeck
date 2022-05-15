@@ -36,7 +36,7 @@ User = get_user_model()
 def is_staff_or_TA(user):
     if user.is_staff:
         return True
-    
+
     try:
         if user.profile.is_TA:
             return True
@@ -58,7 +58,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('quests:categories')
 
     def get_context_data(self, **kwargs):
-        
+
         kwargs['heading'] = 'Create New Campaign'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -930,6 +930,7 @@ def complete(request, submission_id):
 @non_public_only_view
 @login_required
 def start(request, quest_id):
+
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
@@ -1092,7 +1093,8 @@ def submission(request, submission_id=None, quest_id=None):
     else:
         initial = {'comment_text': sub.draft_text}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
-            initial['xp_requested'] = sub.quest.xp
+            # Use the xp requested from the submission. Default to quest xp
+            initial['xp_requested'] = sub.xp_requested or sub.quest.xp
             main_comment_form = SubmissionFormCustomXP(request.POST or None, initial=initial, minimum_xp=sub.quest.xp)
         else:
             main_comment_form = SubmissionForm(request.POST or None, initial=initial)

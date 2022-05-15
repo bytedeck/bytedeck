@@ -6,7 +6,7 @@ from django.dispatch import receiver
 from badges.models import Badge
 from prerequisites.models import Prereq
 from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
-from quest_manager.models import QuestSubmission
+from quest_manager.models import Quest, QuestSubmission
 
 User = get_user_model()
 
@@ -48,6 +48,15 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
 @receiver([post_save, post_delete], sender=Badge, dispatch_uid="prerequisites.signals.update_conditions_met")
 def update_conditions_met(sender, instance, *args, **kwargs):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
+
+
+@receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quest_without_prereqs")
+def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **kwargs):
+    """
+    Handle a specific case where available quests is not updated if the Quest does not contain any prerequisites
+    """
+    if not instance.prereqs().exists():
+        update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
 @receiver([post_save, post_delete], sender=Prereq, dispatch_uid="prerequisites.signals.update_cache_triggered_by_prereq")
