@@ -46,6 +46,7 @@ SHARED_APPS = (
     'django.contrib.contenttypes',
 
     # WHY ARE THESE NEEDED IN BOTH SHARED AND TENANT APPS LISTS?
+    # dylan was here :P delete me later pl0x
     'django.contrib.auth',
     'django.contrib.admin',
     'django.contrib.sessions',
