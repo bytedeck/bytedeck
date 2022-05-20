@@ -110,7 +110,7 @@ If everything has worked so far, you should now be able to create your own byted
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
-1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated), enter you tenant's name (for example, `hackerspace`) and paste these commands:
+1. Open a Python shell specific to your tenant (make sure your virtual environment is activated), enter your tenant's name (for example, `hackerspace`) and paste these commands:
     ```
     $ ./src/manage.py tenant_command shell
     Enter Tenant Schema ('?' to list schemas): hackerspace
