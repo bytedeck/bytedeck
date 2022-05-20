@@ -79,6 +79,3 @@ WORKDIR /app/
 
 # RUN adduser --disabled-password appuser
 # USER appuser
-
-
-#MARC WAS ALSO HERE # delete me later # add another one #another one
