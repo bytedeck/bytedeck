@@ -26,7 +26,7 @@
 {% for assertion in assertions_of_this_badge %}
   <li>{{assertion.timestamp}}
     {% if request.user.is_staff %} {# staff can revoke badges #}
-    <a class='btn btn-danger btn-xs' href='{% url "badges:revoke" assertion.id %}' role='button'>
+    <a class='btn btn-danger btn-xs' title='Revoke' href='{% url "badges:revoke" assertion.id %}' role='button'>
       <i class='fa fa-trash-o'></i>
     </a>
     {% endif %}
