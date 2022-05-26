@@ -158,9 +158,9 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertEqual(CytoScape.objects.count(), 2)
     
     def test_save__sets_first_scape_as_primary(self):
-    newmap = baker.make('djcytoscape.CytoScape')
-    self.assertTrue(self.map.is_the_primary_scape)
-    self.assertFalse(newmap.is_the_primary_scape)
+        newmap = baker.make('djcytoscape.CytoScape')
+        self.assertTrue(self.map.is_the_primary_scape)
+        self.assertFalse(newmap.is_the_primary_scape)
 
     def test_save__changes_primary_scape(self):
         newmap = baker.make('djcytoscape.CytoScape')
