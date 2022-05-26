@@ -2,7 +2,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.test import SimpleTestCase.
+from django.test import SimpleTestCase
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
