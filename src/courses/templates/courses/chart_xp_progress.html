@@ -61,7 +61,7 @@
 
   var GradeAData = {
       type: 'line',
-      label: 'A (86%)',
+      label: 'A {% if not a_p %} (86%){%else%} ({{a_p.minimum_mark|floatformat}}%){%endif%}',
       pointRadius: 0,
       backgroundColor: "rgba(255,255,0,0)",
       borderColor: "rgba(255, 236, 179,50)",
@@ -70,7 +70,7 @@
 
   var GradeFData = {
       type: 'line',
-      label: 'Pass (50%)',
+      label: 'Pass{% if not pass_p %} (50%){%else%} ({{pass_p.minimum_mark|floatformat}}%){%endif%}',
       pointRadius: 0,
       backgroundColor: "rgba(255, 0, 0, 0)",
       borderColor: "rgba(255, 179, 179, 50)",
@@ -80,7 +80,7 @@
   // Chillax Line Data Set = B
   var ChillaxLineData = {
       type: 'line',
-      label: 'B (73%)',
+      label: 'B {% if not b_p %} (50%){%else%} ({{b_p.minimum_mark|floatformat}}%){%endif%}',
       pointRadius: 0,
       backgroundColor: "rgba(0,255,255,0)",
       borderColor: "rgba(0,255,255,255)",
@@ -240,10 +240,15 @@
     GradeAData.data = [];
     GradeFData.data = [];
 
+    var chillaxPercentage = {% if not b_p %} 0.725 {%else%} {{b_float}} {% endif %};
+    var aPercentage = {% if not a_p %} 0.855 {%else%} {{a_float}} {% endif %};
+    var fPercentage = {% if not pass_p %} 0.495 {%else%} {{pass_float}} {% endif %};
+
     for (var i = 1; i <= days; i++) {
-        var p = new DataPoint(i, Math.floor(i * max_xp*0.725 / days));
-        var pA = new DataPoint(i, Math.floor(i * max_xp*0.855 / days));
-        var pF = new DataPoint(i, Math.floor(i * max_xp*0.495 / days));
+
+        var p = new DataPoint(i, Math.floor(i * max_xp*chillaxPercentage / days));
+        var pA = new DataPoint(i, Math.floor(i * max_xp*aPercentage / days));
+        var pF = new DataPoint(i, Math.floor(i * max_xp*fPercentage / days));
         ChillaxLineData.data.push(p);
         GradeAData.data.push(pA);
         GradeFData.data.push(pF);

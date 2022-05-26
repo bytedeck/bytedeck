@@ -18,7 +18,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, SemesterForm
-from .models import Block, Course, CourseStudent, Rank, Semester
+from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 
 # Create your views here.
@@ -44,12 +44,30 @@ def mark_calculations(request, user_id=None):
     else:
         xp_per_course = None
 
+
+    pass_mr    : MarkRange = MarkRange.objects.filter(name__iexact="pass").first() or None
+    pass_float : float = float(pass_mr.minimum_mark / 100) if pass_mr else -1
+
+    a_mr       : MarkRange = MarkRange.objects.filter(name__iexact="a").first() or None
+    a_float    : float = float(a_mr.minimum_mark / 100) if a_mr else -1
+
+    b_mr       : MarkRange = MarkRange.objects.filter(name__iexact="chillax line").first() or None
+    b_float     : float = float(b_mr.minimum_mark / 100) if b_mr else -1
+
     context = {
         'user': user,
         'obj': course_student,
         'courses': courses,
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
+
+        # for mark ranges
+        'pass_p' : pass_mr,
+        'pass_float' : pass_float,
+        'a_p' : a_mr,
+        'a_float' : a_float,
+        'b_p' : b_mr,
+        'b_float' : b_float,
     }
     return render(request, template_name, context)
 

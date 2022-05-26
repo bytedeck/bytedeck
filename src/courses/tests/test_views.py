@@ -132,6 +132,26 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
             'course': self.course.pk,
             'grade_fk': self.grade.pk
         }
+    
+    @tag("do")
+    def test_mark_calculations__variable_mark_ranges(self):
+        """
+            see if xp chart is 'as expected'
+        """
+        [baker.make('courses.MarkRange') for x in Range(7)]
+
+        self.assert200('courses:marks') # they go to same page?
+        self.assert200('courses:my_marks')
+
+        for name in ['Chillax Line', 'a', 'pass']:
+            mr = baker.make('courses.MarkRange')
+            mr.name = name
+
+            self.assert200('courses:marks')
+            self.assert200('courses:my_marks')
+
+        
+        
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
