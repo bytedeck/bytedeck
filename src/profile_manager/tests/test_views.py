@@ -46,34 +46,31 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         tpk = self.test_teacher.profile.pk
         spk = self.test_student1.profile.pk
 
-
-        #login as teacher/admin and check if 'add course' doesnt exists
+        # login as teacher/admin and check if 'add course' doesnt exists
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        #no course
+        # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
         self.assertContains(request, 'Not applicable to staff users.')
 
-        #with course
+        # with course
         course_student = baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
         self.assertContains(request, course.title)
 
-
-        #login as student and check if 'add course' and 'course' exists
+        # login as student and check if 'add course' and 'course' exists
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
-        #no course
+        # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
         self.assertContains(request, 'You have not joined a course yet for this semester')
 
-        #with course
+        # with course
         course_student = baker.make('courses.CourseStudent', user=self.test_student1, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
         self.assertContains(request, course.title)
-
 
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
