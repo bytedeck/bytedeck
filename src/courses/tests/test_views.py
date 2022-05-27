@@ -9,6 +9,8 @@ from courses.models import Block, Course, Semester, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
+import random
+
 User = get_user_model()
 
 
@@ -132,23 +134,51 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
             'course': self.course.pk,
             'grade_fk': self.grade.pk
         }
-    
-    @tag("do")
+
+    #@tag("do")
     def test_mark_calculations__variable_mark_ranges(self):
         """
-            see if xp chart is 'as expected'
+        see if xp chart is 'as expected'
         """
-        [baker.make('courses.MarkRange') for x in Range(7)]
+        INSTANCE = SiteConfig.get() #but this doesnt (2) # i dont event think this is pass by data, just pass by reference
+        INSTANCE = SiteConfig.objects.get(id=INSTANCE.id) #why does this work with save (1)
+        INSTANCE.display_marks_calculation = True
+        INSTANCE.save()
 
-        self.assert200('courses:marks') # they go to same page?
+        #login and join course for student # so xp mark calc can render
+        course_student = baker.make('courses.CourseStudent',  user=self.test_student1, course=self.course,)
+        self.client.force_login(self.test_student1)
+
+
+        #           check for 404s and contains
+        # base. No added mark ranges ====
+        [baker.make('courses.MarkRange') for x in range(7)]
+
+        #should be true if display_marks_calculation = True
+        self.assert200('courses:marks', args=[self.test_student1.id]) # they go to same page?
         self.assert200('courses:my_marks')
 
-        for name in ['Chillax Line', 'a', 'pass']:
-            mr = baker.make('courses.MarkRange')
-            mr.name = name
+        # check for default values
+        # response = self.client.get(reverse('courses:my_marks'))
+        # self.assertContains(response, '<html')
+        # [self.assertContains(response, text) for text in ['A (86%)', 'B (73%)', 'Pass (50%)']]
+        
 
-            self.assert200('courses:marks')
-            self.assert200('courses:my_marks')
+        # with mark ranges ==============
+        mark_data = {name : random.randint(1, 100) for name in ['Chillax Line', 'a', 'pass']}
+
+        for name, mark in mark_data.items():
+            mr = baker.make('courses.MarkRange', name=name, minimum_mark=mark)
+
+        self.assert200('courses:marks', args=[self.test_student1.id])
+        self.assert200('courses:my_marks')
+
+        # #check for new values
+        # response = self.client.get(reverse('courses:my_marks'))
+        # [self.assertContains(response,f"({mark_data[key]}%)") for key in mark_data.keys()]
+
+        
+        
 
         
         

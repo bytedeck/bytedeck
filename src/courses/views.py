@@ -11,6 +11,7 @@ from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.conf import settings
 
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
@@ -28,6 +29,9 @@ def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
 
     if not SiteConfig.get().display_marks_calculation:
+        if settings.DEBUG:
+            print("For future testers check if SiteConfig.display_marks_calculation is on")
+            
         raise Http404
 
     # Only allow staff to see other student's mark page
