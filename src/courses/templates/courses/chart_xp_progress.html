@@ -6,13 +6,13 @@
 
   /*jshint esversion: 6 */
 
-  var max_xp = {{courses.first.course.xp_for_100_percent}}
+  var max_xp = {{ courses.first.course.xp_for_100_percent }}
 
   var ctx = document.getElementById("myChart");
 
   function DataPoint(x, y) {
-      this.x = x;
-      this.y = y;
+    this.x = x;
+    this.y = y;
   }
 
   var days = 85;
@@ -20,246 +20,247 @@
 
   // XP DATA SET
   var XPData = {
-      type: 'line',
-      label: 'XP Earned',
-      fill: false,
-      backgroundColor: "#aaa", //used for legend
-      borderColor: "#1c1e22", //used for legend
-      showLine: false,
-      pointBorderColor: "#1c1e22",
-      pointBackgroundColor: "#aaa",
-      data: [{x: 0, y: 0}],
+    type: 'line',
+    label: 'XP Earned',
+    fill: false,
+    backgroundColor: "#aaa", //used for legend
+    borderColor: "#1c1e22", //used for legend
+    showLine: false,
+    pointBorderColor: "#1c1e22",
+    pointBackgroundColor: "#aaa",
+    data: [{ x: 0, y: 0 }],
   };
-{#  // XP DATA SET FOR BAR STYLE#}
-{#  var XPDataBar = {#}
-{#      type: 'bar',#}
-{#      xAxisID: "x-axis-0",#}
-{#      yAxisID: "y-axis-XP",#}
-{#      label: 'XP Earned',#}
-{#      fill: false,#}
-{#      backgroundColor: "#cc1111", //used for legend#}
-{#      borderColor: "#11cc11", //used for legend#}
-{#      showLine: false,#}
-{#      borderWidth: 2,#}
-{#      data: [100,150,2,300,4,5,6,7,8,9],#}
-{#  };#}
+  {#  // XP DATA SET FOR BAR STYLE#}
+    {#  var XPDataBar = {#}
+      {#      type: 'bar',# }
+      {#      xAxisID: "x-axis-0",# }
+      {#      yAxisID: "y-axis-XP",# }
+      {#      label: 'XP Earned',# }
+      {#      fill: false,# }
+      {#      backgroundColor: "#cc1111", //used for legend#}
+        {#      borderColor: "#11cc11", //used for legend#}
+{#      showLine: false,# }
+        {#      borderWidth: 2,# }
+        {#      data: [100, 150, 2, 300, 4, 5, 6, 7, 8, 9],# }
+        {# };#
+      }
 
 
 
-  // XP Trend Data
-  var XPTrendData = {
-      type: 'line',
-      label: 'If you continue at your current rate',
-      fill: false,
-      pointRadius: 0,
-      lineTension: 0,
-      borderDash: [5, 5],
-      borderColor: "#aaa",
-      backgroundColor: "rgba(150,150,150,0)",
-      data: [{x: 0, y: 0}],
-  };
+      // XP Trend Data
+      var XPTrendData = {
+        type: 'line',
+        label: 'If you continue at your current rate',
+        fill: false,
+        pointRadius: 0,
+        lineTension: 0,
+        borderDash: [5, 5],
+        borderColor: "#aaa",
+        backgroundColor: "rgba(150,150,150,0)",
+        data: [{ x: 0, y: 0 }],
+      };
 
-  var GradeAData = {
-      type: 'line',
-      label: 'A {% if not a_p %} (86%){%else%} ({{a_p.minimum_mark|floatformat}}%){%endif%}',
-      pointRadius: 0,
-      backgroundColor: "rgba(255,255,0,0)",
-      borderColor: "rgba(255, 236, 179,50)",
-      data: [{x: 0, y: 0}],
-  };
+      var GradeAData = {
+        type: 'line',
+        label: 'A {% if not a_p %} (86%){%else%} ({{a_p.minimum_mark|floatformat}}%){%endif%}',
+        pointRadius: 0,
+        backgroundColor: "rgba(255,255,0,0)",
+        borderColor: "rgba(255, 236, 179,50)",
+        data: [{ x: 0, y: 0 }],
+      };
 
-  var GradeFData = {
-      type: 'line',
-      label: 'Pass{% if not pass_p %} (50%){%else%} ({{pass_p.minimum_mark|floatformat}}%){%endif%}',
-      pointRadius: 0,
-      backgroundColor: "rgba(255, 0, 0, 0)",
-      borderColor: "rgba(255, 179, 179, 50)",
-      data: [{x: 0, y: 0}],
-  };
+      var GradeFData = {
+        type: 'line',
+        label: 'Pass{% if not pass_p %} (50%){%else%} ({{pass_p.minimum_mark|floatformat}}%){%endif%}',
+        pointRadius: 0,
+        backgroundColor: "rgba(255, 0, 0, 0)",
+        borderColor: "rgba(255, 179, 179, 50)",
+        data: [{ x: 0, y: 0 }],
+      };
 
-  // Chillax Line Data Set = B
-  var ChillaxLineData = {
-      type: 'line',
-      label: 'B {% if not b_p %} (50%){%else%} ({{b_p.minimum_mark|floatformat}}%){%endif%}',
-      pointRadius: 0,
-      backgroundColor: "rgba(0,255,255,0)",
-      borderColor: "rgba(0,255,255,255)",
-      data: [{x: 0, y: 0}],
-  };
+      // Chillax Line Data Set = B
+      var ChillaxLineData = {
+        type: 'line',
+        label: 'B {% if not b_p %} (50%){%else%} ({{b_p.minimum_mark|floatformat}}%){%endif%}',
+        pointRadius: 0,
+        backgroundColor: "rgba(0,255,255,0)",
+        borderColor: "rgba(0,255,255,255)",
+        data: [{ x: 0, y: 0 }],
+      };
 
-  var data = {
-      datasets: [
+      var data = {
+        datasets: [
           XPData,
-{#          XPDataBar,#}
+          {#          XPDataBar,#}
           XPTrendData,
           GradeFData,
           ChillaxLineData,
           GradeAData,
-      ]
-  };
+        ]
+      };
 
-  // need some starting data for the animation to work it seems..
-  generate_mark_lines(100)
+      // need some starting data for the animation to work it seems..
+      generate_mark_lines(100)
 
-  var options = {
+      var options = {
 
-      responsive: true,
-      maintainAspectRatio: false,
+        responsive: true,
+        maintainAspectRatio: false,
 
-      scales: {
+        scales: {
 
           xAxes: [{
-              type: 'linear',
-              position: 'bottom',
-              ticks: {
-                  max: 5,
-                  min: 0,
-                  stepSize: 5,
-              },
-              scaleLabel: {
-                  display: true,
-                  labelString: 'Days of Class'
-              },
+            type: 'linear',
+            position: 'bottom',
+            ticks: {
+              max: 5,
+              min: 0,
+              stepSize: 5,
+            },
+            scaleLabel: {
+              display: true,
+              labelString: 'Days of Class'
+            },
           }], //xaxes
 
           yAxes: [{
-                  id: "y-axis-XP",
-                  position: 'left',
-                  ticks: {
-                      max: max_xp,
-                      min: 0,
-                      stepSize: max_xp/20,
-                  },
+            id: "y-axis-XP",
+            position: 'left',
+            ticks: {
+              max: max_xp,
+              min: 0,
+              stepSize: max_xp / 20,
+            },
 
-                  scaleLabel: {
-                      display: true,
-                      labelString: 'XP'
-                  },
+            scaleLabel: {
+              display: true,
+              labelString: 'XP'
+            },
 
-                  gridLines: {},
-              }, {
-                  id: "y-axis-percent",
-                  position: 'right',
+            gridLines: {},
+          }, {
+            id: "y-axis-percent",
+            position: 'right',
 
-                  ticks: {
-                      max: 100,
-                      min: 0,
-                      stepSize: 5,
-                  },
+            ticks: {
+              max: 100,
+              min: 0,
+              stepSize: 5,
+            },
 
-                  scaleLabel: {
-                      display: true,
-                      labelString: 'Percent'
-                  },
+            scaleLabel: {
+              display: true,
+              labelString: 'Percent'
+            },
 
-                  gridLines: {
-                      /*show: true,
-                      color: "rgba(255, 255, 255, 1)",
-                      lineWidth: 1,
-                      drawOnChartArea: true,
-                      drawTicks: true,
-                      zeroLineWidth: 1,
-                      zeroLineColor: "rgba(255,255,255,1)", */
-                  },
-              }
+            gridLines: {
+              /*show: true,
+              color: "rgba(255, 255, 255, 1)",
+              lineWidth: 1,
+              drawOnChartArea: true,
+              drawTicks: true,
+              zeroLineWidth: 1,
+              zeroLineColor: "rgba(255,255,255,1)", */
+            },
+          }
 
 
           ], //yaxes
-      }, //scales
+        }, //scales
 
-      title: {
+        title: {
           text: 'A Map of Your Progress',
           display: false,
-      }, //title
+        }, //title
 
-      legend: {
+        legend: {
           position: 'top',
           labels: {
-              usePointStyle: true,
+            usePointStyle: true,
           },
-      }, //legend
+        }, //legend
 
-      tooltips: {
+        tooltips: {
           //mode: 'label', //too slow!
           callbacks: {
 
           },
-      },
+        },
 
 
-      // Pan & Zoom option not working well, try again when the libraries have progressed
-      //https://github.com/chartjs/Chart.Zoom.js
-      // pan: {
-      //     // Boolean to enable panning
-      //     enabled: true,
-      //
-      //     // Panning directions. Remove the appropriate direction to disable
-      //     // Eg. 'y' would only allow panning in the y direction
-      //     mode: 'xy'
-      // },
-      //
-      // // Container for zoom options
-      // zoom: {
-      //     // Boolean to enable zooming
-      //     enabled: true,
-      //
-      //     // Zooming directions. Remove the appropriate direction to disable
-      //     // Eg. 'y' would only allow zooming in the y direction
-      //     mode: 'xy',
-      //     limits: {
-      //       max: 1.5,
-      //       min: 0.5,
-      //     },
-      // },
+        // Pan & Zoom option not working well, try again when the libraries have progressed
+        //https://github.com/chartjs/Chart.Zoom.js
+        // pan: {
+        //     // Boolean to enable panning
+        //     enabled: true,
+        //
+        //     // Panning directions. Remove the appropriate direction to disable
+        //     // Eg. 'y' would only allow panning in the y direction
+        //     mode: 'xy'
+        // },
+        //
+        // // Container for zoom options
+        // zoom: {
+        //     // Boolean to enable zooming
+        //     enabled: true,
+        //
+        //     // Zooming directions. Remove the appropriate direction to disable
+        //     // Eg. 'y' would only allow zooming in the y direction
+        //     mode: 'xy',
+        //     limits: {
+        //       max: 1.5,
+        //       min: 0.5,
+        //     },
+        // },
 
-  };
+      };
 
 
-  function generate_trend(days_in_semester) {
-    // XP Trend calculation
-    // Just a linear extrapolation of the average XP per day
-    var total = 0;
-    XPTrendData.data = [];
-    var days_so_far = XPData.data.length;
-    total = XPData.data[days_so_far - 1].y;
-    var average_per_day = total / days_so_far;
+      function generate_trend(days_in_semester) {
+        // XP Trend calculation
+        // Just a linear extrapolation of the average XP per day
+        var total = 0;
+        XPTrendData.data = [];
+        var days_so_far = XPData.data.length;
+        total = XPData.data[days_so_far - 1].y;
+        var average_per_day = total / days_so_far;
 
-    var trend_total = total;
-    for (var i = days_so_far; i <= days_in_semester; i++) {
+        var trend_total = total;
+        for (var i = days_so_far; i <= days_in_semester; i++) {
 
-        var p = new DataPoint(i, trend_total);
-        XPTrendData.data.push(p);
-        trend_total += average_per_day;
+          var p = new DataPoint(i, trend_total);
+          XPTrendData.data.push(p);
+          trend_total += average_per_day;
 
-    }
+        }
+      }
+
+      function generate_mark_lines(days) {
+        // Mark Line Generation
+        ChillaxLineData.data = [];
+        GradeAData.data = [];
+        GradeFData.data = [];
+
+        var chillaxPercentage = {% if not b_p %} 0.725 {%else%} { { b_float } } {% endif %};
+      var aPercentage = {% if not a_p %} 0.855 {%else%} { { a_float } } {% endif %};
+    var fPercentage = {% if not pass_p %} 0.495 {%else%} { { pass_float } } {% endif %};
+
+  for (var i = 1; i <= days; i++) {
+
+    var p = new DataPoint(i, Math.floor(i * max_xp * chillaxPercentage / days));
+    var pA = new DataPoint(i, Math.floor(i * max_xp * aPercentage / days));
+    var pF = new DataPoint(i, Math.floor(i * max_xp * fPercentage / days));
+    ChillaxLineData.data.push(p);
+    GradeAData.data.push(pA);
+    GradeFData.data.push(pF);
+
   }
-
-  function generate_mark_lines(days) {
-    // Mark Line Generation
-    ChillaxLineData.data = [];
-    GradeAData.data = [];
-    GradeFData.data = [];
-
-    var chillaxPercentage = {% if not b_p %} 0.725 {%else%} {{b_float}} {% endif %};
-    var aPercentage = {% if not a_p %} 0.855 {%else%} {{a_float}} {% endif %};
-    var fPercentage = {% if not pass_p %} 0.495 {%else%} {{pass_float}} {% endif %};
-
-    for (var i = 1; i <= days; i++) {
-
-        var p = new DataPoint(i, Math.floor(i * max_xp*chillaxPercentage / days));
-        var pA = new DataPoint(i, Math.floor(i * max_xp*aPercentage / days));
-        var pF = new DataPoint(i, Math.floor(i * max_xp*fPercentage / days));
-        ChillaxLineData.data.push(p);
-        GradeAData.data.push(pA);
-        GradeFData.data.push(pF);
-
-    }
   }
 
   var myChart = new Chart(ctx, {
-      type: 'line',
-      data: data,
-      options: options,
+    type: 'line',
+    data: data,
+    options: options,
   });
 
   function ajax_update_plot() {
@@ -273,7 +274,7 @@
       data: {
         csrfmiddlewaretoken: "{{ csrf_token }}",
       },
-      success: function(data){
+      success: function (data) {
         // console.log(data.xp_data);
         XPData.data = data.xp_data;
         console.log(data.xp_data);
@@ -296,21 +297,21 @@
   // here we store the window scroll position to lock; -1 means unlocked
   var forceWindowScrollY = -1;
 
-  $(window).scroll(function(event) {
-    if(forceWindowScrollY != -1 && window.scrollY != forceWindowScrollY) {
+  $(window).scroll(function (event) {
+    if (forceWindowScrollY != -1 && window.scrollY != forceWindowScrollY) {
       $(window).scrollTop(forceWindowScrollY);
     }
   });
 
-  $("#myChart").hover(function() {
-    if(forceWindowScrollY == -1) {
+  $("#myChart").hover(function () {
+    if (forceWindowScrollY == -1) {
       forceWindowScrollY = $(window).scrollTop();
     }
-  }, function() {
+  }, function () {
     forceWindowScrollY = -1;
   });
 
-  $(document).ready(function() {
+  $(document).ready(function () {
     ajax_update_plot();
   });
 

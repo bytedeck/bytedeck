@@ -1,24 +1,20 @@
 {% extends "profile_manager/base.html" %}
 
 {% block heading_inner %}{{ object.get_preferred_name }}'s Profile
-    <div class="btn-group" role="group">
-      <a class="btn btn-info" title="Edit your Profile"
-        href="{% url 'profiles:profile_update' object.id %}"
-        role="button"><i class="fa fa-cog"></i></a>
-      <a class="btn btn-warning" title="Change your Password"
-        href="{% url 'account_change_password' %}"
-        role="button"><i class="fa fa-key"></i></a>
+<div class="btn-group" role="group">
+  <a class="btn btn-info" title="Edit your Profile" href="{% url 'profiles:profile_update' object.id %}"
+    role="button"><i class="fa fa-cog"></i></a>
+  <a class="btn btn-warning" title="Change your Password" href="{% url 'account_change_password' %}" role="button"><i
+      class="fa fa-key"></i></a>
 
-      {% if config.display_marks_calculation %}
-        <a class= "btn btn-primary" title="View your Mark Calculations"
-          href="{% url 'courses:marks' object.user.id %}"
-          role="button"><i class="fa fa-line-chart"></i></a>
-      {% endif %}
+  {% if config.display_marks_calculation %}
+  <a class="btn btn-primary" title="View your Mark Calculations" href="{% url 'courses:marks' object.user.id %}"
+    role="button"><i class="fa fa-line-chart"></i></a>
+  {% endif %}
 
-      <a class= "btn btn-success" title="View your Portfolio"
-        href="{% url 'portfolios:detail' object.user.id %}"
-        role="button"><i class="fa fa-picture-o"></i></a>
-    </div>
+  <a class="btn btn-success" title="View your Portfolio" href="{% url 'portfolios:detail' object.user.id %}"
+    role="button"><i class="fa fa-picture-o"></i></a>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -26,7 +22,7 @@
 <div class="row">
   <div class="col-xs-12">
     <div class="bd-profile-row">
-      <img class="icon-avatar img-rounded bd-profile-avatar-col" src="{{object.get_avatar_url}}" alt="avatar"/>
+      <img class="icon-avatar img-rounded bd-profile-avatar-col" src="{{object.get_avatar_url}}" alt="avatar" />
 
       <div class="bd-profile-xp-col">
         <div class="panel panel-primary">
@@ -49,32 +45,37 @@
             <div>Next Rank: {{object.next_rank}} </div>
             <div class="progress progress-xp">
               <div class="progress-bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"
-                  style="width: {% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}%;">
-                <span class="sr-only">{% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}% Complete</span>
+                style="width: {% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}%;">
+                <span class="sr-only">{% widthratio object.xp_since_last_rank object.xp_to_next_rank 100 %}%
+                  Complete</span>
               </div>
             </div>
 
             {% if courses %}
-              {% for course in courses %}
-                <div class="pull-right"> {{xp_per_course|floatformat:0}} / {{course.course.xp_for_100_percent}} XP </div>
-                <div>
-                    {{course.course}} {{course.grade_fk}}
-                </div>
-                <div class="progress progress-xp"><!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
-                  <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
-                      style="width: {% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%;">
-                    <span class="sr-only">{% widthratio xp_per_course course.course.xp_for_100_percent 100 %}% Complete</span>
-                  </div>
-                </div>
-              {% endfor %}
+            {% for course in courses %}
+            <div class="pull-right"> {{xp_per_course|floatformat:0}} / {{course.course.xp_for_100_percent}} XP </div>
+            <div>
+              {{course.course}} {{course.grade_fk}}
+            </div>
+            <div class="progress progress-xp">
+              <!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
+              <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0"
+                aria-valuemax="1000"
+                style="width: {% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%;">
+                <span class="sr-only">{% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%
+                  Complete</span>
+              </div>
+            </div>
+            {% endfor %}
             {% else %}
-              You have not joined a course yet this semester.
-              <a href="{% url 'courses:create' %}">Join a Course</a>
+            You have not joined a course yet this semester.
+            <a href="{% url 'courses:create' %}">Join a Course</a>
             {% endif %}
 
           </div>
 
-        </div> <!--panel -->
+        </div>
+        <!--panel -->
       </div> <!-- bd-profile-xp-col -->
     </div> <!-- profile-row -->
   </div>
@@ -88,149 +89,158 @@
       </div>
       <div class="panel-body">
         <p>Username: {{ object.user.get_username}}</p>
-        <p>Grad Year: {% if object.grad_year %}{{ object.grad_year}}{% else %}<i>None. Edit your profile!</i>{% endif %}</p>
+        <p>Grad Year: {% if object.grad_year %}{{ object.grad_year}}{% else %}<i>None. Edit your profile!</i>{% endif %}
+        </p>
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
         {% if request.user.is_staff %}
-          <p>Last Login: {% if object.user.last_login %} {{ object.user.last_login}} ({{ object.user.last_login|timesince }} ago) {% else %}&mdash;{% endif %}</p>
+        <p>Last Login: {% if object.user.last_login %} {{ object.user.last_login}} ({{ object.user.last_login|timesince
+          }} ago) {% else %}&mdash;{% endif %}</p>
         {% endif %}
       </div>
-     </div> <!--panel -->
-     <!-- COURSES -->
-     <div class="panel panel-primary">
-       <div class="panel-heading">
-         <i class="pull-right fa fa-fw fa-book"></i>
-         <h3 class="panel-title">Courses
-           {% if request.user.is_staff %}
-             &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
-             href="{% url 'courses:join' object.user.id %}" role="button">Add</a>
-           {% endif %}
-         </h3>
-       </div>
-       <ul class="list-group">
-         {% if courses %}
-             {% for course in courses %}
-               <li class="list-group-item">
-                 {{course.course}} {{course.grade_fk}}
-                 {% if request.user.is_staff %}
-                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
-                 {% endif %}
-                 <br/>
-                 <small>{{course.block}} Block, Semester {{course.semester}}
-                 {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
-                 (reason: {{course.xp_adjust_explanation}})
-                 {% endif %}
-                 </small>
-               </li>
-             {% endfor %}
-         {% else %}
-           <li class="list-group-item">You have not joined a course yet for this semester.
-             <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
-           </li>
-         {% endif %}
-         {% if courses_old %}
-             {% for course in courses_old %}
-               <li class="list-group-item text-muted">
-                 {{course.course}} {{course.grade_fk}}
-                 {% if request.user.is_staff %}
-                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
-                 {% endif %}
-                 <br/>
-                 <small>{{course.block}} Block, {{course.semester}}
-                 <br/>Final XP: {{course.final_xp}}
-                 </small>
-               </li>
-             {% endfor %}
-         {% endif %}
-       </ul>
-      </div> <!--panel -->
+    </div>
+    <!--panel -->
+    <!-- COURSES -->
+    <div class="panel panel-primary">
+      <div class="panel-heading">
+        <i class="pull-right fa fa-fw fa-book"></i>
+        <h3 class="panel-title">Courses
+          {% if request.user.is_staff %}
+          &nbsp;&nbsp;<a class="btn btn-xs btn-warning" href="{% url 'courses:join' object.user.id %}"
+            role="button">Add</a>
+          {% endif %}
+        </h3>
+      </div>
+      <ul class="list-group">
+        {% if courses %}
+        {% for course in courses %}
+        <li class="list-group-item">
+          {{course.course}} {{course.grade_fk}}
+          {% if request.user.is_staff %}
+          (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+          {% endif %}
+          <br />
+          <small>{{course.block}} Block, Semester {{course.semester}}
+            {% if course.xp_adjustment != 0 %}<br />XP Adjustment: {{course.xp_adjustment}} XP
+            (reason: {{course.xp_adjust_explanation}})
+            {% endif %}
+          </small>
+        </li>
+        {% endfor %}
+        {% else %}
+        <li class="list-group-item">You have not joined a course yet for this semester.
+          <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
+        </li>
+        {% endif %}
+        {% if courses_old %}
+        {% for course in courses_old %}
+        <li class="list-group-item text-muted">
+          {{course.course}} {{course.grade_fk}}
+          {% if request.user.is_staff %}
+          (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+          {% endif %}
+          <br />
+          <small>{{course.block}} Block, {{course.semester}}
+            <br />Final XP: {{course.final_xp}}
+          </small>
+        </li>
+        {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
+    <!--panel -->
     <!-- QUESTS -->
-     <div class="panel panel-primary">
-       <div class="panel-heading">
-         <i class="pull-right fa fa-fw fa-shield"></i>
-         <h3 class="panel-title">Quests</h3>
-       </div>
-       <div class="list-group">
-         <!-- IN PROGRESS -->
-         <div class="list-group-item list-group-item-info">In Progress</div>
-         {% if in_progress_submissions %}
-           {% for s in in_progress_submissions %}
-             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+    <div class="panel panel-primary">
+      <div class="panel-heading">
+        <i class="pull-right fa fa-fw fa-shield"></i>
+        <h3 class="panel-title">Quests</h3>
+      </div>
+      <div class="list-group">
+        <!-- IN PROGRESS -->
+        <div class="list-group-item list-group-item-info">In Progress</div>
+        {% if in_progress_submissions %}
+        {% for s in in_progress_submissions %}
+        <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
                  {% if s.is_returned %}list-group-item-danger
                  {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} 
-               <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
-             </a>
-           {% endfor %}
-         {% else %}
-           <div class="list-group-item">None.</div>
-         {% endif %}
-          <!-- COMPLETED -->
-         <div class="list-group-item list-group-item-info">Completed</div>
-         {% if completed_submissions %}
-           {% for s in completed_submissions %}
-             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed clearfix
+          <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt="" />
+          {{s|truncatechars:40}}
+          <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            XP)</small>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="list-group-item">None.</div>
+        {% endif %}
+        <!-- COMPLETED -->
+        <div class="list-group-item list-group-item-info">Completed</div>
+        {% if completed_submissions %}
+        {% for s in completed_submissions %}
+        <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed clearfix
                  {% if s.is_awaiting_approval %}list-group-item-warning
                  {% elif s.do_not_grant_xp %}list-group-item-muted
                  {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} <small>
-                {% if s.do_not_grant_xp %}
-                  (Quest Skipped)
-                {% else %}
-                  <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
-                {% endif %}
-                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
-             </a>
-           {% endfor %}
-         {% else %}
-           <div class="list-group-item">None.</div>
-         {% endif %}
-        </div>
+          <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt="" />
+          {{s|truncatechars:40}} <small>
+            {% if s.do_not_grant_xp %}
+            (Quest Skipped)
+            {% else %}
+            <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+              XP)</small>
+            {% endif %}
+            <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="list-group-item">None.</div>
+        {% endif %}
+      </div>
 
-      </div> <!--panel -->
+    </div>
+    <!--panel -->
 
-      <!-- PAST QUESTS -->
-     <div class="panel panel-primary">
-       <div class="panel-heading">
-         <i class="pull-right fa fa-fw fa-shield"></i>
-         <h3 class="panel-title">Past Quests</h3>
-       </div>
-       <div class="list-group">
-         <div class="list-group-item list-group-item-info">Completed</div>
-         {% if completed_past_submissions %}
-           {% for s in completed_past_submissions %}
-               <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
+    <!-- PAST QUESTS -->
+    <div class="panel panel-primary">
+      <div class="panel-heading">
+        <i class="pull-right fa fa-fw fa-shield"></i>
+        <h3 class="panel-title">Past Quests</h3>
+      </div>
+      <div class="list-group">
+        <div class="list-group-item list-group-item-info">Completed</div>
+        {% if completed_past_submissions %}
+        {% for s in completed_past_submissions %}
+        <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
                  {% if s.is_awaiting_approval %}list-group-item-warning
                  {% elif s.do_not_grant_xp %}list-group-item-muted
                  {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} <small>
-                {% if s.do_not_grant_xp %}
-                  (Quest Skipped)
-                {% else %}
-                  ({{s.quest.xp}} XP)
-                {% endif %}
-                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
-             </a>
-           {% endfor %}
-         {% else %}
-           <div class="list-group-item">None.</div>
-         {% endif %}
-        </div>
+          <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt="" />
+          {{s|truncatechars:40}} <small>
+            {% if s.do_not_grant_xp %}
+            (Quest Skipped)
+            {% else %}
+            ({{s.quest.xp}} XP)
+            {% endif %}
+            <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="list-group-item">None.</div>
+        {% endif %}
+      </div>
 
-      </div> <!--panel -->
+    </div>
+    <!--panel -->
 
 
 
-{#      <div class="panel panel-primary">#}
-{#        <div class="panel-heading">#}
-{#          <h3 class="panel-title">Recent Activity</h3>#}
-{#        </div>#}
-{#        <div class="panel-body">#}
-{#          <p>Under construction...</p>#}
-{#        </div>#}
-{#       </div> <!--panel -->#}
+    {# <div class="panel panel-primary">#}
+      {# <div class="panel-heading">#}
+        {# <h3 class="panel-title">Recent Activity</h3>#}
+        {# </div>#}
+      {# <div class="panel-body">#}
+        {# <p>Under construction...</p>#}
+        {# </div>#}
+      {# </div>
+    <!--panel -->#}
   </div>
 
   <!-- BADGES -->
@@ -240,42 +250,43 @@
         <i class="pull-right fa fa-fw fa-certificate"></i>
         <h3 class="panel-title">Badges
           {% if request.user.is_staff %}
-            &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
-            href="{% url 'badges:grant' 0 object.user.id %}" role="button">Grant</a>
+          &nbsp;&nbsp;<a class="btn btn-xs btn-warning" href="{% url 'badges:grant' 0 object.user.id %}"
+            role="button">Grant</a>
           {% endif %}
         </h3>
       </div>
       <div class="list-group">
         {% for badge_type, assertions in badge_assertions_dict_items %}
         <div class="list-group-item list-group-item-info">
-            <i class="pull-right fa fa-fw {{badge_type.fa_icon}}"></i>
-            {{badge_type.name}}s
+          <i class="pull-right fa fa-fw {{badge_type.fa_icon}}"></i>
+          {{badge_type.name}}s
           </h3>
         </div>
         <div class="list-group-item">
           {% for assertion in assertions %}
-            {% with assertions_of_this_badge=assertion.get_duplicate_assertions badge=assertion.badge %}
-            <span class="hidden-xs"> {# only use popover on wider screens #}
-              <a {% include 'badges/snippets/badge_popover.html' %} >
-                {% include 'profile_manager/snippets/profile_badge.html' %}
-              </a>
-            </span>
-            <span class="visible-xs-inline-block"> {# direct link on mobile #}
-              <a href="{{badge.get_absolute_url}}">
-                {% include 'profile_manager/snippets/profile_badge.html' %}
-              </a>
-            </span>
-            {% endwith %}
+          {% with assertions_of_this_badge=assertion.get_duplicate_assertions badge=assertion.badge %}
+          <span class="hidden-xs"> {# only use popover on wider screens #}
+            <a {% include 'badges/snippets/badge_popover.html' %}>
+              {% include 'profile_manager/snippets/profile_badge.html' %}
+            </a>
+          </span>
+          <span class="visible-xs-inline-block"> {# direct link on mobile #}
+            <a href="{{badge.get_absolute_url}}">
+              {% include 'profile_manager/snippets/profile_badge.html' %}
+            </a>
+          </span>
+          {% endwith %}
           {% empty %}
-            None.
+          None.
           {% endfor %} {# for assertion in assertions #}
         </div>
         {% empty %}
-          <div class="list-group-item">
-            None.
-          </div>
-      {% endfor %}
-      </div> <!--list-group -->
+        <div class="list-group-item">
+          None.
+        </div>
+        {% endfor %}
+      </div>
+      <!--list-group -->
     </div> <!-- panel -->
   </div> <!-- col -->
 
@@ -287,8 +298,8 @@
 
 {% block js %}
 <script>
-$(document).ready(function() {
-  $('[data-toggle="popover"]').popover()
-});
+  $(document).ready(function () {
+    $('[data-toggle="popover"]').popover()
+  });
 </script>
 {% endblock %}
