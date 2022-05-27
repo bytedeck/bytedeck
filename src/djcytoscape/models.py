@@ -499,7 +499,7 @@ class CytoScape(models.Model):
             try:
                 current_primary_scape = CytoScape.objects.get(is_the_primary_scape=True)
                 if self != current_primary_scape:
-                    current_primary_scape.is_the_chosen_one = False
+                    current_primary_scape.is_the_primary_scape = False
                     current_primary_scape.save()
             except CytoScape.DoesNotExist:
                 pass
