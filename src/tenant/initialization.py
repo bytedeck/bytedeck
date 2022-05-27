@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 
 from courses.models import Grade, Rank, Course, Block
 from quest_manager.models import Quest, Category
-from badges.models import Badge, BadgeType
+from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 
@@ -24,6 +24,7 @@ def load_initial_tenant_data():
     create_initial_ranks()
     create_initial_grades()
     create_initial_badge_types()
+    create_initial_badge_rarities()
     create_initial_badges()
     create_orientation_campaign() 
 
@@ -107,6 +108,45 @@ def create_initial_badge_types():
         description="Awards are badges that are manually granted by teachers.",
         repeatable=True,
         fa_icon="fa-diamond"
+    )
+
+
+def create_initial_badge_rarities():
+    BadgeRarity.objects.create(
+        name="Common", 
+        percentile=100.0,
+        color="gray",
+        fa_icon="fa-certificate"
+    )
+    BadgeRarity.objects.create(
+        name="Uncommon", 
+        percentile=30.0,
+        color="green",
+        fa_icon="fa-certificate"
+    )
+    BadgeRarity.objects.create(
+        name="Rare", 
+        percentile=16.0,
+        color="royalblue",
+        fa_icon="fa-certificate"
+    )
+    BadgeRarity.objects.create(
+        name="Epic", 
+        percentile=4.0,
+        color="purple",
+        fa_icon="fa-certificate"
+    )
+    BadgeRarity.objects.create(
+        name="Legendary", 
+        percentile=1.0,
+        color="orangered",
+        fa_icon="fa-certificate"
+    )
+    BadgeRarity.objects.create(
+        name="Mythic", 
+        percentile=0.25,
+        color="gold",
+        fa_icon="fa-certificate"
     )
 
 
