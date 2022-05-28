@@ -122,10 +122,12 @@
                  </small>
                </li>
              {% endfor %}
-         {% else %}
+         {% elif not request.user.is_staff %}
            <li class="list-group-item">You have not joined a course yet for this semester.
              <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
            </li>
+           {% else %}
+            <li class="list-group-item">Not applicable to staff users.</li>
          {% endif %}
          {% if courses_old %}
              {% for course in courses_old %}
