@@ -55,7 +55,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Not applicable to staff users.')
 
         # with course
-        course_student = baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
+        baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
         self.assertContains(request, course.title)
 
@@ -68,7 +68,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'You have not joined a course yet for this semester')
 
         # with course
-        course_student = baker.make('courses.CourseStudent', user=self.test_student1, course=course)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
         self.assertContains(request, course.title)
 
