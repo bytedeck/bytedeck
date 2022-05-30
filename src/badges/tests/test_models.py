@@ -21,15 +21,15 @@ class BadgeRarityTestModel(TenantTestCase):
         self.assertEqual(str(self.common), self.common.name)
 
     def test_get_rarity(self):
-        self.common = baker.make(BadgeRarity, percentile=100.0)
-        self.rare = baker.make(BadgeRarity, percentile=50.0)
-        self.ultrarare = baker.make(BadgeRarity, percentile=1.0)
+        """rarity values used are chosen to avoid conflicts with defaults"""
+        self.common = baker.make(BadgeRarity, percentile=90.0)
+        self.rare = baker.make(BadgeRarity, percentile=80.0)
+        self.ultrarare = baker.make(BadgeRarity, percentile=70.0)
 
-        self.assertEqual(BadgeRarity.objects.get_rarity(0.5), self.ultrarare)
-        self.assertEqual(BadgeRarity.objects.get_rarity(49.0), self.rare)
-        self.assertEqual(BadgeRarity.objects.get_rarity(50.0), self.rare)
-        self.assertEqual(BadgeRarity.objects.get_rarity(100.0), self.common)
-        self.assertEqual(BadgeRarity.objects.get_rarity(110.0), self.common)
+        self.assertEqual(BadgeRarity.objects.get_rarity(69.0), self.ultrarare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(79.0), self.rare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(80.0), self.rare)
+        self.assertEqual(BadgeRarity.objects.get_rarity(90.0), self.common)
 
 
 class BadgeTypeTestModel(TenantTestCase):
