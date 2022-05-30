@@ -5,7 +5,7 @@
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
-  <p>Are you sure you want to Revoke this achievment? The instance of this bade will remain. However, only {{object.user}}'s badge will be revoked<p>
+  <p>Are you sure you want to revoke this badge from {{ object.user }}?<p>
   <div class="well">
     <p>Achievement: {{object}}</p>
     <p>User: {{object.user}}</p>
