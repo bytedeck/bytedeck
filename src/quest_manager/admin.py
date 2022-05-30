@@ -171,7 +171,7 @@ class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, Impo
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
     list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
                    'specific_teacher_to_notify', 'common_data', 'campaign']
-    search_fields = ['name', 'instructions', 'submission_details', 'short_description']
+    search_fields = ['name', 'instructions', 'submission_details', 'short_description', 'campaign__title']
     inlines = [
         # TaggedItemInline
         PrereqInline,
