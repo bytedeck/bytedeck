@@ -34,6 +34,42 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def tearDown(self):
         cache.clear()
 
+    def test_courses_correct_displayed_text(self):
+        """
+            Admins in their course tab should only see: 'Not applicable to staff users.'
+            Students that havent joined a course should only be able to see: 'You have not joined a course yet for this semester'
+            else should see course
+        """
+        course = baker.make('courses.Course', title='Test Course')
+        tpk = self.test_teacher.profile.pk
+        spk = self.test_student1.profile.pk
+
+        # login as teacher/admin and check if 'add course' doesnt exists
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # no course
+        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
+        self.assertContains(request, 'Not applicable to staff users.')
+
+        # with course
+        baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
+        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
+        self.assertContains(request, 'Not applicable to staff users.')
+
+        # login as student and check if 'add course' and 'course' exists
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # no course
+        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(request, 'You have not joined a course yet for this semester')
+
+        # with course
+        baker.make('courses.CourseStudent', user=self.test_student1, course=course)
+        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(request, course.title)
+
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
 
