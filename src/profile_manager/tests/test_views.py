@@ -34,11 +34,10 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def tearDown(self):
         cache.clear()
 
-    def test_courses_right_text(self):
+    def test_courses_correct_displayed_text(self):
         """
-            Admin without that has not joined a course should see: 'Not applicable to staff users.'
-            else should see course
-            Students should only be able to see: 'You have not joined a course yet for this semester'
+            Admins in their course tab should only see: 'Not applicable to staff users.'
+            Students that havent joined a course should only be able to see: 'You have not joined a course yet for this semester'
             else should see course
         """
         course = baker.make('courses.Course', title='Test Course')
@@ -56,7 +55,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # with course
         baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
-        self.assertContains(request, course.title)
+        self.assertContains(request, 'Not applicable to staff users.')
 
         # login as student and check if 'add course' and 'course' exists
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
