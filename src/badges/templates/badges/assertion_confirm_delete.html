@@ -5,7 +5,7 @@
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
-  <p>Are you sure you want to Revoke this achievment?<p>
+  <p>Are you sure you want to revoke this badge from {{ object.user }}?<p>
   <div class="well">
     <p>Achievement: {{object}}</p>
     <p>User: {{object.user}}</p>
