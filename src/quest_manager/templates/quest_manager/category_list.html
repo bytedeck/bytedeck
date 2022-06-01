@@ -21,7 +21,7 @@
   {% for object in object_list %}
   <tr>
     <td>{{ object.title }}</td>
-    <td>{% if object.icon %}<img src="{{ object.icon.url }}" width="50" height="50">{% endif %}</td>
+    <td>{% if object.icon %}<img class="img-responsive panel-title-img img-rounded" src="{{ object.icon.url }}">{% endif %}</td>
     <td>{{ object.active }}</td>
     <td>
       <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button" title="Edit this campaign">
