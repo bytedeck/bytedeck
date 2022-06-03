@@ -52,6 +52,18 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CategoryDetail(NonPublicOnlyViewMixin, DetailView):
+    model = Category
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = self.object.title
+        kwargs['c'] = self.object
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     fields = ('title', 'icon', 'active')
     model = Category

@@ -24,6 +24,9 @@
     <td>{% if object.icon %}<img class="img-responsive panel-title-img img-rounded" src="{{ object.icon.url }}">{% endif %}</td>
     <td>{{ object.active }}</td>
     <td>
+      <a class="btn btn-info" href="{% url 'quests:category_detail' object.id %}" role="button" title="View Details: view the content of this campaign.">
+       <i class="fa fa-fw fa-info-circle"></i>
+      </a>
       <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button" title="Edit this campaign">
         <i class="fa fa-edit"></i>
       </a>

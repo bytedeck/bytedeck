@@ -37,6 +37,15 @@ class Category(IsAPrereqMixin, models.Model):
     def __str__(self):
         return self.title
 
+    def get_absolute_url(self):
+        return reverse('quests:category_detail', kwargs={'pk': self.id})
+
+    def get_icon_url(self):
+        if self.icon and hasattr(self.icon, 'url'):
+            return self.icon.url
+        else:
+            return SiteConfig.get().get_default_icon_url()
+
     def xp_sum(self):
         """ Returns the total XP available from completing all visible quests in this campaign.
         Repeating quests are only counted once."""
