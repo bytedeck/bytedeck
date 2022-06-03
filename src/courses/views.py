@@ -128,6 +128,24 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["course"] = self.get_object()
+
+        course_student_qs = self.get_object().coursestudent_set
+        context["population"] = course_student_qs.count()
+        context["populated"] = course_student_qs.exists()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # make sure no data can be passed in POST if populated 
+        # makes sure to prevent 404/delete (because deletion still goes off)
+        populated = self.get_object().coursestudent_set.exists()
+        if populated:
+            return self.get(request, *args, **kwargs)
+
+        return super().post(request, *args, **kwargs)
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
