@@ -92,10 +92,10 @@ urlpatterns = [
     # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
     # Campaigns / Categories
-    path('campaigns/', views.CategoryList.as_view(), name='categories'),
-    path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
-    path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
-    path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
-
+    url(r'^campaigns/$', views.CategoryList.as_view(), name='categories'),
+    url(r'^campaigns/(?P<category_id>[0-9]+)/$', views.categorydetail, name='category_detail'),
+    url(r'^campaigns/add/$', views.CategoryCreate.as_view(), name='category_create'),
+    url(r'^campaigns/(?P<pk>[0-9]+)/edit/$', views.CategoryUpdate.as_view(), name='category_update'),
+    url(r'^campaigns/(?P<pk>[0-9]+)/delete/$', views.CategoryDelete.as_view(), name='category_delete'),
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]

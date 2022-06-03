@@ -214,6 +214,18 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         return context
 
 
+def categorydetail(request, category_id):
+
+    c = get_object_or_404(Category, pk=category_id)
+
+    context = {
+        "heading": c.title,
+        "c": c,
+    }
+
+    return render(request, 'quest_manager/category_detail.html', context)
+
+
 @non_public_only_view
 @login_required
 def ajax_summary_histogram(request, pk):

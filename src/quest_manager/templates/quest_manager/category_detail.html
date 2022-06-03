@@ -1,0 +1,11 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} {{ heading }}{% endblock %}
+
+{% block content %}
+    {% with c as category %}
+        {% include "quest_manager/category_detail_content.html" %}
+    {% endwith %}
+
+{% endblock %}
