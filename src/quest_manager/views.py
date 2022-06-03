@@ -372,8 +372,10 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     # num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
     # num_completed = QuestSubmission.objects.all_completed(request.user).count()
 
+    awaiting_approval = QuestSubmission.objects.filter(user=request.user, is_approved=False, is_completed=True).exists()
     context = {
         "heading": "Quests",
+        "awaiting_approval": awaiting_approval,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
         "num_available": available_quests_count,

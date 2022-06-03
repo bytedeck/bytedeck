@@ -159,6 +159,87 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # the view should have redirect to the same submission:
         self.assertRedirects(response, sub.get_absolute_url())
 
+    def test_student_no_quests_help_text(self):
+        """ 
+            When student has no quests but have:
+
+            Quests in the In Progress Tab:
+                "You have no new quests available, but you can find some quests you have already started in your 'In Progress' tab above."
+
+            Hidden quests:
+                "You have no new quests available, but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above."
+
+            No in-progress and no hidden quests, but quests awaiting approval: 
+                "New quests will become available after your teacher approves your submission!"
+
+            Just no quests:
+                "There are currently no new quest available to you!"
+        """
+        url = reverse('quests:available')
+        user = self.test_student1
+
+        # login
+        success = self.client.login(username=user.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # condition to see any of the 4
+        self.assertTrue(user.profile.has_current_course and not user.is_staff)
+
+        # make sure no available quests
+        Quest.objects.all().delete()
+        self.assertFalse(Quest.objects.get_available(user).exists())
+
+        # quest should be in 'in-progress' ===
+        quest = baker.make(Quest)
+        QuestSubmission.objects.create_submission(user, quest)
+
+        # conditions for msg to show
+        inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)  # should exist
+        available = Quest.objects.get_available(user, True)  # should not exist
+        self.assertTrue(inprogress.exists()) 
+        self.assertFalse(available.exists())
+
+        # check for help text
+        response = self.client.get(url)
+        self.assertContains(response, "No quests are available.")
+        help_text = "You have no new quests available, but you can find some quests you have already started in your 'In Progress' tab above."
+        self.assertContains(response, help_text)
+        QuestSubmission.objects.all().delete()
+        Quest.objects.all().delete()
+
+        # awaiting quest should be in 'completed' ===
+        quest_submission = baker.make(QuestSubmission, user=user, semester=SiteConfig.get().active_semester, is_completed=True, is_approved=False)
+
+        # add different users with submissions
+        [baker.make(QuestSubmission, semester=SiteConfig.get().active_semester, is_completed=True, is_approved=False) for i in range(3)]
+
+        # check for help text
+        response = self.client.get(url)
+        self.assertContains(response, "No quests are available.")
+        self.assertContains(response, "New quests will become available after your teacher approves your submission!")
+
+        quest_submission.delete()
+
+        # assert help text does not show up when no user has no awaiting approvals
+        response = self.client.get(url)
+        self.assertNotContains(response, "New quests will become available after your teacher approves your submission!")
+
+        # No new quests and conditions above do not apply ===
+
+        # assert last 3 conditions as false
+        available = Quest.objects.get_available(user, True)
+        inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)
+        approval = QuestSubmission.objects.filter(user=user, is_approved=False, is_completed=True)
+        self.assertFalse(available.exists())
+        self.assertFalse(inprogress.exists()) 
+        self.assertFalse(user.profile.num_hidden_quests() > 0)
+        self.assertFalse(approval.exists())
+
+        # check for help text
+        response = self.client.get(url)
+        self.assertContains(response, "No quests are available.")
+        self.assertContains(response, "There are currently no new quest available to you!")
+
 
 class SubmissionViewTests(TenantTestCase):
 
