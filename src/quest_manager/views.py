@@ -558,9 +558,10 @@ def approve(request, submission_id):
                         request,
                         ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user))
                     )
-                    comment_text_addition += "<p></br><i class='fa fa-certificate text-warning'></i> The <b>" + \
+                    rarity_icon = badge.get_rarity_icon()
+                    comment_text_addition += "<p></br>" + rarity_icon + "The <b>" + \
                                              badge.name + "</b> badge was granted for this quest " + \
-                                             "<i class='fa fa-certificate text-warning'></i></p>"
+                                             rarity_icon + "</p>"
 
             # handle with quest comments
             blank_comment_text = ""
