@@ -1,0 +1,25 @@
+{% extends "base_sidebar.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%}Create Page | {% endblock%}
+{% block head_css %}{% endblock %}
+
+{% block content %}
+    <div>
+        <form action="" method="post">
+            {% csrf_token %}
+
+            {{ form|crispy }}
+
+            <a href="" role="button" class="btn btn-danger">Cancel</a>
+            <input type="submit" value="Submit" class="btn btn-success"/>
+            {% if update %}
+                <a href="{% url 'utilities:flatpage-delete' pk=flatpage.pk %}" role="button" class="btn btn-danger">Delete</a>
+            {% endif %}
+        </form>
+
+    </div>
+{% endblock %}
+
+{% block js %}
+{% endblock %}
