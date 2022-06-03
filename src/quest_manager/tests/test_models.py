@@ -18,6 +18,7 @@ from siteconfig.models import SiteConfig
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
+        self.client = TenantClient(self.tenant)
         self.category = baker.make(Category, title="Test Campaign")
 
     def test_category_type_creation(self):
@@ -52,6 +53,12 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
         # But other random user still doesn't meet prereq
         self.assertFalse(self.category.condition_met_as_prerequisite(user2))
+
+    def test_category_icon(self):
+        pass
+
+    def test_category_url(self):
+        self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
 
     def test_xp_sum(self):
         """ Test that the XP sum of all quests in a campaign is returned correctly """
