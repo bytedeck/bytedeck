@@ -1,8 +1,19 @@
-{% extends "base_sidebar.html" %}
+{% extends "flatpages/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block head_title%}Create Page | {% endblock%}
-{% block head_css %}{% endblock %}
+{% block head %}
+    <!--here-->
+    {{ form.media }}
+    <!--here-->
+{% endblock %}
+
+{% block head_title%}
+    {% if not update%}
+        Create Page | 
+    {% else %}
+        Update Page | 
+    {% endif %}
+{% endblock%}
 
 {% block content %}
     <div>
@@ -11,7 +22,7 @@
 
             {{ form|crispy }}
 
-            <a href="" role="button" class="btn btn-danger">Cancel</a>
+            <a href="{% url 'utilities:flatpage-list' %}" role="button" class="btn btn-danger">Cancel</a>
             <input type="submit" value="Submit" class="btn btn-success"/>
             {% if update %}
                 <a href="{% url 'utilities:flatpage-delete' pk=flatpage.pk %}" role="button" class="btn btn-danger">Delete</a>
@@ -19,7 +30,4 @@
         </form>
 
     </div>
-{% endblock %}
-
-{% block js %}
 {% endblock %}

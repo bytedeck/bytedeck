@@ -1,9 +1,7 @@
-{% extends "flatpages/default.html" %}
+{% extends "flatpages/base.html" %}
 {% load crispy_forms_tags %}
 
 {% block head_title%} Confirm Deletion | {% endblock%}
-{% block head_css %}{% endblock %}
-{% block content_first %}{% endblock %}
 
 {% block content %}
     <form action="" method="post">
@@ -14,8 +12,4 @@
         <a href="{% url 'utilities:flatpage-list' %}" role="button" class="btn btn-info">Cancel</a>
         <input type="submit" value="Delete" class="btn btn-danger"/>
     </form>
-{% endblock %}
-
-
-{% block js %}
 {% endblock %}

@@ -1,10 +1,7 @@
-{% extends "base_sidebar.html" %}
+{% extends "flatpages/base.html" %}
 {% load crispy_forms_tags %}
 
 {% block head_title%}{{ flatpage.title }} | {% endblock%}
-
-{% block head_css %}{% endblock %}
-{% block content_first %}{% endblock %}
 
 {% block content %}
   <div class="pull-right">
@@ -20,11 +17,8 @@
       <i class="fa fa-edit"></i></a>
     {% endif %}
   </h1>
-  {{ flatpage.content }}
+  {{ flatpage.content|safe }}
 {% endblock %}
-
-
-{% block content_last %}{% endblock %}
 
 {% block js %}
   <script>

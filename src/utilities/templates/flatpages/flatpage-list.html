@@ -1,8 +1,5 @@
-{% extends "flatpages/default.html" %}
+{% extends "flatpages/base.html" %}
 {% load crispy_forms_tags %}
-
-{% block head_title%}Custom Pages | {% endblock%}
-{% block head_css %}{% endblock %}
 
 {% block heading %}
     <i class="fa fa-file-text-o pull-right" aria-hidden="true"></i>Custom Pages
@@ -46,7 +43,4 @@
         </tbody>
     </table>
 
-{% endblock %}
-
-{% block js %}
 {% endblock %}
