@@ -71,6 +71,16 @@
       {% if not request.user.profile.has_current_course and not request.user.is_staff %}
         <p>You have not joined a course yet for this semester.</p>
         <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
+      {% elif not available_quests.exists %}
+        {% if in_progress_submissions.exists %}
+          <p>You have no new quests available, but you can find some quests you have already started in your 'In Progress' tab above.</p>
+        {% elif request.user.profile.num_hidden_quests > 0 %}
+          <p>You have no new quests available, but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.</p>
+        {% elif awaiting_approval %}
+          <p>New quests will become available after your teacher approves your submission!</p>
+        {% else %}
+          <p>There are currently no new quest available to you!</p>
+        {% endif %}
       {% endif %}
       {% include 'quest_manager/tab_quests_available.html' %}
     </div>
