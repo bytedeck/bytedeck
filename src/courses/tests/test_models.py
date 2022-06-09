@@ -26,6 +26,9 @@ class MarkRangeTestModel(TenantTestCase):
 
 class MarkRangeTestManager(TenantTestCase):
     def setUp(self):
+        # clear default mark range variables
+        MarkRange.objects.all().delete()
+
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
     def test_get_range(self):

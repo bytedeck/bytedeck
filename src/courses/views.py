@@ -18,7 +18,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, SemesterForm
-from .models import Block, Course, CourseStudent, Rank, Semester
+from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 
 # Create your views here.
@@ -44,12 +44,21 @@ def mark_calculations(request, user_id=None):
     else:
         xp_per_course = None
 
+    # only show mark ranges where student is enrolled in and is also active
+    user_courses = user.profile.current_courses().values_list('course', flat=True)
+    assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
+    all_ranges = MarkRange.objects.filter(active=True, courses=None) 
+
+    # combine assigned_ranges and all_ranges, then order by min mark
+    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark')
+
     context = {
         'user': user,
         'obj': course_student,
         'courses': courses,
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
+        'markranges': markranges,
     }
     return render(request, template_name, context)
 
