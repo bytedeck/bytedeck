@@ -39,6 +39,18 @@ class ViewTestUtilsMixin():
             response=self.client.get(reverse(url_name, *args, **kwargs)),
             expected_url='%s?next=%s' % (reverse(settings.LOGIN_URL), reverse(url_name, *args, **kwargs))
         )
+    
+    def assertRedirectsLoginURL(self, url_name):
+        """ 
+            assertRedirectsLogin function without reverse() hard coded inside it
+
+            Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the login page
+            with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
+        """ 
+        self.assertRedirects(
+            response=self.client.get(url_name),
+            expected_url='%s?next=%s' % (reverse(settings.LOGIN_URL), url_name)
+        )
 
     def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):
         """
@@ -62,12 +74,38 @@ class ViewTestUtilsMixin():
             200
         )
 
+    def assert200URL(self, url_name):
+        """  
+            assert200 function without reverse() hard coded inside it
+
+            Assert that a GET response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
+            Any url and path parameters should be provided in the url_name.
+        """ 
+        response = self.client.get(url_name)
+        self.assertEqual(
+            response.status_code,
+            200
+        )
+
     def assert404(self, url_name, *args, **kwargs):
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
         Provide any url and path parameters as args or kwargs.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
+        self.assertEqual(
+            response.status_code,
+            404
+        )
+
+    def assert404URL(self, url_name):
+        """  
+            assert404 function without reverse() hard coded inside it
+
+            Assert that a GET response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
+            Provide any url and path parameters as args or kwargs.
+        """ 
+        response = self.client.get(url_name)
         self.assertEqual(
             response.status_code,
             404
