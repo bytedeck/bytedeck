@@ -52,6 +52,11 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CategoryDetail(NonPublicOnlyViewMixin, DetailView):
+    model = Category
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     fields = ('title', 'icon', 'active')
     model = Category

@@ -1286,6 +1286,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         ''' If not logged in then all views should redirect to home page or admin login '''
 
         self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_detail', kwargs={"pk": 1})
         self.assertRedirectsAdmin('quests:category_create')
         self.assertRedirectsAdmin('quests:category_update', args=[1])
         self.assertRedirectsAdmin('quests:category_delete', args=[1])
@@ -1296,6 +1297,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Staff access only
         self.assertRedirectsAdmin('quests:categories')
+        self.assertRedirectsAdmin('quests:category_detail', kwargs={"pk": 1})
         self.assertRedirectsAdmin('quests:category_create')
         self.assertRedirectsAdmin('quests:category_update', args=[1])
         self.assertRedirectsAdmin('quests:category_delete', args=[1])
@@ -1311,6 +1313,12 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('quests:categories'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_CategoryDetail_view(self):
+        """ Admin should be able to view course details """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": 1}))
         self.assertEqual(response.status_code, 200)
 
     def test_CategoryCreate_view(self):
