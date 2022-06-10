@@ -5,7 +5,7 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from courses.models import Block, Course, Semester, Rank
+from courses.models import Block, Course, CourseStudent, Semester, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
@@ -287,7 +287,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.xp_for_100_percent, data['xp_for_100_percent'])
 
-    def test_CourseDelete_view(self):
+    def test_CourseDelete_view__no_students(self):
         """ Admin should be able to delete a course """
         self.client.force_login(self.test_teacher)
 
@@ -296,6 +296,35 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         after_delete_count = Course.objects.count()
         self.assertRedirects(response, reverse('courses:course_list'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
+
+    def test_CourseDelete_view__with_students(self):
+        """ 
+            Admin should not be able to delete course with a student registered
+            Also checks if course can be deleted with a forced post method
+        """ 
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # register student to course
+        course_student = baker.make(CourseStudent, user=self.test_student1, semester=self.sem, block=self.block, course=self.course,)
+        self.assertEquals(CourseStudent.objects.count(), 1)
+        self.assertEquals(CourseStudent.objects.first().pk, course_student.pk)
+
+        # check if prevented delete from view using POST
+        response = self.client.post(reverse('courses:course_delete', args=[self.course.pk]))
+        self.assertNotEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+
+        # confirm course existence
+        self.assertTrue(Course.objects.exists())
+
+        # confirm deletion prevention text shows up
+        dt_ptag = f"Unable to delete '{self.course.title}' as it still has students registered. Consider disabling the course by toggling the"
+        dt_atag_link = reverse("courses:course_update", args=[self.course.pk])
+        dt_well_ptag = f"Registered Students: {self.course.coursestudent_set.count()}"
+        self.assertContains(response, dt_ptag)
+        self.assertContains(response, dt_atag_link)
+        self.assertContains(response, dt_well_ptag)
 
 
 class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):

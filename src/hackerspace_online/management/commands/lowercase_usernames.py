@@ -1,3 +1,4 @@
+import sys
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -18,6 +19,10 @@ class Command(BaseCommand):
         # Let's take a list of users that have duplicate usernames
         users = User.objects.values(lowercase_username=Lower('username')).annotate(existing_count=models.Count('lowercase_username'))
         duplicate_usernames = users.filter(existing_count__gt=1).values_list('lowercase_username', flat=True)
+
+        if not duplicate_usernames:
+            self.stdout.write(self.style.SUCCESS('No duplicate users'))
+            sys.exit(0)
 
         duplicate_users_qs = models.Q()
         for username in duplicate_usernames:

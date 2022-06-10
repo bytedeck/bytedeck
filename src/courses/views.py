@@ -18,7 +18,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, SemesterForm
-from .models import Block, Course, CourseStudent, Rank, Semester
+from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 
 # Create your views here.
@@ -44,12 +44,21 @@ def mark_calculations(request, user_id=None):
     else:
         xp_per_course = None
 
+    # only show mark ranges where student is enrolled in and is also active
+    user_courses = user.profile.current_courses().values_list('course', flat=True)
+    assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
+    all_ranges = MarkRange.objects.filter(active=True, courses=None) 
+
+    # combine assigned_ranges and all_ranges, then order by min mark
+    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark')
+
     context = {
         'user': user,
         'obj': course_student,
         'courses': courses,
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
+        'markranges': markranges,
     }
     return render(request, template_name, context)
 
@@ -127,6 +136,24 @@ class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["course"] = self.get_object()
+
+        course_student_qs = self.get_object().coursestudent_set
+        context["population"] = course_student_qs.count()
+        context["populated"] = course_student_qs.exists()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # make sure no data can be passed in POST if populated 
+        # makes sure to prevent 404/delete (because deletion still goes off)
+        populated = self.get_object().coursestudent_set.exists()
+        if populated:
+            return self.get(request, *args, **kwargs)
+
+        return super().post(request, *args, **kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')

@@ -156,6 +156,21 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
+    
+    def test_save__sets_first_scape_as_primary(self):
+        newmap = baker.make('djcytoscape.CytoScape')
+        self.assertTrue(self.map.is_the_primary_scape)
+        self.assertFalse(newmap.is_the_primary_scape)
+
+    def test_save__changes_primary_scape(self):
+        newmap = baker.make('djcytoscape.CytoScape')
+        self.assertTrue(self.map.is_the_primary_scape)
+        self.assertFalse(newmap.is_the_primary_scape)
+        newmap.is_the_primary_scape = True
+        newmap.save()
+        self.assertTrue(newmap.is_the_primary_scape)
+        self.map.refresh_from_db()
+        self.assertFalse(self.map.is_the_primary_scape)
 
     def test_elements_dict(self):
         eles_dict = self.map.elements_dict()

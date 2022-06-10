@@ -110,7 +110,7 @@ If everything has worked so far, you should now be able to create your own byted
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
-1. Open a Python shell specific to your tenant (make sure you're virtual environment is activated), enter you tenant's name (for example, `hackerspace`) and paste these commands:
+1. Open a Python shell specific to your tenant (make sure your virtual environment is activated), enter your tenant's name (for example, `hackerspace`) and paste these commands:
     ```
     $ ./src/manage.py tenant_command shell
     Enter Tenant Schema ('?' to list schemas): hackerspace
@@ -181,7 +181,7 @@ For full details on code contributions, please see [CONTRIBUTING.md](https://git
 8. Commit your changes (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:  
 `git commit -am "Useful description of your changes; Closes #123"`
 9. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
-10. Push your branch to your fork of the project on github (the first time you do this, it will create the brnahc on github for you): `git push origin yourbranchname`
+10. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
 11. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
 12. Select your recently pushed branch and create a pull request (you should see a button for this)
 ![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)

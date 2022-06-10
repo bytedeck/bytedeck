@@ -100,32 +100,36 @@
        <div class="panel-heading">
          <i class="pull-right fa fa-fw fa-book"></i>
          <h3 class="panel-title">Courses
-           {% if request.user.is_staff %}
+           {% if request.user.is_staff and not object.user.is_staff %}
              &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
              href="{% url 'courses:join' object.user.id %}" role="button">Add</a>
            {% endif %}
          </h3>
        </div>
        <ul class="list-group">
-         {% if courses %}
-             {% for course in courses %}
-               <li class="list-group-item">
-                 {{course.course}} {{course.grade_fk}}
-                 {% if request.user.is_staff %}
-                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
-                 {% endif %}
-                 <br/>
-                 <small>{{course.block}} Block, Semester {{course.semester}}
-                 {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
-                 (reason: {{course.xp_adjust_explanation}})
-                 {% endif %}
-                 </small>
-               </li>
-             {% endfor %}
-         {% else %}
-           <li class="list-group-item">You have not joined a course yet for this semester.
-             <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
-           </li>
+         {% if not object.user.is_staff %}
+          {% if courses %}
+              {% for course in courses %}
+                <li class="list-group-item">
+                  {{course.course}} {{course.grade_fk}}
+                  {% if request.user.is_staff %}
+                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                  {% endif %}
+                  <br/>
+                  <small>{{course.block}} Block, Semester {{course.semester}}
+                  {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
+                  (reason: {{course.xp_adjust_explanation}})
+                  {% endif %}
+                  </small>
+                </li>
+              {% endfor %}
+          {% else %}
+            <li class="list-group-item">You have not joined a course yet for this semester.
+              <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
+            </li>
+          {%endif%}
+        {% else %}
+            <li class="list-group-item">Not applicable to staff users.</li>
          {% endif %}
          {% if courses_old %}
              {% for course in courses_old %}

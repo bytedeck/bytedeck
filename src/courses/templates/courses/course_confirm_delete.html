@@ -4,14 +4,21 @@
 {% block heading_inner %} Delete Course {% endblock %}
 
 {% block content %}
+{% if not populated %}
 <form action="" method="post">{% csrf_token %}
   <p>Are you sure you want to delete this course?<p>
   <div class="well">
-    <p>Course ID: {{object.id}}</p>
-    <p>Title: {{object.title}}</p>
-    <p>XP for 100%: {{object.xp_for_100_percent}}</p>
+    <p>Course ID: {{course.id}}</p>
+    <p>Title: {{course.title}}</p>
+    <p>XP for 100%: {{course.xp_for_100_percent}}</p>
   </div>
   <a href="{% url 'courses:course_list' %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
+{% else %}
+  <p>Unable to delete '{{ course.title }}' as it still has students registered. Consider disabling the course by toggling the <a href="{% url 'courses:course_update' pk=course.pk %}">active</a> field instead.</p>
+  <div class="well">
+    <p>Registered Students: {{ population }}</p>
+  </div>
+{% endif %}
 {% endblock %}
