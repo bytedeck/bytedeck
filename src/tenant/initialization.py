@@ -7,7 +7,7 @@ among other issues
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
-from courses.models import Grade, Rank, Course, Block
+from courses.models import Grade, Rank, Course, Block, MarkRange
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
@@ -21,6 +21,7 @@ def load_initial_tenant_data():
     create_site_config_object()
     create_initial_course()
     create_initial_blocks(user)
+    create_initial_markranges()
     create_initial_ranks()
     create_initial_grades()
     create_initial_badge_types()
@@ -53,6 +54,12 @@ def create_initial_course():
 
 def create_initial_blocks(user):
     Block.objects.create(block="Default", current_teacher=user)
+
+
+def create_initial_markranges():
+    MarkRange.objects.create(name="A", minimum_mark=85.5, color_light="#FFECB3", color_dark="#FFFF00")
+    MarkRange.objects.create(name="B", minimum_mark=72.5, color_light="#BEFFFA", color_dark="#337AB7")
+    MarkRange.objects.create(name="Pass", minimum_mark=49.5, color_light="#FFB3B3", color_dark="#FF0000")
 
 
 def create_initial_ranks():

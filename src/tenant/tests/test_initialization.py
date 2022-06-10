@@ -1,6 +1,7 @@
 from django_tenants.test.cases import TenantTestCase
 
 from badges.models import BadgeRarity
+from courses.models import MarkRange
 
 
 class TenantInitializationTest(TenantTestCase):
@@ -16,3 +17,10 @@ class TenantInitializationTest(TenantTestCase):
     
     def test_only_default_rarities_created(self):
         self.assertEqual(BadgeRarity.objects.count(), 6)
+
+    def test_default_mark_ranges_created(self):
+        """ 
+            When a new tenant is created, the initialization script should create 3 default Markrange objects.
+        """ 
+        for name in ["A", "B", "Pass"]:
+            self.assertTrue(MarkRange.objects.filter(name=name).exists())
