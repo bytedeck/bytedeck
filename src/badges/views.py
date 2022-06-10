@@ -3,11 +3,13 @@ import uuid
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
-from django.views.generic.edit import DeleteView, UpdateView
+from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.views.generic.list import ListView
 
 from notifications.signals import notify
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
@@ -124,6 +126,63 @@ def detail(request, badge_id):
         "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False)
     }
     return render(request, 'badges/detail.html', context)
+
+
+# ########## Badge Type Views ##############################
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeTypeList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = BadgeType
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
+    fields = ('name', 'sort_order', 'fa_icon')
+    model = BadgeType
+    success_url = reverse_lazy('badges:badge_types')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Badge Type'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
+    fields = ('name', 'sort_order', 'fa_icon')
+    model = BadgeType
+    success_url = reverse_lazy('badges:badge_types')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Badge Type'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = BadgeType
+    success_url = reverse_lazy('badges:badge_types')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        badge_type_badge_qs = Badge.objects.filter(badge_type=self.get_object())
+        context["has_badges"] = badge_type_badge_qs.exists()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # make sure no data can be passed in POST if populated 
+        # makes sure to prevent 404/delete (because deletion still goes off)
+        has_badges = Badge.objects.filter(badge_type=self.get_object()).exists()
+        if has_badges:
+            return self.get(request, *args, **kwargs)
+
+        return super().post(request, *args, **kwargs)
 
 
 # ########## Badge Assertion Views #########################

@@ -44,6 +44,17 @@ class BadgeTypeTestModel(TenantTestCase):
         """ A data migration should make default objects for this model """
         self.assertTrue(BadgeType.objects.filter(name="Talent").exists())
         self.assertTrue(BadgeType.objects.filter(name="Award").exists())
+    
+    def test_model_protection(self):
+        """ Badge types shouldn't be deleted if they have any assigned badges """
+
+        # make sure initial variables are in place
+        badge = baker.make(Badge, xp=5, badge_type=self.badge_type)
+        self.assertTrue(Badge.objects.count(), 1)
+        self.assertEqual(badge.badge_type, self.badge_type)
+
+        # see if models.PROTECT is in place
+        self.assertRaises(Exception, self.badge_type.delete)
 
 
 class BadgeSeriesTestModel(TenantTestCase):
