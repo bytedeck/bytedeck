@@ -52,6 +52,11 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CategoryDetail(NonPublicOnlyViewMixin, DetailView):
+    model = Category
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     fields = ('title', 'icon', 'active')
     model = Category
@@ -372,8 +377,10 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     # num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
     # num_completed = QuestSubmission.objects.all_completed(request.user).count()
 
+    awaiting_approval = QuestSubmission.objects.filter(user=request.user, is_approved=False, is_completed=True).exists()
     context = {
         "heading": "Quests",
+        "awaiting_approval": awaiting_approval,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
         "num_available": available_quests_count,
@@ -558,9 +565,10 @@ def approve(request, submission_id):
                         request,
                         ("Badge " + str(new_assertion) + " granted to " + str(new_assertion.user))
                     )
-                    comment_text_addition += "<p></br><i class='fa fa-certificate text-warning'></i> The <b>" + \
+                    rarity_icon = badge.get_rarity_icon()
+                    comment_text_addition += "<p></br>" + rarity_icon + "The <b>" + \
                                              badge.name + "</b> badge was granted for this quest " + \
-                                             "<i class='fa fa-certificate text-warning'></i></p>"
+                                             rarity_icon + "</p>"
 
             # handle with quest comments
             blank_comment_text = ""

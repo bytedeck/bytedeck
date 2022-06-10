@@ -94,8 +94,8 @@ urlpatterns = [
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
     path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
+    path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
-
     # url(r'^in-progress/(?P<pk>[0-9]+)/delete/$', views.SubmissionDelete.as_view(), name='sub_delete'),
 ]

@@ -4,6 +4,24 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.15.0] 2022-06-09 - Summer student contribution 01
+* Custom webpages can now be created from the Admin > Custom Pages area.
+* Context-specific feedback to students when they see no available quests. [#817](https://github.com/bytedeck/bytedeck/issues/817)
+* Mark Ranges are now used in the XP Progress graph
+* New decks now start with some default Badge rarities. [#981](https://github.com/bytedeck/bytedeck/issues/981)
+* Minor tweaks and bugfixes:
+  - [#976](https://github.com/bytedeck/bytedeck/issues/976)
+  - [#942](https://github.com/bytedeck/bytedeck/issues/942)
+  - [#990](https://github.com/bytedeck/bytedeck/issues/990)
+  - [#894](https://github.com/bytedeck/bytedeck/issues/894)
+  - [#864](https://github.com/bytedeck/bytedeck/issues/864)
+  - [#545](https://github.com/bytedeck/bytedeck/issues/545)
+  - [#943](https://github.com/bytedeck/bytedeck/issues/943)
+  - [#257](https://github.com/bytedeck/bytedeck/issues/257)
+  - [#963](https://github.com/bytedeck/bytedeck/issues/963)
+  - [#964](https://github.com/bytedeck/bytedeck/issues/964)
+  
+
 ### [1.14.1] 2022-05-14
 * Make usernames case insensitive (more mobile friendly due to auto-capitalization on phones)
 * Add loading indicator to Notifications drop down [#896](https://github.com/bytedeck/bytedeck/issues/896)

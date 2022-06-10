@@ -1,0 +1,22 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} {{ object.title }} Campaign{% endblock %}
+
+{% block content %}
+    <div class="pull-right">
+        <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button"
+            title = "Edit this campaign" >
+        <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'quests:category_delete' object.id %}" role="button"
+            title = "Delete this campaign" >
+        <i class="fa fa-trash-o"></i>
+        </a>
+    </div>
+
+    {% with object as category %}
+        {% include "quest_manager/category_detail_content.html" %}
+    {% endwith %}
+
+{% endblock %}

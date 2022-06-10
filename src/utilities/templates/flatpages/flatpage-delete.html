@@ -1,0 +1,22 @@
+{% extends "flatpages/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%} Confirm Deletion | {% endblock%}
+
+{% block heading_inner %}Delete Custom Page: {{flatpage.title}}{% endblock %}
+
+{% block content %}
+    <form action="" method="post">
+        {% csrf_token %}
+
+        <p>Are you sure you want to delete this <a href="{{ flatpage.get_absolute_url }}">custom page?</a><p>
+        <div class="well">
+            <p>Custom Page ID: {{flatpage.pk}}</p>
+            <p>Title: {{flatpage.title}}</p>
+            <p>URL: {{flatpage.url}}</p>
+        </div>
+        
+        <a href="{% url 'utilities:flatpage_list' %}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Delete" class="btn btn-danger"/>
+    </form>
+{% endblock %}

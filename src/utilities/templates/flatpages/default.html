@@ -1,0 +1,18 @@
+{% extends "flatpages/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%}{{ flatpage.title }} | {% endblock%}
+
+{% block heading_inner %}
+  {{ flatpage.title }}
+
+  {% if user.is_staff %}
+    <a class="btn btn-info btn-sm" href="{% url 'utilities:flatpage_edit' pk=flatpage.pk %}" role="button" title = "Edit this page" >
+      <i class="fa fa-edit"></i>
+    </a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {{ flatpage.content|safe }}
+{% endblock %}

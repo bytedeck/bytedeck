@@ -59,43 +59,62 @@
       data: [{x: 0, y: 0}],
   };
 
-  var GradeAData = {
-      type: 'line',
-      label: 'A (86%)',
-      pointRadius: 0,
-      backgroundColor: "rgba(255,255,0,0)",
-      borderColor: "rgba(255, 236, 179,50)",
-      data: [{x: 0, y: 0}],
-  };
+  
+  // var GradeAData = {
+  //     type: 'line',
+  //     label: 'A (86%)',
+  //     pointRadius: 0,
+  //     backgroundColor: "rgba(255,255,0,0)",
+  //     borderColor: "rgba(255, 236, 179,50)",
+  //     data: [{x: 0, y: 0}],
+  // };
 
-  var GradeFData = {
-      type: 'line',
-      label: 'Pass (50%)',
-      pointRadius: 0,
-      backgroundColor: "rgba(255, 0, 0, 0)",
-      borderColor: "rgba(255, 179, 179, 50)",
-      data: [{x: 0, y: 0}],
-  };
+  // var GradeFData = {
+  //     type: 'line',
+  //     label: 'Pass (50%)',
+  //     pointRadius: 0,
+  //     backgroundColor: "rgba(255, 0, 0, 0)",
+  //     borderColor: "rgba(255, 179, 179, 50)",
+  //     data: [{x: 0, y: 0}],
+  // };
 
-  // Chillax Line Data Set = B
-  var ChillaxLineData = {
-      type: 'line',
-      label: 'B (73%)',
-      pointRadius: 0,
-      backgroundColor: "rgba(0,255,255,0)",
-      borderColor: "rgba(0,255,255,255)",
-      data: [{x: 0, y: 0}],
-  };
+  // // Chillax Line Data Set = B
+  // var ChillaxLineData = {
+  //     type: 'line',
+  //     label: 'B (73%)',
+  //     pointRadius: 0,
+  //     backgroundColor: "rgba(0,255,255,0)",
+  //     borderColor: "rgba(0,255,255,255)",
+  //     data: [{x: 0, y: 0}],
+  // };
+  
+
+  var markranges = []
+  {% for mr in markranges %}
+  var border;
+  {% if request.user.profile.dark_theme %}
+  border = "{{ mr.color_dark }}";
+  {% else %}
+  border = "{{ mr.color_light }}";
+  {% endif %}
+
+  markranges.push({
+    type: 'line',
+    label: '{{ mr.name }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
+    mark: {{ mr.minimum_mark }},
+    pointRadius: 0,
+    backgroundColor: "rgb(0,0,0,0)",
+    borderColor: border,
+    data: [{x: 0, y: 0}],
+  });
+  {% endfor %}
 
   var data = {
       datasets: [
           XPData,
 {#          XPDataBar,#}
           XPTrendData,
-          GradeFData,
-          ChillaxLineData,
-          GradeAData,
-      ]
+      ].concat(markranges)
   };
 
   // need some starting data for the animation to work it seems..
@@ -236,17 +255,15 @@
 
   function generate_mark_lines(days) {
     // Mark Line Generation
-    ChillaxLineData.data = [];
-    GradeAData.data = [];
-    GradeFData.data = [];
+    for(let range of markranges) {
+      range.data = [];
+    }
 
     for (var i = 1; i <= days; i++) {
-        var p = new DataPoint(i, Math.floor(i * max_xp*0.725 / days));
-        var pA = new DataPoint(i, Math.floor(i * max_xp*0.855 / days));
-        var pF = new DataPoint(i, Math.floor(i * max_xp*0.495 / days));
-        ChillaxLineData.data.push(p);
-        GradeAData.data.push(pA);
-        GradeFData.data.push(pF);
+        for (let range of markranges) {
+          var point = new DataPoint(i, Math.floor(i * max_xp*range.mark/100 / days))
+          range.data.push(point);
+        }
 
     }
   }

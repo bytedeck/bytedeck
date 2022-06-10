@@ -26,6 +26,9 @@ class MarkRangeTestModel(TenantTestCase):
 
 class MarkRangeTestManager(TenantTestCase):
     def setUp(self):
+        # clear default mark range variables
+        MarkRange.objects.all().delete()
+
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
     def test_get_range(self):
@@ -276,6 +279,21 @@ class CourseModelTest(TenantTestCase):
     def test_default_object_created(self):
         """ A data migration should make a default object for this model """
         self.assertTrue(Course.objects.filter(title="Default").exists())
+
+    def test_model_protection(self):
+        """ 
+            Quick test to see if Course model deletion is prevented when trying to delete Course model programmatically
+
+            Course deletion is only prevented when there are CourseStudent models linked via foreign key to the Course model
+        """ 
+        # make sure initial variables are inplace
+        student = baker.make(User)
+        course_student = baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
+        self.assertTrue(CourseStudent.objects.count(), 1)
+        self.assertEqual(course_student.course, self.course)
+
+        # see if models.PROTECT is in place
+        self.assertRaises(Exception, self.course.delete)
 
 
 class CourseStudentModelTest(TenantTestCase):

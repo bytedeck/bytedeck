@@ -3,24 +3,13 @@ from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.contrib.auth.admin import GroupAdmin
 from django.contrib.sites.models import Site
-from django.contrib.flatpages.models import FlatPage
-from django.contrib.flatpages.admin import FlatPageAdmin
 
 from allauth.socialaccount.models import SocialAccount, SocialToken, SocialApp
 from allauth.account.models import EmailAddress
 
-from django_summernote.admin import SummernoteModelAdmin
 from django_summernote.models import Attachment
 
-from tenant.admin import PublicSchemaOnlyAdminAccessMixin, NonPublicSchemaOnlyAdminAccessMixin
-
-
-class FlatPageAdmin2(NonPublicSchemaOnlyAdminAccessMixin, FlatPageAdmin, SummernoteModelAdmin):
-    list_display = ('url', 'title', 'registration_required',)
-
-
-admin.site.unregister(FlatPage)
-admin.site.register(FlatPage, FlatPageAdmin2)
+from tenant.admin import PublicSchemaOnlyAdminAccessMixin
 
 
 class SiteCustomAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

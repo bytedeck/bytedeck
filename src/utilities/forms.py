@@ -1,5 +1,8 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.contrib.flatpages.models import FlatPage
+from django.contrib.flatpages.forms import FlatpageForm
+from django_summernote.widgets import SummernoteInplaceWidget
 
 from utilities.models import VideoResource
 
@@ -86,4 +89,16 @@ class MultiFileField(forms.FileField):
         #     except AttributeError:
         #         pass
 
-# http://k
+
+class CustomFlatpageForm(FlatpageForm):
+
+    class Meta:
+        model = FlatPage
+        exclude = ('enable_comments', 'template_name',)
+
+        widgets = {
+            'content': SummernoteInplaceWidget(),
+            
+            # https://code.djangoproject.com/ticket/24453
+            'sites': forms.MultipleHiddenInput(),
+        }

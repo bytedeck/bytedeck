@@ -5,7 +5,7 @@
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
-  <p>Are you sure you want to Delete this Achievement?  All rewardings will be deleted.<p>
+  <p>Are you sure you want to delete this badge? This badge will be removed from all users that have earned it. This action is irreversible.<p>
   <div class="well">
     <p>Badge Name: {{object.name}}</p>
     <p>Badge ID: {{object.id}}</p>
