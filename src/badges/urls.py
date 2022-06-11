@@ -18,4 +18,10 @@ urlpatterns = [
     url(r'^(?P<badge_id>[0-9]+)/grant/bulk/$', views.bulk_assertion_create, name='bulk_grant_badge'),
     path('grant/bulk/', views.bulk_assertion_create, name='bulk_grant'),
     url(r'^assertion/(?P<assertion_id>[0-9]+)/revoke/$', views.assertion_delete, name='revoke'),
+
+    # Badge Types
+    path('types/', views.BadgeTypeList.as_view(), name='badge_types'),
+    path('types/create/', views.BadgeTypeCreate.as_view(), name='badge_type_create'),
+    path('types/<int:pk>/edit', views.BadgeTypeUpdate.as_view(), name='badge_type_update'),
+    path('types/<int:pk>/delete', views.BadgeTypeDelete.as_view(), name='badge_type_delete'),
 ]

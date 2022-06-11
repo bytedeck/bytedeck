@@ -1,0 +1,35 @@
+{% extends "badges/base.html" %}
+
+{% block head_title %}Badge Types | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading_inner %}Badge Types
+  <a class="btn btn-primary" href="{% url 'badges:badge_type_create' %}" role="button">New</a>
+{% endblock %}
+
+{% block content %}
+<table class="table table-striped">
+  <tr>
+    <th>Title</th>
+    <th>Icon</th>
+    <th>Action</th>
+  </tr>
+  {% for object in object_list %}
+  <tr>
+    <td>{{ object.name }}</td>
+    <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
+    <td>
+      <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this badge_type">
+        <i class="fa fa-edit"></i>
+      </a>
+      <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this badge type">
+        <i class="fa fa-trash-o"></i>
+      </a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
+
+{% block js %}{% endblock %}
