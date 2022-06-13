@@ -5,7 +5,7 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 
 # from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 
-from .models import Prereq
+from .models import IsAPrereqMixin, Prereq
 from .tasks import update_quest_conditions_all_users
 
 
@@ -14,8 +14,8 @@ class PrereqInlineForm(forms.ModelForm):
         super(PrereqInlineForm, self).__init__(*args, **kwargs)
 
         # only include models 'registered' with the prerequisites app
-        self.fields['prereq_content_type'].queryset = Prereq.all_registered_content_types()
-        self.fields['or_prereq_content_type'].queryset = Prereq.all_registered_content_types()
+        self.fields['prereq_content_type'].queryset = IsAPrereqMixin.all_registered_content_types()
+        self.fields['or_prereq_content_type'].queryset = IsAPrereqMixin.all_registered_content_types()
 
 
 class PrereqInline(GenericTabularInline):

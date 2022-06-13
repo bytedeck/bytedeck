@@ -2,6 +2,7 @@
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import models
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -184,10 +185,36 @@ class IsAPrereqMixinTest(TenantTestCase):
 
     def test_all_registered_models_implement_required_methods(self):
         """ All models that inherit from this mixin should implement the condition_met_as_prerequisite() method """
-        for ct in Prereq.all_registered_content_types():
+        for ct in IsAPrereqMixin.all_registered_content_types():
             # If the method is not implemented, then NotImplementedError is thrown
             instance = baker.make(ct.model_class())
             instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
+
+    def test_static_content_type_is_registered(self):
+        """A content_type representing a model that implements the IsAPrereqMixin returns True
+        """
+        ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        self.assertTrue(IsAPrereqMixin.content_type_is_registered(ct))
+
+        ct = ContentType.objects.get(app_label='auth', model='user')
+        self.assertFalse(IsAPrereqMixin.content_type_is_registered(ct))
+
+    def test_static_all_registered_content_types(self):
+        """There are 6 models that implement the IsAPrereqMixin
+        """
+        cts = IsAPrereqMixin.all_registered_content_types()
+        self.assertEqual(cts.count(), 7)
+
+    def test_static_model_is_registered(self):
+        """Any model class that implements IsAPrereqMixin returns True"""
+        class TestClassRegistered(IsAPrereqMixin, models.Model):
+            pass
+
+        class TestClassNotRegsistered(models.Model):
+            pass
+
+        self.assertTrue(IsAPrereqMixin.model_is_registered(TestClassRegistered))
+        self.assertFalse(IsAPrereqMixin.model_is_registered(TestClassNotRegsistered))
 
 
 class PrereqModelTest(TenantTestCase):
@@ -242,21 +269,6 @@ class PrereqModelTest(TenantTestCase):
             quest3 = baker.make('quest_manager.Quest')
             some_object = object()
             Prereq.add_simple_prereq(quest3, some_object)
-
-    def test_cls_model_is_registered(self):
-        """A model that implements the IsAPrereqMixin returns True
-        """
-        ct = ContentType.objects.get(app_label='quest_manager', model='quest')
-        self.assertTrue(Prereq.model_is_registered(ct))
-
-        ct = ContentType.objects.get(app_label='auth', model='user')
-        self.assertFalse(Prereq.model_is_registered(ct))
-
-    def test_all_registered_content_types(self):
-        """There are 6 models that implement the IsAPrereqMixin
-        """
-        cts = Prereq.all_registered_content_types()
-        self.assertEqual(cts.count(), 7)
 
 
 class PrereqAllConditionsMetModelTest(TenantTestCase):

@@ -144,6 +144,28 @@ class IsAPrereqMixin:
     def autocomplete_search_fields():
         return ("name__icontains",)
 
+    @staticmethod
+    def all_registered_content_types():
+        """Returns a queryset of ContentType objects for all models inheriting IsAPrereqMixin"""
+        registered_list = [
+            ct.pk for ct in ContentType.objects.all()
+            if IsAPrereqMixin.content_type_is_registered(ct)
+        ]
+        return ContentType.objects.filter(pk__in=registered_list)
+
+    @staticmethod
+    def content_type_is_registered(content_type):
+        """Check if model represented by this content_type implements IsAPrereqMixin"""
+        return IsAPrereqMixin.model_is_registered(content_type.model_class())
+
+    @staticmethod
+    def model_is_registered(model_class):
+        """Check if class implements IsAPrereqMixin"""
+        if model_class and issubclass(model_class, IsAPrereqMixin):
+            return True
+        else:
+            return False
+
 
 # class PrereqQuerySet(models.query.QuerySet):
 #     """
@@ -464,25 +486,6 @@ class Prereq(IsAPrereqMixin, models.Model):
         )
         new_prereq.save()
         return new_prereq
-
-    @classmethod
-    def all_registered_content_types(cls):
-        registered_list = [
-            ct.pk for ct in ContentType.objects.all()
-            if cls.model_is_registered(ct)
-        ]
-        return ContentType.objects.filter(pk__in=registered_list)
-
-    @staticmethod
-    def model_is_registered(content_type):
-        """Check if class implements IsAPrereqMixin"""
-        mc = content_type.model_class()
-
-        # handle old content types that may not have been removed? mc = None
-        if mc and issubclass(mc, IsAPrereqMixin):
-            return True
-        else:
-            return False
 
 
 class PrereqAllConditionsMet(models.Model):
