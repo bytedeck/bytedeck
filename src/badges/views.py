@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
+from django.views.generic import RedirectView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.views.generic.list import ListView
 
@@ -16,6 +17,11 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
+
+
+class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, RedirectView):
+    def dispatch(self, request):
+        return redirect(request.path_info.replace("achievements", "badges", 1))
 
 
 @non_public_only_view
@@ -70,8 +76,8 @@ def badge_create(request):
 
     # Using `@staff_member_required(login_url='/accounts/login/')` causes a RedirectCycleErrror.
     # For example, a student that is already logged in tries to access this page,
-    # They will get redirect to `/accounts/login/?next=/achievements/create/`.
-    # And since they are already logged in, they will be redirected to `/achievements/create/`
+    # They will get redirect to `/accounts/login/?next=/badges/create/`.
+    # And since they are already logged in, they will be redirected to `/badges/create/`
     # Causing again to redirect since they are not a staff.
 
     # We could use `@staff_member_required(login_url='/')` but this breaks the tests
@@ -85,7 +91,7 @@ def badge_create(request):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": "Create New Achievment",
+        "heading": "Create New Badge",
         "form": form,
         "submit_btn_value": "Create",
     }

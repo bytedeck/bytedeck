@@ -39,16 +39,16 @@
 {#    </a>#}
       {% if request.user.is_staff %}
         <div class="clearfix">
-          <a id="achievements-menu"
-          class="list-group-item left-side {% if '/achievements/list' in request.path_info %}active{% endif %}"
-          href="{% url 'badges:badge_list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+          <a id="badges-menu"
+          class="list-group-item left-side {% if '/badges/' in request.path_info %}active{% endif %}"
+          href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
           <a title="Badge Types" class="list-group-item right-side text-center
-          {% if 'achievements/types/' in request.path_info %}active{% endif %}"
+          {% if 'badges/types/' in request.path_info %}active{% endif %}"
           href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i></a>
         </div>
       {% else %}
-        <a id="achievements-menu"
-        class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
+        <a id="badges-menu"
+        class="list-group-item {% if '/badges/' in request.path_info %}active{% endif %}"
         href="{% url 'badges:list' %}">
         <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
       {% endif %}
