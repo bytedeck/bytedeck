@@ -310,15 +310,12 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEquals(CourseStudent.objects.count(), 1)
         self.assertEquals(CourseStudent.objects.first().pk, course_student.pk)
 
-        # check if prevented delete from view using POST
-        response = self.client.post(reverse('courses:course_delete', args=[self.course.pk]))
-        self.assertNotEqual(response.status_code, 302)
-        self.assertEqual(response.status_code, 200)
-
         # confirm course existence
         self.assertTrue(Course.objects.exists())
 
         # confirm deletion prevention text shows up
+        response = self.client.get(reverse('courses:course_delete', args=[self.course.pk]))
+
         dt_ptag = f"Unable to delete '{self.course.title}' as it still has students registered. Consider disabling the course by toggling the"
         dt_atag_link = reverse("courses:course_update", args=[self.course.pk])
         dt_well_ptag = f"Registered Students: {self.course.coursestudent_set.count()}"
@@ -461,7 +458,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         block = Block.objects.get(id=1)
         self.assertEqual(block.block, data['block'])
 
-    def test_BlockDelete_view(self):
+    def test_BlockDelete_view__no_students(self):
         """ Admin should be able to delete a block """
         self.client.force_login(self.test_teacher)
 
@@ -470,3 +467,32 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         after_delete_count = Block.objects.count()
         self.assertRedirects(response, reverse('courses:block_list'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
+
+    def test_BlockDelete_view__with_students(self):
+        """ 
+            Admin should not be able to delete block with a student registered
+            Also checks if block can be deleted with a forced post method
+        """ 
+        student = baker.make(User)
+        block = baker.make(Block)
+
+        success = self.client.login(username=self.test_teacher.username, password='password')
+        self.assertTrue(success)
+
+        # register student to block
+        course_student = baker.make(CourseStudent, user=student, block=block)
+        self.assertEquals(CourseStudent.objects.count(), 1)
+        self.assertEquals(CourseStudent.objects.first().pk, course_student.pk)
+
+        # confirm block existence
+        self.assertTrue(Block.objects.filter(id=block.pk).first() is not None)
+
+        # confirm deletion prevention text shows up
+        response = self.client.get(reverse('courses:block_delete', args=[block.pk]))
+
+        dt_ptag = f"Unable to delete '{block.block}' as it still has students registered. Consider disabling the block by toggling the"
+        dt_atag_link = reverse('courses:block_update', args=[block.pk])
+        dt_well_ptag = f"Registered Students: {block.coursestudent_set.count()}"
+        self.assertContains(response, dt_ptag)
+        self.assertContains(response, dt_atag_link)
+        self.assertContains(response, dt_well_ptag)

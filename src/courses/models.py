@@ -361,6 +361,7 @@ class Block(models.Model):
                                         null=True, blank=True,
                                         limit_choices_to={'is_staff': True},
                                         on_delete=models.SET_NULL)
+    active = models.BooleanField(default=True)
 
     objects = BlockManager()
 
@@ -500,7 +501,7 @@ class CourseStudent(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
-    block = models.ForeignKey(Block, on_delete=models.SET_NULL, null=True)
+    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True)
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
     # grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
     grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True)

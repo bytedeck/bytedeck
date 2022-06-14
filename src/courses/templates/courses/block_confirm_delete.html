@@ -4,6 +4,9 @@
 {% block heading_inner %} Delete Block {% endblock %}
 
 {% block content %}
+
+{% if not populated %}
+
 <form action="" method="post">{% csrf_token %}
   <p>Are you sure you want to delete this block?<p>
   <div class="well">
@@ -15,4 +18,14 @@
   <a href="{% url 'courses:block_list' %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
+
+{% else %}
+
+<p>Unable to delete '{{ object.block }}' as it still has students registered. Consider disabling the block by toggling the <a href="{% url 'courses:block_update' pk=object.pk %}">active</a> field instead.</p>
+<div class="well">
+  <p>Registered Students: {{ population }}</p>
+</div>
+
+{% endif %}
+
 {% endblock %}
