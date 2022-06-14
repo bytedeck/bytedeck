@@ -8,6 +8,7 @@ app_name = 'badges'
 
 urlpatterns = [
     path('', views.badge_list, name='list'),
+    path('list/', views.badge_list, name='badge_list'),
     path('create/', views.badge_create, name='badge_create'),
     path('<int:badge_id>', views.detail, name='badge_detail'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.BadgeUpdate.as_view(), name='badge_update'),
