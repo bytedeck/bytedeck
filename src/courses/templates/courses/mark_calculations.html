@@ -2,7 +2,15 @@
 {% load crispy_forms_tags %}
 {% load jchart %}
 
-{% block heading_inner %}Mark Calculations{% endblock %}
+{% block heading %}
+Mark Calculations
+
+{% if user != request.user %}
+for {{user}}
+{% endif %}
+
+<i class="fa fa-line-chart pull-right"></i>
+{% endblock %}
 
 {% block content %}
   <p>Hello {{ user.profile.get_preferred_name }},
