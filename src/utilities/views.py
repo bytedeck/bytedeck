@@ -70,3 +70,6 @@ class FlatPageListView(NonPublicOnlyViewMixin, ListView):
     model = FlatPage
     template_name = "flatpages/flatpage-list.html"
     context_object_name = 'flatpages'
+
+    def get_queryset(self):
+        return FlatPage.objects.all().order_by("title")
