@@ -44,12 +44,17 @@ def create_superusers():
         password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
     # OWNER OF THE DECK
-    User.objects.create_superuser(
-        username=settings.TENANT_DEFAULT_OWNER_USERNAME,
-        email='owner@example.com',
-        password=settings.TENANT_DEFAULT_OWNER_PASSWORD,
-    )
+    # get_or_create IS HERE BECAUSE siteconfig.models.get_default_deck_owner() will run before this file (initialization.py)
+    # although siteconfig.models.get_default_deck_owner() will not run before this every time based on manual testing
+    owner, _ = User.objects.get_or_create(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
 
+    # set owner vars since siteconfig.models.get_deck_owner() wont set all vars and/or has not created model yet
+    owner.email = 'owner@example.com'
+    owner.set_password(settings.TENANT_DEFAULT_OWNER_PASSWORD)
+    owner.is_superuser = True
+    owner.is_staff = True
+    owner.save()
+        
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """
@@ -61,7 +66,7 @@ def create_initial_course():
 
 
 def create_initial_blocks():
-    default_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
+    default_user = SiteConfig.get().deck_owner
     Block.objects.create(block="Default", current_teacher=default_user)
 
 
