@@ -4,12 +4,16 @@ from django.core.cache import cache
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.timezone import localtime
+from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
 
 from siteconfig.models import SiteConfig
+
+User = get_user_model()
 
 
 class SiteConfigModelTest(TenantTestCase):
@@ -103,3 +107,15 @@ class SiteConfigModelTest(TenantTestCase):
         cache_time_expiration = localtime() + timedelta(days=1)
         with freeze_time(cache_time_expiration, tz_offset=0):
             self.assertIsNone(cache.get(SiteConfig.cache_key()))
+
+    def test_get_deck_owner(self):
+        """
+            Test to make sure the default deck owner is the correct one
+        """
+        # make sure owner exists first
+        user_owner = User.objects.filter(username=settings.TENANT_DEFAULT_OWNER_USERNAME).first()
+        self.assertIsNotNone(user_owner)
+
+        # get make sure deck_owner is the user_owner
+        deck_owner = self.config.deck_owner
+        self.assertEqual(deck_owner.pk, user_owner.pk)

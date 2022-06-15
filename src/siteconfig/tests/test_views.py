@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.shortcuts import reverse
+from django.db import models
+from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -9,11 +11,13 @@ from django_tenants.test.client import TenantClient
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
+from model_bakery import baker
+
 User = get_user_model()
 
 
-class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
-    """Tests for the SiteConfig model
+class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
+    """Tests for the SiteConfig View
     """
 
     def setUp(self):
@@ -74,3 +78,66 @@ class SiteConfigModelTest(ViewTestUtilsMixin, TenantTestCase):
         # After calling SiteConfig.get(), cache should not be equal to the old cache
         # Comparing the `site_name` since Django's Model.__eq__ is comparing `pk`
         self.assertNotEqual(old_cache.site_name, cache.get(SiteConfig.cache_key()).site_name)
+
+    def test_SiteConfigForm_basic_tests(self):
+        """ 
+            Basic test for SiteConfigForm
+        """ 
+        owner_user = self.config.deck_owner
+        admin_user = User.objects.get(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        staff_user = baker.make(User, is_staff=True,)
+
+        URL = reverse("config:site_config_update_own")
+
+        def generate_form_data(**kwargs):
+            """ 
+                Helper func to generate valid form data using self.config values in order to use self.client.post()
+            """
+            form_data = {}
+            for field_data in SiteConfig.get()._meta.fields[1:]:  # skips id field
+                name = field_data.name
+                value = getattr(SiteConfig.get(), name)
+                
+                if not value:
+                    form_data[name] = [""]
+                elif isinstance(value, models.Model):
+                    form_data[name] = [value.id]
+                else:
+                    form_data[name] = [value]
+
+            # if want to override default form data
+            for key, arg in kwargs.items():
+                form_data[key] = arg
+
+            return form_data
+
+        # NOTE FOR FUTURE TESTS USE SiteConfig.get() INSTEAD OF self.config
+        # self.config IS CACHED SO ITS NOT PASSED BY REFERENCE
+
+        # base case (see if something will change)
+        self.client.force_login(staff_user)
+
+        test_case = "BASE CASE"
+        self.client.post(URL, data=generate_form_data(
+            site_name=test_case,
+        ))
+        self.assertEqual(SiteConfig.get().site_name, test_case)
+        self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)  # owner should be unaffected
+
+        # check if a user who != owner can change SiteConfig deck_owner field
+        test_case = "TEST CASE #1"
+        self.client.post(URL, data=generate_form_data(
+            site_name=test_case, deck_owner=admin_user.pk,
+        ))
+        self.assertEqual(SiteConfig.get().site_name, test_case)
+        self.assertNotEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # should not be equal since form prevents non owner from changing owner
+
+        # check if owner can change who deck_owner is 
+        self.client.force_login(owner_user)
+        
+        test_case = "TEST CASE #2"
+        self.client.post(URL, data=generate_form_data(
+            site_name=test_case, deck_owner=admin_user.pk,
+        ))
+        self.assertEqual(SiteConfig.get().site_name, test_case)
+        self.assertEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
