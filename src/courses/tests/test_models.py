@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db.models import ProtectedError
 
 from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
@@ -293,7 +294,7 @@ class CourseModelTest(TenantTestCase):
         self.assertEqual(course_student.course, self.course)
 
         # see if models.PROTECT is in place
-        self.assertRaises(Exception, self.course.delete)
+        self.assertRaises(ProtectedError, self.course.delete)
 
 
 class CourseStudentModelTest(TenantTestCase):
@@ -347,6 +348,21 @@ class BlockModelTest(TenantTestCase):
     def test_default_object_created(self):
         """ A data migration should make a default block """
         self.assertTrue(Block.objects.filter(block="Default").exists())
+
+    def test_model_protection(self):
+        """ 
+            Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
+            Block deletion is only prevented when there are CourseStudent models linked via foreign key to the Block model
+        """ 
+        # Setup
+        student = baker.make(User)
+        block = baker.make(Block)
+        course_student = baker.make(CourseStudent, user=student, block=block)
+        self.assertTrue(CourseStudent.objects.count(), 1)
+        self.assertEqual(block, course_student.block)
+
+        # see if models.PROTECT is in place
+        self.assertRaises(ProtectedError, block.delete)
 
 
 class RankManagerTest(TenantTestCase):
