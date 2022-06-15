@@ -63,12 +63,14 @@ class MarkRangeTestManager(TenantTestCase):
 class BlockModelManagerTest(TenantTestCase):
 
     def test_grouped_teachers_blocks_equals_one(self):
-        """ Should only return 1 group of teachers if regardless of the number of Blocks """
+        """ 
+            Should only return 1 group of teachers if regardless of the number of Blocks 
+        """
 
-        teacher_admin = User.objects.get(username='admin')
+        teacher_owner = User.objects.get(username='owner')
 
         for _ in range(5):
-            baker.make(Block, current_teacher=teacher_admin)
+            baker.make(Block, current_teacher=teacher_owner)
 
         group = Block.objects.grouped_teachers_blocks()
 
@@ -77,7 +79,7 @@ class BlockModelManagerTest(TenantTestCase):
     def test_grouped_teachers_blocks_more_than_one(self):
         """ Should return 3 group of teachers teaching Default, [AB] and [CD] blocks"""
 
-        teacher_admin = User.objects.get(username='admin')
+        teacher_owner = User.objects.get(username='owner')
         teacher1 = baker.make(User, username='teacher1', is_staff=True)
         teacher2 = baker.make(User, username='teacher2', is_staff=True)
 
@@ -93,7 +95,7 @@ class BlockModelManagerTest(TenantTestCase):
         self.assertEqual(len(group.keys()), 3)
 
         # admin teaches default block
-        self.assertListEqual(group[teacher_admin.id], [block_default.block])
+        self.assertListEqual(group[teacher_owner.id], [block_default.block])
         # teacher1 teaches A and B block
         self.assertListEqual(group[teacher1.id], [block_a.block, block_b.block])
         # teacher2 teaches C and D block

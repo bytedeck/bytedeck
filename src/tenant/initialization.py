@@ -17,10 +17,10 @@ User = get_user_model()
 
 
 def load_initial_tenant_data():
-    user = create_superuser()
+    create_superusers()
     create_site_config_object()
     create_initial_course()
-    create_initial_blocks(user)
+    create_initial_blocks()
     create_initial_markranges()
     create_initial_ranks()
     create_initial_grades()
@@ -33,14 +33,19 @@ def load_initial_tenant_data():
     create_email_notification_tasks()  
 
 
-def create_superuser():
-    # print("Creating default super user of the tenant %s - %s." % (tenant.schema_name, tenant.domain_url))
-    user = User.objects.create_superuser(
-        username=settings.TENANT_DEFAULT_SUPERUSER_USERNAME, 
+def create_superusers():
+    # BYTEDECK ADMIN
+    User.objects.create_superuser(
+        username=settings.TENANT_DEFAULT_ADMIN_USERNAME, 
         email='admin@example.com', 
-        password=settings.TENANT_DEFAULT_SUPERUSER_PASSWORD
+        password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
-    return user
+    # OWNER OF THE DECK
+    User.objects.create_superuser(
+        username=settings.TENANT_DEFAULT_OWNER_USERNAME,
+        email='owner@example.com',
+        password=settings.TENANT_DEFAULT_OWNER_PASSWORD,
+    )
 
 
 def create_site_config_object():
@@ -52,8 +57,9 @@ def create_initial_course():
     Course.objects.create(title="Default")
 
 
-def create_initial_blocks(user):
-    Block.objects.create(block="Default", current_teacher=user)
+def create_initial_blocks():
+    default_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
+    Block.objects.create(block="Default", current_teacher=default_user)
 
 
 def create_initial_markranges():
