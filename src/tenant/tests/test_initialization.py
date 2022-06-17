@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 
 from badges.models import BadgeRarity
 from courses.models import MarkRange
+from utilities.models import MenuItem
 
 
 class TenantInitializationTest(TenantTestCase):
@@ -26,6 +27,9 @@ class TenantInitializationTest(TenantTestCase):
         """ 
         for name in ["A", "B", "Pass"]:
             self.assertTrue(MarkRange.objects.filter(name=name).exists())
+
+    def test_default_menu_items_created(self):
+        self.assertTrue(MenuItem.objects.filter(label="Ranks List").exists())
 
     def test_superusers_created(self):
         """ 

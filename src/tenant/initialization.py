@@ -6,12 +6,14 @@ among other issues
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from courses.models import Grade, Rank, Course, Block, MarkRange
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from utilities.models import MenuItem
 
 User = get_user_model()
 
@@ -27,6 +29,7 @@ def load_initial_tenant_data():
     create_initial_badge_types()
     create_initial_badge_rarities()
     create_initial_badges()
+    create_initial_menu_items()
     create_orientation_campaign() 
 
     from notifications.tasks import create_email_notification_tasks
@@ -210,6 +213,17 @@ def create_initial_badges():
             import_id='bb12b3d1-ce6e-40e3-a411-f43aadfe571a'
         ),
     ])
+
+
+def create_initial_menu_items():
+    MenuItem.objects.create(
+        label="Ranks List",
+        fa_icon="star-o",
+        url=reverse('courses:ranks'),
+        open_link_in_new_tab=False,
+        sort_order=0,
+        visible=True,
+    )
 
 
 def create_orientation_campaign():
