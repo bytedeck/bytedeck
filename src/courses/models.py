@@ -610,11 +610,13 @@ class MarkDistributionHistogram(Chart):
                                  )
         # course_dataset['stack'] = 'marks'
 
+        # prevent negative value thats from user to appear here
+        course_dataset['data'] = [max(val, 0) for val in course_dataset['data']]
+
         user_dataset = DataSet(label='You',
                                data=user_data,
                                )
         # user_dataset['stack'] = 'marks'
-
         return [course_dataset, user_dataset, ]
 
     def generate_user_data(self, user_id):
@@ -634,7 +636,9 @@ class MarkDistributionHistogram(Chart):
             index += 1
         return data
 
+    # WHY DOESNT THIS GENERATE EVERY TIME?
     def generate_histogram(self):
+        # print("I AM GENREATIONG A HSITGRAm", "*"*100)
         data = Semester.objects.get_current().get_student_mark_list(students_only=True)
         # data = numpy.random.normal(0, 20, 1000)
         right_edge = 100 + self.bin_size
