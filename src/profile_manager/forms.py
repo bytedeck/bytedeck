@@ -15,8 +15,6 @@ class ProfileForm(forms.ModelForm):
                   'get_announcements_by_email', 'get_notifications_by_email',
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
-        fields += ['xp_cached']
-
     def __init__(self, *args, **kwargs):
         super(ProfileForm, self).__init__(*args, **kwargs)
         self.fields['grad_year'] = forms.ChoiceField(
