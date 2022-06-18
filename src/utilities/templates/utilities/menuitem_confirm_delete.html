@@ -1,0 +1,18 @@
+{% extends "utilities/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title %}Menu Items | {% endblock %}
+
+{% block heading_inner %}Delete Menu Item {% endblock %}
+
+{% block content %}
+    <form action="" method="post">{% csrf_token %}
+      <p>Are you sure you want to delete this menu item?<p>
+      <div class="well">
+        <p>Menu Item Label: {{object.label}}</p>
+        <p>Menu Item ID: {{object.id}}</p>
+      </div>
+      <a href="{% url 'utilities:menu_items' %}" role="button" class="btn btn-info">Cancel</a>
+      <input type="submit" value="Delete" class="btn btn-danger" />
+    </form>
+{% endblock %}

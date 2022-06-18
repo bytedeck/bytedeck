@@ -1,0 +1,41 @@
+{% extends "utilities/base.html" %}
+
+{% block head_title %}Menu Items | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading_inner %}Menu Items
+{% if request.user.is_staff %}
+  <a class="btn btn-primary" href="{% url 'utilities:menu_item_create' %}" role="button">New</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<table class="table table-striped">
+  <tr>
+    <th>Label</th>
+    <th>Icon</th>
+    <th>Url</th>
+    <th>Sort Order</th>
+    <th>Action</th>
+  </tr>
+  {% for object in object_list %}
+  <tr>
+    <td>{{ object.label }}</td>
+    <td>{% if object.fa_icon %}<i class='fa fa-{{ object.fa_icon }}'></i>{% endif %}</td>
+    <td><a href="{{ object.url }}">{{ object.url }}</a></td>
+    <td>{{ object.sort_order }}</td>
+    <td>
+      <a class="btn btn-warning" href="{% url 'utilities:menu_item_update' object.id %}" role="button" title="Edit this menu item">
+        <i class="fa fa-edit"></i>
+      </a>
+      <a class="btn btn-danger" href="{% url 'utilities:menu_item_delete' object.id %}" role="button" title="Delete this menu item">
+        <i class="fa fa-trash-o"></i>
+      </a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
+
+{% block js %}{% endblock %}
