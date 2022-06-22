@@ -1,21 +1,25 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.http import Http404
+from django.http import Http404, HttpResponseRedirect
 
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
-from django.views.generic.edit import UpdateView
+from django.views.generic.edit import UpdateView, FormView
 
 from .models import Profile
-from .forms import ProfileForm
+from .forms import ProfileForm, UserForm
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+
+from django.contrib.auth.forms import SetPasswordForm
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -129,17 +133,20 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
 
 class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = Profile
-    form_class = ProfileForm
+    public_form_class = ProfileForm
+    staff_form_class = UserForm
     template_name = 'profile_manager/form.html'
 
-    def get_context_data(self, **kwargs):
-        profile = self.get_object()
-        # Call the base implementation first to get a context
-        context = super(ProfileUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
-        context['submit_btn_value'] = "Update"
-        context['profile'] = profile
-        return context
+    def get_object(self):
+        return get_object_or_404(self.model, pk=self.kwargs["pk"])
+
+    # returns a list of existing form instances or new ones
+    def get_forms(self):
+        forms = [self.get_form_public()]
+        if self.request.user.is_staff:
+            forms.append(self.get_form_staff())
+
+        return forms
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
@@ -149,12 +156,106 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
         else:
             raise Http404("Sorry, this profile isn't yours!")
 
+    def post(self, request, *args, **kwargs):
+        forms = self.get_forms()
+
+        # check if all form instances are valid else ...
+        if all([form.is_valid() for form in forms]):
+            return self.form_valid(forms)
+        return self.form_invalid(forms)
+
+    def get_context_data(self, **kwargs):
+        profile = self.get_object()
+        context = {}
+
+        # return instance of form or new form instance
+        context['forms'] = kwargs.get('forms', self.get_forms())
+
+        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
+        context['submit_btn_value'] = "Update"
+        context['profile'] = profile
+
+        return context
+
+    # handles form_kwargs for all forms  # redundant?
+    def get_form_kwargs(self, initial={}):
+        kwargs = initial
+
+        # if request is POST send request data+files
+        if self.request.method == "POST":
+            kwargs.update({
+                "data": self.request.POST,
+                "files": self.request.FILES,
+            })
+
+        return kwargs
+
+    # returns instance of ProfileForm
+    def get_form_public(self):
+        return self.public_form_class(**self.get_form_kwargs(
+            initial={'instance': self.get_object()}
+        ))
+
+    # returns instance of UserForm
+    def get_form_staff(self):
+        return self.staff_form_class(**self.get_form_kwargs(
+            initial={'instance': self.get_object().user}
+        ))
+
+    # runs if all forms are valid
+    def form_valid(self, forms, *args, **kwargs):
+        # log back in since you get kicked out if you change your own username
+        if self.request.user == self.get_object().user:
+            self.request.user.backend = 'django.contrib.auth.backends.ModelBackend'
+            login(self.request, self.request.user)
+    
+        [form.save() for form in forms]
+
+        return HttpResponseRedirect(self.get_success_url())
+
+    # runs if all forms are invalid 
+    # OVERRIDDEN SO WE CAN RENDER ALL FORM VALUES WITHOUT RESETTING FORM (if form is invalid)
+    def form_invalid(self, forms, *args, **kwargs):
+        return self.render_to_response(self.get_context_data(forms=forms))
+
+    def get_success_url(self):
+        return reverse("profiles:profile_detail", args=[self.get_object().pk])
+
 
 class ProfileUpdateOwn(ProfileUpdate):
     """ Provides a single url for users to edit only their own profile, so the link can be included in emails """
 
     def get_object(self):
         return self.request.user.profile
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class PasswordReset(FormView):
+    form_class = SetPasswordForm
+    template_name = 'profile_manager/password_change_form.html'
+    
+    def get_instance(self):
+        model_pk = self.kwargs['pk']
+        return get_user_model().objects.get(pk=model_pk)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.get_instance().profile
+
+        context['heading'] = "Changing " + profile.user.get_username() + "'s Password"
+        context['submit_btn_value'] = "Update"
+        
+        return context
+
+    def get_form(self):
+        return PasswordReset.form_class(user=self.get_instance(), **self.get_form_kwargs())
+
+    def form_valid(self, form):
+        form.save()
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
 @non_public_only_view
