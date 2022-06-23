@@ -1,0 +1,15 @@
+<div class="btn-group" role="group">
+
+    {% if not completed %}
+        <button type='submit' name='complete' class='btn btn-success'
+                title='SUBMIT this quest for completion'>
+        <i class="fa fa-fw fa-check"></i>
+        </button>
+    {% else %}
+        <button type='submit' name='comment' class='btn btn-primary'
+                title='COMMENT on this submission'>
+        <i class="fa fa-fw fa-comment"></i>
+        </button>
+    {% endif %}
+
+</div>

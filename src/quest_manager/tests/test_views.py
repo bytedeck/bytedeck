@@ -549,9 +549,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
             )
         return response
 
-    def test_complete(self):
+    def test_complete_quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
-        Are redirected to their available quests page, submission is marked completed and has a completion time
+        Are redirected to their available quests page, submission is marked completed and has a completion time.
+        Tests for file-less submissions are labeled under the quick reply form because of the form selection
+        logic in the view being tested, but are still possible from the standard submission form.
         """
         comment = "test submission comment"
         response = self.post_complete(submission_comment=comment)
@@ -566,7 +568,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, comment)
 
-    def test_no_comment_verification_not_required(self):
+    def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
         """
         self.sub.quest.verification_required = False
@@ -579,7 +581,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertSuccessMessage(response)
 
-    def test_no_comment_but_verification_required(self):
+    def test_no_comment_but_verification_required_quick_reply_form(self):
         """ When a quest requires teacher's approval, it means they must include either files or a comment
         """
         self.sub.quest.verification_required = True

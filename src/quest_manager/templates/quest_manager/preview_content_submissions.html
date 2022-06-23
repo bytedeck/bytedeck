@@ -34,3 +34,8 @@
 {% with s.get_comments as target_comments %}
   {% include "comments/comments.html" %}
 {% endwith %}
+{% if not past %}
+  <li class="list-group-item list-group-item-info">
+    Quick Reply Form
+  </li>
+{% endif %}
