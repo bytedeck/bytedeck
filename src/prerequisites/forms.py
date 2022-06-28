@@ -2,6 +2,9 @@ from dal import autocomplete
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
+from django import forms
+
+from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
@@ -36,15 +39,22 @@ def generate_prereq_model_choice():
 class PrereqFormInline(autocomplete.FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-        model_choice=generate_prereq_model_choice(),
-        # field_id='prerequisite',
-    )
+    if settings.TESTING:
+        # Use fake form fields during testing because the "Django autocomplete light" fields we want 
+        # to use break tests because ContentTypes aren't loaded yet or don't exist during testing (why?)
+        prereq_object = forms.CharField()
+        or_prereq_object = forms.CharField()
+    else:
+        # The real form fields
+        prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+            model_choice=generate_prereq_model_choice(),
+            # field_id='prerequisite',
+        )
 
-    or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-        model_choice=generate_prereq_model_choice(),
-    )
-
+        or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+            model_choice=generate_prereq_model_choice(),
+        )
+        
     class Meta:
         model = Prereq
         # fields = ['prereq_content_type', 'prereq_object_id', 'prereq_count', 'prereq_invert']
