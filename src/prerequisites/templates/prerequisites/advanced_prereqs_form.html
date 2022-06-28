@@ -10,12 +10,49 @@
 {% block heading_inner %}Advanced Prerequisites{% endblock %}
 
 {% block content %}
-<h3>{{object.prereq_parent_str}}</h3>
+<h3>Editing prereqs for: {{object.prereq_parent_str}}</h3>
 
 <div>Current prerequisites:</div>
 {% include 'prerequisites/current_prereq_list.html' %}
 
 {% crispy form form.helper %}
+
+<hr>
+<p>Each row in the form above is considered a prerequisite.  If there are multiple prerequisites, then they must all be met before the student 
+  will earn: <i>{{object.prereq_parent_str}}</i></p>
+<div class="panel panel-default">
+  <div class="panel-heading"><h3 class="panel-title">Form field descriptions</h3></div>
+  <div class="panel-body">
+    <dl class="dl-horizontal">
+      <dt>Required Element</dt>
+      <dd>The object (badge, quest, rank, etc.) that students must achieve to meet the prerequisite and earn: <i>{{object.prereq_parent_str}}</i>.</dd>
+      <br>
+      <dt>Count</dt>
+      <dd>The minimum number of times the Required Element must be achieved.  This can be used for badges, or quests that are repeatable.  
+        For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 3, then they will meet the prerequisite if 
+        they have earned 3 or more Nickels. For most element types this field is ignored.</dd>
+      <br>
+      <dt>NOT</dt>
+      <dd>This inverts the requirement.  For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 1, 
+        then they will meet the prerequisite as long as they have NOT earned the Nickel badge.  If <b>Count</b> = 3, then 
+        they will meet the prerequisite as long as they have NOT earned three or more Nickel badges, i.e. they have only earned 0, 1 or 2.</dd>
+      <br>
+      <dt>Alternate Element</dt>
+      <dd>Set this if you want to provide students an alternate way of meeting a prerequisite. This prerequisite will be considered met if either
+        the <b>Required Element</b> or the <b>Alternate Element</b>, or both, are met.
+      </dd>
+      <br>
+      <dt>(Alternate) Count</dt>
+      <dd>As above, but for the <b>Alternate Element</b></dd>
+      <br>
+      <dt>(Alternate) NOT</dt>
+      <dd>As above, but for the <b>Alternate Element</b></dd>
+      <br>
+      <dt>Delete</dt>
+      <dd>If this field is checked, the prerequisite will be deleted when the form is saved.</b></dd>
+    </dl>
+  </div>
+</div>
 
 {% endblock %}
 

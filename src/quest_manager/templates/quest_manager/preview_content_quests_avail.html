@@ -23,7 +23,7 @@
                - every {{ q.hours_between_repeats}} hrs
                {% endif %}
             {% endif %}</li>
-      <li>Requirements:
+      <li>Prerequisites:
             {% for p in q.prereqs %}
               {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
               <li>{{ p }}</li>

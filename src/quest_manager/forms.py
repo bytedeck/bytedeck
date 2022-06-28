@@ -126,9 +126,13 @@ class QuestForm(forms.ModelForm):
                         "Basic Prerequisites",
                         # TODO This code should be combined with its use in quest_detail_content.html
                         HTML(
-                            "<div class='help-block'>If you only want to set a single quest and/or badge as a prerequisite, you can set them here. "
-                            "Note that this will overwrite any current prerequisites that are set. For more advanced prerequisite options you "
-                            "will need to use the <a href='{% url \"quests:quest_prereqs_update\" quest.id %}'>Prerequisites Form</a>.</div>"
+                            "<div class='help-block'><p>If you only want to set a single quest and/or badge as a prerequisite, you can set them here."
+                            "{% if object.id %} Note that this will overwrite any current prerequisites that are set. </p><p>{% endif %} "
+                            "For more advanced prerequisite options you will need to "
+                            "{% if request.user.profile.is_TA %} ask a teacher to set them up for you. "
+                            "{% elif not object.id %} save this new quest first."
+                            "{% else %}use the <a href='{% url \"quests:quest_prereqs_update\" object.id %}'>Advanced Prerequisites Form</a>."
+                            "{% endif %}</p></div>"
                             "<div>Current Prerequisites:</div>"
                             "{% include 'prerequisites/current_prereq_list.html' %}",
                         ),

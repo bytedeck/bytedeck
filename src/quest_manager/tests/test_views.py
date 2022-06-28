@@ -71,7 +71,6 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_quest_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
-
         self.assertRedirectsLogin('quests:quests')
 
     def test_all_quest_page_status_codes_for_students(self):
@@ -112,12 +111,14 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
 
+        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 302)
+
         # 403 for CRUD views:
         self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
-
+        
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -128,6 +129,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
 
     def test_start(self):
         # log in a student from setUp
@@ -1038,6 +1040,83 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, quest_to_update.get_absolute_url())
         self.assertEqual(quest_to_update.prereqs().count(), 1)
         self.assertIn("new-prereq-quest2", str(quest_to_update.prereqs()))
+
+
+class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
+    """ These tests are mostly of the prerequisites app's ObjectPrereqsFormView and PrereqFormInline,
+    However, the QuestPrereqsUpdate view is where those are both used.
+
+    url(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.QuestPrereqsUpdate.as_view(), name='quest_prereqs_update'),
+    """
+
+    def setUp(self):
+        """ Tests start with a parent_quest that has a single simple prereq --> prereq_quest"""
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.parent_quest = baker.make(Quest, name="Test Parent Quest")
+        self.prereq_quest = baker.make(Quest, name="Test Prereq Quest")
+        self.parent_quest.add_simple_prereqs([self.prereq_quest])
+
+    def build_formset_form_data(self, form_prefix, form_number, **data):
+        """ https://stackoverflow.com/a/62744916/2700631
+        """
+        form = {}
+        for key, value in data.items():
+            form_key = f"{form_prefix}-{form_number}-{key}"
+            form[form_key] = value
+        return form
+
+    def build_formset_data(self, forms, form_prefix="form", **common_data):
+        formset_dict = {
+            f"{form_prefix}-TOTAL_FORMS": f"{len(forms)}",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-INITIAL_FORMS": "1"
+        }
+        formset_dict.update(common_data)
+        for i, form_data in enumerate(forms):
+            form_dict = self.build_formset_form_data(form_prefix, form_number=i, **form_data)
+            formset_dict.update(form_dict)
+        return formset_dict
+    
+    def test_post_cancel_button(self):
+        """ Cancel button should redirect to the quest detail view """
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data={
+                'object': self.parent_quest,
+                'cancel': True
+            }
+        )
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
+
+    # @tag("do")
+    # def test_post_save_button__defaults(self):
+    #     """ Save button should redirect to the quest detail view, no changes to form data"""
+    #     self.client.force_login(self.test_teacher)
+
+    #     ct = ContentType.objects.get_for_model(self.prereq_quest)
+
+    #     forms_data = [
+    #         {
+    #             "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+    #             "prereq_count": '1',
+    #             "or_prereq_object": '',
+    #             "or_prereq_count": '1',
+    #             "id": f'{self.parent_quest.pk}'
+    #         },
+    #     ]
+    #     form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+
+    #     formset_data = self.build_formset_data(forms_data, form_prefix)
+    #     response = self.client.post(
+    #         reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+    #         data=formset_data
+    #     )
+    #     # If successfully submitted, the form should validate and then redirect to the quest's detail page
+    #     # If get 200 then means probably a form is invalid.
+    #     self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
 
 class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):

@@ -1,5 +1,3 @@
-from dal import autocomplete
-
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.contrib.contenttypes.forms import generic_inlineformset_factory
@@ -12,19 +10,6 @@ from prerequisites.forms import PrereqFormInline, PrereqFormsetHelper
 from prerequisites.models import Prereq
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.edit import FormView
-
-
-class PrereqContentTypeAutocomplete(NonPublicOnlyViewMixin, autocomplete.Select2QuerySetView):
-    def get_queryset(self):
-        if not self.request.user.is_authenticated:
-            return Prereq.objects.none()
-
-        qs = Prereq.all_registered_content_types()
-
-        if self.q:
-            qs = qs.filter(model__istartswith=self.q)
-
-        return qs
 
 
 @method_decorator(staff_member_required, name='dispatch')
