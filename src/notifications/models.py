@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
+from bs4 import BeautifulSoup
 
 from tenant.utils import get_root_url
 
@@ -124,6 +125,77 @@ class Notification(models.Model):
 
     objects = NotificationManager()
 
+    def html_strip(string, char_limit=50, tag_size=1, resize_image=True, image_height=20, **kwargs) -> str:
+        """  
+            Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
+
+            tag_size: how many letters an image should count as
+
+            resize_image: enables image resizing
+            image_height: image height after resizing in pixels
+        """
+        if not string:
+            return ""
+        if type(string) is not str:
+            string = str(string)
+
+        limit_imposed = False
+        HTML_tags = []
+        tag_index = []
+
+        # store HTML tags and index to lists
+        cache_open_index = None
+        for index in range(len(string)):
+            char = string[index]
+
+            # check for open img
+            if char == "<" and string[index:].startswith("<img"):
+                cache_open_index = index
+            
+            # check for closed if open already found 
+            elif cache_open_index is not None and char == ">":
+                # position img tag would be without html tags
+                offset = cache_open_index - len(strip_tags(string[:cache_open_index]))
+
+                start = cache_open_index
+                end = index + 1
+
+                # save the html tag and index to list
+                HTML_tags.append(string[start:end])
+                tag_index.append(cache_open_index - offset)
+
+                cache_open_index = None
+
+        # dict of html tag and its position in the string
+        html_index = {HTML_tags[i]: tag_index[i] for i in range(len(HTML_tags))}
+
+        # index count of images that will be shown
+        shown_tag_count = len([index for _, index in html_index.items() if index < char_limit])
+        # tags should count towards the character limit
+        char_limit -= shown_tag_count * tag_size
+
+        # strip all the tags and apply char limit to TEXT
+        stripped = strip_tags(string)
+        text = stripped[:char_limit]
+        limit_imposed = len(stripped) > char_limit
+        
+        # reinsert tags with new stripped text
+        for tag, index in html_index.items():
+            if index < char_limit:
+                text = text[:index] + tag + text[index:]
+
+        # resizes all images in string
+        if resize_image:
+            soup = BeautifulSoup(text, features="html.parser")
+            for img in soup.findAll('img'):
+                img['style'] = ""  # remove style as it always comes with width/height modifiers
+                img['height'] = f"{image_height}px"
+                img['width'] = "auto"
+
+            text = str(soup)
+            
+        return text + ("..." if limit_imposed else "")
+
     def __str__(self):
         try:
             target_url = self.target_object.get_absolute_url()
@@ -136,20 +208,16 @@ class Notification(models.Model):
 
         action = self.action_object
 
-        if len(str(self.action_object)) > 50:
-            action = str(self.action_object)[:50] + "..."
-        else:
-            action = str(self.action_object)
+        # uses custom strip
+        action = Notification.html_strip(action)
 
-        action = strip_tags(action)
-
-        # absolute url needed for when notfication sare sent via email
+        # absolute url needed for when notifications are sent via email
         root_url = get_root_url()
         context = {
             "sender": self.sender_object,
             "verb": self.verb,
-            "action": action,
-            "target": self.target_object,
+            "action": action,  # notif text
+            "target": self.target_object,  # basically quest name
             "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
@@ -161,7 +229,7 @@ class Notification(models.Model):
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
         else:
-            url = url_common_part + "</a>"
+            url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
         return url
 
     def mark_read(self):
@@ -191,12 +259,14 @@ class Notification(models.Model):
         # except:
         #     target_url = reverse('notifications:list')
 
-        if len(str(self.action_object)) > 50:
-            action = str(self.action_object)[:50] + "..."
-        else:
-            action = str(self.action_object)
+        # if len(str(self.action_object)) > 50:
+        #     action = str(self.action_object)[:50] + "..."
+        # else:
+        #     action = str(self.action_object)
 
-        action = strip_tags(action)
+        # action = strip_tags(action)
+
+        action = Notification.html_strip(str(self.action_object))
 
         context = {
             "sender": self.sender_object,
