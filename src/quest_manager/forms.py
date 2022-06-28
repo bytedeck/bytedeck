@@ -25,6 +25,12 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
     pass
 
 
+class QuestPrereqForm(forms.ModelForm):
+    class Meta:
+        model = Quest
+        fields = ('name',)
+
+
 class QuestForm(forms.ModelForm):
 
     new_quest_prerequisite = forms.ModelChoiceField(
@@ -95,18 +101,11 @@ class QuestForm(forms.ModelForm):
 
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
-        admin_btn = (
-            '<a href="/admin/quest_manager/quest/{{object.id}}"'
-            ' title="This is required to edit prerequisites"'
-            ' role="button" class="btn btn-default">'
-            ' via Admin</a>'
-        )
 
         self.helper = FormHelper()
         self.helper.layout = Layout(
             HTML(cancel_btn),
             HTML(submit_btn),
-            HTML(admin_btn),
             Div(
                 'name',
                 'xp',
@@ -128,14 +127,10 @@ class QuestForm(forms.ModelForm):
                         # TODO This code should be combined with its use in quest_detail_content.html
                         HTML(
                             "<div class='help-block'>If you only want to set a single quest and/or badge as a prerequisite, you can set them here. "
-                            "Note that this will overwrite any current prerequisites that are set. For more interesting prerequisite options you "
-                            " will need to edit the quest via the <a href='/admin/quest_manager/quest/{{object.id}}'>Admin form</a>.</div>"
-                            "<div>Current Prerequisites</div>"
-                            "<div><ul class='left-aligned'><small>"
-                            "{% for p in form.instance.prereqs %}"
-                            "<li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>"
-                            "{% empty %}<li>None</li>"
-                            "{% endfor %}</small></ul></div>",
+                            "Note that this will overwrite any current prerequisites that are set. For more advanced prerequisite options you "
+                            "will need to use the <a href='{% url \"quests:quest_prereqs_update\" quest.id %}'>Prerequisites Form</a>.</div>"
+                            "<div>Current Prerequisites:</div>"
+                            "{% include 'prerequisites/current_prereq_list.html' %}",
                         ),
                         'new_quest_prerequisite',
                         'new_badge_prerequisite',
@@ -164,7 +159,6 @@ class QuestForm(forms.ModelForm):
                 ),
                 HTML(cancel_btn),
                 HTML(submit_btn),
-                HTML(admin_btn),
                 style="margin-top: 10px;"
             )
         )

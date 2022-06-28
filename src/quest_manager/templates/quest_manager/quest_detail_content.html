@@ -40,14 +40,8 @@
               {% endif %}
           </li>
           {% endif %}
-          <li>Requirements:
-                {% for p in quest.prereqs %}
-                  {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
-                  <li><a href="{{ p.get_prereq.get_absolute_url }}">{{ p }}</a></li>
-                  {% if forloop.last %}</small></ul>{% endif %}
-                {% empty %}
-                  None
-                {% endfor %}</li>
+          <li>Requirements: <a class="btn btn-info btn-xs" href="{% url 'quests:quest_prereqs_update' quest.id %}">Edit</a>
+                {% with quest as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
         </ul>
       </div>
     </div>
