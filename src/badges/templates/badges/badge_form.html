@@ -15,9 +15,15 @@
 <form action="" enctype="multipart/form-data" method="post">{% csrf_token %}
   <a href="{% url 'badges:list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
-  <a href="/admin/badges/badge/{{object.id}}" role="button" class="btn btn-default">via Admin</a>
+
+  {% if object.id %}
+    <a role="button" class="btn btn-default" href="{% url 'badges:badge_prereqs_update' object.id %}">Edit Prerequisites</a>
+  {% else %}
+    <button type="button" class="btn btn-default" disabled title="You need to create this new badge first, before you can add prerequisites.">Edit Prerequisites</button>
+  {% endif %}
   {{ form|crispy }}
   <a href="{% url 'badges:list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
+
 </form>
 {% endblock %}
