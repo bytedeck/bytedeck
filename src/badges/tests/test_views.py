@@ -76,6 +76,8 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsAdmin('badges:bulk_grant')
         self.assertRedirectsAdmin('badges:revoke', args=[s_pk])
 
+        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 302)
+
     def test_all_badge_page_status_codes_for_teachers(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -95,6 +97,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:bulk_grant_badge', args=[b_pk])
         self.assert200('badges:bulk_grant')
         self.assert200('badges:revoke', args=[a_pk])
+        self.assert200('badges:badge_prereqs_update', args=[a_pk])
 
     def test_badge_create(self):
         # log in a teacher
