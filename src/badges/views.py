@@ -13,6 +13,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.views.generic.list import ListView
 
 from notifications.signals import notify
+from prerequisites.views import ObjectPrereqsFormView
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
@@ -43,6 +44,10 @@ def badge_list(request):
     return render(request, "badges/list.html", context)
 
 
+class BadgePrereqsUpdate(ObjectPrereqsFormView):
+    model = Badge
+
+
 class BadgeDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Badge
     success_url = reverse_lazy('badges:list')
@@ -61,7 +66,7 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super(BadgeUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Update Achievment"
+        context['heading'] = "Update Badge"
         context['submit_btn_value'] = "Update"
         return context
 
