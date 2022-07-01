@@ -13,7 +13,6 @@ or they could be moved into a `test_urls.py` module.
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
-from django.test import tag
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -23,7 +22,6 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from notifications.models import Notification
-from prerequisites.models import Prereq
 from quest_manager.models import Category, Quest, QuestSubmission
 from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
@@ -1152,7 +1150,6 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         # TODO should no longer have the prereq.. but this doesn't work for some reason....
         # self.assertEqual(self.parent_quest.prereqs().count(), 0)
 
-    @tag("do")
     def test_post_save_button__new_values(self):
         """ New prereq data in form should change the prereqs for the parent quest."""
         self.client.force_login(self.test_teacher)
@@ -1160,8 +1157,6 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         new_quest_2 = baker.make(Quest, name="New Quest 2")
         ct = ContentType.objects.get_for_model(Quest)
 
-        old_num_prereqs = Prereq.objects.count()
-      
         forms_data = [
             {
                 "prereq_object": f"{ct.id}-{new_quest.id}",
