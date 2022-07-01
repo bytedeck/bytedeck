@@ -2,12 +2,10 @@ from dal import autocomplete
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
-from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
-from prerequisites.models import IsAPrereqMixin, Prereq
-from quest_manager.models import Quest
+from prerequisites.models import Prereq
 
 
 def popover_labels(model, field_strings):
@@ -28,30 +26,25 @@ def popover_labels(model, field_strings):
     return fields_html
 
 
-def generate_prereq_model_choice(): 
-    """A list of tuples: [(model, model_search_field), ...] for DAL widgets"""
-    models = IsAPrereqMixin.all_registered_model_classes()
-    model_choices = [(model, model.dal_autocomplete_search_fields()) for model in models]
-    return model_choices
+def hardcoded_prereq_model_choice():
+    """ Can't always dynamically load this list due to accessing contenttypes too early
+    So instead provide a hard coded list which is checked during testing to ensure it matches
+    what the dynamically loaded list would have produced """
+    from courses.models import Course, Grade, Rank
+    from quest_manager.models import Category, Quest
+    from badges.models import Badge
+    return [(Category, 'title'), (Quest, 'name'), (Course, 'title'), (Grade, 'name'), (Rank, 'name'), (Prereq, 'name'), (Badge, 'name')]
 
 
 class PrereqFormInline(autocomplete.FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    if settings.TESTING:
-        # ContentTypes are not available at this point during tests, so can't dynamically generate the model choices
-        # using the generate_prereq_model_choice() method, so hardcode for testing
-        model_choices = [(Quest, "name"), ]
-    else:
-        model_choices = generate_prereq_model_choice()
-
     prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-        model_choice=generate_prereq_model_choice(),
-        # field_id='prerequisite',
+        model_choice=hardcoded_prereq_model_choice()
     )
 
     or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-        model_choice=generate_prereq_model_choice(),
+        model_choice=hardcoded_prereq_model_choice()
     )
         
     class Meta:
