@@ -2,13 +2,12 @@ from dal import autocomplete
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
-from django import forms
-
 from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
 from prerequisites.models import IsAPrereqMixin, Prereq
+from quest_manager.models import Quest
 
 
 def popover_labels(model, field_strings):
@@ -40,20 +39,20 @@ class PrereqFormInline(autocomplete.FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
     if settings.TESTING:
-        # Use fake form fields during testing because the "Django autocomplete light" fields we want 
-        # to use break tests because ContentTypes aren't loaded yet or don't exist during testing (why?)
-        prereq_object = forms.CharField()
-        or_prereq_object = forms.CharField()
+        # ContentTypes are not available at this point during tests, so can't dynamically generate the model choices
+        # using the generate_prereq_model_choice() method, so hardcode for testing
+        model_choices = [(Quest, "name"), ]
     else:
-        # The real form fields
-        prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-            model_choice=generate_prereq_model_choice(),
-            # field_id='prerequisite',
-        )
+        model_choices = generate_prereq_model_choice()
 
-        or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
-            model_choice=generate_prereq_model_choice(),
-        )
+    prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+        model_choice=generate_prereq_model_choice(),
+        # field_id='prerequisite',
+    )
+
+    or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+        model_choice=generate_prereq_model_choice(),
+    )
         
     class Meta:
         model = Prereq
