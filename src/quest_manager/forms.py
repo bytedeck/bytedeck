@@ -102,10 +102,17 @@ class QuestForm(forms.ModelForm):
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
+        prereqs_btn = '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'quests:quest_prereqs_update\' object.id %}">' \
+            'Edit Prerequisites</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %}'
+    
         self.helper = FormHelper()
         self.helper.layout = Layout(
             HTML(cancel_btn),
             HTML(submit_btn),
+            HTML(prereqs_btn),
             Div(
                 'name',
                 'xp',
