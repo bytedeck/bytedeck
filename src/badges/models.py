@@ -1,5 +1,6 @@
 import uuid
 from collections import defaultdict
+from taggit.managers import TaggableManager
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -173,6 +174,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
     # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
 
     objects = BadgeManager()
+    tags = TaggableManager(blank=True)
 
     class Meta:
         # order_with_respect_to = 'badge_type'
