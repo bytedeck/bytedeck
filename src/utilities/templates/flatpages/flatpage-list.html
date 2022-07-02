@@ -11,21 +11,25 @@
 
 {% block content %}
 
-    <table class="table table-striped table-hover">
+    <table class="table table-striped">
         <thead class="thead-light">
             <tr class="row">
-                <th class="col-sm-8" scope="col">Title</th>
-                <th class="col-sm-4" scope="col">Action</th>
+                <th class="col-sm-5" scope="col">Title</th>
+                <th class="col-sm-4" scope="col">Registration Required</th>
+                <th class="col-sm-3" scope="col">Action</th>
             </tr>
         </thead>
 
         <tbody>
             {% for page in flatpages %}
                 <tr class="row">
-                    <td class="class-sm-8">
+                    <td class="class-sm">
                         {{page.title}}
                     </td>
-                    <td class="class-sm-4">
+                    <td class="class-sm">
+                        {{page.registration_required}}
+                    </td>
+                    <td class="class-sm">
                         <a class="btn btn-info" href="{{ page.get_absolute_url }}" role="button" title="View page">
                             <i class="fa fa-eye"></i>
                         </a>

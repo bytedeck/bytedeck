@@ -1,5 +1,6 @@
 import json
 import uuid
+
 from django.utils.decorators import method_decorator
 from django.views.generic.list import ListView
 
@@ -23,6 +24,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
 from notifications.signals import notify
+from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -172,6 +174,10 @@ class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         form.fields['new_quest_prerequisite'].queryset = qs.exclude(id=self.object.id)
         return form
 
+
+class QuestPrereqsUpdate(ObjectPrereqsFormView):
+    model = Quest
+    
 
 class QuestCopy(QuestCreate):
 

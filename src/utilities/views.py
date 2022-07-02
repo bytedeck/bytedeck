@@ -1,15 +1,16 @@
 from django.shortcuts import render
 
-from django.urls import reverse, reverse_lazy
-from django.views.generic import ListView
-from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.contrib.admin.views.decorators import staff_member_required
-from django.utils.decorators import method_decorator
-from django.contrib.sites.models import Site
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.flatpages.models import FlatPage
+from django.contrib.sites.models import Site
+from django.urls import reverse, reverse_lazy
+from django.utils.decorators import method_decorator
+from django.views.generic.edit import CreateView, UpdateView, DeleteView
+from django.views.generic.list import ListView
 
-from .models import VideoResource
-from utilities.forms import VideoForm, CustomFlatpageForm
+from .models import MenuItem, VideoResource
+from utilities.forms import MenuItemForm, VideoForm, CustomFlatpageForm
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 
 
@@ -21,6 +22,43 @@ def videos(request):
         form.save()
     context = {'videos': videos, 'heading': "Video Resources", 'form': form}
     return render(request, 'utilities/videos.html', context)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MenuItemList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+    model = MenuItem
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MenuItemCreate(NonPublicOnlyViewMixin, CreateView):
+    model = MenuItem
+    form_class = MenuItemForm
+    success_url = reverse_lazy('utilities:menu_items')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Create New Menu Item'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MenuItemUpdate(NonPublicOnlyViewMixin, UpdateView):
+    model = MenuItem
+    form_class = MenuItemForm
+    success_url = reverse_lazy('utilities:menu_items')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Menu Item'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MenuItemDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = MenuItem
+    success_url = reverse_lazy('utilities:menu_items')
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -70,3 +108,6 @@ class FlatPageListView(NonPublicOnlyViewMixin, ListView):
     model = FlatPage
     template_name = "flatpages/flatpage-list.html"
     context_object_name = 'flatpages'
+
+    def get_queryset(self):
+        return FlatPage.objects.all().order_by("title")

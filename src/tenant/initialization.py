@@ -6,42 +6,55 @@ among other issues
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from courses.models import Grade, Rank, Course, Block, MarkRange
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from utilities.models import MenuItem
 
 User = get_user_model()
 
 
 def load_initial_tenant_data():
-    user = create_superuser()
+    create_superusers()
     create_site_config_object()
     create_initial_course()
-    create_initial_blocks(user)
+    create_initial_blocks()
     create_initial_markranges()
     create_initial_ranks()
     create_initial_grades()
     create_initial_badge_types()
     create_initial_badge_rarities()
     create_initial_badges()
+    create_initial_menu_items()
     create_orientation_campaign() 
 
     from notifications.tasks import create_email_notification_tasks
     create_email_notification_tasks()  
 
 
-def create_superuser():
-    # print("Creating default super user of the tenant %s - %s." % (tenant.schema_name, tenant.domain_url))
-    user = User.objects.create_superuser(
-        username=settings.TENANT_DEFAULT_SUPERUSER_USERNAME, 
+def create_superusers():
+    # BYTEDECK ADMIN
+    User.objects.create_superuser(
+        username=settings.TENANT_DEFAULT_ADMIN_USERNAME, 
         email='admin@example.com', 
-        password=settings.TENANT_DEFAULT_SUPERUSER_PASSWORD
+        password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
-    return user
+    # OWNER OF THE DECK
+    # get_or_create IS HERE BECAUSE siteconfig.models.get_default_deck_owner() will run before this file (initialization.py)
+    # although siteconfig.models.get_default_deck_owner() will not run before this every time based on manual testing
+    owner, _ = User.objects.get_or_create(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
 
+    # set owner vars since siteconfig.models.get_deck_owner() wont set all vars and/or has not created model yet
+    owner.email = 'owner@example.com'
+    owner.set_password(settings.TENANT_DEFAULT_OWNER_PASSWORD)
+    owner.is_superuser = True
+    owner.is_staff = True
+    owner.save()
+        
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """
@@ -52,8 +65,9 @@ def create_initial_course():
     Course.objects.create(title="Default")
 
 
-def create_initial_blocks(user):
-    Block.objects.create(block="Default", current_teacher=user)
+def create_initial_blocks():
+    default_user = SiteConfig.get().deck_owner
+    Block.objects.create(block="Default", current_teacher=default_user)
 
 
 def create_initial_markranges():
@@ -204,6 +218,17 @@ def create_initial_badges():
             import_id='bb12b3d1-ce6e-40e3-a411-f43aadfe571a'
         ),
     ])
+
+
+def create_initial_menu_items():
+    MenuItem.objects.create(
+        label="Ranks List",
+        fa_icon="star-o",
+        url=reverse('courses:ranks'),
+        open_link_in_new_tab=False,
+        sort_order=0,
+        visible=True,
+    )
 
 
 def create_orientation_campaign():

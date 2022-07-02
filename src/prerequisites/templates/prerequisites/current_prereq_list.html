@@ -1,0 +1,8 @@
+<div class="prereq-list">
+    <ul class='left-aligned'>
+    {% for p in object.prereqs %}
+        <li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>
+    {% empty %}<li>None</li>
+    {% endfor %}
+    </ul>
+</div>

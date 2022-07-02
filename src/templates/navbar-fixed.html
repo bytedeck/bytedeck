@@ -240,7 +240,7 @@
                         {% menu_list %}
                         {% if request.user.is_staff %}
                             <li role="separator" class="divider"></li>
-                            <li><a href="/admin/utilities/menuitem/"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a></li>
+                            <li><a href="{% url 'utilities:menu_items' %}"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a></li>
                         {% endif %}
                         <li role="separator" class="divider visible-xs-block"></li>
                     </ul>

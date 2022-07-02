@@ -1,7 +1,10 @@
 from django_tenants.test.cases import TenantTestCase
+from django.conf import settings
+from django.contrib.auth import get_user_model
 
 from badges.models import BadgeRarity
 from courses.models import MarkRange
+from utilities.models import MenuItem
 
 
 class TenantInitializationTest(TenantTestCase):
@@ -24,3 +27,30 @@ class TenantInitializationTest(TenantTestCase):
         """ 
         for name in ["A", "B", "Pass"]:
             self.assertTrue(MarkRange.objects.filter(name=name).exists())
+
+    def test_default_menu_items_created(self):
+        self.assertTrue(MenuItem.objects.filter(label="Ranks List").exists())
+
+    def test_superusers_created(self):
+        """ 
+            Check if superusers are created, and username/password is correct
+        """ 
+        User = get_user_model()
+
+        usernames = ['admin', 'owner']
+        passwords = [settings.TENANT_DEFAULT_ADMIN_PASSWORD, settings.TENANT_DEFAULT_OWNER_PASSWORD]
+        accounts = {usernames[i]: passwords[i] for i in range(len(usernames))}
+
+        for username, password in accounts.items():
+            
+            # Check if in DB
+            user = User.objects.filter(username=username).first()
+            self.assertTrue(user is not None)
+
+            # Check if superusers and is_staff
+            self.assertTrue(user.is_superuser)
+            self.assertTrue(user.is_staff)
+            
+            # Check if can login
+            success = self.client.login(username=username, password=password)
+            self.assertTrue(success)

@@ -37,11 +37,21 @@
 {#       href="{% url 'quests:quests' %}">#}
 {#      <i class="fa fa-shield fa-fw"></i>&nbsp; Quests#}
 {#    </a>#}
-      <a id="achievements-menu"
-       class="list-group-item {% if '/achievements/' in request.path_info %}active{% endif %}"
-       href="{% url 'badges:list' %}">
-      <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges
-    </a>
+      {% if request.user.is_staff %}
+        <div class="clearfix">
+          <a id="badges-menu"
+          class="list-group-item left-side {% if '/badges/' in request.path_info %}active{% endif %}"
+          href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+          <a title="Badge Types" class="list-group-item right-side text-center
+          {% if 'badges/types/' in request.path_info %}active{% endif %}"
+          href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i></a>
+        </div>
+      {% else %}
+        <a id="badges-menu"
+        class="list-group-item {% if '/badges/' in request.path_info %}active{% endif %}"
+        href="{% url 'badges:list' %}">
+        <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+      {% endif %}
     <a id="maps-menu" class="list-group-item
         {% if '/maps/' in request.path_info %}active{% endif %}"
        href="{% url 'maps:primary' %}">

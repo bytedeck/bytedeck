@@ -1,10 +1,12 @@
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.flatpages.forms import FlatpageForm
+from django.utils.translation import gettext, gettext_lazy as _
 from django_summernote.widgets import SummernoteInplaceWidget
 
-from utilities.models import VideoResource
+from utilities.models import VideoResource, MenuItem
 
 
 class VideoForm(forms.ModelForm):
@@ -102,3 +104,49 @@ class CustomFlatpageForm(FlatpageForm):
             # https://code.djangoproject.com/ticket/24453
             'sites': forms.MultipleHiddenInput(),
         }
+
+
+class MenuItemForm(forms.ModelForm):
+
+    class Meta:
+        model = MenuItem
+        fields = '__all__'
+
+    # needed to accept relative urls on frontend, URLOrRelativeURLField() doesn't work for some reason...
+    # duplicated from django.contrib.flatpages.forms.FlatPageForm save for url help text
+    url = forms.RegexField(
+        label=_(MenuItem._meta.get_field('url').verbose_name),
+        max_length=100,
+        regex=r'^[-\w/\.~]+$',
+        help_text=_(MenuItem._meta.get_field('url').help_text),
+        error_messages={
+            "invalid": _(
+                "This value must contain only letters, numbers, dots, "
+                "underscores, dashes, slashes or tildes."
+            ),
+        },
+    )
+
+    # checks if a trailing slash is required according to the project settings
+    # duplicated from django.contrib.flatpages.forms.FlatPageForm
+    def _trailing_slash_required(self):
+        return (
+            settings.APPEND_SLASH and
+            'django.middleware.common.CommonMiddleware' in settings.MIDDLEWARE
+        )
+
+    # checks for leading or trailing urls and displays according error text
+    # duplicated from django.contrib.flatpages.forms.FlatPageForm
+    def clean_url(self):
+        url = self.cleaned_data['url']
+        if not url.startswith('/'):
+            raise ValidationError(
+                gettext("URL is missing a leading slash."),
+                code='missing_leading_slash',
+            )
+        if self._trailing_slash_required() and not url.endswith('/'):
+            raise ValidationError(
+                gettext("URL is missing a trailing slash."),
+                code='missing_trailing_slash',
+            )
+        return url

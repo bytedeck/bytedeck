@@ -16,6 +16,10 @@
     <h3 class="panel-title">
       <i class="pull-right fa {{badge_type.fa_icon}}"></i>
       {{badge_type.name}}s
+      {% if request.user.is_staff %}
+        &nbsp;&nbsp;<a class="btn btn-xs btn-warning"
+        href="{% url 'badges:badge_type_update' badge_type.id %}" role="button"><i class="fa fa-edit"></i></a>
+      {% endif %}
     </h3>
   </div>
   <div class="panel-body panel-body-badge">

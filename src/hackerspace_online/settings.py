@@ -82,6 +82,11 @@ SHARED_APPS = (
 )
 
 TENANT_APPS = (
+    # https://django-autocomplete-light.readthedocs.io/en/master/install.html
+    'dal',  # must come before grapelli and django.contrib.admin
+    'dal_select2',  # must come before grapelli and django.contrib.admin
+    'dal_queryset_sequence',  # https://django-autocomplete-light.readthedocs.io/en/master/gfk.html#autocompletion-for-genericforeignkey
+
     'django.contrib.auth',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -119,8 +124,14 @@ TENANT_APPS = (
 
 
 INSTALLED_APPS = (
+    # https://django-autocomplete-light.readthedocs.io/en/master/install.html
+    'dal',  # must come before grapelli and django.contrib.admin
+    'dal_select2',  # must come before grapelli and django.contrib.admin
+    'dal_queryset_sequence',  # https://django-autocomplete-light.readthedocs.io/en/master/gfk.html#autocompletion-for-genericforeignkey
+
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
+    
     'django_tenants',
     'tenant.apps.TenantConfig',
 
@@ -457,8 +468,11 @@ DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.
 TENANT_MODEL = "tenant.Tenant"
 TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
-TENANT_DEFAULT_SUPERUSER_USERNAME = env('TENANT_DEFAULT_SUPERUSER_USERNAME')
-TENANT_DEFAULT_SUPERUSER_PASSWORD = env('TENANT_DEFAULT_SUPERUSER_PASSWORD')
+TENANT_DEFAULT_ADMIN_USERNAME = env('TENANT_DEFAULT_ADMIN_USERNAME')
+TENANT_DEFAULT_ADMIN_PASSWORD = env('TENANT_DEFAULT_ADMIN_PASSWORD')
+
+TENANT_DEFAULT_OWNER_USERNAME = env('TENANT_DEFAULT_OWNER_USERNAME')
+TENANT_DEFAULT_OWNER_PASSWORD = env('TENANT_DEFAULT_OWNER_PASSWORD')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.

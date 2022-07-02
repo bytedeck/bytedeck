@@ -83,3 +83,15 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_password_reset_view(self):
         self.assert200('account_reset_password')
+    
+    def test_achievements_redirect_to_badges_views(self):
+        # log in a teacher
+        staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
+        self.client.force_login(staff_user)
+
+        # assert (most) relevant badge views are redirected to from old urls
+        self.assertRedirects(self.client.get('/achievements/'), reverse('badges:list'))
+        self.assertRedirects(self.client.get('/achievements/create/'), reverse('badges:badge_create'))
+        self.assertRedirects(self.client.get('/achievements/1'), reverse('badges:badge_detail', args=[1]))
+        self.assertRedirects(self.client.get('/achievements/1/edit/'), reverse('badges:badge_update', args=[1]))
+        self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
