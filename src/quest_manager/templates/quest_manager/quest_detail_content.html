@@ -20,6 +20,7 @@
           <li><h4>XP: {{quest.xp}}{% if quest.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}
           </h4></li>
           <li>Campaign: {% if quest.campaign %}{{ quest.campaign }} {% else %}-{% endif %}</li>
+          <li>Tags: {{ quest.tags.all|join:", " }}</li>
           <li>Expiry: {{quest.date_expired}}</li>
         </ul>
       </div>

@@ -12,6 +12,8 @@ from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
 
+from taggit.managers import TaggableManager
+
 from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
@@ -422,6 +424,8 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
                                        object_id_field='or_prereq_object_id')
 
     objects = QuestManager()
+
+    tags = TaggableManager(blank=True)
 
     @classmethod
     def get_model_name(cls):
