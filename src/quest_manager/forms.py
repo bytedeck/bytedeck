@@ -1,6 +1,6 @@
 
 from datetime import date
-# from dal import autocomplete
+from dal import autocomplete
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -10,11 +10,12 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from django_summernote.widgets import SummernoteInplaceWidget
-from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
+from django_select2.forms import ModelSelect2MultipleWidget
+from tags.forms import BootstrapTaggitSelect2Widget
 
 from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
-from .models import Quest
+from .models import Category, Quest
 
 
 class BadgeLabel:
@@ -32,19 +33,26 @@ class QuestForm(forms.ModelForm):
         # to_field_name="name",
         required=False,
         queryset=Quest.objects.all(),
-        widget=ModelSelect2Widget(
-            model=Quest,
-            search_fields=['name__icontains'],
-        ),
+        # widget=ModelSelect2Widget(
+        #     model=Quest,
+        #     search_fields=['name__icontains'],
+        # ),
+        widget=autocomplete.ModelSelect2(url='quests:quest_autocomplete'),
     )
 
     new_badge_prerequisite = forms.ModelChoiceField(
-        widget=ModelSelect2Widget(
-            model=Badge,
-            search_fields=['name__icontains'],
-        ),
+        # widget=ModelSelect2Widget(
+        #     model=Badge,
+        #     search_fields=['name__icontains'],
+        # ),
         queryset=Badge.objects.all(),
         # to_field_name="name",
+        required=False,
+        widget=autocomplete.ModelSelect2(url='badges:badge_autocomplete'),
+    )
+
+    campaign = forms.ModelChoiceField(
+        queryset=Category.objects.all(),
         required=False,
     )
 
@@ -84,11 +92,14 @@ class QuestForm(forms.ModelForm):
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
-            'campaign': Select2Widget(),
-            'common_data': Select2Widget(),
-            'specific_teacher_to_notify': Select2Widget(),
+
+            # TODO: Campaign Autocomplete
+            # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
+            # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
+            # 'specific_teacher_to_notify': Select2Widget(),
+
             # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
-            # 'tags': autocomplete.TaggitSelect2('tags-autocomplete'),
+            'tags': BootstrapTaggitSelect2Widget()
         }
 
     def __init__(self, *args, **kwargs):
