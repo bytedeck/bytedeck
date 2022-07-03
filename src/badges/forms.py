@@ -1,3 +1,5 @@
+from dal import autocomplete
+
 from django import forms
 from django.contrib.auth.models import User
 from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
@@ -6,12 +8,30 @@ from profile_manager.models import Profile
 from .models import Badge, BadgeAssertion
 
 
+class CrispyTaggitSelect2(autocomplete.TaggitSelect2):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        print(self.media)
+
+    class Media:
+        js = ('/static/js/select2-set-theme-bootstrap.js',)
+        css = {
+            'all': ('https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css',)
+        }
+
+
 class BadgeForm(forms.ModelForm):
 
     class Meta:
         model = Badge
         fields = '__all__'
         # exclude = None
+
+        widgets = {
+            'tags': CrispyTaggitSelect2('tags-autocomplete')
+        }
 
 
 class BadgeAssertionForm(forms.ModelForm):

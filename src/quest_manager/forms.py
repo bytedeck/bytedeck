@@ -1,5 +1,6 @@
 
 from datetime import date
+# from dal import autocomplete
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -23,12 +24,6 @@ class BadgeLabel:
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
     pass
-
-
-class QuestPrereqForm(forms.ModelForm):
-    class Meta:
-        model = Quest
-        fields = ('name',)
 
 
 class QuestForm(forms.ModelForm):
@@ -91,7 +86,9 @@ class QuestForm(forms.ModelForm):
             'time_expired': TimePickerInput(),
             'campaign': Select2Widget(),
             'common_data': Select2Widget(),
-            'specific_teacher_to_notify': Select2Widget()
+            'specific_teacher_to_notify': Select2Widget(),
+            # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
+            # 'tags': autocomplete.TaggitSelect2('tags-autocomplete'),
         }
 
     def __init__(self, *args, **kwargs):
