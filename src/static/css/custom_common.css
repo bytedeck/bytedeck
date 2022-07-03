@@ -1018,18 +1018,40 @@ div.btn-group.action-btn-group {
     padding: 8px 12px !important;
     font-size: 14px !important;
     line-height: 1.42857143 !important;
-  }
-  
-  .select2-container--bootstrap .select2-selection--multiple {
+}
+
+.select2-container--bootstrap .select2-selection--multiple {
     min-height: 38px !important;
     padding-top: 2px !important;
-  }
-  
-  .select2-container--bootstrap .select2-search--dropdown .select2-search__field {
+}
+
+.select2-container--bootstrap .select2-search--dropdown .select2-search__field {
     padding-left: 8px;
-  }
-  
-  .select2-container .select2-selection--single .select2-selection__rendered,
-  .select2-container--bootstrap .select2-selection--single .select2-selection__rendered {
+}
+
+.select2-container .select2-selection--single .select2-selection__rendered,
+.select2-container--bootstrap .select2-selection--single .select2-selection__rendered {
     padding-left: 0px !important;
-  }
+}
+
+.select2-container--bootstrap .select2-results__group {
+    color: #333 !important;
+}
+
+/* .select2-container .select2-selection--single .select2-selection__rendered {
+padding-right: 20px !important;
+} */
+
+ /*****  PREREQUISITE FORMS *************/
+.table td > .controls > .numberinput.form-control {
+    padding-right: 3px;
+    padding-left: 3px;
+    text-align: center;
+}
+
+#id_prereq_formset td[id$="DELETE"] {
+    text-align: right;
+}
+
+
+

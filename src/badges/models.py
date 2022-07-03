@@ -148,7 +148,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.TextField(blank=True, null=True)
     series = models.ForeignKey(BadgeSeries, blank=True, null=True, on_delete=models.SET_NULL)
-    badge_type = models.ForeignKey(BadgeType, on_delete=models.CASCADE)
+    badge_type = models.ForeignKey(BadgeType, on_delete=models.PROTECT)
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True)  # needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)

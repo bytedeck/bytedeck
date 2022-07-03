@@ -4,6 +4,18 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.16.0] 2022-07-01 - Summer student contribution 02
+* "Deck owner" field added to the Site Configuration form, indicating which user "owns" the deck.  This field can only be changed by the user currently listed as deck owner.  For future use. [#637](https://github.com/bytedeck/bytedeck/issues/637)
+* Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
+  - Badge and Quest prerequisites (edit buttons can be dound beside each item's prereq list)
+  - Menu Items (these appear in the ☰ menu at the top right)
+  - Badge Types (edit button appears beside each badge type on the Badges page, and secondary Badge menu item on the main menu to the left)
+* Minor tweaks and bugfixes:
+  - Broken images and html in notifications [#755](https://github.com/bytedeck/bytedeck/issues/755)
+  - Added contact link to site footer [#542](https://github.com/bytedeck/bytedeck/issues/542)
+  - Change "/achievements/" urls to "/badges/" for consistancy.  Old links will still work via redirect [#997](https://github.com/bytedeck/bytedeck/issues/997)
+  - Fixed broken deletion of blocks. Fix hidden blocks. [#855](https://github.com/bytedeck/bytedeck/issues/855)
+
 ### [1.15.0] 2022-06-09 - Summer student contribution 01
 * Custom webpages can now be created from the Admin > Custom Pages area.
 * Context-specific feedback to students when they see no available quests. [#817](https://github.com/bytedeck/bytedeck/issues/817)

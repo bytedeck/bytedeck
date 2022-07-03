@@ -6,11 +6,35 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
+from django.conf import settings
 
 from django_tenants.utils import get_public_schema_name
 from redis import exceptions as redis_exceptions
 
 User = get_user_model()
+
+
+def get_default_deck_owner():
+    """ 
+        This is run once during site initialization
+
+        Also need to initialize owner if none exists yet.
+        (Since initialization.py loads after everything else)
+    """ 
+    
+    # handle existing decks by getting an existing staff user that is NOT bytedeck_admin:
+    admin_username = settings.TENANT_DEFAULT_ADMIN_USERNAME
+    non_admin_staff_qs = User.objects.filter(is_staff=True).exclude(username=admin_username)
+
+    if non_admin_staff_qs.exists():  # i.e. there are more staff than just the admin user
+        return non_admin_staff_qs.first().pk  # return the first one (assumes sorted by pk, so should be the oldest one?)
+        
+    else:  # no other staff users available yet, so we'll have to create them
+        deck_owner = User.objects.create(
+            username=settings.TENANT_DEFAULT_OWNER_USERNAME,
+            is_staff=True,
+        )
+        return deck_owner.pk
 
 
 def get_superadmin():
@@ -145,6 +169,11 @@ class SiteConfig(models.Model):
         help_text="By default, if a student has more than the expected XP in their course \
             (for the amount of time that has passed in the semester so far) their mark will show greater than 100%.  \
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
+    )
+
+    deck_owner = models.ForeignKey(
+        User, on_delete=models.PROTECT, default=get_default_deck_owner, limit_choices_to={'is_staff': True}, related_name="deck_owner",
+        help_text="Only the current deck owner can change this setting."
     )
 
     def __str__(self):

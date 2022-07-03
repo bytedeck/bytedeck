@@ -1,0 +1,109 @@
+{% extends "prerequisites/base.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block head %}
+  {{ form.media }}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
+{% endblock %}
+
+{% block heading_inner %}Advanced Prerequisites Form{% endblock %}
+
+{% block content %}
+<h3>Editing prereqs for: {{object.prereq_parent_str}}</h3>
+
+<div>Current prerequisites:</div>
+{% include 'prerequisites/current_prereq_list.html' %}
+
+{% crispy form form.helper %}
+
+<hr>
+<p>Each row in the form above is considered a prerequisite.  If there are multiple prerequisites, then they must all be met before the student 
+  will earn: <i>{{object.prereq_parent_str}}</i></p>
+<div class="panel panel-default">
+  <div class="panel-heading"><h3 class="panel-title">Form field descriptions</h3></div>
+  <div class="panel-body">
+    <dl class="dl-horizontal">
+      <dt>Required Element</dt>
+      <dd>The object (badge, quest, rank, etc.) that students must achieve to meet the prerequisite and earn: <i>{{object.prereq_parent_str}}</i>.</dd>
+      <br>
+      <dt>Count</dt>
+      <dd>The minimum number of times the Required Element must be achieved.  This can be used for badges, or quests that are repeatable.  
+        For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 3, then they will meet the prerequisite if 
+        they have earned 3 or more Nickels. For most element types this field is ignored.</dd>
+      <br>
+      <dt>NOT</dt>
+      <dd>This inverts the requirement.  For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 1, 
+        then they will meet the prerequisite as long as they have NOT earned the Nickel badge.  If <b>Count</b> = 3, then 
+        they will meet the prerequisite as long as they have NOT earned three or more Nickel badges, i.e. they have only earned 0, 1 or 2.</dd>
+      <br>
+      <dt>Alternate Element</dt>
+      <dd>Set this if you want to provide students an alternate way of meeting a prerequisite. This prerequisite will be considered met if either
+        the <b>Required Element</b> or the <b>Alternate Element</b>, or both, are met.
+      </dd>
+      <br>
+      <dt>(Alternate) Count</dt>
+      <dd>As above, but for the <b>Alternate Element</b></dd>
+      <br>
+      <dt>(Alternate) NOT</dt>
+      <dd>As above, but for the <b>Alternate Element</b></dd>
+      <br>
+      <dt>Delete</dt>
+      <dd>If this field is checked, the prerequisite will be deleted when the form is saved.</b></dd>
+    </dl>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block js %}
+<script>
+  $.fn.select2.defaults.set( "theme", "bootstrap" );
+    
+  // Button to dynamically add additional forms to the formset
+  var $addFormBtn = $("<a>").attr("id", "add-form");
+  $addFormBtn.html('Add Another Prerequisite <i class="fa fa-plus-circle"></i>');
+  $addFormBtn.addClass("btn btn-primary");
+  $("div.form-actions").append($addFormBtn)
+
+  $('#add-form').click(function() {
+    var $totalFormsInput = $('#id_prerequisites-prereq-parent_content_type-parent_object_id-TOTAL_FORMS')
+    var numForms = $totalFormsInput.val();
+    // forms are zero index (e.g. 0, 1), so new form index = numForms (e.g. 2)
+    var $newRow = $("<tr>").append($('tr.empty-form').html().replace(/__prefix__/g, numForms));
+    $('#id_prereq_formset table>tbody').append($newRow);
+    $totalFormsInput.val(parseInt(numForms) + 1);
+  });
+
+  // When DELETE buttons are ticked, highlight the row in red
+  // also do when page loads in case they refresh page
+  $( document ).ready(function() {
+    $('input[id$="DELETE"]').each(function() {
+      highlightRowsToDelete($(this));
+    });
+  });
+
+  $('input[id$="DELETE"]').click(function() {
+    highlightRowsToDelete($(this));
+  });
+
+  function highlightRowsToDelete($checkbox) {
+    if ($checkbox.is(':checked')) {
+      $checkbox.closest('tr').addClass('danger');
+    } else {
+      $checkbox.closest('tr').removeClass('danger');
+    }
+  }
+
+  // Change Delete to a trash can
+  $( document ).ready(function() {
+    $("[for='id_prerequisites-prereq-parent_content_type-parent_object_id-0-DELETE']").addClass(
+      // '<i class="fa fa-lg fa-trash-o text-danger"></i>'
+      'text-danger'
+    )
+  });
+
+
+</script>
+{% endblock %}

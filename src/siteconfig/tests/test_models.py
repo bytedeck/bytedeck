@@ -4,12 +4,16 @@ from django.core.cache import cache
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.timezone import localtime
+from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
 
-from siteconfig.models import SiteConfig
+from siteconfig.models import SiteConfig, get_default_deck_owner
+
+User = get_user_model()
 
 
 class SiteConfigModelTest(TenantTestCase):
@@ -103,3 +107,32 @@ class SiteConfigModelTest(TenantTestCase):
         cache_time_expiration = localtime() + timedelta(days=1)
         with freeze_time(cache_time_expiration, tz_offset=0):
             self.assertIsNone(cache.get(SiteConfig.cache_key()))
+
+    def test_deck_owner__correct_default_value(self):
+        """
+            Test to make sure new decks have the expected deck_owner after initialization, as set in settings.py via .env
+        """
+        user_owner = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME,)
+
+        # make sure user_owner is the siteconfig.deck_owner and default_deck_owner
+        self.assertEqual(user_owner.pk, get_default_deck_owner())
+        self.assertEqual(user_owner.pk, self.config.deck_owner.pk)
+
+    def test_get_default_deck_owner__returns_correct_value(self):
+        """ 
+            Test if get_deck_owner either gets an already created owner user or creates one
+        """ 
+        # owner already exists since tenantSetup runs initialization.py
+        owner_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME, is_superuser=True, is_staff=True)
+        old_owner_pk = owner_user.pk
+
+        # if non_admin_staff_qs.exists()
+        self.assertEqual(owner_user.pk, get_default_deck_owner())
+
+        # else
+        # remove deck_owner model protection from owner
+        SiteConfig.get().delete()
+        owner_user.delete()
+
+        self.assertNotEqual(get_default_deck_owner(), old_owner_pk) 
+        self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk
