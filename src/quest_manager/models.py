@@ -17,6 +17,7 @@ from siteconfig.models import SiteConfig
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
+from tags.models import TagsModelMixin
 # from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
@@ -364,7 +365,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
+class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \

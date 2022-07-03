@@ -15,6 +15,7 @@ from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
+from tags.models import TagsModelMixin
 
 
 # Create your models here.
@@ -141,7 +142,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(IsAPrereqMixin, HasPrereqsMixin, models.Model):
+class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)

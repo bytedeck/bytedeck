@@ -1,5 +1,6 @@
 
 from datetime import date
+# from dal import autocomplete
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -23,12 +24,6 @@ class BadgeLabel:
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
     pass
-
-
-class QuestPrereqForm(forms.ModelForm):
-    class Meta:
-        model = Quest
-        fields = ('name',)
 
 
 class QuestForm(forms.ModelForm):
@@ -59,7 +54,7 @@ class QuestForm(forms.ModelForm):
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
-                  'map_transition',
+                  'map_transition', 'tags',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
@@ -91,7 +86,9 @@ class QuestForm(forms.ModelForm):
             'time_expired': TimePickerInput(),
             'campaign': Select2Widget(),
             'common_data': Select2Widget(),
-            'specific_teacher_to_notify': Select2Widget()
+            'specific_teacher_to_notify': Select2Widget(),
+            # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
+            # 'tags': autocomplete.TaggitSelect2('tags-autocomplete'),
         }
 
     def __init__(self, *args, **kwargs):
@@ -128,6 +125,7 @@ class QuestForm(forms.ModelForm):
                 'common_data',
                 'max_repeats',
                 'hours_between_repeats',
+                'tags',
                 Accordion(
                     AccordionGroup(
                         "Basic Prerequisites",
