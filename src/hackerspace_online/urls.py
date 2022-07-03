@@ -17,7 +17,7 @@ from django.conf import settings
 from django.conf.urls import url
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include
+from django.urls import include, path
 
 from badges.views import AchievementRedirectView
 from hackerspace_online import views
@@ -53,6 +53,8 @@ urlpatterns += [
     url(r'^decks/', include('tenant.urls', namespace='decks')),
     url(r'^prerequisites/', include('prerequisites.urls')),
 
+    url(r'^tags/', include('tags.urls', namespace='tags')),
+
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth
@@ -68,9 +70,6 @@ urlpatterns += [
     url(r'^select2/', include('django_select2.urls')),
     # Browsers looks for favicon.ico at root, redirect them to proper favicon to prevent constant 404s
     url(r'^favicon\.ico$', views.FaviconRedirectView.as_view()),
-
-    # Tag autocomplete
-    url(r'^tags/autocomplete/$', views.TagAutocomplete.as_view(), name='tags-autocomplete'),
 ]
 
 

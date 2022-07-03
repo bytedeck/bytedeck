@@ -95,10 +95,3 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(self.client.get('/achievements/1'), reverse('badges:badge_detail', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/edit/'), reverse('badges:badge_update', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
-
-
-class TagViewTests(ViewTestUtilsMixin, TenantTestCase):
-
-    def test_tag_autocomplete_view(self):
-        """ Make sure django-autocomplete-light view for tag autocomplete widget is accessible"""
-        self.assert200('tag-autocomplete')

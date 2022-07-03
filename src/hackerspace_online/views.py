@@ -1,6 +1,3 @@
-from dal import autocomplete
-from taggit.models import Tag
-
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import connection
 from django.shortcuts import redirect, render
@@ -83,19 +80,3 @@ class CustomPasswordResetFromKeyView(PasswordResetFromKeyView):
 
 def landing(request):
     return render(request, "index.html", {})
-
-
-class TagAutocomplete(autocomplete.Select2QuerySetView):
-    def get_queryset(self):
-        # Don't forget to filter out results depending on the visitor !
-        print("Self", self)
-        print("request", self.request)
-        if not self.request.user.is_authenticated:
-            return Tag.objects.none()
-
-        qs = Tag.objects.all()
-
-        if self.q:
-            qs = qs.filter(name__istartswith=self.q)
-
-        return qs

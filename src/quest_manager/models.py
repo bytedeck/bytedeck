@@ -12,13 +12,12 @@ from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
 
-from taggit.managers import TaggableManager
-
 from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
+from tags.models import TagsModelMixin
 # from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
@@ -366,7 +365,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
+class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -424,8 +423,6 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
                                        object_id_field='or_prereq_object_id')
 
     objects = QuestManager()
-
-    tags = TaggableManager(blank=True)
 
     @classmethod
     def get_model_name(cls):
