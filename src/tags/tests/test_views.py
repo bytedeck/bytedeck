@@ -36,3 +36,33 @@ class TagAutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
         json_results = response.json()['results']
         self.assertEqual(len(json_results), 1)
         self.assertEqual(json_results[0]['text'], 'test-tag')
+
+
+class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        self.test_password = "password"
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password=self.test_password)
+
+        self.tag = Tag.objects.create(name="test-tag")
+
+    def test_list_view__anonymous(self):
+        """ Make sure the list view is not accessible to unauthenticated users"""
+        self.assert302('tags:list')
+
+    def test_list_view__authenticated(self):
+        """ Make sure the list view is accessible to authenticated users"""
+        self.client.force_login(self.test_student)
+        self.assert200('tags:list')
+
+    def test_detail_view__anonymous(self):
+        """ Make sure the detail view is not accessible to unauthenticated users"""
+        self.assert302('tags:detail', args=[self.tag.pk])
+
+    def test_detail_view__authenticated(self):
+        """ Make sure the detail view is accessible to authenticated users"""
+        self.client.force_login(self.test_student)
+        self.assert200('tags:detail', args=[self.tag.pk])

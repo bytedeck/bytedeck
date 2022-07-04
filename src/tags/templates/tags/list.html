@@ -1,0 +1,60 @@
+{% extends "tags/base.html" %}
+{% load static %}
+
+{% block head %}
+<link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
+<script src="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.js"></script>
+{% endblock %}
+
+{% block heading_inner %}
+    Tags
+{% endblock %}
+
+{% block content %}
+
+    <table 
+        data-toggle='table'
+        data-search='true'
+        data-classes="table table-striped"
+        data-pagination='true'
+        data-page-size=15
+        data-page-list="[15, 50, 100, all]"
+    >
+        <thead>
+            <tr>
+                <th data-sortable='true' data-field='tag'>Tag</th>
+                <!-- <th class="col-sm-4" scope="col">Registration Required</th> -->
+                <th data-searchable='false' data-field='action'>Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for tag in object_list %}
+                <tr>
+                    <td><a href="{% url 'tags:detail' tag.id %}">{{tag.name}}</a></td>
+                    <!-- <td class="class-sm">
+                        {{page.registration_required}}
+                    </td> -->
+                    <td>
+                        Add later
+                        <!-- <a class="btn btn-info" href="{{ page.get_absolute_url }}" role="button" title="View page">
+                            <i class="fa fa-eye"></i>
+                        </a>
+                        {% if request.user.is_staff %}
+                                <a class="btn btn-warning" href="{% url 'utilities:flatpage_edit' pk=1 %}" role="button" title="Edit this page">
+                                    <i class="fa fa-edit"></i>
+                                </a>
+                                <a class="btn btn-danger" href="{% url 'utilities:flatpage_delete' pk=1 %}" role="button" title="Delete this page">
+                                    <i class="fa fa-trash-o"></i>
+                                </a>
+                        {% endif %} -->
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}
