@@ -51,7 +51,6 @@ def generate_form_data(model=None, model_form=None, **kwargs):
     if model is None and model_form is None:
         raise ValueError('one of these arguments is required: model, model_form')
     
-    data = None
     fields = []
     exclude = []
     if model_form is not None:  # should default to model_form since it has more data specifically fields + exclude
@@ -61,13 +60,13 @@ def generate_form_data(model=None, model_form=None, **kwargs):
         exclude = model_form._meta.exclude or []
 
     data = baker.prepare(model, **kwargs,)
-    
+
     json_data = serializers.serialize('json', [data])
     json_data = json.loads(json_data)[0]["fields"]
-    json_data = {key: item or "" for key, item in json_data.items()}  # replaces None with empty string
+    json_data = {key: item if item is not None else "" for key, item in json_data.items()}  # replaces None with empty string
     
     # keep only the fields and exclude exclude
-    [json_data.pop(field_name) for field_name in fields if field_name not in fields]
+    [json_data.pop(field_name) for field_name in json_data.copy() if fields and field_name not in fields]
     [json_data.pop(field_name) for field_name in exclude]
 
     return json_data
