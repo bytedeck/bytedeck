@@ -13,6 +13,7 @@ from model_bakery import baker
 
 from siteconfig.models import SiteConfig, get_default_deck_owner
 
+
 User = get_user_model()
 
 
@@ -123,7 +124,7 @@ class SiteConfigModelTest(TenantTestCase):
             Test if get_deck_owner either gets an already created owner user or creates one
         """ 
         # owner already exists since tenantSetup runs initialization.py
-        owner_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME, is_superuser=True, is_staff=True)
+        owner_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME, is_staff=True)
         old_owner_pk = owner_user.pk
 
         # if non_admin_staff_qs.exists()

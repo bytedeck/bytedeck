@@ -7,6 +7,9 @@ from courses.models import MarkRange
 from utilities.models import MenuItem
 
 
+User = get_user_model()
+
+
 class TenantInitializationTest(TenantTestCase):
 
     def test_default_badge_rarities_created(self):
@@ -31,26 +34,34 @@ class TenantInitializationTest(TenantTestCase):
     def test_default_menu_items_created(self):
         self.assertTrue(MenuItem.objects.filter(label="Ranks List").exists())
 
-    def test_superusers_created(self):
+    def test_admin_created(self):
         """ 
-            Check if superusers are created, and username/password is correct
+            Check if admin superuser is created upon initialization
         """ 
-        User = get_user_model()
+        username = "admin"
+        password = settings.TENANT_DEFAULT_ADMIN_PASSWORD
 
-        usernames = ['admin', 'owner']
-        passwords = [settings.TENANT_DEFAULT_ADMIN_PASSWORD, settings.TENANT_DEFAULT_OWNER_PASSWORD]
-        accounts = {usernames[i]: passwords[i] for i in range(len(usernames))}
+        user = User.objects.filter(username=username).first()
+        self.assertTrue(user is not None)
 
-        for username, password in accounts.items():
-            
-            # Check if in DB
-            user = User.objects.filter(username=username).first()
-            self.assertTrue(user is not None)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
 
-            # Check if superusers and is_staff
-            self.assertTrue(user.is_superuser)
-            self.assertTrue(user.is_staff)
-            
-            # Check if can login
-            success = self.client.login(username=username, password=password)
-            self.assertTrue(success)
+        success = self.client.login(username=username, password=password)
+        self.assertTrue(success)
+
+    def test_owner_created(self):
+        """ 
+            Check if deck_owner is created upon initialization
+        """ 
+        username = "owner"
+        password = settings.TENANT_DEFAULT_OWNER_PASSWORD
+
+        user = User.objects.filter(username=username).first()
+        self.assertTrue(user is not None)
+
+        self.assertTrue(user.is_staff)
+        self.assertFalse(user.is_superuser)
+
+        success = self.client.login(username=username, password=password)
+        self.assertTrue(success)
