@@ -5,8 +5,8 @@
       <a class="btn btn-info" title="Edit your Profile"
         href="{% url 'profiles:profile_update' object.id %}"
         role="button"><i class="fa fa-cog"></i></a>
-      <a class="btn btn-warning" title="Change your Password"
-        href="{% url 'account_change_password' %}"
+      <a class="btn btn-warning" title="{% if request.user.is_staff %}Change user's Password{% else %}Change your Password{% endif %}"
+        href="{% if request.user.is_staff %}{% url 'profiles:change_password' object.user.pk %}{% else %}{% url 'account_change_password' %}{% endif %}"
         role="button"><i class="fa fa-key"></i></a>
 
       {% if config.display_marks_calculation %}

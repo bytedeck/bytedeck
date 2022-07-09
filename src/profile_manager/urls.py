@@ -1,4 +1,5 @@
 from django.conf.urls import url
+from django.urls import path
 
 from profile_manager import views
 
@@ -20,6 +21,8 @@ urlpatterns = [
     url(r'^(?P<profile_id>[0-9]+)/comment_ban/$', views.comment_ban, name='comment_ban'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
     url(r'^edit/own/$', views.ProfileUpdateOwn.as_view(), name='profile_edit_own'),
+
+    path('password/change/<int:pk>/', views.PasswordReset.as_view(), name='change_password'),
 
     # Examples
     # Template View Example
