@@ -28,12 +28,14 @@
   <a href="{% url 'profiles:profile_detail' profile.id %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" /><br><br>
 
-  {% if request.user.is_staff %}
-    <p>Want to change <a href="{% url 'profiles:change_password' profile.user.pk %}">password</a>?</p>
-  {% endif %}
-
-
   {% for form in forms %}
+    {% if forloop.counter == 2 %}
+      <p>
+        <h3>Authentication and Permissions</h3>
+        Only staff members may edit these fields.
+      </p>
+    {% endif %}
+
     {{ form|crispy }}
   {% endfor %}
 

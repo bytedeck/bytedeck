@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import Http404, HttpResponseRedirect
@@ -133,8 +133,8 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
 
 class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = Profile
-    public_form_class = ProfileForm
-    staff_form_class = UserForm
+    profile_form_class = ProfileForm
+    user_form_class = UserForm
     template_name = 'profile_manager/form.html'
 
     def get_object(self):
@@ -142,9 +142,9 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     # returns a list of existing form instances or new ones
     def get_forms(self):
-        forms = [self.get_form_public()]
+        forms = [self.get_profile_form()]
         if self.request.user.is_staff:
-            forms.append(self.get_form_staff())
+            forms.append(self.get_user_form())
 
         return forms
 
@@ -169,7 +169,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
         context = {}
 
         # return instance of form or new form instance
-        context['forms'] = kwargs.get('forms', self.get_forms())
+        context['forms'] = kwargs.get('form', self.get_forms())
 
         context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
         context['submit_btn_value'] = "Update"
@@ -177,47 +177,27 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
 
         return context
 
-    # handles form_kwargs for all forms  # redundant?
-    def get_form_kwargs(self, initial={}):
-        kwargs = initial
-
-        # if request is POST send request data+files
-        if self.request.method == "POST":
-            kwargs.update({
-                "data": self.request.POST,
-                "files": self.request.FILES,
-            })
-
-        return kwargs
-
     # returns instance of ProfileForm
-    def get_form_public(self):
-        return self.public_form_class(**self.get_form_kwargs(
-            initial={'instance': self.get_object()}
-        ))
+    def get_profile_form(self):
+        form_kwargs = super().get_form_kwargs()
+        form_kwargs['instance'] = self.get_object()
+
+        return self.profile_form_class(**form_kwargs)
 
     # returns instance of UserForm
-    def get_form_staff(self):
-        return self.staff_form_class(**self.get_form_kwargs(
-            initial={'instance': self.get_object().user}
-        ))
+    def get_user_form(self):
+        form_kwargs = super().get_form_kwargs()
+        form_kwargs['instance'] = self.get_object().user
+
+        return self.user_form_class(**form_kwargs)
 
     # runs if all forms are valid
     def form_valid(self, forms, *args, **kwargs):
-        # log back in since you get kicked out if you change your own username
-        if self.request.user == self.get_object().user:
-            self.request.user.backend = 'django.contrib.auth.backends.ModelBackend'
-            login(self.request, self.request.user)
-    
-        [form.save() for form in forms]
+        for form in forms:
+            form.save()
 
         return HttpResponseRedirect(self.get_success_url())
-
-    # runs if all forms are invalid 
-    # OVERRIDDEN SO WE CAN RENDER ALL FORM VALUES WITHOUT RESETTING FORM (if form is invalid)
-    def form_invalid(self, forms, *args, **kwargs):
-        return self.render_to_response(self.get_context_data(forms=forms))
-
+    
     def get_success_url(self):
         return reverse("profiles:profile_detail", args=[self.get_object().pk])
 

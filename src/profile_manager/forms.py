@@ -35,7 +35,7 @@ class ProfileForm(forms.ModelForm):
 
         user = self.instance.user
         user.email = self.cleaned_data['email']
-        user.save(update_fields=['email'])
+        user.save()
 
         return self.instance
 
@@ -50,13 +50,17 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = get_user_model()
         fields = [
-            'username', 'first_name', 'last_name', 'is_staff', 'is_active', 'is_TA',
+            'username', 'first_name', 'last_name', 'is_TA', 'is_staff', 'is_active',
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__cached_username = self.instance.username
 
-        self.fields['username'].help_text = 'Unique usernames only!'
+        self.fields['username'].help_text = (
+            'WARNING: If you change this user\'s username they will no longer be able to log in with their old username.'
+            'Make sure to inform the user of their new username!'
+        )
 
         self.fields['is_TA'].label = 'TA'
         self.fields['is_TA'].initial = self.instance.profile.is_TA
@@ -65,6 +69,9 @@ class UserForm(forms.ModelForm):
     def save(self):
         # update self.instance since ProfileForm changes User model vars
         # super().save() not saving email correctly so we only update the model fields in UserForm.fields
+        # This code only updates the UserModel fields that is in self._meta.fields
+        # required since Userform saves over user.email field which is also a field saved in ProfileForm. 
+        # This prevents email field from being overwritten in Userform
         user = self.instance
         user_fields = list(set(self._meta.fields) & set([field.name for field in user._meta.fields]))
         for name in user_fields:
