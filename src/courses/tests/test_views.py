@@ -167,12 +167,10 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:create')
         self.assert200('courses:ranks')
 
-        # ?
-        # self.assert200('courses:mark_distribution_chart', args=[self.test_student1.id])
-
         # 404 unless SiteConfig has marks turned on
         self.assert404('courses:my_marks')
         self.assert404('courses:marks', args=[self.test_student1.id])
+
         # 404 unless ajax POST request
         self.assert404('courses:ajax_progress_chart', args=[self.test_student1.id])
 
@@ -197,16 +195,48 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Refer to rank specific tests for Rank CRUD views
 
     def test_all_page_status_codes_for_staff(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
         self.client.force_login(self.test_teacher)
 
         # Staff access only
         self.assert200('courses:join', args=[self.test_student1.id])
 
+        # Redirects, has own test
+        # self.assert200('courses:end_active_semester')
+
+        self.assert200('courses:semester_list')
+        self.assert200('courses:semester_create')
+        self.assert200('courses:semester_update', args=[1])
+
+        self.assert200('courses:block_list')
+        self.assert200('courses:block_create')
+        self.assert200('courses:block_update', args=[1])
+        self.assert200('courses:block_delete', args=[1])
+
+        self.assert200('courses:course_list')
+        self.assert200('courses:course_create')
+        self.assert200('courses:course_update', args=[1])
+        self.assert200('courses:course_delete', args=[1])
+
+    def test_end_active_semester__staff(self):
+        ''' End_active_semester view should redirect to semester list view '''
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        self.assertFalse(active_sem.closed)
         self.assertRedirects(
             response=self.client.get(reverse('courses:end_active_semester')),
-            expected_url=reverse('config:site_config_update_own'),
+            expected_url=reverse('courses:semester_list'),
         )
+        active_sem.refresh_from_db()
+        self.assertTrue(active_sem.closed)
+
+    def test_SemesterActivate(self):
+        """When this view is accessed, the siteconfig's active semester should be changed
+        and the view should redirect tot he semester_list """
+        self.client.force_login(self.test_teacher)
+        new_semester = baker.make('courses.semester')
+        response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
     def test_CourseAddStudent_view(self):
         '''Admin can add a student to a course'''

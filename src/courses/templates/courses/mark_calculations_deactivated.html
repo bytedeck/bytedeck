@@ -1,0 +1,14 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+{% load jchart %}
+
+{% block heading %}
+Mark Calculations
+<i class="fa fa-line-chart pull-right"></i>
+{% endblock %}
+
+{% block content %}
+<p>This feature is not currently activated on your deck.</p>
+<p>To activate this feature, turn on the "Use mark percentages" setting in your <a href="{% url 'config:site_config_update_own' %}">site configuration</a>.</p>
+{% endblock %}
+

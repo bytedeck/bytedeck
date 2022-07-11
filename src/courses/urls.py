@@ -15,6 +15,7 @@ urlpatterns = [
     path('semesters/add/', views.SemesterCreate.as_view(), name='semester_create'),
     path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
     path('semesters/close/', views.end_active_semester, name='end_active_semester'),
+    path('semesters/<pk>/activate/', views.SemesterActivate.as_view(), name='semester_activate'),
     path('semesters/autocomplete/', ModelAutocomplete.as_view(model=models.Semester), name='semester_autocomplete'),
 
     # Blocks

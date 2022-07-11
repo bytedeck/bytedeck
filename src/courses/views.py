@@ -9,6 +9,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -27,8 +28,14 @@ from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 def mark_calculations(request, user_id=None):
     template_name = 'courses/mark_calculations.html'
 
+    # Mark calculation not activated on this deck
     if not SiteConfig.get().display_marks_calculation:
-        raise Http404
+        if request.user.is_staff:
+            template_name = "courses/mark_calculations_deactivated.html"
+            return render(request, template_name)
+        else:
+            # Students should be here, they must have entered URL manually
+            raise Http404()
 
     # Only allow staff to see other student's mark page
     if user_id is not None and request.user.is_staff:
@@ -215,6 +222,19 @@ class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class SemesterActivate(View):
+
+    def get(self, request, *args, **kwargs):
+        semester_pk = self.kwargs['pk']
+        semester = get_object_or_404(Semester, pk=semester_pk)
+        siteconfig = SiteConfig.objects.get()
+        siteconfig.active_semester = semester
+        siteconfig.save()
+
+        return redirect('courses:semester_list')
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class BlockList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Block
 
@@ -268,7 +288,8 @@ def end_active_semester(request):
     semester_warnings = {
         Semester.CLOSED: 'Semester is already closed, no action taken.',
         Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester until they are approved or returned",
-        'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0 and announcements have been archived.',
+        'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0, in-progress quests have been deleted, and \
+        announcements have been archived.',
     }
 
     if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL):
@@ -279,7 +300,7 @@ def end_active_semester(request):
         request,
         semester_warnings.get(sem, semester_warnings['success']))
 
-    return redirect('config:site_config_update_own')
+    return redirect('courses:semester_list')
 
 
 @non_public_only_view
