@@ -3,7 +3,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -209,7 +209,6 @@ class ProfileUpdateOwn(ProfileUpdate):
         return self.request.user.profile
 
 
-@method_decorator(staff_member_required, name='dispatch')
 class PasswordReset(FormView):
     form_class = SetPasswordForm
     template_name = 'profile_manager/password_change_form.html'
@@ -218,6 +217,13 @@ class PasswordReset(FormView):
         model_pk = self.kwargs['pk']
         return get_user_model().objects.get(pk=model_pk)
 
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        user = self.get_instance()
+        if user.is_staff:
+            return HttpResponseForbidden("Staff users are forbidden")
+        return super().dispatch(*args, **kwargs)
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.get_instance().profile

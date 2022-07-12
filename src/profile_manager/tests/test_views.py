@@ -282,7 +282,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_password_change_status_code__staff(self):
         self.client.force_login(self.test_teacher)
 
-        self.assert200("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
