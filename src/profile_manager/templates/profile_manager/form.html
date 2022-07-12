@@ -30,10 +30,8 @@
 
   {% for form in forms %}
     {% if forloop.counter == 2 %}
-      <p>
-        <h3>Authentication and Permissions</h3>
-        Only staff members may edit these fields.
-      </p>
+    <h3>Authentication and Permissions</h3>
+    <p>Only staff members may edit these fields.</p>
     {% endif %}
 
     {{ form|crispy }}
