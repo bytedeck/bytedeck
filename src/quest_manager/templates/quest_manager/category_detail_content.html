@@ -1,11 +1,26 @@
 
 <div class="media">
   <div class="media-left">
-      <img class="media-object icon-lg img-rounded" src="{{ category.get_icon_url }}" alt="icon" />
+    <img class="media-object icon-lg img-rounded" src="{{ category.get_icon_url }}" alt="icon" />
   </div>
-  <div class="media-body">
-    <p>Number of quests in this campaign: {{ category.quest_count }}</p>
-    <p>Total XP available: {{ category.xp_sum }}</p>
+</div>
+
+<div id="category-info-{{category.id}}" class="panel panel-primary panel-top">
+  <div class="panel-heading">
+    <h3 class="panel-title">Campaign Info</h3>
+  </div>
+  <div class="panel-body">
+
+    <div class="row">
+      <div class="col-sm-6">
+        <ul class="list-unstyled">
+          <li>Quests in this campaign: {{ category.quest_count }}</li>
+          <li>Total XP available: {{ category.xp_sum }}</li>
+          <li>Active: {{category.active }}</li>
+        </ul>
+      </div>
+    </div>
+
   </div>
 </div>
 
