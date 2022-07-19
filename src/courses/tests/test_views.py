@@ -526,3 +526,13 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, dt_ptag)
         self.assertContains(response, dt_atag_link)
         self.assertContains(response, dt_well_ptag)
+
+    def test_BlockForm_initial_values(self):
+        """ 
+            Test if the form passed through context has correct initial values
+        """ 
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:block_create'))
+        form = response.context['form']
+
+        self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
