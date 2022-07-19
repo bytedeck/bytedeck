@@ -46,11 +46,19 @@ class Category(IsAPrereqMixin, models.Model):
             return self.icon.url
         else:
             return SiteConfig.get().get_default_icon_url()
+    
+    def current_quests(self):
+        """ Returns a queryset containing every currently available quest in this campaign."""
+        return self.quest_set.all().visible().not_archived()
+
+    def quest_count(self):
+        """ Returns the total number of quests available in this campaign."""
+        return self.current_quests().count()
 
     def xp_sum(self):
         """ Returns the total XP available from completing all visible quests in this campaign.
         Repeating quests are only counted once."""
-        return self.quest_set.all().visible().not_archived().aggregate(Sum('xp'))['xp__sum']
+        return self.current_quests().aggregate(Sum('xp'))['xp__sum']
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
