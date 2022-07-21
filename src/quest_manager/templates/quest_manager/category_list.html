@@ -1,4 +1,4 @@
-{% extends "courses/base.html" %}
+{% extends "quest_manager/base.html" %}
 
 {% block head_title %}Campaigns | {% endblock %}
 {% block head %}{% endblock %}
@@ -6,7 +6,7 @@
 {% block content_first %}{% endblock %}
 {% block heading_inner %}Campaigns
 {% if request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button">New</a>
+  <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
 {% endif %}
 {% endblock %}
 
