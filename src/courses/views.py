@@ -18,7 +18,7 @@ from siteconfig.models import SiteConfig
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import BlockForm, CourseStudentForm, SemesterForm
+from .forms import BlockForm, CourseStudentForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 
@@ -193,11 +193,64 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+class SemesterCreateUpdateFormsetMixin:
+    formset_class = ExcludedDateFormset
+
+    def get(self, *args, **kwargs):
+        self.object = self.get_object()
+        return super().get(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        self.object = self.get_object()
+        forms = [self.get_form(), self.get_formset()]
+
+        if all([form.is_valid() for form in forms]):
+            return self.form_valid(*forms)
+        return self.form_invalid(*forms)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs).copy()
+        ctx['formset'] = kwargs.get('formset', self.get_formset())
+        ctx['helper'] = ExcludedDateFormsetHelper()
+        return ctx
+
+    # formsets 
+
+    def get_formset_queryset(self):
+        return self.get_object().excludeddate_set.all().order_by('date')
+
+    def get_formset_kwargs(self):
+        form_kwargs = super().get_form_kwargs()
+        # wrong instance, therefore get rid of it
+        form_kwargs.pop('instance')  # instance will be passed as a kwarg automatically by formset anyway
+
+        form_kwargs['form_kwargs'] = {
+            'semester': self.object,
+        }
+        return form_kwargs
+        
+    def get_formset(self):
+        return self.formset_class(**self.get_formset_kwargs(), queryset=self.get_formset_queryset())
+    
+    # form
+
+    def form_valid(self, form, formset):
+        response = super().form_valid(form)  # has to be before formset.save() so CreateView can save model first (necessary for create view)
+        formset.save()
+        return response
+
+    def form_invalid(self, form, formset):
+        return self.render_to_response(self.get_context_data(form=form, formset=formset))
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
+class SemesterCreate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
+
+    def get_object(self):
+        return self.model()
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Create New Semester'
@@ -207,16 +260,14 @@ class SemesterCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Update Semester'
         kwargs['submit_btn_value'] = 'Update'
-        kwargs['update_via_admin'] = True
 
         return super().get_context_data(**kwargs)
 

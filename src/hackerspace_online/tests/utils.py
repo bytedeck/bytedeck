@@ -72,6 +72,90 @@ def generate_form_data(model=None, model_form=None, **kwargs):
     return json_data
 
 
+def model_to_form_data(model, model_form):
+    """ 
+        This generates valid form data that can be used for post requests. 
+        Values are dependant on the model instance passed through the model variable.
+
+        The only limitations it should have are whatever serializers.serialize() can't serialize into json
+
+        EXAMPLE:
+        >>> instance = Model(var1=1, var2=2, ...)
+        >>> form_data = model_to_form_data(instance, ModelForm)
+        >>> form_data
+        { "var1": 1, "var2": 2 }
+
+        >>> form = ModelForm(form)
+        >>> form.is_valid()
+        True
+    """
+    fields = model_form._meta.fields or model._meta.fields
+    exclude = model_form._meta.exclude or []
+
+    json_data = serializers.serialize('json', [model])
+    json_data = json.loads(json_data)[0]["fields"]
+
+    json_data = {key: item if item is not None else "" for key, item in json_data.items()}
+    [json_data.pop(field_name) for field_name in json_data.copy() if fields and field_name not in fields]
+    [json_data.pop(field_name) for field_name in exclude]
+
+    return json_data
+
+
+def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
+    """ 
+        This generates valid form data that can be used for post requests. This has the same limitations as generate_form_data()
+        Values will default to form/model default.
+        kwargs values are equal to any name in the meta fields
+
+        EXAMPLE 1:
+        >>> formset_data = generate_formset_data(ModelFormset, quantity=5)
+        >>> formset = ModelFormset(formset_data)
+        >>> formset.is_valid()
+        True
+
+        EXAMPLE 2 (using kwargs):
+        >>> formset_data = generate_formset(ModelFormset, quantity=3, name=lambda: random.choice(['name1', 'name2', 'name3']))
+        >>> formset = ModelFormset(formset_data)
+        >>> formset.is_valid()
+        True
+    """ 
+    model = model_formset.model
+    form_fields = [name for name in model_formset.form._meta.fields]
+    formset_added = ['id', 'DELETE']  # form fields im pretty sure are added by formset factory. wont do anything if it not needed anyway
+
+    model_instances = [] if not quantity else baker.prepare(model, _quantity=quantity, **kwargs)
+
+    json_data = serializers.serialize('json', model_instances)
+    json_data = [data["fields"] for data in json.loads(json_data)]
+
+    # format json data to formset valid data
+    for index in range(quantity):
+        form_data = json_data[index]
+
+        # remove keys not in form_fields
+        form_data = {name: data for name, data in form_data.items() if name in form_fields}
+
+        # replaces None with empty string
+        form_data = {name: data if data is not None else "" for name, data in form_data.items()}
+
+        # converts existing fields to formset valid fields
+        form_data = {f'{prefix}-{index}-{field}': form_data.pop(field) for field in form_fields}
+
+        # add formset_added fields
+        form_data.update({f'{prefix}-{index}-{field}': '' for field in formset_added})
+
+        json_data[index] = form_data
+
+    # combine everything
+    formset_data = {  # management_form
+        f'{prefix}-TOTAL_FORMS': quantity,
+        f'{prefix}-INITIAL_FORMS': 0,
+    }
+    [formset_data.update(form_data) for form_data in json_data]
+    return formset_data
+
+
 class ViewTestUtilsMixin():
     """ 
     Utility methods to make cleaner tests for common response assertions.  The base class must
