@@ -3,6 +3,7 @@ from django import forms
 from bootstrap_datepicker_plus.widgets import DateTimePickerInput, TimePickerInput
 
 from .models import Block, Course, CourseStudent, Semester
+from siteconfig.models import SiteConfig
 
 
 class CourseStudentForm(forms.ModelForm):
@@ -64,3 +65,7 @@ class BlockForm(forms.ModelForm):
             'start_time': TimePickerInput,
             'end_time': TimePickerInput
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['current_teacher'].initial = SiteConfig.get().deck_owner.pk
