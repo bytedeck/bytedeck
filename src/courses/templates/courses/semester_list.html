@@ -25,6 +25,8 @@
   <tr>
     <th>First Day</th>
     <th>Last Day</th>
+    <th>Total Days</th>
+    <th># Excluded Dates</th>
     <th>Closed</th>
     <!-- <th>Active</th> -->
     <th>Action</th>
@@ -33,7 +35,10 @@
   <tr {% if object == config.active_semester %}class="success" title="This is your currently active semester."{% endif %}>
     <td>{{ object.first_day }}</td>
     <td>{{ object.last_day }}</td>
+    <td>{{ object.num_days }}</td>
+    <td>{{ object.excludeddate_set.count }}</td>
     <td>{{ object.closed }}</td>
+
     <!-- <td>{% if object == config.active_semester %}True{% else %}False{% endif %}</td> -->
     <td>
       {% if not object.closed %}
