@@ -4,8 +4,9 @@
 {% block heading_inner %}{{ heading }}{% endblock %}
 
 {% block content %}
-    <p><a href="{% url 'portfolios:edit' profile.user.pk %}" class="btn btn-info">
-        <i class="fa fa-picture-o"></i> &nbsp;Edit your Portfolio</a></p>
+    <p>
+      <a href="{% url 'portfolios:edit' profile.user.pk %}" class="btn btn-info"> <i class="fa fa-picture-o"></i> &nbsp;Edit your Portfolio</a>
+    </p>
     <div class="panel panel-info" >
         <div class="panel-heading">
             How your names will be used:
@@ -22,10 +23,21 @@
         </div>
     </div>
 
+
 <form action="" enctype="multipart/form-data" method="post">{% csrf_token %}
   <a href="{% url 'profiles:profile_detail' profile.id %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" /><br><br>
-  {{ form|crispy }}
+
+  {% for form in forms %}
+    {% if forloop.counter == 2 %}
+    <h3>Authentication and Permissions</h3>
+    <p>Only staff members may edit these fields.</p>
+    {% endif %}
+
+    {{ form|crispy }}
+  {% endfor %}
+
+
   <a href="{% url 'profiles:profile_detail' profile.id %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success" />
 </form>

@@ -143,7 +143,7 @@ class QuestManagerTest(TenantTestCase):
         baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
         baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
-        self.assertListEqual(list(qs), ['Quest-available-without-course', 'Send your teacher a Message'])
+        self.assertQuerysetEqual(qs, ['Quest-available-without-course', 'Send your teacher a Message'], ordered=False)
 
     def test_quest_qs_editable(self):
         """
@@ -240,7 +240,7 @@ class QuestManagerTest(TenantTestCase):
         # complete the blocking quest to make others available
         blocking_sub.mark_completed()
         qs = Quest.objects.get_available(self.student)
-        self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'])
+        self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions

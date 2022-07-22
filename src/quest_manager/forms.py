@@ -1,5 +1,6 @@
 
 from datetime import date
+from dal import autocomplete
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -9,11 +10,12 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from django_summernote.widgets import SummernoteInplaceWidget
-from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
+from django_select2.forms import ModelSelect2MultipleWidget
+from tags.forms import BootstrapTaggitSelect2Widget
 
 from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
-from .models import Quest
+from .models import Category, Quest
 
 
 class BadgeLabel:
@@ -25,31 +27,32 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
     pass
 
 
-class QuestPrereqForm(forms.ModelForm):
-    class Meta:
-        model = Quest
-        fields = ('name',)
-
-
 class QuestForm(forms.ModelForm):
 
     new_quest_prerequisite = forms.ModelChoiceField(
         # to_field_name="name",
         required=False,
         queryset=Quest.objects.all(),
-        widget=ModelSelect2Widget(
-            model=Quest,
-            search_fields=['name__icontains'],
-        ),
+        # widget=ModelSelect2Widget(
+        #     model=Quest,
+        #     search_fields=['name__icontains'],
+        # ),
+        widget=autocomplete.ModelSelect2(url='quests:quest_autocomplete'),
     )
 
     new_badge_prerequisite = forms.ModelChoiceField(
-        widget=ModelSelect2Widget(
-            model=Badge,
-            search_fields=['name__icontains'],
-        ),
+        # widget=ModelSelect2Widget(
+        #     model=Badge,
+        #     search_fields=['name__icontains'],
+        # ),
         queryset=Badge.objects.all(),
         # to_field_name="name",
+        required=False,
+        widget=autocomplete.ModelSelect2(url='badges:badge_autocomplete'),
+    )
+
+    campaign = forms.ModelChoiceField(
+        queryset=Category.objects.all(),
         required=False,
     )
 
@@ -59,7 +62,7 @@ class QuestForm(forms.ModelForm):
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
-                  'map_transition',
+                  'map_transition', 'tags',
                   'new_quest_prerequisite',
                   'new_badge_prerequisite',
                   'specific_teacher_to_notify', 'blocking',
@@ -89,9 +92,14 @@ class QuestForm(forms.ModelForm):
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
-            'campaign': Select2Widget(),
-            'common_data': Select2Widget(),
-            'specific_teacher_to_notify': Select2Widget()
+
+            # TODO: Campaign Autocomplete
+            # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
+            # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
+            # 'specific_teacher_to_notify': Select2Widget(),
+
+            # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
+            'tags': BootstrapTaggitSelect2Widget()
         }
 
     def __init__(self, *args, **kwargs):
@@ -102,10 +110,17 @@ class QuestForm(forms.ModelForm):
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
+        prereqs_btn = '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'quests:quest_prereqs_update\' object.id %}">' \
+            'Edit Prerequisites</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %}'
+    
         self.helper = FormHelper()
         self.helper.layout = Layout(
             HTML(cancel_btn),
             HTML(submit_btn),
+            HTML(prereqs_btn),
             Div(
                 'name',
                 'xp',
@@ -121,6 +136,7 @@ class QuestForm(forms.ModelForm):
                 'common_data',
                 'max_repeats',
                 'hours_between_repeats',
+                'tags',
                 Accordion(
                     AccordionGroup(
                         "Basic Prerequisites",

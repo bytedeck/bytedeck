@@ -48,3 +48,15 @@ def favicon_url():
 def menu_list():
     links = MenuItem.objects.filter(visible=True)
     return {'links': links}
+
+
+@register.filter
+def checkcross(value):
+    """
+    Converts a boolean value to a corresponding class value for a fontawesome check or cross (times) icon
+    Usage: <i class="{{ booleanvalue | crosscheck }}"></i>
+    """
+    if value is True:
+        return 'fa fa-check'
+    elif value is False:
+        return 'fa fa-times'

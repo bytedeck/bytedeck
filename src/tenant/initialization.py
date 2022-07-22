@@ -44,17 +44,20 @@ def create_superusers():
         password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
     # OWNER OF THE DECK
-    # get_or_create IS HERE BECAUSE siteconfig.models.get_default_deck_owner() will run before this file (initialization.py)
+    # update_or_create IS HERE BECAUSE siteconfig.models.get_default_deck_owner() will run before this file (initialization.py)
     # although siteconfig.models.get_default_deck_owner() will not run before this every time based on manual testing
-    owner, _ = User.objects.get_or_create(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
 
-    # set owner vars since siteconfig.models.get_deck_owner() wont set all vars and/or has not created model yet
-    owner.email = 'owner@example.com'
-    owner.set_password(settings.TENANT_DEFAULT_OWNER_PASSWORD)
-    owner.is_superuser = True
-    owner.is_staff = True
+    owner, _ = User.objects.update_or_create(
+        username=settings.TENANT_DEFAULT_OWNER_USERNAME, 
+        defaults={
+            "email": 'owner@example.com',
+            "is_superuser": False,
+            "is_staff": True,
+        },
+    )
+    owner.set_password(settings.TENANT_DEFAULT_OWNER_PASSWORD,)
     owner.save()
-        
+
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """

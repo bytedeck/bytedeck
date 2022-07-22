@@ -10,7 +10,8 @@ class SiteConfigForm(forms.ModelForm):
 
     class Meta:
         model = SiteConfig
-        fields = "__all__"
+        # active_semester setting moved to Semester views.
+        exclude = ["active_semester"]
 
     def __init__(self, *args, **kwargs):
         is_deck_owner = kwargs.pop('is_deck_owner', False)

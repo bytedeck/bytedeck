@@ -1,0 +1,85 @@
+{% load static %}
+{% load crispy_forms_tags %}
+<div id="contact">
+    <div class="row">
+
+      <!-- <div class="d-none d-xxl-block col-xxl-1 BG-BD-DarkBlue"></div> -->
+      <div class="col-lg-6 px-xl-5 BD-content1 BD-bg-DarkBlue">
+        <div class="row justify-content-center">
+          <div class="col-lg-11 col-xl-10">
+
+            <div class="BD-title BD-title-pixels">
+              <h1-BD>READY TO GO?</h1-BD>
+              <div>
+                <img class="BD-img-pixels-topright BD-img-pixels" src="{% static 'public/images/pixels-5.png' %}">
+              </div>
+            </div>
+
+            <p class="lead">Every new platform has a learning curve. Fill out this form to get in touch with our team and we'll help get you started.</p>
+            <form method="post" class="bootstrap4">
+              {% csrf_token %}
+              {{ form | crispy }}
+
+              {% comment %}
+              <div class="BD-form">
+                <input type="name" class="form-control" id="F-name" placeholder="First Name">
+              </div>
+              <div class="BD-form">
+                <input type="name" class="form-control" id="L-name" placeholder="Last Name">
+              </div>
+              <div class="BD-form">
+                <input type="email" class="form-control" id="InputEmail1" aria-describedby="emailHelp" placeholder="Email">
+                <small id="emailHelp" class="form-text BD-muted">We'll never share your email with anyone else.</small>
+              </div>
+              <div class="BD-form-message">
+                <textarea  rows="5" type="text" class="form-control" id="Message" placeholder="Message"></textarea>
+              </div>
+              {% endcomment %}
+
+              <button type="submit" class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-form">SEND</button>
+
+            </form>
+
+            <!-- Enter Form element here-->
+            <!-- When adding the form please remove the above <br> lines (Used for layour) -->
+
+            {% comment %}
+            <div class="row form-socials">
+              <div class="col-2 offset-3 mx-auto">
+                <a href="">
+                  <span class="fa-stack fa-lg">
+                    <i class="fa fa-circle fa-stack-2x" style="color:#7dc3e9"></i>
+                    <i class="fa fa-instagram fa-stack-1x fa-inverse"></i>
+                  </span>
+                </a>
+              </div>
+              <div class="col-2 mx-auto">
+                <a href="">
+                <span class="fa-stack fa-lg">
+                  <i class="fa fa-circle fa-stack-2x" style="color:#7dc3e9"></i>
+                  <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                </span>
+                </a>
+              </div>
+              <div class="col-2 mx-auto">
+                <a href="">
+                  <span class="fa-stack fa-lg">
+                    <i class="fa fa-circle fa-stack-2x" style="color:#7dc3e9"></i>
+                    <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                  </span>
+                </a>
+              </div>
+            </div> <!-- /social media row -->
+            {% endcomment %}
+          </div>
+
+        </div>  <!-- /content row -->
+      </div> <!-- /content col -->
+
+      <div class="col-lg-6 d-flex justify-content-center align-items-center order-xl-last order-lg-last order-first order-sm-first order-md-first BD-bg-White">
+        <img class="img-fluid BD-undraw-img" src="{% static 'public/images/undraw_manage_chats_revised2.png' %}" alt="">
+      </div>
+
+    </div>
+    <!-- /row -->
+  </div>

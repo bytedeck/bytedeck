@@ -1,0 +1,71 @@
+{% load static %}
+{% load crispy_forms_tags %}
+<!DOCTYPE html>
+<html lang='en'>
+  <head>
+
+      <!-- Required Meta Tags-->
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+      <!-- Site Meta Tags -->
+      <title> ByteDeck </title>
+      <meta content="Description content" name="description"/>
+      <meta content="ByteDeck" property="og:title"/>
+      <meta content="Description content." property="og:description"/>
+      <meta content="image" property="og:image"/>
+      <!-- Jquery -->
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+      <!-- Bootstrap CSS -->
+      <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css" integrity="sha384-r4NyP46KrjDleawBgD5tp8Y7UzmLA05oM1iAEQ17CSuDqnUK2+k9luXQOfXJCJ4I" crossorigin="anonymous">
+      <!-- FontAwesome-->
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+      <!-- Google Font link-->
+      <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+      <!-- Custom CSS -->
+      <link rel="stylesheet" href="{% static 'public/css/custom.css' %}">
+
+  </head>
+
+
+  <body>
+
+    <!-- Messages -->
+
+    {% if messages %}{% for message in messages %}
+    <div class="alert alert-warning alert-dismissible fade show text-center lead {% if message.tags %}{{ message.tags }}{% endif %}" role="alert"}>
+        <b>{{ message|safe }}</b>
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    {% endfor %}{% endif %}
+
+<!--
+      For the Addition of the Subscriptions section. Due to bootstrap limitations, to get
+      the appearance of split colours which remain split in a responsive website (ex: on a phone and tablet)
+      no full page margins could be used and each Div needed to be given its
+      specific background colour
+
+-->
+    <!--Navbar -->
+    {% include 'public/snippets/navbar.html' %}
+<!--/.Navbar -->
+
+<!-- Page Content -->
+{% block content %}{% endblock %}
+
+<!-- /Page Content -->
+
+<!-- Footer -->
+{% include 'public/snippets/footer.html' %}
+<!-- /Footer-->
+
+<!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/js/bootstrap.min.js" integrity="sha384-oesi62hOLfzrys4LxRF63OJCXdXDipiYWBnvTl9Y9/TRlw5xlKIEHpNyvvDShgf/" crossorigin="anonymous"></script>
+    <script src="{% static 'public/js/smoothscroll.js' %}"> </script>
+<!-- /JavaScript -->
+  </body>
+
+</html>

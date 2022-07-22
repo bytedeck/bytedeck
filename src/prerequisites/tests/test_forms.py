@@ -10,7 +10,7 @@ class PrereqFormsTest(TenantTestCase):
         """ A list of tuples: [(model, model_search_field), ...] for DAL widgets"""
         models = IsAPrereqMixin.all_registered_model_classes()
         model_choices = [(model, model.dal_autocomplete_search_fields()) for model in models]
-        print([(model.__name__, model.dal_autocomplete_search_fields()) for model in models])
+        # print([(model.__name__, model.dal_autocomplete_search_fields()) for model in models])
         return model_choices
 
     def test_hardcoded_prereq_model_choice(self):

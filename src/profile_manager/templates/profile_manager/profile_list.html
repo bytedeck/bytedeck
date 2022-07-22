@@ -179,7 +179,7 @@
                         {% if object.not_earning_xp %}btn-success{% else %}btn-default{% endif %}">
                                 <i class="fa fa-magic"></i>
                             </a>
-                            <a href="/admin/auth/user/{{ object.user.id }}/password/" class="btn btn-sm btn-default"
+                            <a href="{% url 'profiles:change_password' object.user.pk %}" class="btn btn-sm btn-default"
                                title="Reset this student's password">
                                 <i class="fa fa-key"></i>
                             </a>

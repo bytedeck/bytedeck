@@ -4,7 +4,8 @@
 
 {% block heading_inner %}{{heading}}
 {% if request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'badges:badge_create' %}" role="button">New</a>
+  <a class="btn btn-primary" href="{% url 'badges:badge_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create Badge</a>
+  <a class="btn btn-primary" href="{% url 'badges:badge_type_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create Badge Type</a>
 {% endif %}
 {% endblock %}
 
