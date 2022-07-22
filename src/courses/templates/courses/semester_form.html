@@ -19,9 +19,19 @@
         {% crispy form form.helper %}
     </div>
 
+    <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
+
     <h3>Excluded Dates</h3>
+    <p>Weekends are automatically excluded in mark calculations. To exclude additional dates, add them here:</p>
+    
     <div id="form-management"> {{ formset.management_form }} </div>
     <div id="form-container">
+        <div class="row">
+            <div class="col-xs-4 col-sm-3"><label>Date*</label></div>
+            <div class="col-xs-6 col-sm-4"><label>Label (optional)</label></div>
+        </div>
+
         {% for form in formset %}
         <div class="row" id="form-{{forloop.counter0}}-container">
 

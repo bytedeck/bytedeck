@@ -516,6 +516,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         post_data = {
             'first_day': '2020-10-16',
+            'last_day': '2020-12-16',
             **generate_formset_data(ExcludedDateFormset, quantity=0)
         }
         response = self.client.post(reverse('courses:semester_update', args=[1]), data=post_data)

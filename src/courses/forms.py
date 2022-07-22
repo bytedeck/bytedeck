@@ -80,6 +80,9 @@ class ExcludedDateForm(forms.ModelForm):
         widgets = {
             'date': DateTimePickerInput(format='%Y-%m-%d'),
         }
+        help_texts = {
+            'label': None
+        }
     
     def __init__(self, *args, **kwargs):
         self.semester_instance = kwargs.pop('semester')
