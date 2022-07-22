@@ -11,4 +11,3 @@ coveralls  # includes coverage
 names
 namegenerator
 tblib
-pre-commit

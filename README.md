@@ -172,9 +172,8 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md)
 
 1. Move into your cloned directory. `cd ~/Developer/bytedeck`
-2. Initialize pre-commit hooks: `git init --template=.git-template`
-3. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
-4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
+2. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
+3. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
 5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
 6. Write code!
 7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):   
@@ -187,8 +186,8 @@ For full details on code contributions, please see [CONTRIBUTING.md](https://git
 12. Select your recently pushed branch and create a pull request (you should see a button for this)
 ![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)
 
-13. Complete pull request.
-14. Start work on another feature by checking out the develop branch again: `git checkout develop`
-15. Start again at Step 4 and repeat!
+10. Complete pull request.
+11. Start work on another feature by checking out the develop branch again: `git checkout develop`
+12. Start again at Step 3 and repeat!
 
 If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
