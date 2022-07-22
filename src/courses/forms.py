@@ -1,8 +1,11 @@
 from django import forms
 
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout
+from crispy_forms.bootstrap import Div
 from bootstrap_datepicker_plus.widgets import DateTimePickerInput, TimePickerInput
 
-from .models import Block, Course, CourseStudent, Semester
+from .models import Block, Course, CourseStudent, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
 
 
@@ -54,6 +57,71 @@ class SemesterForm(forms.ModelForm):
             'first_day': DateTimePickerInput(format='%Y-%m-%d'),
             'last_day': DateTimePickerInput(format='%Y-%m-%d'),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.include_media = False
+        self.helper.disable_csrf = True
+        self.helper.form_tag = False
+
+        self.helper.layout = Layout(
+            Div('first_day', css_class='col-xs-6 col-sm-4',),
+            Div('last_day', css_class='col-xs-6 col-sm-4',),
+        )
+
+
+class ExcludedDateForm(forms.ModelForm):
+
+    class Meta:
+        model = ExcludedDate
+        fields = ['date', 'label']
+        widgets = {
+            'date': DateTimePickerInput(format='%Y-%m-%d'),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.semester_instance = kwargs.pop('semester')
+        super().__init__(*args, **kwargs)
+
+        self.fields['label'].label = ''
+        self.fields['label'].required = False
+
+        self.fields['date'].label = ''
+        self.fields['date'].required = True
+    
+    def save(self, **kwargs):
+        excluded_date = self.instance
+        excluded_date.semester = self.semester_instance
+
+        return excluded_date.save()  # formset saves the rest in its own function
+
+
+class ExcludedDateFormsetHelper(FormHelper):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.include_media = False
+        self.disable_csrf = True
+        self.form_tag = False
+
+        self.layout = Layout(
+            # formset injected vars
+            'id',
+            'DELETE',
+            # form vars
+            Div('date', css_class='col-xs-4 col-sm-3',),
+            Div('label', css_class='col-xs-6 col-sm-4',),
+        )
+
+
+class BaseFormSet(forms.BaseModelFormSet):
+    def add_fields(self, form, index):
+        super().add_fields(form, index)
+        form.fields['DELETE'].widget = forms.HiddenInput()
+        
+
+ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=ExcludedDateForm, formset=BaseFormSet, can_delete=True, extra=1)
 
 
 class BlockForm(forms.ModelForm):

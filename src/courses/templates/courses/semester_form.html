@@ -14,12 +14,112 @@
 {% endblock %}
 
 {% block content %}
-<form method="post">{% csrf_token %}
-  {{ form | crispy }}
+<form action="" enctype="multipart/form-data" method="post">{% csrf_token %}
+    <div class="row">
+        {% crispy form form.helper %}
+    </div>
+
+    <h3>Excluded Dates</h3>
+    <div id="form-management"> {{ formset.management_form }} </div>
+    <div id="form-container">
+        {% for form in formset %}
+        <div class="row" id="form-{{forloop.counter0}}-container">
+
+            {% crispy form helper  %}
+
+            <div class="button-container col-xs-2">
+                {% if not forloop.last %}
+                <button type="button" class="btn btn-danger" onclick="RemoveForm({{forloop.counter0}})"><i class="fa fa-minus"></i></button>
+                {% else %}
+                <button type="button" class="btn btn-success" onclick="AddForm()"><i class="fa fa-plus"></i></button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
   <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-danger">Cancel</a>
   <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
-  {% if update_via_admin %}
-    <a href="{% url 'admin:courses_semester_change' object.id %}" role="button" class="btn btn-default">via Admin</a>
-  {% endif %}
 </form>
+{% endblock %}
+
+{% block js %}
+
+<script>
+    // formset
+    const container = document.getElementById("form-container");
+    const removeButtonCopy = '<button type="button" class="btn btn-danger" onclick="RemoveForm(__prefix__)"><i class="fa fa-minus"></i></button>';
+    const addButtonCopy = '<button type="button" class="btn btn-success" onclick="AddForm()"><i class="fa fa-plus"></i></button>'
+    
+    // management form
+    const formTotalForms = document.getElementById("id_form-TOTAL_FORMS");
+    const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
+    const initialForms = parseInt(formInitialForms.getAttribute("value"))-1;
+
+    var cached_datepicker_data = null;
+
+
+    function AddForm() {
+        // management form change data
+        var totalForms = parseInt(formTotalForms.getAttribute("value"));
+        formTotalForms.setAttribute("value", totalForms+1);
+
+        // replace add button of second last el with remove button
+        var buttonContainer = container.lastElementChild.querySelector(".button-container");
+        buttonContainer.innerHTML = removeButtonCopy.replaceAll("__prefix__", totalForms-1);
+
+        // create input field + add button to last el
+        var newIndex = totalForms
+
+        // container for field + buttons
+        var formRowElement = document.createElement('div');
+        formRowElement.setAttribute("class", "row");
+        formRowElement.setAttribute("id", `form-${newIndex}-container`);
+        container.insertAdjacentElement("beforeend", formRowElement);
+
+        // field
+        formRowElement.innerHTML = `{% crispy formset.empty_form helper  %}`.replaceAll("__prefix__", newIndex);
+        
+        // container for buttons
+        var buttonElement = document.createElement('div');
+        buttonElement.setAttribute("class", "button-container col-xs-1");
+        formRowElement.insertAdjacentElement("beforeend", buttonElement);
+
+        buttonElement.insertAdjacentHTML("beforeend", addButtonCopy);
+        
+        if (!cached_datepicker_data) {
+            var datepicker = document.getElementById(`id_form-${newIndex}-date`); 
+            cached_datepicker_data = JSON.parse(datepicker.getAttribute("data-dp-config")).options;
+        }
+    }
+
+    // https://stackoverflow.com/a/42453540
+    $('body').on('focus',".datetimepickerinput", function(){
+        backup = {"showClose": true, "showClear": true, "showTodayButton": true, "format": "YYYY-MM-DD"};
+        data = cached_datepicker_data ? cached_datepicker_data : backup;
+        $(this).datetimepicker(data);
+    });
+
+    function RemoveForm(index) {
+        var fieldContainer = document.getElementById(`form-${index}-container`);
+
+        // // remove if its not initialized else
+        // if (index > initialForms) {
+        //     var totalForms = parseInt(formTotalForms.getAttribute("value"));
+        //     formTotalForms.setAttribute("value", totalForms-1);
+
+        //     fieldContainer.remove();
+        //     return;
+        // }
+
+        // make invisible
+        fieldContainer.style.display = "none";
+
+        // add delete input for POST DATA
+        var deleteInput = document.getElementById(`id_form-${index}-DELETE`);
+        deleteInput.setAttribute("value", "on");
+    }
+    
+</script>
+
 {% endblock %}

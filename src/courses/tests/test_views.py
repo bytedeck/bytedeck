@@ -5,9 +5,14 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent, Semester, Rank
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from courses.models import Block, Course, CourseStudent, Semester, Rank, ExcludedDate
+from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
+from courses.forms import SemesterForm, ExcludedDateFormset
+
+import random
+import datetime
+import itertools
 
 
 User = get_user_model()
@@ -423,6 +428,23 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
+    def generate_dates(quantity, dates=[]): 
+        """
+            Small recursive function that gets n unique dates
+        """
+        if max(quantity, 0) == 0: 
+            return dates
+
+        dates += [datetime.date(
+            random.randint(2000, 2020),  # year
+            random.randint(1, 12),  # month
+            random.randint(1, 28),  # day
+        ) for i in range(quantity)]
+        dates = list(set(dates))  # make it so unique only
+
+        leftover = quantity - len(dates)
+        return SemesterViewTests.generate_dates(leftover, dates)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
@@ -438,20 +460,152 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
-    def test_SemesterCreate_view(self):
+    def test_SemesterCreate__without_ExcludedDates__view(self):
         self.client.force_login(self.test_teacher)
 
-        response = self.client.post(reverse('courses:semester_create'), data={'first_day': '2020-10-15', 'last_day': '2020-12-15'})
+        post_data = {
+            'first_day': '2020-10-15', 'last_day': '2020-12-15',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+        response = self.client.post(reverse('courses:semester_create'), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.count(), 2)
+
+    def test_SemesterCreate__with_ExcludedDates__view(self):
+        """ 
+            Test for SemesterCreate with correct/valid post data.
+            valid post data includes default values for SemesterForm, randomly generated values for ExcludedDateFormset
+        """
+        self.client.force_login(self.test_teacher)
+
+        # need to generate dates here sinces its unique only (generate_formset_data cant handle validators)
+        exclude_dates = SemesterViewTests.generate_dates(5)
+
+        post_data = {
+            **generate_form_data(model_form=SemesterForm),
+            **generate_formset_data(ExcludedDateFormset, quantity=len(exclude_dates), date=itertools.cycle(exclude_dates)),
+        }
+        response = self.client.post(reverse('courses:semester_create'), data=post_data)
+        self.assertRedirects(response, reverse('courses:semester_list'))
+
+        # check if data was added to db
+        self.assertEqual(Semester.objects.count(), 2)
+        semester = Semester.objects.get(pk=2)
+
+        self.assertTrue(semester.excludeddate_set.exists())
+        for ed in semester.excludeddate_set.all():
+            self.assertTrue(ed.date in exclude_dates)
+
+    def test_SemesterCreate__add_without_required_fields__view(self):
+        """ 
+            Test for SemesterCreate with leaving required fields blank
+        """
+        self.client.force_login(self.test_teacher)
+
+        form_data = generate_form_data(model_form=SemesterForm)
+        formset_data = generate_formset_data(ExcludedDateFormset, quantity=5, label="filler text", date=None)
+
+        # test with response
+        response = self.client.post(reverse('courses:semester_create'), data={**form_data, **formset_data})
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFalse(response.context['formset'].is_valid())
 
     def test_SemesterUpdate_view(self):
         self.client.force_login(self.test_teacher)
 
-        first_day = '2020-10-16'
-        response = self.client.post(reverse('courses:semester_update', args=[1]), data={'first_day': first_day})
+        post_data = {
+            'first_day': '2020-10-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[1]), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
-        self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), first_day)
+        self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
+    
+    def test_SemesterUpdate__add_data__view(self):
+        """ 
+             Test for SemesterUpdate with correct/valid post data.
+             Only add data for ExcludeDateFormset related fields
+        """ 
+        self.client.force_login(self.test_teacher)
+
+        # need to generate dates here sinces its unique only (generate_formset_data cant handle validators)
+        exclude_dates = SemesterViewTests.generate_dates(5)
+        
+        semester = SiteConfig.get().active_semester
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            **generate_formset_data(ExcludedDateFormset, quantity=len(exclude_dates), date=itertools.cycle(exclude_dates)),
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+        self.assertRedirects(response, reverse('courses:semester_list'))
+
+        self.assertTrue(semester.excludeddate_set.exists())
+        for ed in semester.excludeddate_set.all():
+            self.assertTrue(ed.date in exclude_dates)
+
+    def test_SemesterUpdate__update_data__view(self):
+        """ 
+             Test for SemesterUpdate with correct/valid post data.
+             Only update/add data for ExcludeDateFormset related fields
+        """ 
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        dates = SemesterViewTests.generate_dates(13)
+
+        old_exclude_dates = dates[:5]
+        updated_exclude_dates = dates[:2] + dates[5:]
+
+        # load data to semester before updating it
+        excludeddates_set = baker.make(ExcludedDate, semester=semester, date=itertools.cycle(old_exclude_dates), _quantity=len(old_exclude_dates))
+        
+        form_data = model_to_form_data(semester, SemesterForm)
+        formset_data = generate_formset_data(ExcludedDateFormset, quantity=len(updated_exclude_dates), date=itertools.cycle(updated_exclude_dates))
+
+        # update management form
+        formset_data.update({
+            'form-INITIAL_FORMS': len(old_exclude_dates)
+        })
+        # give existing dates an id
+        for index in range(len(old_exclude_dates)):
+            formset_data[f'form-{index}-id'] = excludeddates_set[index].id
+
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data={**form_data, **formset_data})
+        self.assertRedirects(response, reverse('courses:semester_list'))
+
+        # assert data is correct
+        for ed in semester.excludeddate_set.all():
+            self.assertTrue(ed.date in updated_exclude_dates)
+
+    def test_SemesterUpdate__delete_data__view(self):
+        """ 
+             Test for SemesterUpdate with correct/valid post data.
+             Only delete data for ExcludeDateFormset related fields
+        """ 
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        
+        dates = SemesterViewTests.generate_dates(10)
+        excludeddates_set = baker.make(ExcludedDate, semester=semester, date=itertools.cycle(dates), _quantity=len(dates))
+
+        form_data = model_to_form_data(semester, SemesterForm)
+        formset_data = generate_formset_data(ExcludedDateFormset, quantity=len(dates), date=itertools.cycle(dates))
+
+        # update management form
+        formset_data.update({
+            'form-INITIAL_FORMS': len(dates)
+        })
+
+        # give existing dates an id + delete=on
+        for index in range(len(dates)):
+            formset_data[f'form-{index}-id'] = excludeddates_set[index].id
+            formset_data[f'form-{index}-DELETE'] = 'on'
+
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data={**form_data, **formset_data})
+        self.assertRedirects(response, reverse('courses:semester_list'))
+
+        self.assertFalse(ExcludedDate.objects.exists())
 
 
 class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
