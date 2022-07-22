@@ -44,6 +44,7 @@ class BadgeTypeTestModel(TenantTestCase):
         """ A data migration should make default objects for this model """
         self.assertTrue(BadgeType.objects.filter(name="Talent").exists())
         self.assertTrue(BadgeType.objects.filter(name="Award").exists())
+        self.assertTrue(BadgeType.objects.filter(name="Team").exists())
     
     def test_model_protection(self):
         """ Badge types shouldn't be deleted if they have any assigned badges """
@@ -83,11 +84,21 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
     def test_default_badge_data(self):
-        """ Data migration should create 4 badges """
+        """ Data migration should create 7 badges """
         self.assertTrue(Badge.objects.filter(name="Penny").exists())
         self.assertTrue(Badge.objects.filter(name="Nickel").exists())
         self.assertTrue(Badge.objects.filter(name="Dime").exists())
         self.assertTrue(Badge.objects.filter(name="ByteDeck Proficiency").exists())
+        self.assertTrue(Badge.objects.filter(name="Red Team").exists())
+        self.assertTrue(Badge.objects.filter(name="Green Team").exists())
+        self.assertTrue(Badge.objects.filter(name="Blue Team").exists())
+    
+    def test_default_badge_icons(self):
+        """
+        Empty because Django tests involving static files are prone to breakage.
+        Come back to this once testing static files is made clearer.
+        """
+        pass
 
 
 class BadgeAssertionTestManager(TenantTestCase):
