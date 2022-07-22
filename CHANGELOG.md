@@ -4,6 +4,22 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.17.0] 2022-07-21 - Summer student contribution 03
+* "Deck owner" is no longer a superuser and will not have access to Django Admin.
+* Campaign list page (currently Admin > Campaigns) updated with quest count, XP available
+* Campign name in quests now link to the detail view of that campaign 
+* Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
+  - Password resetting
+  - Ability to set a user as Staff or TA (in profile form)
+  - Excluded dates for a semester
+* Minor tweaks and bugfixes:
+  - Changing semesters is now done in the Semester views
+  - "Badge Types" can now be created from Badges page
+  - New blocks default to the owner user as the teacher
+  - Flatpages added to the public tenant
+  - New default Badge Type "Teams" and 3 new default teams badges
+  - Various other minor bugfixes and tweaks
+
 ### [1.16.0] 2022-07-01 - Summer student contribution 02
 * "Deck owner" field added to the Site Configuration form, indicating which user "owns" the deck.  This field can only be changed by the user currently listed as deck owner.  For future use. [#637](https://github.com/bytedeck/bytedeck/issues/637)
 * Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
