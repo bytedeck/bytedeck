@@ -1,15 +1,15 @@
 
 {% with object.tags.all as tags%}
-<div class="tags-list">
+<div class='tags-list'>
 <ul class='left-aligned'>
 {% if tags.count > 4 %}
     {% for tag in tags %}
-    <a href="{% url 'tags:detail' tag.id %}">{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+    <a href='{% url "tags:detail" tag.id %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
     {% empty %} None
     {% endfor %}
 {% else %}
     {% for tag in tags %}
-    <li><a href="{% url 'tags:detail' tag.id %}">{{ tag.name }}</a></li>
+    <li><a href='{% url "tags:detail" tag.id %}'>{{ tag.name }}</a></li>
     {% empty %} <li>None</li>
     {% endfor %}
 {% endif %}
