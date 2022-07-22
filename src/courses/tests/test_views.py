@@ -9,6 +9,7 @@ from courses.models import Block, Course, CourseStudent, Semester, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
+
 User = get_user_model()
 
 
@@ -432,6 +433,10 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('courses:semester_list'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['object_list'].count(), 1)
+
+        for obj in response.context['object_list']:
+            self.assertContains(response, obj.num_days())
+            self.assertContains(response, obj.excludeddate_set.count())
 
     def test_SemesterCreate_view(self):
         self.client.force_login(self.test_teacher)
