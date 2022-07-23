@@ -15,7 +15,7 @@ from tags.forms import BootstrapTaggitSelect2Widget
 
 from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
-from .models import Category, Quest
+from .models import Category, Quest, CommonQuestInfo
 
 
 class BadgeLabel:
@@ -60,7 +60,7 @@ class QuestForm(forms.ModelForm):
         model = Quest
         fields = ('name', 'visible_to_students', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
-                  'campaign', 'common_data', 'submission_details', 'instructor_notes',
+                  'campaign', 'common_quest_info', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'map_transition', 'tags',
                   'new_quest_prerequisite',
@@ -95,7 +95,7 @@ class QuestForm(forms.ModelForm):
 
             # TODO: Campaign Autocomplete
             # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
-            # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
+            # 'common_quest_info': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
             # 'specific_teacher_to_notify': Select2Widget(),
 
             # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
@@ -133,7 +133,7 @@ class QuestForm(forms.ModelForm):
                 'submission_details',
                 'instructor_notes',
                 'campaign',
-                'common_data',
+                'common_quest_info',
                 'max_repeats',
                 'hours_between_repeats',
                 'tags',
@@ -265,3 +265,14 @@ class SubmissionQuickReplyForm(forms.Form):
     def __init__(self, *args, **kwds):
         super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
+
+
+class CommonQuestInfoForm(forms.ModelForm):
+    
+    class Meta:
+        model = CommonQuestInfo
+        fields = "__all__"
+        widgets = {
+            "instructions": SummernoteInplaceWidget()
+        }
+        

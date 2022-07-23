@@ -14,7 +14,7 @@ from prerequisites.admin import PrereqInline
 from badges.models import Badge
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .signals import tidy_html
-from .models import Quest, Category, QuestSubmission, CommonData
+from .models import Quest, Category, QuestSubmission, CommonQuestInfo
 
 
 def publish_selected_quests(modeladmin, request, queryset):
@@ -85,7 +85,7 @@ class QuestResource(resources.ModelResource):
     class Meta:
         model = Quest
         import_id_fields = ('import_id',)
-        exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
+        exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_quest_info')
 
     def dehydrate_prereq_import_ids(self, quest):
         # save basic single/simple prerequisites, if there are any (no OR).
@@ -168,9 +168,9 @@ class QuestResource(resources.ModelResource):
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
-                    'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
+                    'editor', 'specific_teacher_to_notify', 'common_quest_info', 'campaign')
     list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
-                   'specific_teacher_to_notify', 'common_data', 'campaign']
+                   'specific_teacher_to_notify', 'common_quest_info', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description', 'campaign__title']
     inlines = [
         # TaggedItemInline
@@ -198,7 +198,7 @@ class CategoryAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
 admin.site.register(Quest, QuestAdmin)
 admin.site.register(Category, CategoryAdmin)
-admin.site.register(CommonData, CommonDataAdmin)
+admin.site.register(CommonQuestInfo, CommonDataAdmin)
 admin.site.register(QuestSubmission, QuestSubmissionAdmin)
 # admin.site.register(Prereq)
 # admin.site.register(Feedback, FeedbackAdmin)

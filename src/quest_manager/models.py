@@ -91,7 +91,7 @@ class Category(IsAPrereqMixin, models.Model):
         return self.title
 
 
-class CommonData(models.Model):
+class CommonQuestInfo(models.Model):
     title = models.CharField(max_length=50, unique=True)
     instructions = models.TextField()
     active = models.BooleanField(default=True)
@@ -392,7 +392,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         on_delete=models.SET_NULL
     )
     campaign = models.ForeignKey(Category, blank=True, null=True, on_delete=models.SET_NULL)
-    common_data = models.ForeignKey(CommonData, blank=True, null=True, on_delete=models.SET_NULL)
+    common_quest_info = models.ForeignKey(CommonQuestInfo, blank=True, null=True, on_delete=models.SET_NULL)
     instructions = models.TextField(blank=True, verbose_name='Quest Details')
     submission_details = models.TextField(blank=True, verbose_name='Submission Instructions')
     instructor_notes = models.TextField(blank=True, null=True,

@@ -1,0 +1,10 @@
+      <div id="quest-common-{{ q.id }}" class="panel panel-primary panel-top">
+        <div class="panel-heading">
+          <h3 class="panel-title">{{ q.common_quest_info.title }}<br>
+            <small>General Info (<a href="{% url 'quest_manager:commonquestinfo_update' pk=q.common_quest_info.id %}?next={{request.get_full_path}}">edit</a>)</small>
+          </h3>
+        </div>
+        <div class="panel-body">
+          {{ q.common_quest_info.instructions | safe }}
+        </div>
+      </div>

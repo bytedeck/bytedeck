@@ -12,7 +12,7 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from courses.models import Semester
-from quest_manager.models import Category, CommonData, Quest, QuestSubmission
+from quest_manager.models import Category, CommonQuestInfo, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 
@@ -102,11 +102,11 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
 class CommonDataTestModel(TenantTestCase):
     def setUp(self):
-        self.common_data = baker.make(CommonData)
+        self.common_quest_info = baker.make(CommonQuestInfo)
 
     def test_badge_series_creation(self):
-        self.assertIsInstance(self.common_data, CommonData)
-        self.assertEqual(str(self.common_data), self.common_data.title)
+        self.assertIsInstance(self.common_quest_info, CommonQuestInfo)
+        self.assertEqual(str(self.common_quest_info), self.common_quest_info.title)
 
 
 class QuestTestModel(TenantTestCase):

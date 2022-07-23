@@ -18,7 +18,7 @@ from quest_manager import views
 from django.conf.urls import url
 from django.urls import path
 
-from quest_manager.models import Category, CommonData, Quest
+from quest_manager.models import Category, CommonQuestInfo, Quest
 from utilities.views import ModelAutocomplete
 
 app_name = 'quest_manager'
@@ -105,5 +105,10 @@ urlpatterns = [
     path('campaigns/autocomplete/', ModelAutocomplete.as_view(model=Category), name='category_autocomplete'),
 
     # Common Data
-    path('commondata/autocomplete/', ModelAutocomplete.as_view(model=CommonData), name='commondata_autocomplete'),
+    path('common-quest-info/autocomplete/', ModelAutocomplete.as_view(model=CommonQuestInfo), name='commonquestinfo_autocomplete'),
+
+    path('common-quest-info/list/', views.CommonQuestInfoListView.as_view(), name='commonquestinfo_list'),
+    path('common-quest-info/create/', views.CommonQuestInfoCreateView.as_view(), name='commonquestinfo_create'),
+    path('common-quest-info/update/<pk>/', views.CommonQuestInfoUpdateView.as_view(), name='commonquestinfo_update'),
+    path('common-quest-info/delete/<pk>/', views.CommonQuestInfoDeleteView.as_view(), name='commonquestinfo_delete'),
 ]

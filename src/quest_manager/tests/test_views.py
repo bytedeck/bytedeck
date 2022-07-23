@@ -20,9 +20,9 @@ from django_tenants.test.client import TenantClient
 from mock import patch
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
-from quest_manager.models import Category, Quest, QuestSubmission
+from quest_manager.models import Category, Quest, QuestSubmission, CommonQuestInfo
 from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
@@ -56,7 +56,7 @@ class AutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_commondata_autocomplete_view(self):
         """ Make sure autocomplete view for this model is accessible and not throwing errors"""
-        response = self.client.get(reverse('quests:commondata_autocomplete'))
+        response = self.client.get(reverse('quests:commonquestinfo_autocomplete'))
         self.assertEqual(response.status_code, 200)
 
     # TODO: Campaign Autocomplete <-- why doesn't this work?  should be same as above tests!!!
@@ -1092,13 +1092,13 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
             form[form_key] = value
         return form
 
-    def build_formset_data(self, forms, form_prefix="form", **common_data):
+    def build_formset_data(self, forms, form_prefix="form", **common_quest_info):
         formset_dict = {
             f"{form_prefix}-TOTAL_FORMS": f"{len(forms)}",
             f"{form_prefix}-MAX_NUM_FORMS": "1000",
             f"{form_prefix}-INITIAL_FORMS": "1"
         }
-        formset_dict.update(common_data)
+        formset_dict.update(common_quest_info)
         for i, form_data in enumerate(forms):
             form_dict = self.build_formset_form_data(form_prefix, form_number=i, **form_data)
             formset_dict.update(form_dict)
@@ -2280,3 +2280,90 @@ class Is_staff_or_TA_test(TenantTestCase):
     def test_is_staff_or_TA__anonymous(self):
         """ Anonymous user returns False"""
         self.assertFalse(is_staff_or_TA(AnonymousUser()))
+
+
+class CommonQuestInfoViewTest(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.teacher = baker.make(User, is_staff=True)
+
+        self.cqi = baker.make(CommonQuestInfo)
+
+    def test_page_status_code__anonymous(self):
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_list")
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_create")
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
+
+    def test_page_status_code__student(self):
+        stu = baker.make(User)
+        self.client.force_login(stu)
+
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_list")
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_create")
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
+        self.assertRedirectsAdmin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
+
+    def test_page_status_code__teacher(self):
+        self.client.force_login(self.teacher)
+        
+        self.assert200("quest_manager:commonquestinfo_list")
+        self.assert200("quest_manager:commonquestinfo_create")
+        self.assert200("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
+        self.assert200("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
+
+    def test_CommonQuestInfoList_view(self):
+        """
+            Test if CommonQuestInfo displays all CQI obj
+        """
+        baker.make(CommonQuestInfo, _quantity=5)
+        self.client.force_login(self.teacher)
+        
+        response = self.client.get(reverse("quest_manager:commonquestinfo_list"))
+        object_list = response.context["object_list"]
+
+        for model_obj, ctx_obj in zip(CommonQuestInfo.objects.all(), object_list):
+            self.assertEqual(model_obj.pk, ctx_obj.pk)
+
+    def test_CommonQuestInfoCreate_view(self):
+        """ 
+            Test if CQI can be created using CreateView via form_data
+        """ 
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(reverse("quest_manager:commonquestinfo_create"), data=generate_form_data(CommonQuestInfo))
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(CommonQuestInfo.objects.count(), 2)
+
+    def test_CommonQuestInfoUpdate_view(self):
+        """ 
+            Test if CQI can be updated using UpdateView via form_data
+        """ 
+        self.client.force_login(self.teacher)
+        old = baker.make(CommonQuestInfo, title="old title")
+
+        response = self.client.post(
+            reverse("quest_manager:commonquestinfo_update", args=[old.pk]), 
+            data=generate_form_data(CommonQuestInfo, title="new title", instructions=old.instructions)
+        )
+        self.assertEqual(response.status_code, 302)
+
+        new = CommonQuestInfo.objects.filter(pk=old.pk).first()
+        self.assertTrue(new)
+        self.assertNotEqual(new.title, old.title)
+        self.assertEqual(new.instructions, old.instructions)
+
+    def test_CommonQuestInfoDelete_view(self):
+        """ 
+            Test if CQI can be deleted using DeleteView
+        """ 
+        obj = baker.make(CommonQuestInfo)
+        self.assertNotEqual(CommonQuestInfo.objects.count(), 1)
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(reverse("quest_manager:commonquestinfo_delete", args=[obj.pk]))
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(CommonQuestInfo.objects.count(), 1)
