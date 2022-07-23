@@ -106,4 +106,7 @@ class CreateEmailNotificationTasksTest(TenantTestCase):
         create_email_notification_tasks()
         tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
         self.assertEqual(tasks.count(), 1)
-        self.assertEqual(tasks[0].headers, json.dumps({"_schema_name": "test"}))
+        task = tasks.first()
+        self.assertEqual(task.headers, json.dumps({"_schema_name": "test"}))
+        self.assertTrue(task.enabled)
+        self.assertFalse(task.one_off)

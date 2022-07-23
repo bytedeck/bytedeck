@@ -99,7 +99,7 @@ def create_email_notification_tasks():
             'headers': json.dumps({
                 '_schema_name': tenant.schema_name,
             }),
-            'one_off': True,
+            'one_off': False,
             'enabled': True,
         }
 
