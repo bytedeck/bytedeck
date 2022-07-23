@@ -227,17 +227,25 @@ class ViewTestUtilsMixin():
             200
         )
 
-    def assert200URL(self, url_name):
-        """  
-            assert200 function without reverse() hard coded inside it
-
-            Assert that a GET response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
-            Any url and path parameters should be provided in the url_name.
+    def assert200URL(self, url):
+        """ Assert that a GET response succeeded with a status code of 200.
         """ 
-        response = self.client.get(url_name)
+        response = self.client.get(url)
         self.assertEqual(
             response.status_code,
             200
+        )
+
+    def assert302(self, url_name, *args, **kwargs):
+        """
+        Assert that a GET response to reverse(url_name, *args, **kwargs) gives a 403 Permission Denied.
+        For example, when an unauthenticated user attempts to access a view with the LoginRequiredMixin
+        Provide any url and path parameters as args or kwargs.
+        """
+        response = self.client.get(reverse(url_name, *args, **kwargs))
+        self.assertEqual(
+            response.status_code,
+            302
         )
 
     def assert404(self, url_name, *args, **kwargs):
@@ -251,14 +259,9 @@ class ViewTestUtilsMixin():
             404
         )
 
-    def assert404URL(self, url_name):
-        """  
-            assert404 function without reverse() hard coded inside it
-
-            Assert that a GET response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
-            Provide any url and path parameters as args or kwargs.
-        """ 
-        response = self.client.get(url_name)
+    def assert404URL(self, url):
+        """Assert that a GET response fails with a status code of 404.""" 
+        response = self.client.get(url)
         self.assertEqual(
             response.status_code,
             404

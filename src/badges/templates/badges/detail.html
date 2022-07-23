@@ -18,18 +18,28 @@
     <!-- Default panel contents -->
     <div class="panel-heading"><h3 class="panel-title">Badge Details</h3></div>
     <div class="panel-body">
-      <p>XP: {{badge.xp}}</p>
-      <p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p>
-      <p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</p>
-      
-      <p>Prerequisites: <a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a></p>
-      <ul>
-      {% for p in badge.prereqs %}
-        <li><a href="{{ p.get_prereq.get_absolute_url }}">{{ p }}</a></li>
-      {% empty %}
-        <li>None (granted manually)</li>
-      {% endfor %}
-      </ul>
+      <div class="row">
+        <div class="col-sm-6">
+          <ul class="list-unstyled">
+            <li><h4>XP: {{badge.xp}}</h4></li>
+            <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p></li>
+            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</p></li>
+          </ul>
+        </div>
+        <div class="col-sm-6">
+          <ul class="list-unstyled">
+            {% with badge as object %}
+            <li>Tags: {% include 'tags/snippets/tag-list.html' %}{% endwith %}<br></li>
+            <li>Prerequisites: <a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>
+                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}
+                
+            </li>
+            {% endwith %}
+          </ul>
+        </div>
+      </div> <!-- /.row -->
+     
+
 
       {% if assertions_of_this_badge %} {# If a student is looking at this, it will show which badges they have earned #}
       <p>Earned: </p>

@@ -1,0 +1,34 @@
+{% extends "tags/base.html" %}
+{% load static %}
+
+{% block head %}
+{% endblock %}
+
+{% block heading_inner %}
+    Tag: {{object.name}}
+{% endblock %}
+
+{% block content %}
+<h3>Quests ({{ quests|length }})</h3>
+<ul>
+    {% for quest in quests %}
+        <li>
+            <a href="{{ quest.get_absolute_url }}">{{ quest }}</a>
+        </li>
+    {% empty %} <li>None</li>
+    {% endfor %}
+</ul>
+<h3>Badges ({{ badges|length }})</h3>
+<ul>
+    {% for badge in badges %}
+        <li>
+            <a href="{{ badge.get_absolute_url }}">{{ badge }}</a>
+        </li>
+    {% empty %} <li>None</li>
+    {% endfor %}
+</ul>
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}

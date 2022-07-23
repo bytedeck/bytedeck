@@ -16,7 +16,7 @@ from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from dal import autocomplete
 
 
-class ModelAutocomplete(autocomplete.Select2QuerySetView):
+class ModelAutocomplete(NonPublicOnlyViewMixin, autocomplete.Select2QuerySetView):
     """ 
     DRY autocomplete view for select2 widgets.  Example usage in urls.py with model = Quest
     `path('quest/autocomplete/', utilities.views.ModelAutocomplete.as_view(model=Quest), name='quest_autocomplete')`
