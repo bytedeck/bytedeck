@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
 from profile_manager.models import Profile
+from tags.forms import BootstrapTaggitSelect2Widget
 from .models import Badge, BadgeAssertion
 
 
@@ -10,8 +11,14 @@ class BadgeForm(forms.ModelForm):
 
     class Meta:
         model = Badge
-        fields = '__all__'
-        # exclude = None
+        fields = (
+            'name', 'xp', 'icon', 'short_description', 'badge_type', 'tags', 
+            'sort_order', 'active', 'map_transition', 'import_id'
+        )
+
+        widgets = {
+            'tags': BootstrapTaggitSelect2Widget()
+        }
 
 
 class BadgeAssertionForm(forms.ModelForm):

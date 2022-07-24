@@ -7,7 +7,7 @@ from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from utilities.models import ImageResource, MenuItem, VideoResource
 
 
-class FlatPageAdmin2(NonPublicSchemaOnlyAdminAccessMixin, FlatPageAdmin, SummernoteModelAdmin):
+class FlatPageAdmin2(FlatPageAdmin, SummernoteModelAdmin):
     list_display = ('url', 'title', 'registration_required',)
     summernote_fields = ('content',)
 

@@ -59,19 +59,45 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
     def test_category_url(self):
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
+    
+    def test_current_quests(self):
+        """ Test that the queryset of all quests in a campaign is returned correctly """
+
+        # assert that the current campaign has no quests
+        self.assertEqual(self.category.current_quests().count(), 0)
+
+        # create some quests as part of the test campaign, some are invalid and won't be included
+        baker.make(Quest, campaign=self.category)  # included in queryset
+        baker.make(Quest, campaign=self.category)  # included in queryset
+        baker.make(Quest, campaign=self.category, visible_to_students=False)  # NOT included in queryset because not visible
+        baker.make(Quest, campaign=self.category, archived=True)  # NOT included in queryset because archived
+        baker.make(Quest)  # NOT included in queryset because in a different campaign
+
+        # assert that the current campaign has 2 valid quests after additions
+        self.assertEqual(self.category.current_quests().count(), 2)
 
     def test_xp_sum(self):
         """ Test that the XP sum of all quests in a campaign is returned correctly """
 
         # create some quests as part of the test campaign
-        baker.make(Quest, campaign=self.category, xp=1)  # included in sum
-        baker.make(Quest, campaign=self.category, xp=2)  # included in sum
-        baker.make(Quest, xp=4)  # NOT included in sum because n a different campaign
-        baker.make(Quest, visible_to_students=False, xp=8)  # NOT included in sum becuase not visible
-        baker.make(Quest, archived=True, xp=16)  # NOT included in sum becase archived
+        baker.make(Quest, campaign=self.category, xp=1)
+        baker.make(Quest, campaign=self.category, xp=2)
 
         # check that the XP sum is correct
         self.assertEqual(self.category.xp_sum(), 3)
+
+    def test_quest_count(self):
+        """ Test that the number of all quests in a campaign is returned correctly """
+
+        # assert that the current campaign has no quests
+        self.assertEqual(self.category.quest_count(), 0)
+
+        # create some quests as a part of the test campaign
+        baker.make(Quest, campaign=self.category)
+        baker.make(Quest, campaign=self.category)
+
+        # check that the quest count is correct after additions
+        self.assertEqual(self.category.quest_count(), 2)
 
 
 class CommonDataTestModel(TenantTestCase):

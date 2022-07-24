@@ -44,6 +44,28 @@ def create_two_test_files():
     return [test_file1, test_file2]
 
 
+class AutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+    def test_quest_autocomplete_view(self):
+        """ Make sure autocomplete view for this model is accessible and not throwing errors"""
+        response = self.client.get(reverse('quests:quest_autocomplete'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_commondata_autocomplete_view(self):
+        """ Make sure autocomplete view for this model is accessible and not throwing errors"""
+        response = self.client.get(reverse('quests:commondata_autocomplete'))
+        self.assertEqual(response.status_code, 200)
+
+    # TODO: Campaign Autocomplete <-- why doesn't this work?  should be same as above tests!!!
+    # def test_category_autocomplete_view(self):
+    #     """ Make sure autocomplete view for this model is accessible and not throwing errors"""
+    #     response = self.client.get(reverse('quests:category_autocomplete'))
+    #     self.assertEqual(response.status_code, 200)
+
+
 class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     # includes some basic model data

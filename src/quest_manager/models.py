@@ -17,6 +17,7 @@ from siteconfig.models import SiteConfig
 from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
+from tags.models import TagsModelMixin
 # from utilities.models import ImageResource
 
 # from django.contrib.contenttypes.models import ContentType
@@ -45,11 +46,19 @@ class Category(IsAPrereqMixin, models.Model):
             return self.icon.url
         else:
             return SiteConfig.get().get_default_icon_url()
+    
+    def current_quests(self):
+        """ Returns a queryset containing every currently available quest in this campaign."""
+        return self.quest_set.all().visible().not_archived()
+
+    def quest_count(self):
+        """ Returns the total number of quests available in this campaign."""
+        return self.current_quests().count()
 
     def xp_sum(self):
         """ Returns the total XP available from completing all visible quests in this campaign.
         Repeating quests are only counted once."""
-        return self.quest_set.all().visible().not_archived().aggregate(Sum('xp'))['xp__sum']
+        return self.current_quests().aggregate(Sum('xp'))['xp__sum']
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
@@ -364,7 +373,7 @@ class QuestManager(models.Manager):
             return qs.editable(user)
 
 
-class Quest(IsAPrereqMixin, HasPrereqsMixin, XPItem):
+class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \

@@ -53,6 +53,8 @@ urlpatterns += [
     url(r'^decks/', include('tenant.urls', namespace='decks')),
     url(r'^prerequisites/', include('prerequisites.urls')),
 
+    url(r'^tags/', include('tags.urls', namespace='tags')),
+
     # summer_note
     url(r'^summernote/', include('django_summernote.urls')),
     # allauth

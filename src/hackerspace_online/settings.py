@@ -108,6 +108,8 @@ TENANT_APPS = (
     'hackerspace_online',
     'django_summernote',
 
+    'taggit',
+
     'quest_manager',
     'profile_manager',
     'announcements',
@@ -193,6 +195,9 @@ INSTALLED_APPS = (
 
     # django storages
     'storages',
+
+    # django-taggit: https://django-taggit.readthedocs.io/en/latest/index.html
+    'taggit',
 
     # local apps
     'quest_manager',
@@ -730,6 +735,9 @@ SUMMERNOTE_CONFIG = {
 DJANGORESIZED_DEFAULT_QUALITY = 90
 DJANGORESIZED_DEFAULT_SIZE = [256, 256]
 DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
+
+# django-taggit
+TAGGIT_CASE_INSENSITIVE = True
 
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################

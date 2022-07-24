@@ -13,6 +13,35 @@ from .models import MenuItem, VideoResource
 from utilities.forms import MenuItemForm, VideoForm, CustomFlatpageForm
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 
+from dal import autocomplete
+
+
+class ModelAutocomplete(autocomplete.Select2QuerySetView):
+    """ 
+    DRY autocomplete view for select2 widgets.  Example usage in urls.py with model = Quest
+    `path('quest/autocomplete/', utilities.views.ModelAutocomplete.as_view(model=Quest), name='quest_autocomplete')`
+
+    https://django-autocomplete-light.readthedocs.io/en/master/tutorial.html#create-an-autocomplete-view
+    """
+
+    def get_queryset(self):
+        # Don't forget to filter out results depending on the visitor !
+        if not self.request.user.is_authenticated:
+            return self.model.objects.none()
+
+        # if model doesn't have a 'name' then try 'title'
+        search_field = 'name' if hasattr(self.model, 'name') else 'title'
+
+        # order_by() added to prevent this warning:
+        # UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class '<some model here>'> QuerySet.
+        qs = self.model.objects.all().order_by(search_field)
+
+        if self.q:  # If a GET search query was provided (autocomplete/?q=thing), then filter on it
+            filter_kwargs = {f'{search_field}__icontains': self.q}
+            qs = qs.filter(**filter_kwargs)
+
+        return qs
+
 
 @non_public_only_view
 def videos(request):

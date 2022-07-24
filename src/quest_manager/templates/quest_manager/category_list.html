@@ -1,4 +1,4 @@
-{% extends "courses/base.html" %}
+{% extends "quest_manager/base.html" %}
 
 {% block head_title %}Campaigns | {% endblock %}
 {% block head %}{% endblock %}
@@ -6,7 +6,7 @@
 {% block content_first %}{% endblock %}
 {% block heading_inner %}Campaigns
 {% if request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button">New</a>
+  <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
 {% endif %}
 {% endblock %}
 
@@ -15,13 +15,18 @@
   <tr>
     <th>Title</th>
     <th>Icon</th>
+    <th># of Quests</th>
+    <th>XP Available</th>
     <th>Active</th>
     <th>Action</th>
   </tr>
   {% for object in object_list %}
   <tr>
     <td>{{ object.title }}</td>
-    <td>{% if object.icon %}<img class="img-responsive panel-title-img img-rounded" src="{{ object.icon.url }}">{% endif %}</td>
+    <td><img class="img-responsive panel-title-img img-rounded" src="{{ object.get_icon_url }}"></td>
+    <td>{{ object.quest_count }}</td>
+    <td>{{ object.xp_sum }}</td>
+
     <td>{{ object.active }}</td>
     <td>
       <a class="btn btn-info" href="{% url 'quests:category_detail' object.id %}" role="button" title="View Details: view the content of this campaign.">

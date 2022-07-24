@@ -5,9 +5,16 @@
       <a class="btn btn-info" title="Edit your Profile"
         href="{% url 'profiles:profile_update' object.id %}"
         role="button"><i class="fa fa-cog"></i></a>
-      <a class="btn btn-warning" title="Change your Password"
+
+      {% if request.user.is_staff and not object.user.is_staff %}
+        <a class="btn btn-warning" title="Change User's Password"
+          href="{% url 'profiles:change_password' object.user.pk %}"
+          role="button"><i class="fa fa-key"></i></a>
+      {% else %}
+        <a class="btn btn-warning" title="Change Password"
         href="{% url 'account_change_password' %}"
         role="button"><i class="fa fa-key"></i></a>
+      {% endif %}
 
       {% if config.display_marks_calculation %}
         <a class= "btn btn-primary" title="View your Mark Calculations"

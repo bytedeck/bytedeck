@@ -1,21 +1,25 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.http import Http404
+from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
-from django.views.generic.edit import UpdateView
+from django.views.generic.edit import UpdateView, FormView
 
 from .models import Profile
-from .forms import ProfileForm
+from .forms import ProfileForm, UserForm
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+
+from django.contrib.auth.forms import SetPasswordForm
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -129,17 +133,20 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
 
 class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = Profile
-    form_class = ProfileForm
+    profile_form_class = ProfileForm
+    user_form_class = UserForm
     template_name = 'profile_manager/form.html'
 
-    def get_context_data(self, **kwargs):
-        profile = self.get_object()
-        # Call the base implementation first to get a context
-        context = super(ProfileUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
-        context['submit_btn_value'] = "Update"
-        context['profile'] = profile
-        return context
+    def get_object(self):
+        return get_object_or_404(self.model, pk=self.kwargs["pk"])
+
+    # returns a list of existing form instances or new ones
+    def get_forms(self):
+        forms = [self.get_profile_form()]
+        if self.request.user.is_staff:
+            forms.append(self.get_user_form())
+
+        return forms
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
@@ -149,12 +156,92 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
         else:
             raise Http404("Sorry, this profile isn't yours!")
 
+    def post(self, request, *args, **kwargs):
+        forms = self.get_forms()
+
+        # check if all form instances are valid else ...
+        if all([form.is_valid() for form in forms]):
+            return self.form_valid(forms)
+        return self.form_invalid(forms)
+
+    def get_context_data(self, **kwargs):
+        profile = self.get_object()
+        context = {}
+
+        # return instance of form or new form instance
+        context['forms'] = kwargs.get('form', self.get_forms())
+
+        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
+        context['submit_btn_value'] = "Update"
+        context['profile'] = profile
+
+        return context
+
+    # returns instance of ProfileForm
+    def get_profile_form(self):
+        form_kwargs = super().get_form_kwargs()
+        form_kwargs['instance'] = self.get_object()
+
+        return self.profile_form_class(**form_kwargs)
+
+    # returns instance of UserForm
+    def get_user_form(self):
+        form_kwargs = super().get_form_kwargs()
+        form_kwargs['instance'] = self.get_object().user
+
+        return self.user_form_class(**form_kwargs)
+
+    # runs if all forms are valid
+    def form_valid(self, forms, *args, **kwargs):
+        for form in forms:
+            form.save()
+
+        return HttpResponseRedirect(self.get_success_url())
+    
+    def get_success_url(self):
+        return reverse("profiles:profile_detail", args=[self.get_object().pk])
+
 
 class ProfileUpdateOwn(ProfileUpdate):
     """ Provides a single url for users to edit only their own profile, so the link can be included in emails """
 
     def get_object(self):
         return self.request.user.profile
+
+
+class PasswordReset(FormView):
+    form_class = SetPasswordForm
+    template_name = 'profile_manager/password_change_form.html'
+    
+    def get_instance(self):
+        model_pk = self.kwargs['pk']
+        return get_user_model().objects.get(pk=model_pk)
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        user = self.get_instance()
+        if user.is_staff:
+            return HttpResponseForbidden("Staff users are forbidden")
+        return super().dispatch(*args, **kwargs)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.get_instance().profile
+
+        context['heading'] = "Changing " + profile.user.get_username() + "'s Password"
+        context['submit_btn_value'] = "Update"
+        
+        return context
+
+    def get_form(self):
+        return PasswordReset.form_class(user=self.get_instance(), **self.get_form_kwargs())
+
+    def form_valid(self, form):
+        form.save()
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
 @non_public_only_view

@@ -9,6 +9,10 @@ from model_bakery import baker
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
+from profile_manager.forms import ProfileForm, UserForm
+
+from hackerspace_online.tests.utils import generate_form_data
+
 
 class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
@@ -161,3 +165,145 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         self.assert404('courses:my_marks')
+
+    def test_assert_correct_forms__not_staff(self):
+        """ 
+            test if non staff users have access to ProfileForm and not UserForm in ProfileView
+        """
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
+        self.assertTrue(any(isinstance(form, ProfileForm) for form in response.context["forms"]))
+        self.assertFalse(any(isinstance(form, UserForm) for form in response.context["forms"]))
+
+    def test_assert_correct_forms__staff(self):
+        """ 
+            test if staff users have access to ProfileForm and UserForm in ProfileView
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_teacher.profile.pk]))
+
+        self.assertTrue(any(isinstance(form, ProfileForm) for form in response.context["forms"]))
+        self.assertTrue(any(isinstance(form, UserForm) for form in response.context["forms"]))
+    
+    def test_update_profile__not_staff(self):
+        """ 
+            Test to see if a user who is_staff=False can use the UserForm using ProfileView
+            (They shouldn't)
+        """
+        User = get_user_model()
+        Profile = ProfileForm._meta.model
+
+        user_instance = baker.make(User, email="old@email.com")
+        profile_instance = user_instance.profile
+
+        # ProfileForm form data
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=Profile.get_grad_year_choices()[0][0])
+        # UserForm form data
+        form_data.update({
+            "username": "NEWUSERNAME",
+            "email": "new@email.com",
+            "first_name": "NEW",
+            "last_name": "NEW",
+
+            "is_staff": True,
+            "is_active": True,
+            "is_TA": False,
+        })
+
+        self.client.force_login(user_instance)
+
+        # test if view accepts form data without errors
+        response = self.client.post(reverse("profiles:profile_update", args=[profile_instance.pk]), data=form_data)
+        self.assertRedirects(response, reverse("profiles:profile_detail", args=[profile_instance.pk]))
+
+        # check if model data was changed
+        self.assertTrue(User.objects.filter(email=form_data["email"]).exists())
+
+        # check if staff and superuser args were ignored
+        user_instance = User.objects.get(email=form_data["email"])
+        self.assertFalse(user_instance.is_staff)
+    
+    def test_update_profile__staff(self):
+        """ 
+            Test to see if a user who is_staff=True can use the UserForm using ProfileView
+            (They can)
+        """
+        User = get_user_model()
+        Profile = ProfileForm._meta.model
+
+        user_instance = baker.make(User, email="old@email.com", is_staff=True)
+        profile_instance = user_instance.profile
+
+        # ProfileForm form data
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=Profile.get_grad_year_choices()[0][0])
+        # UserForm form data
+        form_data.update({
+            "username": "NEWUSERNAME",
+            "email": "new@email.com",
+            "first_name": "NEW",
+            "last_name": "NEW",
+
+            "is_staff": False,
+            "is_active": True,
+            "is_TA": True,
+        })
+
+        self.client.force_login(user_instance)
+
+        # test if view accepts form data without errors
+        response = self.client.post(reverse("profiles:profile_update", args=[profile_instance.pk]), data=form_data)
+        self.assertRedirects(response, reverse("profiles:profile_detail", args=[profile_instance.pk]))
+
+        # check if model data was changed
+        self.assertTrue(User.objects.filter(email=form_data["email"]).exists())
+
+        # check if other args were updated
+        user_instance = User.objects.get(email=form_data["email"])
+        self.assertEqual(user_instance.username, form_data["username"])
+        self.assertEqual(user_instance.first_name, form_data["first_name"])
+        self.assertEqual(user_instance.last_name, form_data["last_name"])
+        self.assertEqual(user_instance.is_staff, form_data["is_staff"])
+        self.assertEqual(user_instance.profile.is_TA, form_data["is_TA"])
+
+    def test_password_change_status_code__anonymous(self):
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
+    
+    def test_password_change_status_code__student(self):
+        self.client.force_login(self.test_student1)
+
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
+        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
+    
+    def test_password_change_status_code__staff(self):
+        self.client.force_login(self.test_teacher)
+
+        self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assert200("profiles:change_password", kwargs={"pk": self.test_student1.pk})
+        self.assert200("profiles:change_password", kwargs={"pk": self.test_student2.pk})
+
+    def test_update_password(self):
+        """ 
+            quick test to see if staff can change their user's password using passwordchange form
+        """ 
+        User = get_user_model()
+        user_instance = User.objects.create_user(username="username", password=self.test_password)
+
+        form_data = {
+            'new_password1': 'xXxnewwordpassxXx123@',
+            'new_password2': 'xXxnewwordpassxXx123@',
+        }
+
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # test if view accepts form data without errors
+        self.client.post(reverse("profiles:change_password", kwargs={"pk": user_instance.pk}), data=form_data)
+
+        # login to confirm changed password
+        success = self.client.login(username=user_instance.username, password=form_data['new_password1'])
+        self.assertTrue(success)

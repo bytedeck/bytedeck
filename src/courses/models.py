@@ -204,8 +204,8 @@ class Semester(models.Model):
     CLOSED = -1
     QUEST_AWAITING_APPROVAL = -2
 
-    first_day = models.DateField(blank=True, null=True, default=date.today)
-    last_day = models.DateField(blank=True, null=True, default=default_end_date)
+    first_day = models.DateField(null=True, default=date.today)
+    last_day = models.DateField(null=True, default=default_end_date)
     closed = models.BooleanField(
         default=False,
         help_text="All student courses in this semester have been closed and final marks recorded."
@@ -374,8 +374,9 @@ class Block(models.Model):
 
 class ExcludedDate(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
-    date_type = models.ForeignKey(DateType, on_delete=models.SET_NULL, null=True)
+    date_type = models.ForeignKey(DateType, on_delete=models.SET_NULL, blank=True, null=True)
     date = models.DateField(unique=True)
+    label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
 
     def __str__(self):
         return self.date.strftime("%d-%b-%Y")
