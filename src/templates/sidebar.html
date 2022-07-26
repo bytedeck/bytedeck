@@ -40,7 +40,7 @@
       {% if request.user.is_staff %}
         <div class="clearfix">
           <a id="badges-menu"
-          class="list-group-item left-side {% if '/badges/' in request.path_info %}active{% endif %}"
+          class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
           href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
           <a title="Badge Types" class="list-group-item right-side text-center
           {% if 'badges/types/' in request.path_info %}active{% endif %}"
