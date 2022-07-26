@@ -2,7 +2,6 @@ import json
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
-from django.test import tag
 from django_celery_beat.models import PeriodicTask
 from mock import patch
 
@@ -38,38 +37,38 @@ class NotificationTasksTests(TenantTestCase):
         """ Test that the correct list of notification emails are generated"""
         root_url = 'https://test.com'
 
-        # No notifications to start
+        # 1 notifications to start
         emails = get_notification_emails(root_url)
         self.assertEqual(type(emails), list)
-        self.assertEqual(len(emails), 0)
+        self.assertEqual(len(emails), 1)
 
         # Create a notification for student 1, but they have emails turned off by default
         notification1 = baker.make(Notification, recipient=self.test_student1)
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 0)
+        self.assertEqual(len(emails), 1)
 
         # Turn on notification emails for student1, now it should appear
         self.test_student1.profile.get_notifications_by_email = True
         self.test_student1.profile.save()
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 2)
 
-        # Turn on notification emails for student2, should still only be 1
+        # Turn on notification emails for student2, should still only be 1 + deck_owner
         self.test_student2.profile.get_notifications_by_email = True
         self.test_student2.profile.save()
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
-
-        # Make a bunch of notifications for student2, so now we should have 2 emails
-        baker.make(Notification, recipient=self.test_student2, _quantity=10)
-        emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 2)
 
-        # mark the original notification as read, so only student2 email now
+        # Make a bunch of notifications for student2, so now we should have 2 emails + deck_owner
+        baker.make(Notification, recipient=self.test_student2, _quantity=10)
+        emails = get_notification_emails(root_url)
+        self.assertEqual(len(emails), 3)
+
+        # mark the original notification as read, so only student2 email now + deck_owner
         notification1.unread = False
         notification1.save()
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 2)
 
     def test_email_notifications_to_users(self):
         task_result = tasks.email_notifications_to_users.apply(
@@ -101,7 +100,6 @@ class NotificationTasksTests(TenantTestCase):
         self.assertIn(str(notifications[0]), html_content)  # Links to notifications
         self.assertIn(str(notifications[1]), html_content)  # Links to notifications
         
-    @tag("do")
     def test_generate_notification_email__staff(self):
         """ Test that staff notification emails include quests awaiting approval """
         notification = baker.make(Notification, recipient=self.test_teacher)
