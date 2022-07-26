@@ -29,8 +29,8 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
-                    SubmissionQuickReplyForm, TAQuestForm)
-from .models import Quest, QuestSubmission, Category
+                    SubmissionQuickReplyForm, TAQuestForm, CommonDataForm)
+from .models import Quest, QuestSubmission, Category, CommonData
 
 User = get_user_model()
 
@@ -223,6 +223,50 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context['percent_returned'] = percent_returned
 
         return context
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CommonDataListView(ListView):
+    model = CommonData
+    template_name = "quest_manager/common_quest_info_list.html"
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CommonDataCreateView(CreateView):
+    model = CommonData
+    form_class = CommonDataForm
+    template_name = "quest_manager/common_quest_info_form.html"
+    success_url = reverse_lazy("quest_manager:commonquestinfo_list")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['heading'] = "Create Common Quest Info"
+        context['submit_btn_value'] = "Create"
+        return context
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CommonDataUpdateView(UpdateView):
+    model = CommonData
+    form_class = CommonDataForm
+    template_name = "quest_manager/common_quest_info_form.html"
+    success_url = reverse_lazy("quest_manager:commonquestinfo_list")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['heading'] = "Update Common Quest Info"
+        context['submit_btn_value'] = "Update"
+        return context
+
+    def get_success_url(self):
+        return self.request.GET.get('next', self.success_url)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CommonDataDeleteView(DeleteView):
+    model = CommonData
+    template_name = "quest_manager/common_quest_info_delete.html"
+    success_url = reverse_lazy("quest_manager:commonquestinfo_list")
 
 
 @non_public_only_view

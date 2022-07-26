@@ -105,5 +105,10 @@ urlpatterns = [
     path('campaigns/autocomplete/', ModelAutocomplete.as_view(model=Category), name='category_autocomplete'),
 
     # Common Data
-    path('commondata/autocomplete/', ModelAutocomplete.as_view(model=CommonData), name='commondata_autocomplete'),
+    path('common-quest-info/autocomplete/', ModelAutocomplete.as_view(model=CommonData), name='commonquestinfo_autocomplete'),
+
+    path('common-quest-info/list/', views.CommonDataListView.as_view(), name='commonquestinfo_list'),
+    path('common-quest-info/create/', views.CommonDataCreateView.as_view(), name='commonquestinfo_create'),
+    path('common-quest-info/update/<pk>/', views.CommonDataUpdateView.as_view(), name='commonquestinfo_update'),
+    path('common-quest-info/delete/<pk>/', views.CommonDataDeleteView.as_view(), name='commonquestinfo_delete'),
 ]
