@@ -118,7 +118,7 @@ class QuestTestModel(TenantTestCase):
     def test_badge_creation(self):
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
-
+        
     def test_quest_icon(self):
         pass
 
