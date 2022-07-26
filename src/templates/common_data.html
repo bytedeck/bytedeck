@@ -1,7 +1,7 @@
       <div id="quest-common-{{ q.id }}" class="panel panel-primary panel-top">
         <div class="panel-heading">
           <h3 class="panel-title">{{ q.common_data.title }}<br>
-            <small>General Info (<a href="/admin/quest_manager/commondata/{{q.common_data.id}}/change/">edit</a>)</small>
+            <small>General Info (<a href="{% url 'quest_manager:commonquestinfo_update' pk=q.common_data.id %}?next={{request.get_full_path}}">edit</a>)</small>
           </h3>
         </div>
         <div class="panel-body">
