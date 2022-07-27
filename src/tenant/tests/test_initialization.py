@@ -32,11 +32,17 @@ class TenantInitializationTest(TenantTestCase):
         username = "owner"
         password = settings.TENANT_DEFAULT_OWNER_PASSWORD
 
+        # user model test
         user = User.objects.filter(username=username).first()
         self.assertTrue(user is not None)
 
         self.assertTrue(user.is_staff)
         self.assertFalse(user.is_superuser)
+
+        # profile model test
+        profile = user.profile
+        self.assertTrue(profile.get_notifications_by_email)
+        self.assertTrue(profile.get_announcements_by_email)
 
         success = self.client.login(username=username, password=password)
         self.assertTrue(success)

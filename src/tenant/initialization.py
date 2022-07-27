@@ -98,6 +98,11 @@ def create_superusers():
     owner.set_password(settings.TENANT_DEFAULT_OWNER_PASSWORD,)
     owner.save()
 
+    profile = owner.profile
+    profile.get_notifications_by_email = True
+    profile.get_announcements_by_email = True
+    profile.save()
+
 
 def create_site_config_object():
     """ Create the single SiteConfig object for this tenant """
