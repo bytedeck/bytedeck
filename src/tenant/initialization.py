@@ -31,10 +31,10 @@ def load_initial_tenant_data():
     create_initial_markranges()
     create_initial_ranks()
     create_initial_grades()
+    create_initial_menu_items()
     create_initial_badge_types()
     create_initial_badge_rarities()
     create_initial_badges()
-    create_initial_menu_items()
     create_orientation_campaign() 
 
     from notifications.tasks import create_email_notification_tasks
@@ -384,6 +384,7 @@ def create_orientation_campaign():
         name="Send your teacher a Message",
         xp=0,
         short_description="Use this quest to communicate with your teacher. Send a file, link, message, question, reminder, suggestion, etc.",
+        specific_teacher_to_notify=SiteConfig.get().deck_owner,
         instructions="<h3>\n    How this quest works\n</h3>\n<p>\n    You can use this quest however you want. Its main purpose is to allow you to communicate with your teacher. Here are some examples of how you might use it:\n</p>\n<p style=\"padding-left: 30px;\">\n    - Just to say hi\n    <br/>\n    - Send a file (using add attachment)\n    <br/>\n    - Send an interesting link you want your teacher to check out\n    <br/>\n    - Report a problem with the website or a quest etc.\n    <br/>\n    - As a reminder to your teacher of something you told them, that you don't want them to forget\n    <br/>\n    - Send your teacher suggestions, ideas, tips, tricks, etc.\n</p>\n<p>\n    This quest will always be available to you, either in your In Progress or in your Available quest list.\n</p>",  # noqa
         submission_details="<p>Send me your message.</p>",
         instructor_notes="",
