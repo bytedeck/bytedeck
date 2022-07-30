@@ -1,8 +1,10 @@
 from django_tenants.test.cases import TenantTestCase
 from django.contrib.auth import get_user_model
+from django.db.utils import ProgrammingError
 
 from model_bakery import baker
 
+from taggit.models import Tag
 from tags.models import total_xp_by_tags
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
@@ -20,12 +22,17 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         self.user = baker.make(User)
 
     def create_quest_and_submissions(self, xp, quest_submission_quantity=1):
-        """ 
-            Creates and returns quest with linked quest submission objects
-            Args
-                xp - amount of xp quest obj will have
-                quest_submission_quantity - how many submissions are crated
-        """ 
+        """
+        Creates and returns quest with linked quest submission objects for self.user
+
+        Args:
+            xp (int): amount of xp quest object will have
+            quest_submission_quantity (int, optional): how many submissions are created. Defaults to 1.
+
+        Returns:
+            tuple[Quest, list[QuestSubmission]]: tuple of Quest object + list of QuestSubmission objects
+        """
+
         quest = baker.make(Quest, xp=xp)
         quest_submissions = baker.make(
             QuestSubmission, 
@@ -41,17 +48,47 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         return quest, quest_submissions
 
     def create_badge_and_assertions(self, xp, badge_assertion_quantity=1):
-        """ 
-            Creates and returns badge with linked badge assertion objects
-            Args
-                xp - amount of xp badge obj will have
-                badge_assertion_quantity - how many assertions are crated
-        """ 
+        """
+        Creates and returns badge with linked badge assertion objects that are also linked to self.user
+
+        Args:
+            xp (int): amount of xp badge obj will have
+            badge_assertion_quantity (int, optional): how many assertions are created. Defaults to 1.. Defaults to 1.
+
+        Returns:
+            tuple[Badge, list[BadgeAssertion]]: tuple of Badge object + list of BadgeAssertion objects
+        """
         badge = baker.make(Badge, xp=xp)
         badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
 
         return badge, badge_assertion
 
+    # MISC. TEST
+
+    def test_list_input(self):
+        """ 
+            check if total_xp_by_tags can accept test without exception
+        """ 
+        try: 
+            name = baker.make(Tag).name
+
+            total_xp_by_tags(self.user, [])
+            total_xp_by_tags(self.user, [name])
+        except ProgrammingError:
+            self.fail("total_xp_by_tags raised ProgrammingError when using list as input")
+        
+    def test_queryset_input(self):
+        """ 
+            check if total_xp_by_tags can accept a queryset without exception
+        """ 
+        try: 
+            baker.make(Tag)
+
+            total_xp_by_tags(self.user, Tag.objects.none())
+            total_xp_by_tags(self.user, Tag.objects.all())
+        except ProgrammingError:
+            self.fail("total_xp_by_tags raised ProgrammingError when using queryset as input")
+        
     # QUEST ONLY TESTS
 
     def test_one_tag_quests_only(self):
@@ -60,6 +97,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
 
+        # generate quests with same tag
         for xp in xp_list:
             quest, _ = self.create_quest_and_submissions(xp)
             quest.tags.add("TAG")
@@ -74,9 +112,10 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61]
         tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
 
-        for i in range(len(xp_list)):
-            quest, _ = self.create_quest_and_submissions(xp_list[i])
-            quest.tags.add(tag_list[i])
+        # generate quests with unique tag
+        for xp, tag_name in zip(xp_list, tag_list):
+            quest, _ = self.create_quest_and_submissions(xp)
+            quest.tags.add(tag_name)
 
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
 
@@ -87,11 +126,12 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
         xp_list = [55, 84, 74, 85, 61]
         tag_tuples = [('tag0-0', 'tag1-0'), ('tag0-1', 'tag1-1'), ('tag0-2', 'tag1-2'), ('tag0-3', 'tag1-3'), ('tag0-4', 'tag1-4')]
-    
-        for i in range(len(xp_list)):
-            quest, _ = self.create_quest_and_submissions(xp_list[i])
-            quest.tags.add(tag_tuples[i][0])
-            quest.tags.add(tag_tuples[i][1])
+
+        # generate quests with 2 tags
+        for xp, tag_tuple in zip(xp_list, tag_tuples):
+            quest, _ = self.create_quest_and_submissions(xp)
+            quest.tags.add(tag_tuple[0])
+            quest.tags.add(tag_tuple[1])
 
         unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
@@ -103,8 +143,9 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
         quantity_list = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
 
-        for i in range(len(xp_list)):
-            quest, _ = self.create_quest_and_submissions(xp_list[i], quantity_list[i])
+        # generate quests with x amount of submissions and 1 tag
+        for xp, quantity in zip(xp_list, quantity_list):
+            quest, _ = self.create_quest_and_submissions(xp, quantity)
             quest.tags.add("TAG")
 
         calculated_xp = total_xp_by_tags(self.user, ["TAG"])
@@ -115,9 +156,17 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
             See if correct xp is returned using only one tag + quests with multiple questsubmissions in different semesters
         """ 
-        semester_set = [SiteConfig().get().active_semester] + baker.make("courses.semester", _quantity=2)
+        # generate quest in active sem
+        quest, submissions = self.create_quest_and_submissions(100)
+        quest.tags.add("TAG")
+
+        submissions[0].semester = SiteConfig().get().active_semester
+        submissions[0].save()
+
+        # generate quests outside of active sem
+        semester_set = baker.make("courses.semester", _quantity=2)
         for semester in semester_set:
-            quest, submissions = self.create_quest_and_submissions(100)
+            quest, submissions = self.create_quest_and_submissions(399)
             quest.tags.add("TAG")
 
             submissions[0].semester = semester
@@ -133,6 +182,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
         
+        # generate badges with same tag
         for xp in xp_list:
             badge, _ = self.create_badge_and_assertions(xp)
             badge.tags.add("TAG")
@@ -147,9 +197,10 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61]
         tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
 
-        for i in range(len(xp_list)):
-            badge, _ = self.create_badge_and_assertions(xp_list[i])
-            badge.tags.add(tag_list[i])
+        # generate badges with unique tag
+        for xp, tag_name in zip(xp_list, tag_list):
+            badge, _ = self.create_badge_and_assertions(xp)
+            badge.tags.add(tag_name)
 
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
 
@@ -160,11 +211,12 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
         xp_list = [55, 84, 74, 85, 61]
         tag_tuples = [('tag0-0', 'tag1-0'), ('tag0-1', 'tag1-1'), ('tag0-2', 'tag1-2'), ('tag0-3', 'tag1-3'), ('tag0-4', 'tag1-4')]
-    
-        for i in range(len(xp_list)):
-            badge, _ = self.create_badge_and_assertions(xp_list[i])
-            badge.tags.add(tag_tuples[i][0])
-            badge.tags.add(tag_tuples[i][1])
+
+        # generate badges with 2 tags
+        for xp, tag_name in zip(xp_list, tag_tuples):
+            badge, _ = self.create_badge_and_assertions(xp)
+            badge.tags.add(tag_name[0])
+            badge.tags.add(tag_name[1])
 
         unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
@@ -176,8 +228,9 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
         quantity_list = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
 
-        for i in range(len(xp_list)):
-            badge, _ = self.create_badge_and_assertions(xp_list[i], quantity_list[i])
+        # generate badges with x amount of assertions and 1 tag
+        for xp, quantity in zip(xp_list, quantity_list):
+            badge, _ = self.create_badge_and_assertions(xp, quantity)
             badge.tags.add("TAG")
 
         calculated_xp = total_xp_by_tags(self.user, ["TAG"])
@@ -188,9 +241,17 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         """ 
             See if correct xp is returned using only one tag + badges with multiple BadgeAssertions in different semesters
         """ 
-        semester_set = [SiteConfig().get().active_semester] + baker.make("courses.semester", _quantity=2)
+        # generate quest in active sem
+        badge, assertions = self.create_quest_and_submissions(100)
+        badge.tags.add("TAG")
+
+        assertions[0].semester = SiteConfig().get().active_semester
+        assertions[0].save()
+
+        # generate quests outside of active sem
+        semester_set = baker.make("courses.semester", _quantity=2)
         for semester in semester_set:
-            badge, assertions = self.create_badge_and_assertions(100)
+            badge, assertions = self.create_quest_and_submissions(399)
             badge.tags.add("TAG")
 
             assertions[0].semester = semester
@@ -209,6 +270,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
             36, 22, 93, 16, 2, 36, 28, 95, 10, 79, 
         ]
         
+        # Generates quest and badge + assigns both a tag
         for i in range(0, len(xp_list), 2):
             quest, _ = self.create_quest_and_submissions(xp_list[i])
             quest.tags.add("TAG")
@@ -226,6 +288,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
         tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4', 'tag-5', 'tag-6', 'tag-7', 'tag-8', 'tag-9']
 
+        # Generates quest and badge + assigns both a unique tag
         for i in range(0, len(xp_list), 2):
             quest, _ = self.create_quest_and_submissions(xp_list[i])
             quest.tags.add(tag_list[i])
@@ -246,6 +309,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
             ('tag0-5', 'tag1-5'), ('tag0-6', 'tag1-6'), ('tag0-7', 'tag1-7'), ('tag0-8', 'tag1-8'), ('tag0-9', 'tag1-9')
         ]
 
+        # Generates quest and badge + assigns both a unique tag
         for i in range(0, len(xp_list), 2):
             quest, _ = self.create_quest_and_submissions(xp_list[i])
             quest.tags.add(tag_tuples[i][0])
@@ -265,6 +329,7 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         xp_list = [55, 84, 74, 85, 61, 61, 22, 39, 12, 46]
         quantity_list = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
 
+        # generate quests and badges with x amount of submissions/assertions and 1 tag
         for i in range(0, len(xp_list), 2):
             quest, _ = self.create_quest_and_submissions(xp_list[i], quantity_list[i])
             quest.tags.add("TAG")
