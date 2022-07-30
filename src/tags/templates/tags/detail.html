@@ -9,24 +9,9 @@
 {% endblock %}
 
 {% block content %}
-<h3>Quests ({{ quests|length }})</h3>
-<ul>
-    {% for quest in quests %}
-        <li>
-            <a href="{{ quest.get_absolute_url }}">{{ quest }}</a>
-        </li>
-    {% empty %} <li>None</li>
-    {% endfor %}
-</ul>
-<h3>Badges ({{ badges|length }})</h3>
-<ul>
-    {% for badge in badges %}
-        <li>
-            <a href="{{ badge.get_absolute_url }}">{{ badge }}</a>
-        </li>
-    {% empty %} <li>None</li>
-    {% endfor %}
-</ul>
+
+<br>
+{% include 'tags/snippets/related-xp-item.html' with type='default' %}
 
 {% endblock %}
 

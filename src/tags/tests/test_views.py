@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 from taggit.models import Tag
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from tags.forms import TagForm
+from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
 
@@ -49,20 +50,100 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.tag = Tag.objects.create(name="test-tag")
 
-    def test_list_view__anonymous(self):
-        """ Make sure the list view is not accessible to unauthenticated users"""
+    def test_page_status_code__anonymous(self):
+        """Make sure the all views are not accessible to anonymous users"""
         self.assert302('tags:list')
-
-    def test_list_view__authenticated(self):
-        """ Make sure the list view is accessible to authenticated users"""
-        self.client.force_login(self.test_student)
-        self.assert200('tags:list')
-
-    def test_detail_view__anonymous(self):
-        """ Make sure the detail view is not accessible to unauthenticated users"""
         self.assert302('tags:detail', args=[self.tag.pk])
+        self.assertRedirectsAdmin('tags:create')
+        self.assertRedirectsAdmin('tags:update', args=[self.tag.pk])
+        self.assertRedirectsAdmin('tags:delete', args=[self.tag.pk])
 
-    def test_detail_view__authenticated(self):
-        """ Make sure the detail view is accessible to authenticated users"""
+    def test_page_status_code__student(self):
+        """Make sure the list/detail views are accessible students but create/update/delete are not"""
         self.client.force_login(self.test_student)
+
+        self.assert200('tags:list')
         self.assert200('tags:detail', args=[self.tag.pk])
+        self.assertRedirectsAdmin('tags:create')
+        self.assertRedirectsAdmin('tags:update', args=[self.tag.pk])
+        self.assertRedirectsAdmin('tags:delete', args=[self.tag.pk])
+
+    def test_page_status_code__teacher(self):
+        """Make sure the everything is accessible to teachers"""
+        self.client.force_login(self.test_teacher)
+        
+        self.assert200('tags:list')
+        self.assert200('tags:detail', args=[self.tag.pk])
+        self.assert200('tags:create')
+        self.assert200('tags:update', args=[self.tag.pk])
+        self.assert200('tags:delete', args=[self.tag.pk])
+
+    def test_ListView(self):
+        """Make sure list view displays all tags correctly"""
+        baker.make(Tag, _quantity=5)
+        
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('tags:list'))
+
+        object_list = response.context['object_list']
+
+        self.assertEqual(Tag.objects.count(), len(object_list))
+        
+        for model_obj, ctx_obj in zip(Tag.objects.all(), object_list):
+            self.assertEqual(model_obj.pk, ctx_obj.pk)
+
+    def test_ListView__admin_buttons_staff(self):
+        """Make sure admin buttons in list view show up for staff"""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('tags:list'))
+
+        self.assertContains(response, reverse('tags:update', args=[self.tag.pk]))
+        self.assertContains(response, reverse('tags:delete', args=[self.tag.pk]))
+
+    def test_ListView__admin_buttons_student(self):
+        """Make sure admin buttons in list view dont show up for student"""
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('tags:list'))
+
+        self.assertNotContains(response, reverse('tags:update', args=[self.tag.pk]))
+        self.assertNotContains(response, reverse('tags:delete', args=[self.tag.pk]))
+
+    def test_DetailView(self):
+        """Make sure detail view displays related quest/badges correctly"""
+        quest = baker.make('quest_manager.quest')
+        badge = baker.make('badges.badge')
+        quest.tags.add(self.tag.name)
+        badge.tags.add(self.tag.name)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('tags:detail', args=[self.tag.pk]))
+
+        self.assertContains(response, quest.name)
+        self.assertContains(response, badge.name)
+
+    def test_CreateView(self):
+        """Make sure create view can create tags"""
+        form_data = generate_form_data(model_form=TagForm)
+
+        self.client.force_login(self.test_teacher)
+        self.client.post(reverse('tags:create'), data=form_data)
+
+        self.assertTrue(Tag.objects.filter(name=form_data['name']).exists())
+
+    def test_UpdateView(self):
+        """Make sure update view can change name + update slug"""
+        form_data = generate_form_data(model_form=TagForm)
+
+        self.client.force_login(self.test_teacher)
+        self.client.post(reverse('tags:update', args=[self.tag.pk]), data=form_data)
+
+        tag = Tag.objects.get(pk=self.tag.pk)  # refresh object
+        self.assertEqual(form_data['name'], tag.name)
+        self.assertEqual(form_data['name'].lower(), tag.slug)
+
+    def test_DeleteView(self):
+        """Make sure delete view can delete tag"""
+        self.client.force_login(self.test_teacher)
+        self.client.post(reverse('tags:delete', args=[self.tag.pk]))
+
+        self.assertFalse(Tag.objects.filter(pk=self.tag.pk).exists())
