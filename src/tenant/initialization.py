@@ -183,7 +183,7 @@ def create_initial_badge_types():
         sort_order=3,
         description="Teams categorize students into groups for collaboration on projects, access to special quests, etc.",
         repeatable=True,
-        fa_icon="fa-handshake-simple"
+        fa_icon="fa-handshake-o"
     )
 
 
