@@ -290,6 +290,31 @@
     </div> <!-- panel -->
   </div> <!-- col -->
 
+  <!-- TAGS -->
+  <div class="col-sm-6">
+    <div class="panel panel-primary">
+      
+      <div class="panel-heading">
+        <i class="pull-right fa fa-fw fa-tags"></i>
+        <h3 class="panel-title">XP earned by Tag</h3>
+      </div>
+
+      <div class="list-group">
+        {% for tag, xp in tags %}
+          <a href="{% url 'tags:detail' pk=tag.pk %}" class="list-group-item list-group-item-packed">
+              <small>
+                {{tag|truncatechars:40}}
+                <span class="pull-right">{{xp}} XP</span>
+              </small>
+          </a>
+        {% empty %}
+          <div class="list-group-item">None.</div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+
 
 
 </div> <!-- row -->
