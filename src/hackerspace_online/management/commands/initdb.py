@@ -18,8 +18,9 @@ User = get_user_model()
 
 class Command(BaseCommand):
 
-    help = 'Used to initialize the database, creates a Sites object, creates the public Tenant object, and creates a superuser for the public schema/tenant. \
-        This should only be run on a fresh db'
+    help = ('Used to initialize the database, creates a Sites object, creates the public Tenant object, '
+            'and creates a superuser for the public schema/tenant.'
+            '\nThis should only be run on a fresh db')
 
     @transaction.atomic
     def handle(self, *args, **options):
