@@ -31,22 +31,22 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_rank_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to login page '''
 
         self.assertRedirectsLogin('courses:ranks')
-        self.assertRedirectsAdmin('courses:rank_create')
-        self.assertRedirectsAdmin('courses:rank_update', args=[1])
-        self.assertRedirectsAdmin('courses:rank_delete', args=[1])
+        self.assertRedirectsLogin('courses:rank_create')
+        self.assertRedirectsLogin('courses:rank_update', args=[1])
+        self.assertRedirectsLogin('courses:rank_delete', args=[1])
 
     def test_all_rank_page_status_codes_for_students(self):
-        ''' If logged in as student then all views except ranks list view should redirect to home page or admin login '''
+        ''' If logged in as student then all views except ranks list view should redirect to login page '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:ranks') 
 
         # staff access only
-        self.assertRedirectsAdmin('courses:rank_create')
-        self.assertRedirectsAdmin('courses:rank_update', args=[1])
-        self.assertRedirectsAdmin('courses:rank_delete', args=[1])
+        self.assert403('courses:rank_create')
+        self.assert403('courses:rank_update', args=[1])
+        self.assert403('courses:rank_delete', args=[1])
 
     def test_all_rank_page_status_codes_for_staff(self):
         ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
@@ -140,35 +140,35 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         }
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to home page '''
         self.assertRedirectsLogin('courses:create')
-        self.assertRedirectsAdmin('courses:join', args=[1])
+        self.assertRedirectsLogin('courses:join', args=[1])
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
-        self.assertRedirectsAdmin('courses:end_active_semester')
+        self.assertRedirectsLogin('courses:end_active_semester')
         self.assertRedirectsLogin('courses:ajax_progress_chart', args=[1])
 
-        self.assertRedirectsAdmin('courses:semester_list')
-        self.assertRedirectsAdmin('courses:semester_create')
-        self.assertRedirectsAdmin('courses:semester_update', args=[1])
+        self.assertRedirectsLogin('courses:semester_list')
+        self.assertRedirectsLogin('courses:semester_create')
+        self.assertRedirectsLogin('courses:semester_update', args=[1])
 
-        self.assertRedirectsAdmin('courses:block_list')
-        self.assertRedirectsAdmin('courses:block_create')
-        self.assertRedirectsAdmin('courses:block_update', args=[1])
-        self.assertRedirectsAdmin('courses:block_delete', args=[1])
+        self.assertRedirectsLogin('courses:block_list')
+        self.assertRedirectsLogin('courses:block_create')
+        self.assertRedirectsLogin('courses:block_update', args=[1])
+        self.assertRedirectsLogin('courses:block_delete', args=[1])
 
-        self.assertRedirectsAdmin('courses:course_list')
-        self.assertRedirectsAdmin('courses:course_create')
-        self.assertRedirectsAdmin('courses:course_update', args=[1])
-        self.assertRedirectsAdmin('courses:course_delete', args=[1])
+        self.assertRedirectsLogin('courses:course_list')
+        self.assertRedirectsLogin('courses:course_create')
+        self.assertRedirectsLogin('courses:course_update', args=[1])
+        self.assertRedirectsLogin('courses:course_delete', args=[1])
         # View from external package.  Need to override view with LoginRequiredMixin if we want to bother
         # self.assertRedirectsLogin('courses:mark_distribution_chart', args=[1])
 
         # Refer to rank specific tests for Rank CRUD views
 
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to home page '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:create')
         self.assert200('courses:ranks')
@@ -181,22 +181,22 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert404('courses:ajax_progress_chart', args=[self.test_student1.id])
 
         # Staff access only
-        self.assertRedirectsAdmin('courses:join', args=[self.test_student1.id])
-        self.assertRedirectsAdmin('courses:end_active_semester')
+        self.assert403('courses:join', args=[self.test_student1.id])
+        self.assert403('courses:end_active_semester')
 
-        self.assertRedirectsAdmin('courses:semester_list')
-        self.assertRedirectsAdmin('courses:semester_create')
-        self.assertRedirectsAdmin('courses:semester_update', args=[1])
+        self.assert403('courses:semester_list')
+        self.assert403('courses:semester_create')
+        self.assert403('courses:semester_update', args=[1])
 
-        self.assertRedirectsAdmin('courses:block_list')
-        self.assertRedirectsAdmin('courses:block_create')
-        self.assertRedirectsAdmin('courses:block_update', args=[1])
-        self.assertRedirectsAdmin('courses:block_delete', args=[1])
+        self.assert403('courses:block_list')
+        self.assert403('courses:block_create')
+        self.assert403('courses:block_update', args=[1])
+        self.assert403('courses:block_delete', args=[1])
 
-        self.assertRedirectsAdmin('courses:course_list')
-        self.assertRedirectsAdmin('courses:course_create')
-        self.assertRedirectsAdmin('courses:course_update', args=[1])
-        self.assertRedirectsAdmin('courses:course_delete', args=[1])
+        self.assert403('courses:course_list')
+        self.assert403('courses:course_create')
+        self.assert403('courses:course_update', args=[1])
+        self.assert403('courses:course_delete', args=[1])
 
         # Refer to rank specific tests for Rank CRUD views
 

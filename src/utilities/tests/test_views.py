@@ -29,21 +29,21 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to admin login '''
-        self.assertRedirectsAdmin('utilities:menu_items')
-        self.assertRedirectsAdmin('utilities:menu_item_create')
-        self.assertRedirectsAdmin('utilities:menu_item_update', args=[1])
-        self.assertRedirectsAdmin('utilities:menu_item_delete', args=[1])
+        ''' If not logged in then all views should redirect to login '''
+        self.assertRedirectsLogin('utilities:menu_items')
+        self.assertRedirectsLogin('utilities:menu_item_create')
+        self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
+        self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
     
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in as admin then all views should redirect to admin login '''
+        ''' If not logged in as admin then all views should redirect to 403 '''
         self.client.force_login(self.test_student)
 
         # Staff access only
-        self.assertRedirectsAdmin('utilities:menu_items')
-        self.assertRedirectsAdmin('utilities:menu_item_create')
-        self.assertRedirectsAdmin('utilities:menu_item_update', args=[1])
-        self.assertRedirectsAdmin('utilities:menu_item_delete', args=[1])
+        self.assert403('utilities:menu_items')
+        self.assert403('utilities:menu_item_create')
+        self.assert403('utilities:menu_item_update', args=[1])
+        self.assert403('utilities:menu_item_delete', args=[1])
     
     def test_MenuItemList_view(self):
         ''' Admin should be able to view menu item list '''
@@ -196,13 +196,13 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('utilities:flatpage_list')
 
         # Staff only
-        self.assertRedirectsAdmin('utilities:flatpage_create')
-        self.assertRedirectsAdmin('utilities:flatpage_edit', args=[1])
-        self.assertRedirectsAdmin('utilities:flatpage_delete', args=[1])
+        self.assertRedirectsLogin('utilities:flatpage_create')
+        self.assertRedirectsLogin('utilities:flatpage_edit', args=[1])
+        self.assertRedirectsLogin('utilities:flatpage_delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
         """
-            Redirects to admin or returns 200 if user is is_staff=False
+            Redirects to 403 or returns 200 if user is is_staff=False
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -210,9 +210,9 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('utilities:flatpage_list')
 
         # Staff only
-        self.assertRedirectsAdmin('utilities:flatpage_create')
-        self.assertRedirectsAdmin('utilities:flatpage_edit', args=[1])
-        self.assertRedirectsAdmin('utilities:flatpage_delete', args=[1])
+        self.assert403('utilities:flatpage_create')
+        self.assert403('utilities:flatpage_edit', args=[1])
+        self.assert403('utilities:flatpage_delete', args=[1])
 
     def test_all_page_status_codes_for_staff(self):
         """ 

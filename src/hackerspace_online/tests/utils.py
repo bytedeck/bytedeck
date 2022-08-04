@@ -6,6 +6,7 @@ from django.shortcuts import reverse
 from model_bakery import baker
 
 import json
+import warnings
 
 
 def generate_form_data(model=None, model_form=None, **kwargs):
@@ -164,10 +165,14 @@ class ViewTestUtilsMixin():
     
     def assertRedirectsAdmin(self, url_name, *args, **kwargs):
         """
+        Redirection to django admin is now deprecated.
+        Use assertRedirectsLogin(self, url_name, *args, **kwargs) instead.
+
         Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the admin login page.
         with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
 
         """
+        warnings.warn("Redirection to django admin is now deprecated.\nUse assertRedirectsLogin(self, url_name, *args, **kwargs) instead...")
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
             expected_url='{}?next={}'.format('/admin/login/', reverse(url_name, *args, **kwargs)),

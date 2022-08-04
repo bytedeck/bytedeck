@@ -1,6 +1,5 @@
 from django.shortcuts import render
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
@@ -8,6 +7,8 @@ from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
+
+from hackerspace_online.decorators import staff_member_required
 
 from .models import MenuItem, VideoResource
 from utilities.forms import MenuItemForm, VideoForm, CustomFlatpageForm

@@ -117,16 +117,16 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
-        self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
 
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
@@ -134,7 +134,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
 
-        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 403)
 
         # 403 for CRUD views:
         self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
@@ -312,14 +312,14 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
 
         # Students shouldn't have access to these
-        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
 
         # Student's own submission
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
         # Not this student's submission
@@ -1463,24 +1463,24 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         # self.category = baker.make('quests_manager.category', name="testcat")
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to home page '''
 
-        self.assertRedirectsAdmin('quests:categories')
-        self.assertRedirectsAdmin('quests:category_detail', kwargs={"pk": 1})
-        self.assertRedirectsAdmin('quests:category_create')
-        self.assertRedirectsAdmin('quests:category_update', args=[1])
-        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+        self.assertRedirectsLogin('quests:categories')
+        self.assertRedirectsLogin('quests:category_detail', kwargs={"pk": 1})
+        self.assertRedirectsLogin('quests:category_create')
+        self.assertRedirectsLogin('quests:category_update', args=[1])
+        self.assertRedirectsLogin('quests:category_delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to 403'''
         self.client.force_login(self.test_student1)
 
         # Staff access only
-        self.assertRedirectsAdmin('quests:categories')
-        self.assertRedirectsAdmin('quests:category_detail', kwargs={"pk": 1})
-        self.assertRedirectsAdmin('quests:category_create')
-        self.assertRedirectsAdmin('quests:category_update', args=[1])
-        self.assertRedirectsAdmin('quests:category_delete', args=[1])
+        self.assert403('quests:categories')
+        self.assert403('quests:category_detail', kwargs={"pk": 1})
+        self.assert403('quests:category_create')
+        self.assert403('quests:category_update', args=[1])
+        self.assert403('quests:category_delete', args=[1])
 
     def test_all_page_status_codes_for_staff(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
@@ -2291,19 +2291,19 @@ class CommonDataViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.cqi = baker.make(CommonData)
 
     def test_page_status_code__anonymous(self):
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_list")
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_create")
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
+        self.assertRedirectsLogin("quest_manager:commonquestinfo_list")
+        self.assertRedirectsLogin("quest_manager:commonquestinfo_create")
+        self.assertRedirectsLogin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
+        self.assertRedirectsLogin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
 
     def test_page_status_code__student(self):
         stu = baker.make(User)
         self.client.force_login(stu)
 
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_list")
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_create")
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
-        self.assertRedirectsAdmin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
+        self.assert403("quest_manager:commonquestinfo_list")
+        self.assert403("quest_manager:commonquestinfo_create")
+        self.assert403("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
+        self.assert403("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
 
     def test_page_status_code__teacher(self):
         self.client.force_login(self.teacher)

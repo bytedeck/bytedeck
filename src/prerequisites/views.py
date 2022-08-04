@@ -2,8 +2,9 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.contrib.contenttypes.forms import generic_inlineformset_factory
 from django.utils.decorators import method_decorator
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
+
+from hackerspace_online.decorators import staff_member_required
 
 from tenant.views import NonPublicOnlyViewMixin
 from prerequisites.forms import PrereqFormInline, PrereqFormsetHelper

@@ -39,12 +39,12 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('djcytoscape:quest_map_interlink', args=[1, 1, 1])
 
         self.assertRedirectsLogin('djcytoscape:list')
-        self.assertRedirectsAdmin('djcytoscape:regenerate', args=[1])
-        self.assertRedirectsAdmin('djcytoscape:regenerate_all')
-        self.assertRedirectsAdmin('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
-        self.assertRedirectsAdmin('djcytoscape:generate_unseeded')
-        self.assertRedirectsAdmin('djcytoscape:update', args=[1])
-        self.assertRedirectsAdmin('djcytoscape:delete', args=[1])
+        self.assertRedirectsLogin('djcytoscape:regenerate', args=[1])
+        self.assertRedirectsLogin('djcytoscape:regenerate_all')
+        self.assertRedirectsLogin('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
+        self.assertRedirectsLogin('djcytoscape:generate_unseeded')
+        self.assertRedirectsLogin('djcytoscape:update', args=[1])
+        self.assertRedirectsLogin('djcytoscape:delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -58,12 +58,12 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('djcytoscape:primary')
         self.assert200('djcytoscape:quest_map', args=[self.map.id])
 
-        self.assertRedirectsAdmin('djcytoscape:update', args=[self.map.id])
-        self.assertRedirectsAdmin('djcytoscape:delete', args=[self.map.id])
-        self.assertRedirectsAdmin('djcytoscape:regenerate', args=[self.map.id])
-        self.assertRedirectsAdmin('djcytoscape:regenerate_all')
-        self.assertRedirectsAdmin('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
-        self.assertRedirectsAdmin('djcytoscape:generate_unseeded')
+        self.assert403('djcytoscape:update', args=[self.map.id])
+        self.assert403('djcytoscape:delete', args=[self.map.id])
+        self.assert403('djcytoscape:regenerate', args=[self.map.id])
+        self.assert403('djcytoscape:regenerate_all')
+        self.assert403('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
+        self.assert403('djcytoscape:generate_unseeded')
 
     def test_all_page_status_codes_for_teachers(self):
         # log in a teacher

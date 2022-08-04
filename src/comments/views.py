@@ -1,11 +1,12 @@
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.http import Http404
 from django.shortcuts import (HttpResponseRedirect, get_object_or_404,
                               redirect, render)
+
+from hackerspace_online.decorators import staff_member_required
 
 from notifications.signals import notify
 from tenant.views import non_public_only_view

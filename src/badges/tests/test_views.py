@@ -35,7 +35,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home or admin page  '''
+        ''' If not logged in then all views should redirect to home  '''
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
         s_pk = self.test_student1.pk
@@ -44,13 +44,13 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('badges:badge_detail', args=[b_pk])
         self.assertRedirectsLogin('badges:badge_create')
 
-        self.assertRedirectsAdmin('badges:badge_update', args=[b_pk])
-        self.assertRedirectsAdmin('badges:badge_copy', args=[b_pk])
-        self.assertRedirectsAdmin('badges:badge_delete', args=[b_pk])
-        self.assertRedirectsAdmin('badges:grant', args=[b_pk, s_pk])
-        self.assertRedirectsAdmin('badges:bulk_grant_badge', args=[b_pk])
-        self.assertRedirectsAdmin('badges:bulk_grant')
-        self.assertRedirectsAdmin('badges:revoke', args=[a_pk])
+        self.assertRedirectsLogin('badges:badge_update', args=[b_pk])
+        self.assertRedirectsLogin('badges:badge_copy', args=[b_pk])
+        self.assertRedirectsLogin('badges:badge_delete', args=[b_pk])
+        self.assertRedirectsLogin('badges:grant', args=[b_pk, s_pk])
+        self.assertRedirectsLogin('badges:bulk_grant_badge', args=[b_pk])
+        self.assertRedirectsLogin('badges:bulk_grant')
+        self.assertRedirectsLogin('badges:revoke', args=[a_pk])
 
     def test_all_badge_page_status_codes_for_students(self):
 
@@ -65,18 +65,18 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:list')
         self.assert200('badges:badge_detail', args=[b_pk])
 
-        # students shouldn't have access to these and should be redirected
+        # students shouldn't have access to these and should get permission denied 403
+        
+        self.assert403('badges:badge_create'),
+        self.assert403('badges:badge_update', args=[b_pk])
+        self.assert403('badges:badge_copy', args=[b_pk])
+        self.assert403('badges:badge_delete', args=[b_pk])
+        self.assert403('badges:grant', args=[b_pk, s_pk])
+        self.assert403('badges:bulk_grant_badge', args=[b_pk])
+        self.assert403('badges:bulk_grant')
+        self.assert403('badges:revoke', args=[s_pk])
 
-        self.assertRedirectsQuests('badges:badge_create', follow=True),
-        self.assertRedirectsAdmin('badges:badge_update', args=[b_pk])
-        self.assertRedirectsAdmin('badges:badge_copy', args=[b_pk])
-        self.assertRedirectsAdmin('badges:badge_delete', args=[b_pk])
-        self.assertRedirectsAdmin('badges:grant', args=[b_pk, s_pk])
-        self.assertRedirectsAdmin('badges:bulk_grant_badge', args=[b_pk])
-        self.assertRedirectsAdmin('badges:bulk_grant')
-        self.assertRedirectsAdmin('badges:revoke', args=[s_pk])
-
-        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
 
     def test_all_badge_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -239,21 +239,21 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.badge_type = baker.make(BadgeType)
     
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
-        self.assertRedirectsAdmin('badges:badge_types')
-        self.assertRedirectsAdmin('badges:badge_type_create')
-        self.assertRedirectsAdmin('badges:badge_type_update', args=[1])
-        self.assertRedirectsAdmin('badges:badge_type_delete', args=[1])
+        ''' If not logged in then all views should redirect to login page '''
+        self.assertRedirectsLogin('badges:badge_types')
+        self.assertRedirectsLogin('badges:badge_type_create')
+        self.assertRedirectsLogin('badges:badge_type_update', args=[1])
+        self.assertRedirectsLogin('badges:badge_type_delete', args=[1])
     
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in then all views should redirect to home page or admin login '''
+        ''' If not logged in then all views should redirect to 403 '''
         self.client.force_login(self.test_student1)
 
         # Staff access only
-        self.assertRedirectsAdmin('badges:badge_types')
-        self.assertRedirectsAdmin('badges:badge_type_create')
-        self.assertRedirectsAdmin('badges:badge_type_update', args=[1])
-        self.assertRedirectsAdmin('badges:badge_type_delete', args=[1])
+        self.assert403('badges:badge_types')
+        self.assert403('badges:badge_type_create')
+        self.assert403('badges:badge_type_update', args=[1])
+        self.assert403('badges:badge_type_delete', args=[1])
     
     def test_BadgeTypeList_view(self):
         """ Admin should be able to view badge type list """

@@ -54,9 +54,9 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         """Make sure the all views are not accessible to anonymous users"""
         self.assert302('tags:list')
         self.assert302('tags:detail', args=[self.tag.pk])
-        self.assertRedirectsAdmin('tags:create')
-        self.assertRedirectsAdmin('tags:update', args=[self.tag.pk])
-        self.assertRedirectsAdmin('tags:delete', args=[self.tag.pk])
+        self.assertRedirectsLogin('tags:create')
+        self.assertRedirectsLogin('tags:update', args=[self.tag.pk])
+        self.assertRedirectsLogin('tags:delete', args=[self.tag.pk])
 
     def test_page_status_code__student(self):
         """Make sure the list/detail views are accessible students but create/update/delete are not"""
@@ -64,9 +64,9 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('tags:list')
         self.assert200('tags:detail', args=[self.tag.pk])
-        self.assertRedirectsAdmin('tags:create')
-        self.assertRedirectsAdmin('tags:update', args=[self.tag.pk])
-        self.assertRedirectsAdmin('tags:delete', args=[self.tag.pk])
+        self.assert403('tags:create')
+        self.assert403('tags:update', args=[self.tag.pk])
+        self.assert403('tags:delete', args=[self.tag.pk])
 
     def test_page_status_code__teacher(self):
         """Make sure the everything is accessible to teachers"""
