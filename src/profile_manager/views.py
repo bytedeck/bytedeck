@@ -17,6 +17,7 @@ from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
+from tags.models import get_user_tags_and_xp
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from django.contrib.auth.forms import SetPasswordForm
@@ -114,6 +115,7 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
         context['xp_per_course'] = profile.xp_per_course()
         context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
+        context['tags'] = get_user_tags_and_xp(profile.user)
 
         # earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile.user)
         # assertion_dict = defaultdict(list)

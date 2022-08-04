@@ -5,7 +5,7 @@ from django.db.utils import ProgrammingError
 from model_bakery import baker
 
 from taggit.models import Tag
-from tags.models import total_xp_by_tags
+from tags.models import total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
@@ -13,13 +13,7 @@ from badges.models import Badge, BadgeAssertion
 User = get_user_model()
 
 
-class Tag_total_xp_by_tags_Tests(TenantTestCase):
-    """ 
-        Specialized TestClass for testing total_xp_by_tags function
-    """ 
-
-    def setUp(self):
-        self.user = baker.make(User)
+class TagHelper:
 
     def create_quest_and_submissions(self, xp, quest_submission_quantity=1):
         """
@@ -62,6 +56,160 @@ class Tag_total_xp_by_tags_Tests(TenantTestCase):
         badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
 
         return badge, badge_assertion
+
+
+class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
+    """ 
+        Specialized TestClass for testing get_user_tags_and_xp function
+    """ 
+
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_unique_tag_quest_badges(self):
+        """ 
+            Unique tags per quest and badge, xp representing tag's index
+        """
+        # generate quests + submissions and assign a unique tag
+        quest_tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
+        for count, tag_name in enumerate(quest_tag_list):
+            quest, _ = self.create_quest_and_submissions(count)
+            quest.tags.add(tag_name)
+
+        # Generates badge + assertions and assigns a unique tag
+        badge_tag_list = ['tag-5', 'tag-6', 'tag-7', 'tag-8', 'tag-9']
+        for count, tag_name in enumerate(badge_tag_list, start=len(quest_tag_list)):
+            badge, _ = self.create_badge_and_assertions(count)
+            badge.tags.add(tag_name)
+
+        # see if tag names are in the same order
+        expected_order = (quest_tag_list + badge_tag_list)[::-1]
+        calculated_order = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]  # get tag names from func
+
+        self.assertEqual(expected_order, calculated_order)
+
+    def test_same_tag_per_quest_badges(self):
+        """ 
+            Same tag for quest and badges, xp representing tag's index
+        """
+        tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
+        
+        # Generates quest and badge + assigns both the same tag
+        for count, tag_name in enumerate(tag_list):
+            quest, _ = self.create_quest_and_submissions(count)
+            quest.tags.add(tag_name)
+        
+            badge, _ = self.create_badge_and_assertions(count)
+            badge.tags.add(tag_name)
+
+        # see if tag names are in the same order
+        expected_order = tag_list[::-1]
+        calculated_order = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]  # get tag names from func
+        
+        self.assertEqual(expected_order, calculated_order)
+
+    def test_multiple_tags_per_quest_badges(self):
+        """ 
+            Two tags per generated quest and badges, xp representing tag_tuples's index
+        """
+        # generate quests + submissions and assign quest 2 tags
+        quest_tag_tuples = [('tag-0-0', 'tag-0-1'), ('tag-1-0', 'tag-1-1'), ('tag-2-0', 'tag-2-1'), ('tag-3-0', 'tag-3-1'), ('tag-4-0', 'tag-4-1')]
+        for count, tag_tuple in enumerate(quest_tag_tuples):
+            quest, _ = self.create_quest_and_submissions(count)
+            quest.tags.add(tag_tuple[0])
+            quest.tags.add(tag_tuple[1])
+
+        # generate badge + assertions and assign badge 2 tags
+        badge_tag_tuples = [('tag-5-0', 'tag-5-1'), ('tag-6-0', 'tag-6-1'), ('tag-7-0', 'tag-7-1'), ('tag-8-0', 'tag-8-1'), ('tag-9-0', 'tag-9-1')]
+        for count, tag_tuple in enumerate(badge_tag_tuples, start=len(quest_tag_tuples)):
+            badge, _ = self.create_badge_and_assertions(count)
+            badge.tags.add(tag_tuple[0])
+            badge.tags.add(tag_tuple[1])
+
+        # sort by xp instead since 2 tags share the same total xp then their position is entirely up to sorted()
+        expected_order = [xp for xp in range(len(quest_tag_tuples + badge_tag_tuples)) for i in range(2)][::-1]
+        calculated_order = [tag_tuple[1] for tag_tuple in get_user_tags_and_xp(self.user)]  # get xp from func
+
+        self.assertEqual(expected_order, calculated_order)
+
+
+class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
+    """ 
+        Specialized TestClass for testing get_tags_from_user function
+    """ 
+
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_unique_tag_per_quest_badges(self):
+        """ 
+            Unique tags per quest and badge
+        """ 
+        # Generates quest + submission and assigns a unique tag
+        quest_tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
+        for tag_name in quest_tag_list:
+            quest, _ = self.create_quest_and_submissions(0)
+            quest.tags.add(tag_name)
+        
+        # Generates badge + assertions and assigns a unique tag
+        badge_tag_list = ['tag-5', 'tag-6', 'tag-7', 'tag-8', 'tag-9']
+        for tag_name in badge_tag_list:
+            badge, _ = self.create_badge_and_assertions(0)
+            badge.tags.add(tag_name)
+
+        tag_list = quest_tag_list + badge_tag_list
+        tag_names = list(get_tags_from_user(self.user).order_by('name').values_list('name', flat=True))
+        self.assertEqual(tag_names, tag_list)
+    
+    def test_same_tag_per_quest_badges(self):
+        """ 
+            Same tag for quest and badges
+        """ 
+        tag_list = ['tag-0', 'tag-1', 'tag-2', 'tag-3', 'tag-4']
+        
+        # Generates quest and badge + assigns both the same tag
+        for tag_name in tag_list:
+            quest, _ = self.create_quest_and_submissions(0)
+            quest.tags.add(tag_name)
+        
+            badge, _ = self.create_badge_and_assertions(0)
+            badge.tags.add(tag_name)
+
+        tag_names = list(get_tags_from_user(self.user).order_by('name').values_list('name', flat=True))
+        self.assertEqual(tag_names, tag_list)
+
+    def test_multiple_tags_per_quest_badges(self):
+        """ 
+            Two tags per generated quest and badges
+        """
+        # generate quests + submissions and assign quest 2 tags
+        quest_tag_tuples = [('tag-0-0', 'tag-0-1'), ('tag-1-0', 'tag-1-1'), ('tag-2-0', 'tag-2-1'), ('tag-3-0', 'tag-3-1'), ('tag-4-0', 'tag-4-1')]
+        for tag_tuple in quest_tag_tuples:
+            quest, _ = self.create_quest_and_submissions(0)
+            quest.tags.add(tag_tuple[0])
+            quest.tags.add(tag_tuple[1])
+
+        # generate badge + assertions and assign badge 2 tags
+        badge_tag_tuples = [('tag-5-0', 'tag-5-1'), ('tag-6-0', 'tag-6-1'), ('tag-7-0', 'tag-7-1'), ('tag-8-0', 'tag-8-1'), ('tag-9-0', 'tag-9-1')]
+        for tag_tuple in badge_tag_tuples:
+            badge, _ = self.create_badge_and_assertions(0)
+            badge.tags.add(tag_tuple[0])
+            badge.tags.add(tag_tuple[1])
+
+        tag_tuples = quest_tag_tuples + badge_tag_tuples
+        unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
+        tag_names = list(get_tags_from_user(self.user).order_by('name').values_list('name', flat=True))
+
+        self.assertEqual(tag_names, unpacked_tag_tuples)
+
+
+class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
+    """ 
+        Specialized TestClass for testing total_xp_by_tags function
+    """ 
+
+    def setUp(self):
+        self.user = baker.make(User)
 
     # MISC. TEST
 
