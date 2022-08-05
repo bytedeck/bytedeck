@@ -4,12 +4,24 @@
 <ul class='left-aligned'>
 {% if tags.count > 4 %}
     {% for tag in tags %}
-    <a href='{% url "tags:detail" tag.id %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+
+    {% if user_obj %}
+    <a href='{% url "tags:detail_student" tag_pk=tag.id user_pk=user_obj.pk %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+    {% else %}
+    <a href='{% url "tags:detail_staff" tag.id %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+    {% endif %}
+
     {% empty %} None
     {% endfor %}
 {% else %}
     {% for tag in tags %}
-    <li><a href='{% url "tags:detail" tag.id %}'>{{ tag.name }}</a></li>
+
+    {% if user_obj %}
+    <li><a href='{% url "tags:detail_student" tag_pk=tag.id user_pk=user_obj.pk %}'>{{ tag.name }}</a></li>
+    {% else %}
+    <li><a href='{% url "tags:detail_staff" tag.id %}'>{{ tag.name }}</a></li>
+    {% endif %}
+
     {% empty %} <li>None</li>
     {% endfor %}
 {% endif %}

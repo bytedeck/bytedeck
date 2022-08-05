@@ -5,8 +5,10 @@ from django_tenants.test.client import TenantClient
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
-from taggit.models import Tag
 from tags.forms import TagForm
+from taggit.models import Tag
+from siteconfig.models import SiteConfig
+
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
@@ -53,7 +55,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""
         self.assert302('tags:list')
-        self.assert302('tags:detail', args=[self.tag.pk])
+        self.assert302('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assertRedirectsLogin('tags:detail_staff', args=[self.tag.pk])
         self.assertRedirectsLogin('tags:create')
         self.assertRedirectsLogin('tags:update', args=[self.tag.pk])
         self.assertRedirectsLogin('tags:delete', args=[self.tag.pk])
@@ -63,7 +66,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_student)
 
         self.assert200('tags:list')
-        self.assert200('tags:detail', args=[self.tag.pk])
+        self.assert200('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assert403('tags:detail_staff', args=[self.tag.pk])
         self.assert403('tags:create')
         self.assert403('tags:update', args=[self.tag.pk])
         self.assert403('tags:delete', args=[self.tag.pk])
@@ -73,7 +77,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         
         self.assert200('tags:list')
-        self.assert200('tags:detail', args=[self.tag.pk])
+        self.assert200('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assert200('tags:detail_staff', args=[self.tag.pk])
         self.assert200('tags:create')
         self.assert200('tags:update', args=[self.tag.pk])
         self.assert200('tags:delete', args=[self.tag.pk])
@@ -108,18 +113,59 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotContains(response, reverse('tags:update', args=[self.tag.pk]))
         self.assertNotContains(response, reverse('tags:delete', args=[self.tag.pk]))
 
-    def test_DetailView(self):
-        """Make sure detail view displays related quest/badges correctly"""
-        quest = baker.make('quest_manager.quest')
-        badge = baker.make('badges.badge')
-        quest.tags.add(self.tag.name)
-        badge.tags.add(self.tag.name)
+    def test_DetailView___staff_view(self):
+        """
+            Make sure detail view displays related quest/badges correctly.
+            Staff should have access to all quest and badges tagged to self.tag
+        """
+        # generate quests + badges and link to tag
+        quest_set = baker.make('quest_manager.quest', _quantity=5)
+        badge_set = baker.make('badges.badge', _quantity=5)
+        [quest.tags.add(self.tag.name) for quest in quest_set]
+        [badge.tags.add(self.tag.name) for badge in badge_set]
 
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('tags:detail', args=[self.tag.pk]))
+        response = self.client.get(reverse('tags:detail_staff', args=[self.tag.pk]))
 
-        self.assertContains(response, quest.name)
-        self.assertContains(response, badge.name)
+        # check if ALL quests and badges show up in view
+        [self.assertContains(response, quest.name) for quest in quest_set]  # quest check
+        [self.assertContains(response, badge.name) for badge in badge_set]  # badge check
+
+    def test_DetailView__student_view(self):
+        """
+            Make sure detail view displays related quest/badges correctly.
+            Students should only have access to quest and badges they have completed/earned
+        """ 
+        # generate quests + badges and link to tag
+        quest_set = baker.make('quest_manager.quest', _quantity=5)
+        badge_set = baker.make('badges.badge', _quantity=5)
+        [quest.tags.add(self.tag.name) for quest in quest_set]
+        [badge.tags.add(self.tag.name) for badge in badge_set]
+
+        # only assign first set element from quest and badge to user
+        baker.make( 
+            'quest_manager.questsubmission',
+            quest=quest_set[0], 
+            user=self.test_student, 
+            is_completed=True, 
+            is_approved=True, 
+            semester=SiteConfig().get().active_semester,
+        )
+        baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
+
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))
+
+        # check if only the quest and badges self.test_student has completed shows up in view
+        self.assertContains(response, quest_set[0].name)
+        [self.assertNotContains(response, quest.name) for quest in quest_set[1:]]
+
+        self.assertContains(response, badge_set[0].name)
+        [self.assertNotContains(response, badge.name) for badge in badge_set[1:]]
+
+        # assert title shows up -> <tag_name> Tag Details for <user_username>
+        self.assertContains(response, self.tag.name)
+        self.assertContains(response, self.test_student.username)
 
     def test_CreateView(self):
         """Make sure create view can create tags"""

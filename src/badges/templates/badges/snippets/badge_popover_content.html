@@ -8,9 +8,8 @@
 
 <p>Rarity: {{badge.get_rarity_icon|safe}} <small>{{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</small></p>
 
-{% with badge as object %}
-Tags: {% include 'tags/snippets/tag-list.html' %}
-{% endwith %}
+Tags: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=user_obj %}
+POPOVER {{object.user}}
 
 Prerequisites:
 
