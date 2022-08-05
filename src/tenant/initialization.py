@@ -24,7 +24,7 @@ User = get_user_model()
 
 
 def load_initial_tenant_data():
-    create_superusers()
+    create_users()
     create_site_config_object()
     create_initial_course()
     create_initial_blocks()
@@ -76,7 +76,7 @@ def set_initial_icons(object_list):
             print(f"Couldn't open icon at {icon_file}")
 
 
-def create_superusers():
+def create_users():
     # BYTEDECK ADMIN
     User.objects.create_superuser(
         username=settings.TENANT_DEFAULT_ADMIN_USERNAME, 

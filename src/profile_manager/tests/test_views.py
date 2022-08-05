@@ -221,7 +221,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # check if model data was changed
         self.assertTrue(User.objects.filter(email=form_data["email"]).exists())
 
-        # check if staff and superuser args were ignored
+        # check if staff args were ignored
         user_instance = User.objects.get(email=form_data["email"])
         self.assertFalse(user_instance.is_staff)
     
