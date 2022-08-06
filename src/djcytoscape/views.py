@@ -23,6 +23,7 @@ from .tasks import regenerate_all_maps
 User = get_user_model()
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = CytoScape
     fields = [
@@ -38,6 +39,7 @@ class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
         return super(ScapeUpdate, self).dispatch(*args, **kwargs)
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class ScapeDelete(NonPublicOnlyViewMixin, DeleteView):
     model = CytoScape
     success_url = reverse_lazy('djcytoscape:list')

@@ -5,52 +5,48 @@
   <link rel="stylesheet" href="{% static 'djcytoscape/css/djcytoscape.css' %}">
 {% endblock %}
 {% endblock %}
+
 {% block heading_inner %}{{ scape.name }} Quest Map
+  <span><small>Generated On: {{ scape.last_regeneration }}</small></span>
 {% if personalized_user %}
     <br><small>of <a href="{% url 'profiles:profile_detail' personalized_user.profile.id %}">{{personalized_user}}</a>, {{ personalized_user.profile}}</small>
 {%endif %}
 {% endblock%}
+
 {% block content %}
-    {% if user.is_staff %}
-        <p>
-            <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
-              title = "Recalculate ALL Maps.  This may take a few moments." >
-              <i class="fa fa-refresh"></i>
-            </a>
-            <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
-              title = "Recalculate this Map." >
-              <i class="fa fa-undo"></i>
-            </a>
-            <a class="btn btn-default" href="{% url 'djcytoscape:list' %}" role="button"
-              title = "List all maps" >
-              <i class="fa fa-list-ul"></i>
-            </a>
-            <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
-              title = "Edit the Map" >
-              <i class="fa fa-edit"></i>
-            </a>
-            <a class="btn btn-danger" href="{% url 'djcytoscape:delete' scape.id %}" role="button"
-              title = "Delete this Map" >
-              <i class="fa fa-trash-o"></i>
-            </a>
-        &nbsp;&nbsp;&nbsp;Generated on {{ scape.last_regeneration }}
-        </p>
-
-    {%  endif %}
-
-    <p id="fullscreen" class="pull-right">
-      <a id="btn-print" role="button" class="btn btn-default">Print <i class="fa fa-print"></i></a>
+  {% if user.is_staff %}
+    <div class="pull-right">
+      &nbsp;<a id="btn-print" role="button" class="btn btn-default">Print <i class="fa fa-print"></i></a>
       <a id="btn-fullscreen" role="button" class="btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a>
-    </p>
+      <a class="btn btn-default" href="{% url 'djcytoscape:list' %}" role="button"
+        title = "List all maps"><i class="fa fa-list-ul"></i></a>
+      <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
+        title = "Recalculate ALL Maps.  This may take a few moments." >
+        <i class="fa fa-refresh"></i>
+      </a>
+      <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
+        title = "Recalculate this Map." >
+        <i class="fa fa-undo"></i>
+      </a>
+      <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
+        title = "Edit the Map" >
+        <i class="fa fa-edit"></i>
+      </a>
+      <a class="btn btn-danger" href="{% url 'djcytoscape:delete' scape.id %}" role="button"
+        title = "Delete this Map" >
+        <i class="fa fa-trash-o"></i>
+      </a>
+    </div>
+  {%  endif %}
 
-    <p>Click on a quest to go to it.  A blue quest or badge will take you to a connected map.
-      Some quests are available based on your Rank; see the <a href="{% url 'courses:ranks' %}">Ranks page</a>
-      to view the Rank-based maps.</p>
+  <p>Click on a quest to go to it.  A blue quest or badge will take you to a connected map.
+    Some quests are available based on your Rank; see the <a href="{% url 'courses:ranks' %}">Ranks page</a>
+    to view the Rank-based maps.</p>
 
-    {% if scape.parent_scape %}
-        <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
-    {% endif %}
-    <div id="cy"></div>
+  {% if scape.parent_scape %}
+    <p>Back to <a href="{{ scape.parent_scape.get_absolute_url }}">{{ scape.parent_scape }} Quest Map</a></p>
+  {% endif %}
+  <div id="cy"></div>
 
 {% endblock %}
 {% block js %}
