@@ -1,11 +1,16 @@
-
+from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.contrib.auth.mixins import LoginRequiredMixin
-# from django.urls import reverse_lazy
+from django.contrib.admin.views.decorators import staff_member_required
+
 from django.views.generic import DetailView
-# from django.views.generic.edit import CreateView, UpdateView, DeleteView
+from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
+
 from badges.models import Badge
 from quest_manager.models import Quest
+
+from tags.forms import TagForm
 
 # from utilities.forms import TagForm, 
 from tenant.views import NonPublicOnlyViewMixin
@@ -33,48 +38,56 @@ from taggit.models import Tag
 
 
 class TagList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
-    template_name = 'tags/list.html'
     model = Tag
+    template_name = 'tags/list.html'
 
 
 class TagDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
-    template_name = 'tags/detail.html'
     model = Tag
+    template_name = 'tags/detail.html'
 
     def get_context_data(self, **kwargs):
         kwargs['quests'] = Quest.objects.filter(tags__name=self.object.name)
         kwargs['badges'] = Badge.objects.filter(tags__name=self.object.name)
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class TagCreate(NonPublicOnlyViewMixin, CreateView):
+    model = Tag
+    form_class = TagForm
+    template_name = 'tags/form.html'
+    success_url = reverse_lazy('tags:list')
+
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Create Tag'
+        kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
 
 
-# @method_decorator(staff_member_required, name='dispatch')
-# class TagCreate(NonPublicOnlyViewMixin, CreateView):
-#     model = Tag
-#     form_class = MenuItemForm
-#     success_url = reverse_lazy('utilities:menu_items')
+@method_decorator(staff_member_required, name='dispatch')
+class TagUpdate(NonPublicOnlyViewMixin, UpdateView):
+    model = Tag
+    form_class = TagForm
+    template_name = 'tags/form.html'
+    success_url = reverse_lazy('tags:list')
 
-#     def get_context_data(self, **kwargs):
-#         kwargs['heading'] = 'Create New Menu Item'
-#         kwargs['submit_btn_value'] = 'Create'
+    def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Tag'
+        kwargs['submit_btn_value'] = 'Update'
 
-#         return super().get_context_data(**kwargs)
-
-
-# @method_decorator(staff_member_required, name='dispatch')
-# class TagUpdate(NonPublicOnlyViewMixin, UpdateView):
-#     model = MenuItem
-#     form_class = MenuItemForm
-#     success_url = reverse_lazy('utilities:menu_items')
-
-#     def get_context_data(self, **kwargs):
-#         kwargs['heading'] = 'Update Menu Item'
-#         kwargs['submit_btn_value'] = 'Update'
-
-#         return super().get_context_data(**kwargs)
+        return super().get_context_data(**kwargs)
 
 
-# @method_decorator(staff_member_required, name='dispatch')
-# class TagDelete(NonPublicOnlyViewMixin, DeleteView):
-#     model = MenuItem
-#     success_url = reverse_lazy('utilities:menu_items')
+@method_decorator(staff_member_required, name='dispatch')
+class TagDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = Tag
+    template_name = 'tags/delete.html'
+    success_url = reverse_lazy('tags:list')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs).copy()
+        ctx['quests'] = Quest.objects.filter(tags__id=self.object.id)
+        ctx['badges'] = Badge.objects.filter(tags__id=self.object.id)
+        return ctx

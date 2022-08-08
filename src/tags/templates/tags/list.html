@@ -8,6 +8,10 @@
 
 {% block heading_inner %}
     Tags
+
+    {% if request.user.is_staff %}
+        <a class="btn btn-primary" href="{% url 'tags:create' %}" role="button">New</a>
+    {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -22,36 +26,33 @@
     >
         <thead>
             <tr>
-                <th data-sortable='true' data-field='tag'>Tag</th>
-                <!-- <th class="col-sm-4" scope="col">Registration Required</th> -->
-                <th data-searchable='false' data-field='action'>Action</th>
+                <th data-sortable='true' data-field='tag' class="col-sm-8">Tag</th>
+                <th data-searchable='false' data-field='action' class="col-sm-4">Action</th>
             </tr>
         </thead>
 
         <tbody>
             {% for tag in object_list %}
                 <tr>
-                    <td><a href="{% url 'tags:detail' tag.id %}">{{tag.name}}</a></td>
-                    <!-- <td class="class-sm">
-                        {{page.registration_required}}
-                    </td> -->
+                    <td>{{tag.name}}</td>
                     <td>
-                        Add later
-                        <!-- <a class="btn btn-info" href="{{ page.get_absolute_url }}" role="button" title="View page">
+                        <a class="btn btn-info" href="{% url 'tags:detail' tag.id %}" role="button" title="View page">
                             <i class="fa fa-eye"></i>
                         </a>
+        
                         {% if request.user.is_staff %}
-                                <a class="btn btn-warning" href="{% url 'utilities:flatpage_edit' pk=1 %}" role="button" title="Edit this page">
-                                    <i class="fa fa-edit"></i>
-                                </a>
-                                <a class="btn btn-danger" href="{% url 'utilities:flatpage_delete' pk=1 %}" role="button" title="Delete this page">
-                                    <i class="fa fa-trash-o"></i>
-                                </a>
-                        {% endif %} -->
+                            <a class="btn btn-warning" href="{% url 'tags:update' tag.id %}" role="button" title="Edit this tag">
+                                <i class="fa fa-edit"></i>
+                            </a>
+                            <a class="btn btn-danger" href="{% url 'tags:delete' tag.id %}" role="button" title="Delete this tag">
+                                <i class="fa fa-trash-o"></i>
+                            </a>
+                        {% endif %}
                     </td>
                 </tr>
             {% endfor %}
         </tbody>
+        
     </table>
 
 {% endblock %}

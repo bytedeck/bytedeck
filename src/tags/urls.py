@@ -1,13 +1,18 @@
 from django.urls import path
 
 from taggit.models import Tag
-from tags.views import TagDetail, TagList
+
+from tags import views
 from utilities.views import ModelAutocomplete
 
 app_name = 'tags'
 
 urlpatterns = [
-    path('', TagList.as_view(), name='list'),
     path('autocomplete/', ModelAutocomplete.as_view(model=Tag), name='autocomplete'),
-    path('<int:pk>/', TagDetail.as_view(), name='detail'),
+
+    path('', views.TagList.as_view(), name='list'),
+    path('create/', views.TagCreate.as_view(), name='create'),
+    path('<int:pk>/', views.TagDetail.as_view(), name='detail'),
+    path('update/<int:pk>/', views.TagUpdate.as_view(), name='update'),
+    path('delete/<int:pk>/', views.TagDelete.as_view(), name='delete'),
 ]
