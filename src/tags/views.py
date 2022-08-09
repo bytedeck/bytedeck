@@ -1,11 +1,12 @@
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.admin.views.decorators import staff_member_required
 
 from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
+
+from hackerspace_online.decorators import staff_member_required
 
 from badges.models import Badge
 from quest_manager.models import Quest

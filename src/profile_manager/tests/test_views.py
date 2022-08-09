@@ -99,9 +99,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
 
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
         self.assert404('profiles:profile_update', args=[s2_pk])
@@ -268,16 +268,16 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(user_instance.profile.is_TA, form_data["is_TA"])
 
     def test_password_change_status_code__anonymous(self):
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
+        self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
+        self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
     
     def test_password_change_status_code__student(self):
         self.client.force_login(self.test_student1)
 
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
-        self.assertRedirectsAdmin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
+        self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
+        self.assert403("profiles:change_password", kwargs={"pk": self.test_student1.pk})
+        self.assert403("profiles:change_password", kwargs={"pk": self.test_student2.pk})
     
     def test_password_change_status_code__staff(self):
         self.client.force_login(self.test_teacher)

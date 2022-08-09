@@ -7,7 +7,6 @@ from django.views.generic.list import ListView
 import numpy as np
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -19,6 +18,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+
+from hackerspace_online.decorators import staff_member_required
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
