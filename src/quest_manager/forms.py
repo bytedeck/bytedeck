@@ -54,6 +54,7 @@ class QuestForm(forms.ModelForm):
     campaign = forms.ModelChoiceField(
         queryset=Category.objects.all(),
         required=False,
+        limit_choices_to={'active': True}
     )
 
     class Meta:

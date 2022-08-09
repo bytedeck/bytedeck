@@ -1,9 +1,8 @@
 import datetime
 import re
-from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.utils.timezone import localtime
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -115,7 +114,7 @@ class QuestTestModel(TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.quest = baker.make(Quest)
 
-    def test_badge_creation(self):
+    def test_quest_creation(self):
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
         
@@ -124,6 +123,48 @@ class QuestTestModel(TenantTestCase):
 
     def test_quest_url(self):
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
+    
+    def test_active(self):
+        """
+        The active method of the Quest model's parent "XPItem" should return the correct values based on a quest object's settings.
+
+        Quest.active should return False if:
+        1. The quest has an availability date/time that hasn't yet been reached (date_available, time_available are in the future)
+        2. The quest is expired (Quest.expired == False; date_expired, time_expired are in the past)
+        3. The quest is a part of an inactive campaign (Quest.campaign == True and Quest.campaign.active == False)
+        4. The quest is manually set to be invisible to students (Quest.visible_to_students == False)
+        """
+
+        # create and test a control quest that will return active
+        baker.make(Quest, name="control-quest")
+        self.assertEqual(Quest.objects.get(name="control-quest").active, True)
+
+        # create and test a quest that won't be available until one day later
+        baker.make(Quest, name="future-date-quest", date_available=(timezone.localtime() + timezone.timedelta(days=1)))
+        self.assertEqual(Quest.objects.get(name="future-date-quest").active, False)
+
+        # create and test a quest that won't be available until one hour later in the same day
+        baker.make(
+            Quest, name="future-time-quest", date_available=timezone.localtime(), 
+            time_available=(timezone.localtime() + timezone.timedelta(hours=1)))
+        self.assertEqual(Quest.objects.get(name="future-time-quest").active, False)
+
+        # create and test a quest that's expired one day ago
+        baker.make(Quest, name="past-date-quest", date_expired=(timezone.localtime() - timezone.timedelta(days=1)))
+        self.assertEqual(Quest.objects.get(name="past-date-quest").active, False)
+
+        # create and test a quest that's expired one hour ago
+        baker.make(Quest, name="past-time-quest", time_expired=(timezone.localtime() - timezone.timedelta(hours=1)))
+        self.assertEqual(Quest.objects.get(name="past-time-quest").active, False)
+
+        # create and test a quest that's a part of an inactive campaign
+        inactive_campaign = baker.make(Category, title="inactive-campaign", active=False)
+        baker.make(Quest, name="inactive-campaign-quest", campaign=inactive_campaign)
+        self.assertEqual(Quest.objects.get(name="inactive-campaign-quest").active, False)
+
+        # create and test a quest that's invisible to students
+        baker.make(Quest, name="invisible-quest", visible_to_students=False)
+        self.assertEqual(Quest.objects.get(name="invisible-quest").active, False)
 
     def test_quest_html_formatting(self):
         test_markup = "<p>this <span>span</span> tag should not break</p>"
@@ -215,7 +256,7 @@ class QuestTestModel(TenantTestCase):
         sub_repeat_1hr.mark_completed()
 
         # jump ahead an hour so repeat cooldown is over
-        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+        with freeze_time(timezone.localtime() + timezone.timedelta(hours=1, minutes=1)):
             self.assertTrue(quest_repeat_1hr.is_repeat_available(student))
             # start another one
             QuestSubmission.objects.create_submission(student, quest_repeat_1hr)
