@@ -20,7 +20,11 @@
           <li><h4>XP: {{quest.xp}}{% if quest.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}
           </h4></li>
           <li>Campaign: {% if quest.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' quest.campaign.id %}">{{ quest.campaign }}</a>{% else %}{{ quest.campaign }}{% endif %}{% else %}-{% endif %}</li>
+          {% if request.user.is_staff %}
           <li>Tags: {% with quest as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
+          {% else %}
+          <li>Tags: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
+          {% endif %}
         </ul>
       </div>
       <div class="col-sm-6">
