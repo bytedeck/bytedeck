@@ -38,6 +38,12 @@ class ProfileQuerySet(models.query.QuerySet):
     def students_only(self):
         return self.filter(user__is_staff=False, is_test_account=False)
 
+    def get_active(self):
+        return self.filter(user__is_active=True)
+
+    def get_inactive(self):
+        return self.filter(user__is_active=False)
+
 
 class ProfileManager(models.Manager):
     def get_queryset(self):
@@ -49,7 +55,7 @@ class ProfileManager(models.Manager):
     def all_for_active_semester(self):
         """:return: a queryset of student profiles with a course this semester"""
         courses_user_list = CourseStudent.objects.all_users_for_active_semester()
-        qs = self.all_students().filter(user__in=courses_user_list)
+        qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
 
     def get_mailing_list(self):
@@ -57,6 +63,12 @@ class ProfileManager(models.Manager):
 
     def all_visible(self):
         return self.get_queryset().visible()
+
+    def all_active(self):
+        return self.get_queryset().get_active()
+
+    def all_inactive(self):
+        return self.get_queryset().get_inactive()
 
 
 def user_directory_path(instance, filename):

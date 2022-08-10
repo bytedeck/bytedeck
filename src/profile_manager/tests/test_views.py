@@ -78,6 +78,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ If not logged in then all views should redirect to home page  """
 
         self.assertRedirectsLogin('profiles:profile_list')
+        self.assertRedirectsLogin('profiles:profile_list_current')
+        self.assertRedirectsLogin('profiles:profile_list_inactive')
+        self.assertRedirectsLogin('profiles:profile_list_staff')
 
     def test_all_profile_page_status_codes_for_students(self):
 
@@ -95,6 +98,8 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # students shouldn't have access to these and should be redirected to login or permission denied
         self.assert403('profiles:profile_list')
+        self.assert403('profiles:profile_list_inactive')
+        self.assert403('profiles:profile_list_staff')
 
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
@@ -118,6 +123,8 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('profiles:profile_update', args=[s_pk])
         self.assert200('profiles:profile_list')
         self.assert200('profiles:profile_list_current')
+        self.assert200('profiles:profile_list_staff')
+        self.assert200('profiles:profile_list_inactive')
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
@@ -307,3 +314,63 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # login to confirm changed password
         success = self.client.login(username=user_instance.username, password=form_data['new_password1'])
         self.assertTrue(success)
+
+    def test_profile_list(self):
+        """ 
+            quick test for ProfileList to see...
+            - if profile_lists have the correct view_type 
+            - has correct queryset
+        """
+        # since ProfileList qs only filters for active=True, staff=False, students
+        User = get_user_model()
+
+        # these shouldnt show up in qs
+        baker.make(User, username='1', is_active=False)
+        baker.make(User, username='2', is_staff=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
+
+        qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
+        self.assertTrue(qs.count(), 2)  # these are the test students
+        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True) 
+        self.assertFalse(filtered_qs.exists())
+    
+    def test_profile_list_current(self):
+        """ 
+            quick test for ProfileListCurrent to see...
+            - if profile_lists have the correct view_type 
+            
+            no need to check for qs since its already tested in test_managers
+        """
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list_current"))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].CURRENT)
+
+    def test_profile_list_inactive(self):
+        """ 
+            quick test for ProfileListInactive to see...
+            - if profile_lists have the correct view_type 
+            
+            no need to check for qs since its already tested in test_managers
+        """
+        
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list_inactive"))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INACTIVE)
+
+    def test_profile_list_staff(self):
+        """ 
+            quick test for ProfileListStaff to see...
+            - if profile_lists have the correct view_type 
+            - has correct queryset
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list_staff"))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
+        
+        qs = response.context['object_list']
+        self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin

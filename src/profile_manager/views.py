@@ -24,9 +24,21 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from django.contrib.auth.forms import SetPasswordForm
 
 
+class ViewTypes:
+    """ enum for ProfileList and its descendants """
+    LIST = 0
+    CURRENT = 1
+    STAFF = 2
+    INACTIVE = 3
+
+
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     model = Profile
     template_name = 'profile_manager/profile_list.html'
+
+    # this will determine which button will be active in self.template_name
+    # also if view_type=ViewTypes.STAFF will render a different partial template
+    view_type = ViewTypes.LIST  
 
     def test_func(self):
         return self.request.user.is_staff
@@ -43,8 +55,14 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         return profiles_qs
 
     def get_queryset(self):
-        profiles_qs = Profile.objects.all_students()
+        profiles_qs = Profile.objects.all_students().get_active()
         return self.queryset_append(profiles_qs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['VIEW_TYPES'] = ViewTypes
+        context['view_type'] = self.view_type
+        return context
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
@@ -59,6 +77,7 @@ class ProfileListCurrent(ProfileList):
     Arguments:
         ProfileList -- Base class
     """
+    view_type = ViewTypes.CURRENT
 
     # override the staff requirement for ProfileList
     def test_func(self):
@@ -68,10 +87,21 @@ class ProfileListCurrent(ProfileList):
         profiles_qs = Profile.objects.all_for_active_semester()
         return self.queryset_append(profiles_qs)
 
-    def get_context_data(self, **kwargs):
-        context = super(ProfileListCurrent, self).get_context_data(**kwargs)
-        context['current_only'] = True
-        return context
+
+@method_decorator(staff_member_required, name='dispatch')
+class ProfileListStaff(ProfileList):
+    view_type = ViewTypes.STAFF
+
+    def get_queryset(self):
+        return Profile.objects.filter(user__is_staff=True)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ProfileListInactive(ProfileList):
+    view_type = ViewTypes.INACTIVE
+
+    def get_queryset(self):
+        return Profile.objects.all_inactive()
 
 
 # Profiles are automatically created with each user, so there is never a teacher to create on manually.
