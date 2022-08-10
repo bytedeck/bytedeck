@@ -1234,27 +1234,28 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.test_student = User.objects.create_user('test_student', password="password")
         self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+
         self.quest = baker.make(Quest, name="Test Quest")
+        self.quest.tags.add('tag')
 
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
         self.test_ta = User.objects.create_user('test_ta')
         self.test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
         self.test_ta.profile.save()
 
-        self.valid_copy_form_data = {
-            'name': "Test Quest - COPY",  # only blank required field
-            # these fields are required but they have defaults
-            'xp': 0,
-            'max_repeats': 0,
-            'max_xp': -1,
-            'hours_between_repeats': 0,
-            'sort_order': 0,
-            'date_available': "2006-10-25",
-            'time_available': "14:30:59",
+        self.valid_copy_form_data = generate_form_data(model=Quest)
+        self.valid_copy_form_data.update({
+            # for testing
+            'name': 'Test Quest - COPY',
+            'tags': [1],
             'new_quest_prerequisite': self.quest.id,
-        }
+
+            # validation error
+            'date_available': '2006-10-25',
+        })
 
     def test_teacher_copy_quest_GET(self):
+        """ initial values in form GET is the same as the self.quest (quest that is being copied)  """
         self.client.force_login(self.test_teacher)
 
         get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
@@ -1265,10 +1266,13 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Quest name should have changed
         self.assertEqual(form_data['name'], 'Test Quest - COPY')
+        # Tags should be the same as original
+        self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
 
     def test_teacher_copy_quest_POST(self):
+        """ values after being saved is the same as copied quest + '- COPY' being appended to name """
         self.client.force_login(self.test_teacher)
 
         response = self.client.post(
@@ -1286,6 +1290,9 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(new_quest.prereqs().count(), 1)
         self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
 
+        # Copied quest should have tag
+        self.assertEqual(new_quest.tags.count(), 1)
+
     def test_TA_can_copy_quest_GET(self):
 
         self.client.force_login(self.test_ta)
@@ -1297,6 +1304,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Quest name should have changed
         self.assertEqual(form_data['name'], 'Test Quest - COPY')
+        # Tags should be the same as original
+        self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
         # self.assertFalse(form_data['visible_to_students']) ? When is this changed?
@@ -1327,6 +1336,9 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         # Copied quests should set the original as a pre-requisite
         self.assertEqual(new_quest.prereqs().count(), 1)
         self.assertEqual(new_quest.prereqs().first().prereq_object, self.quest)
+
+        # Copied quest should have tag
+        self.assertEqual(new_quest.tags.count(), 1)
 
     def test_copy_with_new_prereqs(self):
         """ When copying a quest should be able to set new prereqs """

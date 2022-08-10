@@ -188,6 +188,7 @@ class QuestCopy(QuestCreate):
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])
+        kwargs['initial']['tags'] = copied_quest.tags.all()
         kwargs['initial']['new_quest_prerequisite'] = copied_quest
 
         new_quest = get_object_or_404(Quest, pk=self.kwargs['quest_id'])

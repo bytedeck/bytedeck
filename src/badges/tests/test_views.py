@@ -30,7 +30,8 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = SiteConfig.get().active_semester
 
-        self.test_badge = baker.make(Badge, xp=5)
+        self.test_badge = baker.make(Badge, name="badge", xp=5)
+        self.test_badge.tags.add('tag')
         self.test_badge_type = baker.make(BadgeType)
         self.test_assertion = baker.make(BadgeAssertion)
 
@@ -123,7 +124,19 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         new_badge = Badge.objects.latest('datetime_created')
         self.assertEqual(new_badge.name, "badge test")
 
-    def test_badge_copy(self):
+    def test_badge_copy__GET(self):
+        """ initial values in form GET is the same as the self.test_badge (badge that is being copied)  """
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('badges:badge_copy', args=[self.test_badge.id]))
+        
+        form_data = response.context['form'].initial
+
+        # Badge name should have changed
+        self.assertEqual(form_data['name'], "Copy of " + self.test_badge.name)
+        # Tags should be the same as original
+        self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
+
+    def test_badge_copy__POST(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
