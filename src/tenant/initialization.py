@@ -401,7 +401,7 @@ def create_orientation_campaign():
 
     # quests with icons need to have them uploaded programmatically from static files to be displayed properly in development, same as badges.
     if not settings.TESTING:
-        set_initial_icons([message_quest, cc_quest, avatar_quest, contract_quest])
+        set_initial_icons([message_quest, cc_quest, avatar_quest, contract_quest, screenshots_quest])
 
     # now link them to the welcome quest with pre-requisites:      
     Prereq.add_simple_prereq(avatar_quest, welcome_quest)
