@@ -2,6 +2,7 @@
         <li role="separator" class="divider"></li>
         <li class="dropdown-header">Course Setup</li>
         <li><a href="{% url 'courses:ranks' %}"><i class="fa fa-fw fa-star"></i>&nbsp;Ranks</a></li>
+        <li><a href="{% url 'tags:list' %}"><i class="fa fa-fw fa-tags"></i>&nbsp;Tags</a></li>
         <li><a href="{% url 'quests:categories' %}"><i class="fa fa-fw fa-compass"></i>&nbsp;Campaigns</a></li>
         <li><a href="{% url 'courses:block_list' %}"><i class="fa fa-fw fa-square"></i>&nbsp;Blocks/Sections</a></li>
         <li><a href="{% url 'courses:course_list' %}"><i class="fa fa-fw fa-book"></i>&nbsp;Courses</a></li>
@@ -10,9 +11,11 @@
         <li class="dropdown-header">Custom Pages</li>
         <li><a href="{% url 'utilities:flatpage_list' %}"><i class="fa fa-list"></i>&nbsp;Pages</a></li>
         <li><a href="{% url 'utilities:flatpage_create' %}"><i class="fa fa-pencil-square-o"></i>&nbsp;Create Page</a></li>
+        {% if request.user.is_superuser %}
         <li role="separator" class="divider"></li>
         <li class="dropdown-header">Advanced</li>
-        <li><a href="/admin"><i class="fa fa-fw fa-database"></i>&nbsp;Site Administration</a></li>
+        <li><a href="/admin"><i class="fa fa-fw fa-database"></i>&nbsp;Django Admin</a></li>
+        {% endif %}
         <li role="separator" class="divider"></li>
         <li class="dropdown-header">ByteDeck</li>
         <li><a title="Ask a question, report a bug, or request a feature!" href="https://github.com/bytedeck/bytedeck/discussions"><i class="fa fa-fw fa-comments-o"></i>&nbsp;ByteDeck Forum</a></li>

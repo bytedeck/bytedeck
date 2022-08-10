@@ -1,0 +1,30 @@
+
+{% with object.tags.all as tags%}
+<div class='tags-list'>
+<ul class='left-aligned'>
+{% if tags.count > 4 %}
+    {% for tag in tags %}
+
+    {% if user_obj %}
+    <a href='{% url "tags:detail_student" tag_pk=tag.id user_pk=user_obj.pk %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+    {% else %}
+    <a href='{% url "tags:detail_staff" tag.id %}'>{{ tag.name }}{% if not forloop.last %}, {% endif %}</a>
+    {% endif %}
+
+    {% empty %} None
+    {% endfor %}
+{% else %}
+    {% for tag in tags %}
+
+    {% if user_obj %}
+    <li><a href='{% url "tags:detail_student" tag_pk=tag.id user_pk=user_obj.pk %}'>{{ tag.name }}</a></li>
+    {% else %}
+    <li><a href='{% url "tags:detail_staff" tag.id %}'>{{ tag.name }}</a></li>
+    {% endif %}
+
+    {% empty %} <li>None</li>
+    {% endfor %}
+{% endif %}
+</ul>
+</div>  
+{% endwith %}

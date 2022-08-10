@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
@@ -11,12 +10,15 @@ from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import UpdateView, FormView
 
+from hackerspace_online.decorators import staff_member_required
+
 from .models import Profile
 from .forms import ProfileForm, UserForm
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
+from tags.models import get_user_tags_and_xp
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from django.contrib.auth.forms import SetPasswordForm
@@ -114,6 +116,7 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
         context['xp_per_course'] = profile.xp_per_course()
         context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
+        context['tags'] = get_user_tags_and_xp(profile.user)
 
         # earned_assertions = BadgeAssertion.objects.all_for_user_distinct(profile.user)
         # assertion_dict = defaultdict(list)
@@ -245,7 +248,7 @@ class PasswordReset(FormView):
 
 
 @non_public_only_view
-@staff_member_required(login_url='/')
+@staff_member_required
 def recalculate_current_xp(request):
     profiles_qs = Profile.objects.all_for_active_semester()
     for profile in profiles_qs:
@@ -266,7 +269,7 @@ def tour_complete(request):
 
 
 @non_public_only_view
-@staff_member_required(login_url='/')
+@staff_member_required
 def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
@@ -275,13 +278,13 @@ def xp_toggle(request, profile_id):
 
 
 @non_public_only_view
-@staff_member_required(login_url='/')
+@staff_member_required
 def comment_ban_toggle(request, profile_id):
     return comment_ban(request, profile_id, toggle=True)
 
 
 @non_public_only_view
-@staff_member_required(login_url='/')
+@staff_member_required
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
     if toggle:

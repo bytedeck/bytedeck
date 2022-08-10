@@ -79,7 +79,7 @@ class AnnouncementTasksTests(TenantTestCase):
                            course=course,
                            semester=semester)
         emails = get_users_to_email()
-        self.assertEqual(len(emails), 11)
+        self.assertEqual(len(emails), 12)  # 11 + deck owner = 12
 
     def test_send_announcement_emails(self):
 

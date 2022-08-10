@@ -30,23 +30,23 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.config = SiteConfig.get()
         self.client = TenantClient(self.tenant)
 
-    def test_SiteConfigUpdateOwn(self):
-        """ SiteConfigUpdateOwn is an update view that sets the object to
-        this tenants SiteConfig singleton
-        """
+    def test_all_siteconfig_page_status_codes_for_anonymous(self):
+        self.assertRedirectsLogin('config:site_config_update', args=[self.config.get().id])
+        self.assertRedirectsLogin('config:site_config_update_own')
 
-        # requires staff member
-        self.assertRedirectsAdmin('config:site_config_update_own')
+    def test_all_siteconfig_page_status_codes_for_students(self):
+        student = baker.make(User)
+        self.client.force_login(student)
 
-        self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
-        self.assert200('config:site_config_update_own')
+        self.assert403('config:site_config_update', args=[self.config.get().id])
+        self.assert403('config:site_config_update_own')
 
-    def test_SiteConfigUpdate(self):
-        # requires staff member
-        self.assertRedirectsAdmin('config:site_config_update', args=[self.config.get().id])
+    def test_all_siteconfig_page_status_codes_for_staff(self):
+        teacher = baker.make(User, is_staff=True)
+        self.client.force_login(teacher)
 
-        self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
         self.assert200('config:site_config_update', args=[self.config.get().id])
+        self.assert200('config:site_config_update_own')
 
     def testSiteConfigUpdate_uses_newly_saved_cache_data(self):
 

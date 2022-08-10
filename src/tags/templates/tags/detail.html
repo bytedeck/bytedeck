@@ -1,0 +1,19 @@
+{% extends "tags/base.html" %}
+{% load static %}
+
+{% block head %}
+{% endblock %}
+
+{% block heading_inner %}
+    {{object.name}} Tag Details {% if user_obj %}for {{user_obj.username}}{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<br>
+{% include 'tags/snippets/related-xp-item.html' with type='default' %}
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "tags/base.html" %}
+{% load static %}
+
+{% block head %}
+<link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
+<script src="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.js"></script>
+{% endblock %}
+
+{% block heading_inner %}
+    Tags
+
+    {% if request.user.is_staff %}
+        <a class="btn btn-primary" href="{% url 'tags:create' %}" role="button">New</a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+
+    <table 
+        data-toggle='table'
+        data-search='true'
+        data-classes="table table-striped"
+        data-pagination='true'
+        data-page-size=15
+        data-page-list="[15, 50, 100, all]"
+    >
+        <thead>
+            <tr>
+                <th data-sortable='true' data-field='tag' class="col-sm-8">Tag</th>
+                <th data-searchable='false' data-field='action' class="col-sm-4">Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for tag in object_list %}
+                <tr>
+                    <td>{{tag.name}}</td>
+                    <td>
+                        <a class="btn btn-info" href="{% url 'tags:detail_staff' tag.id %}" role="button" title="View page">
+                            <i class="fa fa-eye"></i>
+                        </a>
+        
+                        {% if request.user.is_staff %}
+                            <a class="btn btn-warning" href="{% url 'tags:update' tag.id %}" role="button" title="Edit this tag">
+                                <i class="fa fa-edit"></i>
+                            </a>
+                            <a class="btn btn-danger" href="{% url 'tags:delete' tag.id %}" role="button" title="Delete this tag">
+                                <i class="fa fa-trash-o"></i>
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+        
+    </table>
+
+{% endblock %}
+
+{% block js %}
+{% endblock %}

@@ -5,14 +5,30 @@
 <body>
   <p>Hello {{user.get_full_name}},</p>
 
-  <p>You have unread notifications:</p>
+  {% if user.is_staff %}
+  <p>Quest submissions awaiting your approval:</p>
+
+  <ul>
+    {% for sub in submissions %}
+      <li><a href="{{root_url}}{{sub.get_absolute_url}}">{{sub}}: {{sub.user}}</a></li>
+    {% empty %}
+      <li>None</li>
+    {% endfor %}
+  </ul>
+  <hr>
+  {% endif %}
+
+  <p>Unread notifications:</p>
 
   <ul>
   {% for notice in notifications %}
-  <li>{{notice|safe}}</li>
+    <li>{{notice|safe}}</li>
+  {% empty %}
+    <li>None</li>
   {% endfor %}
   </ul>
   <hr>
+
 
   <p>
     {% firstof config.outgoing_email_signature config.site_name %}

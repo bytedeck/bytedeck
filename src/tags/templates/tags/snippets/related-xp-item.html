@@ -1,0 +1,31 @@
+<div class="panel-group">
+
+    <div class="panel panel-{{type}}">
+        <div class="panel-heading">Related Quests ({{quests|length}}) <i class="fa fa-shield fa-fw"></i></div>
+        <div class="panel-body">
+            <p></p>
+            <ul>
+                {% for quest in quests %}
+                    <li><a href="{{ quest.get_absolute_url }}">{{ quest }}</a></li>
+                {% empty %}
+                    <li>None.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <br>
+    <div class="panel panel-{{type}}">
+        <div class="panel-heading">Related Badges ({{badges|length}}) <i class="fa fa-certificate fa-fw"></i></div>
+        <div class="panel-body">
+            <p></p>
+            <ul>
+                {% for badge in badges %}
+                    <li><a href="{{ badge.get_absolute_url }}">{{ badge }}</a></li>
+                {% empty %}
+                    <li>None.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+</div>

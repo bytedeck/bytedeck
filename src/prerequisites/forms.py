@@ -20,7 +20,7 @@ def popover_labels(model, field_strings):
             continue  # if generic foreign key we skip it, it doesn't have these attributes
 
         html = field.verbose_name
-        if(field.help_text != ""):
+        if field.help_text != "":
             html += ' <i class="fa fa-question-circle-o text-info" data-toggle="tooltip" data-placement="top" title="' + field.help_text + '"></i> '
         fields_html[field.name] = html
     return fields_html

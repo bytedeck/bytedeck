@@ -6,7 +6,6 @@ from django.db import connection
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
-
 from django_tenants.utils import get_public_schema_name
 
 from .forms import TenantForm

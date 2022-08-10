@@ -8,17 +8,18 @@
 
 <p>Rarity: {{badge.get_rarity_icon|safe}} <small>{{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</small></p>
 
-<!-- <p>Series: {{badge.series}}</p> -->
+Tags: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=user_obj %}
+POPOVER {{object.user}}
 
-<p>Prerequisites:</p>
+Prerequisites:
 
-<ul><small>
+<ul class='left-aligned'>
 {% for p in badge.prereqs %}
   <li><a href='{{ p.get_prereq.get_absolute_url }}'>{{ p }}</a></li>
 {% empty %}
   <li>None (granted manually)</li>
 {% endfor %}
-</small></ul>
+</ul>
 
 {% if assertions_of_this_badge %} {# If a student is looking at this, it will show which badges they have earned #}
 <p>Earned: </p>

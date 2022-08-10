@@ -267,7 +267,7 @@
           {% for assertion in assertions %}
             {% with assertions_of_this_badge=assertion.get_duplicate_assertions badge=assertion.badge %}
             <span class="hidden-xs"> {# only use popover on wider screens #}
-              <a {% include 'badges/snippets/badge_popover.html' %} >
+              <a {% include 'badges/snippets/badge_popover.html' with user_obj=object.user %} >
                 {% include 'profile_manager/snippets/profile_badge.html' %}
               </a>
             </span>
@@ -289,6 +289,31 @@
       </div> <!--list-group -->
     </div> <!-- panel -->
   </div> <!-- col -->
+
+  <!-- TAGS -->
+  <div class="col-sm-6">
+    <div class="panel panel-primary">
+      
+      <div class="panel-heading">
+        <i class="pull-right fa fa-fw fa-tags"></i>
+        <h3 class="panel-title">XP earned by Tag</h3>
+      </div>
+
+      <div class="list-group">
+        {% for tag, xp in tags %}
+          <a href="{% url 'tags:detail_student' tag_pk=tag.pk user_pk=object.user.pk %}" class="list-group-item list-group-item-packed">
+              <small>
+                {{tag|truncatechars:40}}
+                <span class="pull-right">{{xp}} XP</span>
+              </small>
+          </a>
+        {% empty %}
+          <div class="list-group-item">None.</div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
 
 
 

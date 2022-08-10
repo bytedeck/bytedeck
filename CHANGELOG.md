@@ -4,6 +4,32 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.18.0] 2022-08-09 - Beta Release Candidate 01 + TAGS!
+* Tags:
+  - Tags list can be accessed via Admin menu under Course Setup
+  - Viewing a Tag's detail page will show all quests andbadges tagged with it
+  - Tags can be added to quests and badges on their forms in the Tags field. Select from existing tags, or new tags will be created if they don't already exist.
+  - Student Profile pages now include a list of tags, showing how much XP they have earned for each tag
+  - Clicking a tag in a student profile will list which quests/badges they earned the XP from under that tag
+  - Tags are listed in Quests and Badges top Info section (Quest/Badge detail view)
+  - Copying a quest/badge will also copy the tags
+* Notifications to staff now include a list of Quests awaiting approval
+* Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
+  - "Common Quest Info" items now list/create/edit/delete from the quests submenu.
+* Defaults and deck initialization:
+  - New tenants (Decks) now default to max_users = 5 and trial_end_date = today + 60 days (though these fields are for info only, and still don't do anything)
+  - New tenant "Deck owner" user now defaults to having notification and announcement emails = True
+  - The default "Send a Message" quest in a new deck now notifies the deck owner user by default.
+  - Teams badges and badge category included in new decks
+* Minor tweaks and bugfixes:
+  - Quest Maps list view is available to students, and re-formatted
+  - Several quest/badge features and forms are now available in the quest/badge submenus
+  - email notifications fixed (would only send one until server was restarted)
+  - Teams badge category icon fixed
+* Development:
+  - Tenants in dev environment now displays proper default icons, default icons are now in repo.
+  - Flake8 pre-commit hook
+
 ### [1.17.0] 2022-07-21 - Summer student contribution 03
 * "Deck owner" is no longer a superuser and will not have access to Django Admin.
 * Campaign list page (currently Admin > Campaigns) updated with quest count, XP available

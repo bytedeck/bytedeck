@@ -1,9 +1,15 @@
 {% extends "djcytoscape/base.html" %}
 
-{% block content %}
+{% block heading_inner %}Delete Map {% endblock %}
 
+{% block content %}
 <form action="" method="post">{% csrf_token %}
-    <p>Are you sure you want to delete "{{ object }}"?</p>
-    <input type="submit" value="Confirm" />
+  <p>Are you sure you want to delete this map?<p>
+  <div class="well">
+    <p>Map Name: {{ object.name }}</p>
+    <p>Map ID: {{ object.id }}</p>
+  </div>
+  <a href="{% url 'djcytoscape:list' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
 {% endblock %}

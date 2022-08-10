@@ -1,28 +1,39 @@
 {% extends "djcytoscape/base.html" %}
 {% load static %}
-{% block heading_inner %}Quest Maps{% endblock%}
+
+{% block content_first %}{% endblock %}
+{% block heading_inner %}Quest Maps
+  {% if request.user.is_staff %}
+    <a class="btn btn-primary" href="{% url 'djcytoscape:generate_unseeded' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
+    <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
+    title = "Recalculate ALL Maps.  This may take a few moments." ><i class="fa fa-refresh"></i></a>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
-    {% if user.is_staff %}
-        <p>
-            <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
-              title = "Recalculate ALL Maps.  This may take a few moments." >
-              <i class="fa fa-refresh"></i>
-            </a>
-            <a class="btn btn-success" href="{% url 'djcytoscape:generate_unseeded' %}" role="button"
-              title = "Create a new Map." >
-              <i class="fa fa-map-signs"></i>
-            </a>
-        </p>
-    {%  endif %}
-
-  <ul>
-      {% for scape in object_list %}
-      <li>{{ scape.name }}  :  generated on {{ scape.last_regeneration }}
-        <a href="{% url "djcytoscape:quest_map" scape.id %}">view</a>
-      <a href="{% url "djcytoscape:update" scape.id %}">edit</a>
-      <a href="{% url "djcytoscape:delete" scape.id %}">delete</a>
-      </li>
-      {% endfor %}
-  </ul>
-
-{%  endblock %}
+<table class="table table-striped">
+  <tr>
+    <th>Map Name</th>
+    <th>Generated On</th>
+    {% if request.user.is_staff %}
+      <th>Action</th>
+    {% endif %} 
+  </tr>
+  {% for scape in object_list %}
+  <tr>
+    <td><a href="{% url 'djcytoscape:quest_map' scape.id %}">{{ scape.name }}</a></td>
+    <td>{{ scape.last_regeneration }}</td>
+    {% if request.user.is_staff %}
+      <td>
+          <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button" title="Edit this map.">
+            <i class="fa fa-edit"></i>
+          </a>
+          <a class="btn btn-danger" href="{% url 'djcytoscape:delete' scape.id %}" role="button" title="Delete this map.">
+            <i class="fa fa-trash-o"></i>
+          </a>
+      </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
