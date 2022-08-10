@@ -172,7 +172,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md)
 
 1. Move into your cloned directory. `cd ~/Developer/bytedeck`
-2. Initialize pre-commit hooks: `git init --template=.git-template`
+2. Initialize pre-commit hooks: `git init --template=.git-template && chmod +x .git/hooks/pre-commit`
 3. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
 4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
 5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
