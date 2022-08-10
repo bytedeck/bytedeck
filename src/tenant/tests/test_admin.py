@@ -6,6 +6,7 @@ from django.contrib.admin.sites import AdminSite
 from django_tenants.test.cases import TenantTestCase
 # from django_tenants.test.client import TenantClient
 from django_tenants.utils import tenant_context
+from django.utils import timezone
 
 from tenant.admin import TenantAdmin, TenantAdminForm
 from tenant.models import Tenant
@@ -120,7 +121,7 @@ class TenantAdminFormTest(TenantTestCase):
             'max_active_users': 50,
             'max_quests': 100,
             # 'paid_until': None,
-            # 'trial_end_date': None
+            'trial_end_date': timezone.now()
         }
 
     def test_public_tenant_not_editable(self):
