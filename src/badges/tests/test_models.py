@@ -39,11 +39,6 @@ class BadgeTypeTestModel(TenantTestCase):
     def test_badge_type_creation(self):
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
-
-    def test_default_badges_created(self):
-        """ A data migration should make default objects for this model """
-        self.assertTrue(BadgeType.objects.filter(name="Talent").exists())
-        self.assertTrue(BadgeType.objects.filter(name="Award").exists())
     
     def test_model_protection(self):
         """ Badge types shouldn't be deleted if they have any assigned badges """
@@ -81,13 +76,6 @@ class BadgeTestModel(TenantTestCase):
 
     def test_badge_url(self):
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
-
-    def test_default_badge_data(self):
-        """ Data migration should create 4 badges """
-        self.assertTrue(Badge.objects.filter(name="Penny").exists())
-        self.assertTrue(Badge.objects.filter(name="Nickel").exists())
-        self.assertTrue(Badge.objects.filter(name="Dime").exists())
-        self.assertTrue(Badge.objects.filter(name="ByteDeck Proficiency").exists())
 
 
 class BadgeAssertionTestManager(TenantTestCase):

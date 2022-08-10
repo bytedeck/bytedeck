@@ -2,7 +2,7 @@
 
     $(document).ready(function () {
 
-        {% if quests_available_page and request.user.is_superuser %}
+        {% if quests_available_page and request.user.is_staff %}
             // teacher on main quest page need to load all at once since individual ajax calls for each quest will
             // overwhelm or error out or something bad (i.e. doesn't work most of time)
             $.ajax({

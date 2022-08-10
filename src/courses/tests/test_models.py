@@ -9,7 +9,7 @@ from freezegun import freeze_time
 from mock import patch
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
+from courses.models import Block, Course, CourseStudent, ExcludedDate, MarkRange, Rank, Semester
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -279,10 +279,6 @@ class CourseModelTest(TenantTestCase):
         baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
         self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
-    def test_default_object_created(self):
-        """ A data migration should make a default object for this model """
-        self.assertTrue(Course.objects.filter(title="Default").exists())
-
     def test_model_protection(self):
         """ 
             Quick test to see if Course model deletion is prevented when trying to delete Course model programmatically
@@ -347,10 +343,6 @@ class CourseStudentModelTest(TenantTestCase):
 
 class BlockModelTest(TenantTestCase):
 
-    def test_default_object_created(self):
-        """ A data migration should make a default block """
-        self.assertTrue(Block.objects.filter(block="Default").exists())
-
     def test_model_protection(self):
         """ 
             Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
@@ -409,19 +401,3 @@ class RankManagerTest(TenantTestCase):
         Rank.objects.all().delete()
         rank_1000 = Rank.objects.get_next_rank(1000)
         self.assertIsNone(rank_1000)
-
-
-class RankModelTest(TenantTestCase):
-
-    def test_default_object_created(self):
-        """ A data migration should make default objects for this model """
-        self.assertTrue(Rank.objects.filter(name="Digital Noob").exists())
-        self.assertEqual(Rank.objects.count(), 13)
-
-
-class GradeModelTest(TenantTestCase):
-
-    def test_default_object_created(self):
-        """ A data migration should make default objects for this model """
-        self.assertTrue(Grade.objects.filter(name="12").exists())
-        self.assertEqual(Grade.objects.count(), 5)

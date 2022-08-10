@@ -1,6 +1,5 @@
 from django.shortcuts import render
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
@@ -9,6 +8,8 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
 
+from hackerspace_online.decorators import staff_member_required
+
 from .models import MenuItem, VideoResource
 from utilities.forms import MenuItemForm, VideoForm, CustomFlatpageForm
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
@@ -16,7 +17,7 @@ from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from dal import autocomplete
 
 
-class ModelAutocomplete(autocomplete.Select2QuerySetView):
+class ModelAutocomplete(NonPublicOnlyViewMixin, autocomplete.Select2QuerySetView):
     """ 
     DRY autocomplete view for select2 widgets.  Example usage in urls.py with model = Quest
     `path('quest/autocomplete/', utilities.views.ModelAutocomplete.as_view(model=Quest), name='quest_autocomplete')`

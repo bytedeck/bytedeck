@@ -1,7 +1,8 @@
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.messages.views import SuccessMessageMixin
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import UpdateView
+
+from hackerspace_online.decorators import staff_member_required
 
 from .models import SiteConfig
 from .forms import SiteConfigForm

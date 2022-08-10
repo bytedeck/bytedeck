@@ -1,7 +1,6 @@
 import uuid
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
@@ -11,6 +10,8 @@ from django.utils.decorators import method_decorator
 from django.views.generic import RedirectView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.views.generic.list import ListView
+
+from hackerspace_online.decorators import staff_member_required
 
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
@@ -76,20 +77,8 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 
 @non_public_only_view
-@login_required
+@staff_member_required
 def badge_create(request):
-
-    # Using `@staff_member_required(login_url='/accounts/login/')` causes a RedirectCycleErrror.
-    # For example, a student that is already logged in tries to access this page,
-    # They will get redirect to `/accounts/login/?next=/badges/create/`.
-    # And since they are already logged in, they will be redirected to `/badges/create/`
-    # Causing again to redirect since they are not a staff.
-
-    # We could use `@staff_member_required(login_url='/')` but this breaks the tests
-    # which requires views to be redirected to /accounts/login
-    if request.user.is_active and not request.user.is_staff:
-        return redirect('quests:quests')
-
     form = BadgeForm(request.POST or None, request.FILES or None)
 
     if form.is_valid():
@@ -106,12 +95,13 @@ def badge_create(request):
 @non_public_only_view
 @staff_member_required
 def badge_copy(request, badge_id):
+    original_badge = get_object_or_404(Badge, pk=badge_id)  # prevent: Badge objects need to have a primary key value before you can access their tags
     new_badge = get_object_or_404(Badge, pk=badge_id)
     new_badge.pk = None  # autogen a new primary key (quest_id by default)
     new_badge.import_id = uuid.uuid4()
     new_badge.name = "Copy of " + new_badge.name
 
-    form = BadgeForm(request.POST or None, instance=new_badge)
+    form = BadgeForm(request.POST or None, instance=new_badge, initial={'tags': original_badge.tags.all()})
     if form.is_valid():
         form.save()
         return redirect('badges:list')

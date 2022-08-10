@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
@@ -12,6 +11,8 @@ from django.urls.base import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+
+from hackerspace_online.decorators import staff_member_required
 
 from comments.forms import CommentForm
 from comments.models import Comment

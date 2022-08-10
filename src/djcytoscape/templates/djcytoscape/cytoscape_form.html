@@ -6,10 +6,8 @@
 <form action="" method="post">{% csrf_token %}
     <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
     <input type="submit" value="Update" class="btn btn-success"/>
-    <a href="/admin/djcytoscape/cytoscape/{{object.id}}/" role="button" class="btn btn-default">via Admin</a>
     {{ form|crispy }}
     <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
     <input type="submit" value="Update" class="btn btn-success"/>
-    <a href="/admin/djcytoscape/cytoscape/{{object.id}}/" role="button" class="btn btn-default">via Admin</a>
 </form>
 {% endblock %}

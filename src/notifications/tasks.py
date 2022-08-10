@@ -10,6 +10,7 @@ from django.utils import timezone
 from django_tenants.utils import get_tenant_model
 
 from hackerspace_online.celery import app
+from quest_manager.models import QuestSubmission
 # from celery import shared_task
 
 from siteconfig.models import SiteConfig
@@ -30,31 +31,45 @@ def email_notifications_to_users(root_url):
 
 def get_notification_emails(root_url):
     users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
-    subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
-    html_template = get_template('notifications/email_notifications.html')
 
     notification_emails = []
 
     for user in users_to_email:
-
-        to_email_address = user.email
-        unread_notifications = Notification.objects.all_unread(user)
-
-        if unread_notifications:
-            text_content = str(unread_notifications)
-
-            html_content = html_template.render({
-                'user': user,
-                'notifications': unread_notifications,
-                'root_url': root_url,
-                'profile_edit_url': reverse('profiles:profile_edit_own')
-            })
-            email_msg = EmailMultiAlternatives(subject, text_content, to=[to_email_address])
-            email_msg.attach_alternative(html_content, "text/html")
-            notification_emails.append(email_msg)
+        email = generate_notification_email(user, root_url)
+        if email:
+            notification_emails.append(email)
 
     return notification_emails
 
+
+def generate_notification_email(user, root_url):
+    """Generate an email notification from user"""
+    html_template = get_template('notifications/email_notifications.html')
+    subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
+    to_email_address = user.email
+    unread_notifications = Notification.objects.all_unread(user)
+    if user.is_staff:
+        submissions_awaiting_approval = QuestSubmission.objects.all_awaiting_approval(teacher=user)
+    else:
+        submissions_awaiting_approval = None
+
+    if unread_notifications or submissions_awaiting_approval:
+        text_content = str(unread_notifications)
+
+        html_content = html_template.render({
+            'user': user,
+            'notifications': unread_notifications,
+            'submissions': submissions_awaiting_approval,
+            'root_url': root_url,
+            'profile_edit_url': reverse('profiles:profile_edit_own')
+        })
+        email_msg = EmailMultiAlternatives(subject, text_content, to=[to_email_address])
+        email_msg.attach_alternative(html_content, "text/html")
+
+        return email_msg
+    else:
+        return None
+    
 
 def create_email_notification_tasks():
     """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
@@ -99,7 +114,7 @@ def create_email_notification_tasks():
             'headers': json.dumps({
                 '_schema_name': tenant.schema_name,
             }),
-            'one_off': True,
+            'one_off': False,
             'enabled': True,
         }
 

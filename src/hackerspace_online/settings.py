@@ -122,6 +122,7 @@ TENANT_APPS = (
     'portfolios',
     'utilities',
     'siteconfig',
+    'tags',
 )
 
 
@@ -212,7 +213,10 @@ INSTALLED_APPS = (
     'portfolios',
     'utilities',
     'siteconfig',
+    'tags',
 )
+
+TAGGIT_CASE_INSENSITIVE = True
 
 MIDDLEWARE = [
     'django_tenants.middleware.TenantMiddleware',

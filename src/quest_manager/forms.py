@@ -15,7 +15,7 @@ from tags.forms import BootstrapTaggitSelect2Widget
 
 from utilities.fields import RestrictedFileFormField
 from badges.models import Badge
-from .models import Category, Quest
+from .models import Category, Quest, CommonData
 
 
 class BadgeLabel:
@@ -106,6 +106,9 @@ class QuestForm(forms.ModelForm):
         super(QuestForm, self).__init__(*args, **kwargs)
 
         self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
+
+        self.fields['common_data'].label = 'Common Quest Info'
+        self.fields['common_data'].queryset = CommonData.objects.filter(active=True)
 
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
@@ -265,3 +268,13 @@ class SubmissionQuickReplyForm(forms.Form):
     def __init__(self, *args, **kwds):
         super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
+
+
+class CommonDataForm(forms.ModelForm):
+
+    class Meta:
+        model = CommonData
+        fields = "__all__"
+        widgets = {
+            "instructions": SummernoteInplaceWidget()
+        }

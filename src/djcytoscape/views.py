@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -12,6 +11,8 @@ from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView
 from django.urls import reverse_lazy
 
+from hackerspace_online.decorators import staff_member_required
+
 from quest_manager.models import QuestSubmission, Quest
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -22,6 +23,7 @@ from .tasks import regenerate_all_maps
 User = get_user_model()
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
     model = CytoScape
     fields = [
@@ -37,6 +39,7 @@ class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
         return super(ScapeUpdate, self).dispatch(*args, **kwargs)
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class ScapeDelete(NonPublicOnlyViewMixin, DeleteView):
     model = CytoScape
     success_url = reverse_lazy('djcytoscape:list')

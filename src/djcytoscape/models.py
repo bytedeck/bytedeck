@@ -986,7 +986,7 @@ class CytoScape(models.Model):
     def regenerate(self):
         if self.initial_content_object is None:
             self.delete()            
-            raise(self.InitialObjectDoesNotExist)
+            raise (self.InitialObjectDoesNotExist)
 
         # Delete existing nodes
         CytoElement.objects.all_for_scape(self).delete()

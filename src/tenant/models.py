@@ -1,7 +1,10 @@
 import re
+from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.timezone import timedelta
+
 
 from django_tenants.models import DomainMixin, TenantMixin
 
@@ -26,6 +29,10 @@ def check_tenant_name(name):
         raise ValidationError("Invalid string used for the tenant name.")
 
 
+def default_trial_end_date():
+    return date.today() + timedelta(days=60)
+
+
 class Tenant(TenantMixin):
     # tenant = Tenant(domain_url='test.localhost', schema_name='test', name='Test')
     name = models.CharField(
@@ -44,7 +51,7 @@ class Tenant(TenantMixin):
     )
     owner_email = models.EmailField(null=True, blank=True)
     max_active_users = models.SmallIntegerField(
-        default=40,
+        default=5,
         help_text="The maximum number of users that can be active on this deck; -1 = unlimited."
     )
     max_quests = models.SmallIntegerField(
@@ -52,7 +59,8 @@ class Tenant(TenantMixin):
         help_text="The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited."
     )
     trial_end_date = models.DateField(
-        blank=True, null=True,
+        null=True,
+        default=default_trial_end_date,
         help_text="The date when the trial period ends. Blank or a date in the past means the deck is not in trial mode."
     )
     paid_until = models.DateField(

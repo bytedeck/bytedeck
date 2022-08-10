@@ -1,0 +1,44 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title %}Common Quest Info | {% endblock %}
+
+{% block heading_inner %}
+    Common Quest Info
+
+    <a class="btn btn-primary" href="{% url 'quest_manager:commonquestinfo_create' %}" role="button">New</a>
+{% endblock %}
+
+{% block content %}
+    <table class="table table-striped">
+        <thead class="thead-light">
+            <tr class="row">
+                <th class="col-sm-5" scope="col">Title</th>
+                <th class="col-sm-5" scope="col">Active</th>
+                <th class="col-sm-2" scope="col">Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for object in object_list %}
+                <tr class="row">
+                    <td class="class-sm">
+                        {{object.title}}
+                    </td>
+                    <td class="class-sm">
+                        {{object.active}}
+                    </td>
+                    <td class="class-sm">
+                        <a class="btn btn-warning" href="{% url 'quest_manager:commonquestinfo_update' pk=object.pk %}" role="button" title="Edit this page">
+                            <i class="fa fa-edit"></i>
+                        </a>
+                        <a class="btn btn-danger" href="{% url 'quest_manager:commonquestinfo_delete' pk=object.pk %}" role="button" title="Delete this page">
+                            <i class="fa fa-trash-o"></i>
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+{% endblock %} 

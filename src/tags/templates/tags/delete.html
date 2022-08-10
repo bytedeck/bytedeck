@@ -1,0 +1,20 @@
+{% extends "tags/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block head_title%} Confirm Deletion | {% endblock%}
+
+{% block heading_inner %}Delete Tag: {{object.name}}{% endblock %}
+
+{% block content %}
+    <h3>Are you sure you want to delete Tag - {{object.name}}?</h3>
+    {% if quests or badges %}
+        <h4>The following objects will lose this tag upon deletion</h4>
+        {% include 'tags/snippets/related-xp-item.html' with type='warning' %}
+    {% endif %}
+
+    <form action="" method="post">
+        {% csrf_token %}
+        <a href="{% url 'tags:list' %}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Delete" class="btn btn-danger"/>
+    </form>
+{% endblock %} 
