@@ -34,11 +34,10 @@
             {% else %}
             <li>{% tags_name %}: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
             {% endif %}
-            <li>Prerequisites: <a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>
-                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}
-                
+            <li>Prerequisites: 
+                  {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
+                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}     
             </li>
-            {% endwith %}
           </ul>
         </div>
       </div> <!-- /.row -->
