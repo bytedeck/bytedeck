@@ -176,7 +176,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s %(grade_fk)s course"
+    success_message = "You have been added to the %(course)s course"
 
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()
@@ -299,7 +299,7 @@ class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Create New {SiteConfig.objects.get().custom_name_for_groups}'
+        kwargs['heading'] = f'Create New {SiteConfig.objects.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -313,7 +313,7 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_groups}'
+        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)

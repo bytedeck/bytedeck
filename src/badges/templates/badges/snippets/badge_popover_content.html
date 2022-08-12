@@ -10,7 +10,7 @@
 
 <p>Rarity: {{badge.get_rarity_icon|safe}} <small>{{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</small></p>
 
-{% tags_name %}: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=user_obj %}
+{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=user_obj %}
 
 Prerequisites:
 

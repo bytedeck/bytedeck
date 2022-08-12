@@ -33,7 +33,7 @@ for {{user}}
         {% for course in courses %}
           <tr>
             <td>{{ course.block }} Block</td>
-            <td>{{ course.course }} {{ course.grade_fk }}</td>
+            <td>{{ course.course }}</td>
             <td><strong>{{ course.user.profile.mark|floatformat }}%</strong></td>
           </tr>
         {% endfor %}

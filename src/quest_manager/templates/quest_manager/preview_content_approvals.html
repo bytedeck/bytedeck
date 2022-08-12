@@ -4,7 +4,7 @@
 <li class="list-group-item visible-xs-block">
     <div class="row">
         <div class="col-xs-6">
-            {% groups_name %}<br>
+            {% group_name %}<br>
             {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </div>
         <div class="col-xs-6">

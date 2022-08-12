@@ -4,10 +4,10 @@
 
 {% block head_title%} Confirm Deletion | {% endblock%}
 
-{% block heading_inner %}Delete {% tags_name %}: {{object.name}}{% endblock %}
+{% block heading_inner %}Delete {% tag_name %}: {{object.name}}{% endblock %}
 
 {% block content %}
-    <h3>Are you sure you want to delete {% tags_name %} - {{object.name}}?</h3>
+    <h3>Are you sure you want to delete {% tag_name %} - {{object.name}}?</h3>
     {% if quests or badges %}
         <h4>The following objects will lose this tag upon deletion</h4>
         {% include 'tags/snippets/related-xp-item.html' with type='warning' %}

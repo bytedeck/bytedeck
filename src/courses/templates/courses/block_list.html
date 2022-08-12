@@ -1,11 +1,11 @@
 {% extends "courses/base.html" %}
 {% load utility_tags %}}
 
-{% block head_title %}{% groups_name %} | {% endblock %}
+{% block head_title %}{% group_name %}s | {% endblock %}
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}<i class="fa fa-square pull-right"></i>{% groups_name %}
+{% block heading %}<i class="fa fa-group pull-right"></i>{% group_name %} List
   {% if request.user.is_staff %}
     <a class="btn btn-primary" href="{% url 'courses:block_create' %}" role="button">New</a>
   {% endif %}

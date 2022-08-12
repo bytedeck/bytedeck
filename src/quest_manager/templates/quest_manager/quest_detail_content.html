@@ -22,9 +22,9 @@
           </h4></li>
           <li>Campaign: {% if quest.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' quest.campaign.id %}">{{ quest.campaign }}</a>{% else %}{{ quest.campaign }}{% endif %}{% else %}-{% endif %}</li>
           {% if request.user.is_staff %}
-          <li>{% tags_name %}: {% with quest as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
+          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
           {% else %}
-          <li>{% tags_name %}: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
+          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
           {% endif %}
         </ul>
       </div>

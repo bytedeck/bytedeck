@@ -87,7 +87,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         Block = apps.get_model("courses", "block")
         Course = apps.get_model("courses", "course")
         Semester = apps.get_model("siteconfig", "siteconfig").get().active_semester
-        Grade = apps.get_model("courses", "grade")
+        # Grade = apps.get_model("courses", "grade")
         
         CourseStudent = apps.get_model("courses", "coursestudent")
 
@@ -96,7 +96,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
             block=baker.make(Block),
             course=baker.make(Course),
             semester=Semester,
-            grade_fk=baker.make(Grade)
+            # grade_fk=baker.make(Grade)
         )
         form_data_invalid = generate_form_data(CourseStudent)
 
