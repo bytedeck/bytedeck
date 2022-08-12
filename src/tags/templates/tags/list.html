@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block heading_inner %}
-    {% tags_name %}
+    {% tag_name %} List
 
     {% if request.user.is_staff %}
         <a class="btn btn-primary" href="{% url 'tags:create' %}" role="button">New</a>
@@ -27,7 +27,7 @@
     >
         <thead>
             <tr>
-                <th data-sortable='true' data-field='tag' class="col-sm-8">{% tags_name %}</th>
+                <th data-sortable='true' data-field='tag' class="col-sm-8">{% tag_name %}</th>
                 <th data-searchable='false' data-field='action' class="col-sm-4">Action</th>
             </tr>
         </thead>

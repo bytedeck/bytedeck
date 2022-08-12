@@ -110,7 +110,7 @@ class TagCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = f'Create {SiteConfig.objects.get().custom_name_for_tags}'
+        kwargs['heading'] = f'Create {SiteConfig.objects.get().custom_name_for_tag}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -124,7 +124,7 @@ class TagUpdate(NonPublicOnlyViewMixin, UpdateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_tags}'
+        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_tag}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)

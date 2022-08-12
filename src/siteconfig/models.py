@@ -171,17 +171,18 @@ class SiteConfig(models.Model):
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
     )
 
-    custom_name_for_groups = models.CharField(
-        default="Groups", max_length=20,
-        help_text="A custom name specific to your deck to replace \"Groups\".  Groups can be used to assign a group of students \
-            to a specific teacher, and/or used as a prerequisite. For example, \"Blocks\", \"Cohorts\", or \"Sections\" \
+    # Group is actually the Block model, but has been genericized and is now called Group
+    custom_name_for_group = models.CharField(
+        default="Group", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Group\".  Groups can be used to assign a group of students \
+            to a specific teacher, and/or used as a prerequisite. For example, \"Block\", \"Cohort\", or \"Section\" \
             might be a more suitable name than Groups, depending on your context."
     )
 
-    custom_name_for_tags = models.CharField(
-        default="Tags", max_length=20,
-        help_text="A custom name specific to your deck to replace \"Tags\".   For example, \"Competencies\", \"Learning Outcomes\", \
-            or \"Skills\" might be a more suitable name, depending on how you use the Tags feature."
+    custom_name_for_tag = models.CharField(
+        default="Tag", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Tag\".   For example, \"Competency\", \"Learning Outcome\", \
+            or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
     )        
 
     deck_owner = models.ForeignKey(

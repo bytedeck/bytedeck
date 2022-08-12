@@ -364,6 +364,10 @@ class Block(IsAPrereqMixin, models.Model):
 
     objects = BlockManager()
 
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Group'
+
     def __str__(self):
         return self.name
 
@@ -506,7 +510,7 @@ class CourseStudentManager(models.Manager):
 class CourseStudent(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
-    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True)
+    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True, verbose_name="Group")
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
     # grade is deprecated, shouldn't be used anywhere any more
     grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)

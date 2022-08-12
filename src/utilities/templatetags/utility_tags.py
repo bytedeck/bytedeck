@@ -44,14 +44,14 @@ def favicon_url():
 
 @register.simple_tag
 @not_allow_public_tenant
-def tags_name():
-    return SiteConfig.get().custom_name_for_tags
+def tag_name():
+    return SiteConfig.get().custom_name_for_tag
 
 
 @register.simple_tag
 @not_allow_public_tenant
-def groups_name():
-    return SiteConfig.get().custom_name_for_groups
+def group_name():
+    return SiteConfig.get().custom_name_for_group
 
 
 # https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags

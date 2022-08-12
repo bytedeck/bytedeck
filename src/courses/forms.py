@@ -22,6 +22,7 @@ class CourseStudentForm(forms.ModelForm):
 
         block_qs = Block.objects.filter(active=True)
         self.fields['block'].queryset = block_qs
+        self.fields['block'].label = SiteConfig.get().custom_name_for_group
         
         # if there is only one option for the fields, then make them default by removing the blank option:
         if block_qs.count() == 1:

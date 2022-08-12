@@ -30,9 +30,9 @@
         <div class="col-sm-6">
           <ul class="list-unstyled">
             {% if not request.user.is_staff %}
-            <li>{% tags_name %}: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
             {% else %}
-            <li>{% tags_name %}: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
             {% endif %}
             <li>Prerequisites: 
                   {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
