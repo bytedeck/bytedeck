@@ -53,7 +53,7 @@ class TenantInitializationTest(TenantTestCase):
     
     def test_default_block_created(self):
         """ Initialization scripts should create a default Block object. """
-        self.assertTrue(Block.objects.filter(block="Default").exists())
+        self.assertTrue(Block.objects.filter(name="Default").exists())
     
     def test_default_mark_ranges_created(self):
         """ Initialization script should create 3 default MarkRange objects. """ 

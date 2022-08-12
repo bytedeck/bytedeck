@@ -274,7 +274,7 @@ class Profile(models.Model):
     def blocks(self):
         current_courses = self.current_courses()
         if current_courses:
-            return current_courses.values_list('block__block', flat=True)
+            return current_courses.values_list('block__name', flat=True)
         else:
             return None
 

@@ -1,7 +1,7 @@
 {% extends "courses/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %} Delete Block {% endblock %}
+{% block heading_inner %}Delete Block {% endblock %}
 
 {% block content %}
 
@@ -11,8 +11,7 @@
   <p>Are you sure you want to delete this block?<p>
   <div class="well">
     <p>Block ID: {{ object.id }}</p>
-    <p>Start Time: {{ object.start_time }}</p>
-    <p>End Time: {{ object.end_time }}</p>
+    <p>Block Description {{ object.descrription }}</p>
     <p>Current Teacher: {{ object.current_teacher }}</p>
   </div>
   <a href="{% url 'courses:block_list' %}" role="button" class="btn btn-info">Cancel</a>
@@ -21,7 +20,7 @@
 
 {% else %}
 
-<p>Unable to delete '{{ object.block }}' as it still has students registered. Consider disabling the block by toggling the <a href="{% url 'courses:block_update' pk=object.pk %}">active</a> field instead.</p>
+<p>Unable to delete '{{ object.name }}' as it still has students registered. Consider disabling the block by toggling the <a href="{% url 'courses:block_update' pk=object.pk %}">active</a> field instead.</p>
 <div class="well">
   <p>Registered Students: {{ population }}</p>
 </div>

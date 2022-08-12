@@ -628,25 +628,25 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Admin should be able to create a block """
         self.client.force_login(self.test_teacher)
         data = {
-            'block': 'My Block',
+            'name': 'My Block',
         }
 
         response = self.client.post(reverse('courses:block_create'), data=data)
         self.assertRedirects(response, reverse('courses:block_list'))
 
-        block = Block.objects.get(block=data['block'])
-        self.assertEqual(block.block, data['block'])
+        block = Block.objects.get(name=data['name'])
+        self.assertEqual(block.name, data['name'])
 
     def test_BlockUpdate_view(self):
         """ Admin should be able to update a block """
         self.client.force_login(self.test_teacher)
         data = {
-            'block': 'Updated Block',
+            'name': 'Updated Block',
         }
         response = self.client.post(reverse('courses:block_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:block_list'))
         block = Block.objects.get(id=1)
-        self.assertEqual(block.block, data['block'])
+        self.assertEqual(block.name, data['name'])
 
     def test_BlockDelete_view__no_students(self):
         """ Admin should be able to delete a block """
@@ -680,7 +680,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         # confirm deletion prevention text shows up
         response = self.client.get(reverse('courses:block_delete', args=[block.pk]))
 
-        dt_ptag = f"Unable to delete '{block.block}' as it still has students registered. Consider disabling the block by toggling the"
+        dt_ptag = f"Unable to delete '{block.name}' as it still has students registered. Consider disabling the block by toggling the"
         dt_atag_link = reverse('courses:block_update', args=[block.pk])
         dt_well_ptag = f"Registered Students: {block.coursestudent_set.count()}"
         self.assertContains(response, dt_ptag)

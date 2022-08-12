@@ -61,7 +61,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         Block = apps.get_model("courses", "block")
 
         self.client.force_login(self.teacher)
-        form_data = generate_form_data(model_form=BlockForm, block="NEW BLOCK NAME")
+        form_data = generate_form_data(model_form=BlockForm, name="NEW BLOCK NAME")
 
         # form valid test
         form = BlockForm(form_data)
@@ -72,7 +72,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         # assert changes
-        self.assertTrue(Block.objects.filter(block="NEW BLOCK NAME").exists())
+        self.assertTrue(Block.objects.filter(name="NEW BLOCK NAME").exists())
 
     def test_valid_CourseStudentForm(self):
         """ 
