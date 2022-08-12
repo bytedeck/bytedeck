@@ -12,49 +12,58 @@
     {% if request.user.is_staff %}
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"
-            class="btn {% if current_only %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+            class="btn {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
 
             <a href="{% url 'profiles:profile_list' %}"
-            class="btn {% if not current_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+            class="btn {% if view_type == VIEW_TYPES.LIST %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+
+            <a href="{% url 'profiles:profile_list_inactive' %}"
+            class="btn {% if view_type == VIEW_TYPES.INACTIVE %}btn-primary{% else %}btn-default{% endif %}">Inactive</a>
+
+            <a href="{% url 'profiles:profile_list_staff' %}"
+            class="btn {% if view_type == VIEW_TYPES.STAFF %}btn-primary{% else %}btn-default{% endif %}">Staff</a>
         </div>
     {% endif %}
     <i class="fa fa-users pull-right"></i>
 {% endblock %}
 
 {% block content %}
-    <table data-toggle='table'
-           data-sort-name='first'
-           data-sort-order='asc'
-           data-search='true'
-           data-show-columns='true'
-           {% if request.user.is_staff %}
-            data-show-export="true"
-            data-export-types="['csv', 'json']"
-           {% endif %}
+    
+<table data-toggle='table'
+data-sort-name='first'
+data-sort-order='asc'
+data-search='true'
+data-show-columns='true'
+{% if request.user.is_staff %}
+data-show-export="true"
+data-export-types="['csv', 'json']"
+{% endif %}
 
-           data-icons='icons'
-           data-icons-prefix='fa'
-           data-classes="table table-no-bordered table-hover"
+data-icons='icons'
+data-icons-prefix='fa'
+data-classes="table table-no-bordered table-hover"
 
-    >
-        <thead>
+>
+    <thead>
         <tr>
-            <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
-                Avatar
-            </th>
-            <th data-sortable='true' data-field='first' data-visible="false">
-                First Name
-            </th>
-            <th data-sortable='true' data-field='preferred'>
-                Preferred Name
-            </th>
-            <th data-sortable='true' data-field='last'>
-                Last Name
-            </th>
-            <th data-sortable='true' data-field='alias'
-                {% if request.user.is_staff %}data-visible="false"{% endif %}>
-                Alias
-            </th>
+        <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
+            Avatar
+        </th>
+        <th data-sortable='true' data-field='first' data-visible="false">
+            First Name
+        </th>
+        <th data-sortable='true' data-field='preferred'>
+            Preferred Name
+        </th>
+        <th data-sortable='true' data-field='last'>
+            Last Name
+        </th>
+        <th data-sortable='true' data-field='alias'
+            {% if request.user.is_staff %}data-visible="false"{% endif %}>
+            Alias
+        </th>
+
+        {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
             <th data-sortable='true' data-field='grad'
                 {% if request.user.is_staff %}data-visible="false"{% endif %}>
                 Grad
@@ -72,40 +81,49 @@
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 Mark
             </th>
-            {% endif %}
-            <th data-sortable='true' data-field='portfolio'
-                {% if request.user.is_staff %}data-visible="false"{% endif %}>
-                Portfolio
-            </th>
+        {% endif %}
 
-            {% if request.user.is_staff %}
-            <!-- Uses `last_sub_datetime` for sorting -->
-            <!-- Needed to do this since we can't rely on the content of `last_sub` -->
-            <th data-sortable='true' data-field='last_sub' data-sort-name='last_sub_datetime'>
-                Last Quest
-            </th>
-            <th data-field='last_sub_datetime' data-switchable='false' data-visible='false'></th>
-            <!-- End sorting group -->
+        {% endif %}
+        <th data-sortable='true' data-field='portfolio'
+            {% if request.user.is_staff %}data-visible="false"{% endif %}>
+            Portfolio
+        </th>
+
+        {% if request.user.is_staff %}
+
+            {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE   %}
+                <!-- Uses `last_sub_datetime` for sorting -->
+                <!-- Needed to do this since we can't rely on the content of `last_sub` -->
+                <th data-sortable='true' data-field='last_sub' data-sort-name='last_sub_datetime'>
+                    Last Quest
+                </th>
+                <th data-field='last_sub_datetime' data-switchable='false' data-visible='false'></th>
+                <!-- End sorting group -->
+            {% endif %}
 
             <!-- Uses `last_login_datetime` for sorting-->
             <th data-sortable='true' data-field='last_login' data-sort-name='last_login_datetime' data-visible="false">
-              Last Login
+                Last Login
             </th>
             <th data-field='last_login_datetime' data-switchable='false' data-visible='false'></th>
             <!-- End sorting group -->
 
             <th data-sortable='true' data-field='username'>
-              Username
+                Username
             </th>
-            <th data-field='skipped' data-switchable="false">
-                Admin
-            </th>
+
+            {% if view_type != VIEW_TYPES.STAFF %}
+                <th data-field='skipped' data-switchable="false">
+                    Admin
+                </th>
             {% endif %}
 
-        </tr>
-        </thead>
+        {% endif %}
 
-        <tbody>
+        </tr>
+    </thead>
+
+    <tbody>
         {% for object in object_list %}
 
             <tr {% if request.user.is_staff %}
@@ -117,81 +135,102 @@
                 {% endif %}>
 
                 <td><img class="icon-md img-rounded" src="{{ object.get_avatar_url }}" alt="avatar"/></td>
+
                 <td>{{ object.user.first_name }}</td>
+
                 <td>{{ object.get_preferred_name }}</td>
+
                 <td>{{ object.user.last_name|default:"-" }}</td>
+
                 <td>{{ object.alias_clipped|default:"-" }}</td>
-                <td>{{ object.grad_year|default:"-" }}</td>
-                <td>
-                  {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
-                </td>
-                <td>{% if object.visible_to_other_students or request.user.is_staff %}
-                    {{ object.xp_cached }}
-                    {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
-                </td>
-                {% if config.display_marks_calculation %}
-                <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                
+
+                {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
+
+                    <td>{{ object.grad_year|default:"-" }}</td>
+
+                    <td>
+                        {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                    </td>
+
+                    <td>{% if object.visible_to_other_students or request.user.is_staff %}
+                        {{ object.xp_cached }}
+                        {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
+                    </td>
+
+                    {% if config.display_marks_calculation %}
+                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                    {% endif %}
+                
                 {% endif %}
+
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
                         <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
+                
                 {% if request.user.is_staff %}
-                    {% with last_submission=object.last_submission_completed_value %}
-                      <td>
-                          {% if last_submission %}
-                              {{ last_submission.time_completed|date:'y/m/d' }}<br>
-                              <small>{{ last_submission.time_completed|timesince }} ago</small>
-                          {% else %}
-                              &nbsp;Never
-                          {% endif %}
-                      </td>
-                      <!-- `last_sub_datetime` -->
-                      <td>
-                        {{ last_submission.time_completed|date:"y/m/d" }} {{ last_submission.time_completed|time:"H:i:s"}}
-                      </td>
-                      <!-- end `last_sub_datetime` -->
 
-                    {% endwith %}
+                    {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
+                        {% with last_submission=object.last_submission_completed_value %}
+                            <td>
+                                {% if last_submission %}
+                                    {{ last_submission.time_completed|date:'y/m/d' }}<br>
+                                    <small>{{ last_submission.time_completed|timesince }} ago</small>
+                                {% else %}
+                                    &nbsp;Never
+                                {% endif %}
+                            </td>
+                            <!-- `last_sub_datetime` -->
+                            <td>
+                            {{ last_submission.time_completed|date:"y/m/d" }} {{ last_submission.time_completed|time:"H:i:s"}}
+                            </td>
+                            <!-- end `last_sub_datetime` -->
+
+                        {% endwith %}
+                    {% endif %}
+
                     <td>
-                      {{ object.user.last_login|date:'y/m/d' }}<br>
-                      <small>{{ object.user.last_login|timesince }} ago</small>
+                        {{ object.user.last_login|date:'y/m/d' }}<br>
+                        <small>{{ object.user.last_login|timesince }} ago</small>
                     </td>
                     <!-- `last_login_datetime` -->
                     <td>
-                      {{ object.user.last_login|date:"y/m/d" }} {{ object.user.last_login|time:"H:i:s"}}
+                        {{ object.user.last_login|date:"y/m/d" }} {{ object.user.last_login|time:"H:i:s"}}
                     </td>
                     <!-- end `last_login_datetime` -->
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
-
+                    
                     {#      Admin buttons #}
-                    <td>
-                        <div class="btn-group action-btn-group">
-                            <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
-                               title="{% if object.banned_from_comments %}Remove comment ban
-                           {% else %}Ban student from public comments{% endif %}"
-                               class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
-                                <i class="fa fa-commenting-o"></i>
-                            </a>
-                            <a href="{% url 'profiles:xp_toggle' object.id %}"
-                               title="{% if object.not_earning_xp %}Turn quest skipping off
-                           {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"
-                               class="btn btn-sm
-                        {% if object.not_earning_xp %}btn-success{% else %}btn-default{% endif %}">
-                                <i class="fa fa-magic"></i>
-                            </a>
-                            <a href="{% url 'profiles:change_password' object.user.pk %}" class="btn btn-sm btn-default"
-                               title="Reset this student's password">
-                                <i class="fa fa-key"></i>
-                            </a>
-                        </div>
-                    </td>
-
+                    {% if view_type != VIEW_TYPES.STAFF %}
+                        <td>
+                            <div class="btn-group action-btn-group">
+                                <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
+                                    title="{% if object.banned_from_comments %}Remove comment ban
+                                {% else %}Ban student from public comments{% endif %}"
+                                    class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
+                                    <i class="fa fa-commenting-o"></i>
+                                </a>
+                                <a href="{% url 'profiles:xp_toggle' object.id %}"
+                                    title="{% if object.not_earning_xp %}Turn quest skipping off
+                                {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"
+                                    class="btn btn-sm
+                            {% if object.not_earning_xp %}btn-success{% else %}btn-default{% endif %}">
+                                    <i class="fa fa-magic"></i>
+                                </a>
+                                <a href="{% url 'profiles:change_password' object.user.pk %}" class="btn btn-sm btn-default"
+                                    title="Reset this student's password">
+                                    <i class="fa fa-key"></i>
+                                </a>
+                            </div>
+                        </td>
+                    {% endif %}
                 {% endif %}
             </tr>
         {% endfor %}
-        </tbody>
-    </table>
+    </tbody>
+</table>
+
 
 {% endblock %}
 
