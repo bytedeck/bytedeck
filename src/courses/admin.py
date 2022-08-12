@@ -4,19 +4,6 @@ from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade, MarkRange
 
 
-# def convert_selected_grade_to_fk(modeladmin, request, queryset):
-#     for course_student in queryset:
-#         current_grade_field = course_student.grade
-#         grade_fk, created = Grade.objects.get_or_create(
-#             name=str(current_grade_field),
-#             value=current_grade_field,
-#         )
-#
-#         if course_student.grade_fk is None:
-#             course_student.grade_fk = grade_fk
-#             course_student.save()
-
-
 class ExcludedDateInline(admin.TabularInline):
     model = ExcludedDate
 
@@ -37,10 +24,10 @@ class RankAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
 
 class CourseStudentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('__str__', 'user', 'semester', 'course', 'grade_fk', 'final_grade', 'active')
+    list_display = ('__str__', 'user', 'semester', 'course', 'final_grade', 'active')
     # actions = [convert_selected_grade_to_fk]
 
-    list_filter = ['course', 'grade_fk', ]
+    list_filter = ['course', ]
     search_fields = ['user__username']
 
 

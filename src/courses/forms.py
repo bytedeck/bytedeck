@@ -43,7 +43,7 @@ class CourseStudentForm(forms.ModelForm):
 
     class Meta:
         model = CourseStudent
-        fields = ['semester', 'block', 'course', 'grade_fk']
+        fields = ['semester', 'block', 'course']
     #         exclude = ['user', 'active']
     #         # widgets = {'user': forms.HiddenInput()}
 

@@ -176,7 +176,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s %(grade_fk)s course"
+    success_message = "You have been added to the %(course)s course"
 
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()

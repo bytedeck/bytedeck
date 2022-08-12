@@ -504,14 +504,12 @@ class CourseStudentManager(models.Manager):
 
 
 class CourseStudent(models.Model):
-    GRADE_CHOICES = ((9, 9), (10, 10), (11, 11), (12, 12), (13, 'Adult'))
-
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
     block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True)
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
-    # grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
-    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True)
+    # grade is deprecated, shouldn't be used anywhere any more
+    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)
@@ -532,8 +530,7 @@ class CourseStudent(models.Model):
         return self.user.get_username() \
             + ", " + str(self.semester) if self.semester else "" \
             + ", " + str(self.block.name) if self.block else "" \
-            + ": " + str(self.course) \
-            + " " + str(self.grade_fk.value) if self.grade_fk else ""
+            + ": " + str(self.course)
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')
