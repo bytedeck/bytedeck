@@ -1,5 +1,6 @@
 {% extends "tags/base.html" %}
 {% load static %}
+{% load utility_tags %}
 
 {% block head %}
 <link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
@@ -7,7 +8,7 @@
 {% endblock %}
 
 {% block heading_inner %}
-    Tags
+    {% tags_name %}
 
     {% if request.user.is_staff %}
         <a class="btn btn-primary" href="{% url 'tags:create' %}" role="button">New</a>
@@ -26,7 +27,7 @@
     >
         <thead>
             <tr>
-                <th data-sortable='true' data-field='tag' class="col-sm-8">Tag</th>
+                <th data-sortable='true' data-field='tag' class="col-sm-8">{% tags_name %}</th>
                 <th data-searchable='false' data-field='action' class="col-sm-4">Action</th>
             </tr>
         </thead>

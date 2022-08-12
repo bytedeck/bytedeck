@@ -11,6 +11,7 @@ from hackerspace_online.decorators import staff_member_required
 
 from badges.models import Badge, BadgeAssertion
 from quest_manager.models import Quest, QuestSubmission
+from siteconfig.models import SiteConfig
 
 from tags.forms import TagForm
 
@@ -109,7 +110,7 @@ class TagCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = 'Create Tag'
+        kwargs['heading'] = f'Create {SiteConfig.objects.get().custom_name_for_tags}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -123,7 +124,7 @@ class TagUpdate(NonPublicOnlyViewMixin, UpdateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = 'Update Tag'
+        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_tags}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)

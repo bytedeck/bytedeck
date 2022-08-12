@@ -42,6 +42,18 @@ def favicon_url():
     return SiteConfig.get().get_favicon_url()
 
 
+@register.simple_tag
+@not_allow_public_tenant
+def tags_name():
+    return SiteConfig.get().custom_name_for_tags
+
+
+@register.simple_tag
+@not_allow_public_tenant
+def groups_name():
+    return SiteConfig.get().custom_name_for_groups
+
+
 # https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
 
 @register.inclusion_tag('utilities/list_of_links.html')

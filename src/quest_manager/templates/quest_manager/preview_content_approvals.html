@@ -1,9 +1,10 @@
 {% load crispy_forms_tags %}
+{% load utility_tags %}}
 <li class="list-group-item list-group-item-info visible-xs-block">Status</li>
 <li class="list-group-item visible-xs-block">
     <div class="row">
         <div class="col-xs-6">
-            Blocks<br>
+            {% groups_name %}<br>
             {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </div>
         <div class="col-xs-6">

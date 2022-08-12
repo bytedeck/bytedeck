@@ -7,13 +7,14 @@
 -->
 
 {% load crispy_forms_tags %}
+{% load utility_tags %}}
 
 {% if tab.submissions %}
   <div class="row panel-heading">
     <div class="col-sm-1 col-xs-2 col-icon"></div>
     <div class="col-sm-4 col-xs-5">Quest</div>
     <div class="col-sm-1 col-xs-2">XP</div>
-    <div class="col-sm-1 hidden-xs">Blocks</div>
+    <div class="col-sm-1 hidden-xs">{% groups_name %}</div>
     <div class="col-sm-2 col-xs-3">User</div>
     <div class="col-sm-2 hidden-xs">Status</div>
   </div>

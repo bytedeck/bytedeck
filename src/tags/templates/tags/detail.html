@@ -1,11 +1,12 @@
 {% extends "tags/base.html" %}
 {% load static %}
+{% load utility_tags %}
 
 {% block head %}
 {% endblock %}
 
 {% block heading_inner %}
-    {{object.name}} Tag Details {% if user_obj %}for {{user_obj.username}}{% endif %}
+    {{object.name}} {% tags_name %} Details {% if user_obj %}for {{user_obj.username}}{% endif %}
 {% endblock %}
 
 {% block content %}

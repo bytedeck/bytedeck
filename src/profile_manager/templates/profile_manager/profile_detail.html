@@ -1,4 +1,5 @@
 {% extends "profile_manager/base.html" %}
+{% load utility_tags %}
 
 {% block heading_inner %}{{ object.get_preferred_name }}'s Profile
     <div class="btn-group" role="group">
@@ -123,7 +124,7 @@
                     (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
                   {% endif %}
                   <br/>
-                  <small>{{course.block}} Block, Semester {{course.semester}}
+                  <small>{{course.block}}, Semester {{course.semester}}
                   {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
                   (reason: {{course.xp_adjust_explanation}})
                   {% endif %}
@@ -146,7 +147,7 @@
                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
                  {% endif %}
                  <br/>
-                 <small>{{course.block}} Block, {{course.semester}}
+                 <small>{{course.block}}, {{course.semester}}
                  <br/>Final XP: {{course.final_xp}}
                  </small>
                </li>
@@ -296,7 +297,7 @@
       
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-tags"></i>
-        <h3 class="panel-title">XP earned by Tag</h3>
+        <h3 class="panel-title">XP earned by {% tags_name %}</h3>
       </div>
 
       <div class="list-group">

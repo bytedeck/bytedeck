@@ -1,6 +1,7 @@
 {% extends "base_sidebar.html" %}
 {% load crispy_forms_tags %}
 {% load static %}
+{% load utility_tags %}
 
 {% block head_css %}
 {% endblock %}
@@ -60,7 +61,7 @@
             </th>
             <th data-sortable='true' data-field='blocks'
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
-                Block
+                {% groups_name %}
             </th>
             <th data-sortable='true' data-field='xp'
                 {% if request.user.is_staff and config.display_marks_calculation %}data-visible="false"{% endif %}>
