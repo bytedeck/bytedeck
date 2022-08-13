@@ -279,7 +279,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
         self.assertFalse(form.is_valid())
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Block and User already exists')
+        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the block also, should validate now
@@ -412,7 +412,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
         self.assertFalse(form.is_valid())
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Block and User already exists')
+        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the block also, should validate now
