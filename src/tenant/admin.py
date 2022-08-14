@@ -76,14 +76,17 @@ class TenantAdminForm(forms.ModelForm):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date',
-        'total_user_count', 'active_user_count', 'quest_count', 'last_staff_login'
+        'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
+        'paid_until', 'trial_end_date',
+        'max_active_users', 'active_user_count', 'total_user_count',
+        'max_quests', 'quest_count',        
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name', 'owner_email']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
+    change_list_template = 'admin/tenant/tenant/change_list.html'
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
