@@ -6,7 +6,7 @@ from django.db import connection
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from quest_manager.models import Quest
+# from quest_manager.models import Quest
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
@@ -77,9 +77,9 @@ class TenantAdminForm(forms.ModelForm):
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
         'schema_name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date',
-        'active_user_count', 'quest_count'
+        'total_user_count', 'active_user_count', 'quest_count', 'last_staff_login'
     )
-    list_filter = ('paid_until', 'trial_end_date')
+    list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name', 'owner_email']
 
     form = TenantAdminForm
@@ -97,16 +97,15 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # Disable delete button and admin action
         return False
 
-    def quest_count(self, obj):
-        if obj.name != get_public_schema_name():
-            with tenant_context(obj):
-                return Quest.objects.filter(archived=False).count()
-        else:
-            return None
-
-    def active_user_count(self, obj):
-        with tenant_context(obj):
-            return User.objects.filter(is_active=True).count()
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Update cached fields
+        for tenant in qs:
+            if tenant.name != get_public_schema_name():
+                with tenant_context(tenant):
+                    tenant.update_cached_fields()
+                    print(tenant)
+        return qs
 
 
 admin.site.register(Tenant, TenantAdmin)
