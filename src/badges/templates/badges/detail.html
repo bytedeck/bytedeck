@@ -1,5 +1,6 @@
 {% extends "badges/base.html" %}
 {% load crispy_forms_tags %}
+{% load utility_tags %}
 
 {% block heading_inner %} Badge: {{ heading }}{% endblock %}
 
@@ -29,15 +30,14 @@
         <div class="col-sm-6">
           <ul class="list-unstyled">
             {% if not request.user.is_staff %}
-            <li>Tags: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
             {% else %}
-            <li>Tags: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
             {% endif %}
-            <li>Prerequisites: <a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>
-                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}
-                
+            <li>Prerequisites: 
+                  {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
+                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}     
             </li>
-            {% endwith %}
           </ul>
         </div>
       </div> <!-- /.row -->

@@ -2258,12 +2258,12 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approval_all_button_exists(self):
         """ My blocks button should not be rendered """
 
-        baker.make('courses.Block', block='A', current_teacher=self.current_teacher)
-        baker.make('courses.Block', block='B', current_teacher=self.current_teacher)
+        baker.make('courses.Block', name='A', current_teacher=self.current_teacher)
+        baker.make('courses.Block', name='B', current_teacher=self.current_teacher)
 
         another_teacher = baker.make(User, is_staff=True)
-        baker.make('courses.Block', block='C', current_teacher=another_teacher)
-        baker.make('courses.Block', block='D', current_teacher=another_teacher)
+        baker.make('courses.Block', name='C', current_teacher=another_teacher)
+        baker.make('courses.Block', name='D', current_teacher=another_teacher)
 
         response = self.client.get(reverse('quests:approvals'))
         self.assertContains(response, 'My blocks')

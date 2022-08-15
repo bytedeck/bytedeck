@@ -6,7 +6,7 @@ from django.db import connection
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from quest_manager.models import Quest
+# from quest_manager.models import Quest
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
@@ -76,14 +76,17 @@ class TenantAdminForm(forms.ModelForm):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date',
-        'active_user_count', 'quest_count'
+        'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
+        'paid_until', 'trial_end_date',
+        'max_active_users', 'active_user_count', 'total_user_count',
+        'max_quests', 'quest_count',        
     )
-    list_filter = ('paid_until', 'trial_end_date')
+    list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name', 'owner_email']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
+    change_list_template = 'admin/tenant/tenant/change_list.html'
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
@@ -97,16 +100,15 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # Disable delete button and admin action
         return False
 
-    def quest_count(self, obj):
-        if obj.name != get_public_schema_name():
-            with tenant_context(obj):
-                return Quest.objects.filter(archived=False).count()
-        else:
-            return None
-
-    def active_user_count(self, obj):
-        with tenant_context(obj):
-            return User.objects.filter(is_active=True).count()
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Update cached fields
+        for tenant in qs:
+            if tenant.name != get_public_schema_name():
+                with tenant_context(tenant):
+                    tenant.update_cached_fields()
+                    print(tenant)
+        return qs
 
 
 admin.site.register(Tenant, TenantAdmin)

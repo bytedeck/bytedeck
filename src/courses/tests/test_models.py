@@ -84,11 +84,11 @@ class BlockModelManagerTest(TenantTestCase):
         teacher1 = baker.make(User, username='teacher1', is_staff=True)
         teacher2 = baker.make(User, username='teacher2', is_staff=True)
 
-        block_default = Block.objects.get(block='Default')
-        block_a = baker.make(Block, block='A', current_teacher=teacher1)
-        block_b = baker.make(Block, block='B', current_teacher=teacher1)
-        block_c = baker.make(Block, block='C', current_teacher=teacher2)
-        block_d = baker.make(Block, block='D', current_teacher=teacher2)
+        block_default = Block.objects.get(name='Default')
+        block_a = baker.make(Block, name='A', current_teacher=teacher1)
+        block_b = baker.make(Block, name='B', current_teacher=teacher1)
+        block_c = baker.make(Block, name='C', current_teacher=teacher2)
+        block_d = baker.make(Block, name='D', current_teacher=teacher2)
 
         group = Block.objects.grouped_teachers_blocks()
 
@@ -96,11 +96,11 @@ class BlockModelManagerTest(TenantTestCase):
         self.assertEqual(len(group.keys()), 3)
 
         # admin teaches default block
-        self.assertListEqual(group[teacher_owner.id], [block_default.block])
+        self.assertListEqual(group[teacher_owner.id], [block_default.name])
         # teacher1 teaches A and B block
-        self.assertListEqual(group[teacher1.id], [block_a.block, block_b.block])
+        self.assertListEqual(group[teacher1.id], [block_a.name, block_b.name])
         # teacher2 teaches C and D block
-        self.assertListEqual(group[teacher2.id], [block_c.block, block_d.block])
+        self.assertListEqual(group[teacher2.id], [block_c.name, block_d.name])
 
 
 class SemesterModelManagerTest(TenantTestCase):
@@ -343,20 +343,42 @@ class CourseStudentModelTest(TenantTestCase):
 
 class BlockModelTest(TenantTestCase):
 
+    def setUp(self):
+        self.student = baker.make(User)
+        self.block = baker.make(Block)
+
     def test_model_protection(self):
         """ 
             Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
             Block deletion is only prevented when there are CourseStudent models linked via foreign key to the Block model
         """ 
         # Setup
-        student = baker.make(User)
-        block = baker.make(Block)
-        course_student = baker.make(CourseStudent, user=student, block=block)
+
+        course_student = baker.make(CourseStudent, user=self.student, block=self.block)
         self.assertTrue(CourseStudent.objects.count(), 1)
-        self.assertEqual(block, course_student.block)
+        self.assertEqual(self.block, course_student.block)
 
         # see if models.PROTECT is in place
-        self.assertRaises(ProtectedError, block.delete)
+        self.assertRaises(ProtectedError, self.block.delete)
+
+    def test_condition_met_as_prerequisite(self):
+        """ If the user is registered in a course in this block during the active semester, then condition is met
+        Tests check condition on self.block for self.student """
+
+        # Student is not registered in any courses, so condition not met:
+        self.assertFalse(self.block.condition_met_as_prerequisite(self.student))
+
+        # Register student in a course in a  DIFFERENT block, condition still not met for self.block
+        baker.make(CourseStudent, user=self.student, block=baker.make(Block))
+        self.assertFalse(self.block.condition_met_as_prerequisite(self.student))
+
+        # Register student in a course in self.block, but not the active semester, condition still not met for self.block
+        baker.make(CourseStudent, user=self.student, block=self.block, semester=baker.make(Semester))
+        self.assertFalse(self.block.condition_met_as_prerequisite(self.student))
+        
+        # Finally, register student in a course in self.block, and active semester, NOW condition is met for self.block
+        baker.make(CourseStudent, user=self.student, block=self.block, semester=SiteConfig.get().active_semester)
+        self.assertTrue(self.block.condition_met_as_prerequisite(self.student))
 
 
 class RankManagerTest(TenantTestCase):

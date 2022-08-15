@@ -210,7 +210,7 @@ class IsAPrereqMixinTest(TenantTestCase):
         """There are 6 models that implement the IsAPrereqMixin
         """
         cts = IsAPrereqMixin.all_registered_content_types()
-        self.assertEqual(cts.count(), 7)
+        self.assertEqual(cts.count(), 8)
 
     def test_static_model_is_registered(self):
         """Any model class that implements IsAPrereqMixin returns True"""

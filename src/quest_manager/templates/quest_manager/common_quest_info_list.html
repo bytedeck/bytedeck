@@ -6,10 +6,14 @@
 {% block heading_inner %}
     Common Quest Info
 
-    <a class="btn btn-primary" href="{% url 'quest_manager:commonquestinfo_create' %}" role="button">New</a>
+    <a class="btn btn-primary" href="{% url 'quest_manager:commonquestinfo_create' %}" role="button" ><i class="fa fa-plus-circle"></i> New</a>
 {% endblock %}
 
 {% block content %}
+    <p>Common Quest Infos are snippets of formatted text that can be used to display information
+        that might be common to multiple quests. When a Common Quest Info has been assigned to
+        a quest it will appear on that quest's page to the left, under the menu buttons.</p>
+
     <table class="table table-striped">
         <thead class="thead-light">
             <tr class="row">
