@@ -136,7 +136,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
             'semester': self.sem.pk,
             'block': self.block.pk,
             'course': self.course.pk,
-            'grade_fk': self.grade.pk
         }
 
     def test_all_page_status_codes_for_anonymous(self):
@@ -267,11 +266,12 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(add_course_url, data=self.valid_form_data)
 
         # invalid form
-        form = response.context['form']
-        self.assertFalse(form.is_valid())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+        # GRADE field is depercated and no longer used within unique_together
+        # form = response.context['form']
+        # self.assertFalse(form.is_valid())
+        # self.assertEqual(response.status_code, 200)
+        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
+        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the grade, still fails cus same block in same semester
         self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
@@ -279,7 +279,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
         self.assertFalse(form.is_valid())
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Block and User already exists')
+        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the block also, should validate now
@@ -381,7 +381,6 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
             'semester': self.sem.pk,
             'block': self.block.pk,
             'course': self.course.pk,
-            'grade_fk': self.grade.pk
         }
 
     def test_CourseStudentCreate_view(self):
@@ -399,12 +398,13 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Now try adding them a second time, should not validate:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
 
+        # GRADE has been deprecated and is no longer part of a unique requirement
         # invalid form
-        form = response.context['form']
-        self.assertFalse(form.is_valid())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+        # form = response.context['form']
+        # self.assertFalse(form.is_valid())
+        # self.assertEqual(response.status_code, 200)
+        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
+        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the grade, still fails cus same block in same semester
         self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
@@ -412,7 +412,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
         self.assertFalse(form.is_valid())
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Block and User already exists')
+        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the block also, should validate now
@@ -628,25 +628,25 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Admin should be able to create a block """
         self.client.force_login(self.test_teacher)
         data = {
-            'block': 'My Block',
+            'name': 'My Block',
         }
 
         response = self.client.post(reverse('courses:block_create'), data=data)
         self.assertRedirects(response, reverse('courses:block_list'))
 
-        block = Block.objects.get(block=data['block'])
-        self.assertEqual(block.block, data['block'])
+        block = Block.objects.get(name=data['name'])
+        self.assertEqual(block.name, data['name'])
 
     def test_BlockUpdate_view(self):
         """ Admin should be able to update a block """
         self.client.force_login(self.test_teacher)
         data = {
-            'block': 'Updated Block',
+            'name': 'Updated Block',
         }
         response = self.client.post(reverse('courses:block_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:block_list'))
         block = Block.objects.get(id=1)
-        self.assertEqual(block.block, data['block'])
+        self.assertEqual(block.name, data['name'])
 
     def test_BlockDelete_view__no_students(self):
         """ Admin should be able to delete a block """
@@ -680,7 +680,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         # confirm deletion prevention text shows up
         response = self.client.get(reverse('courses:block_delete', args=[block.pk]))
 
-        dt_ptag = f"Unable to delete '{block.block}' as it still has students registered. Consider disabling the block by toggling the"
+        dt_ptag = f"Unable to delete '{block.name}' as it still has students registered. Consider disabling the block by toggling the"
         dt_atag_link = reverse('courses:block_update', args=[block.pk])
         dt_well_ptag = f"Registered Students: {block.coursestudent_set.count()}"
         self.assertContains(response, dt_ptag)

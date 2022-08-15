@@ -1,10 +1,11 @@
 {% extends "courses/base.html" %}
+{% load utility_tags %}
 
-{% block head_title %}Blocks | {% endblock %}
+{% block head_title %}{% group_name %}s | {% endblock %}
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading %}<i class="fa fa-square pull-right"></i>Blocks
+{% block heading %}<i class="fa fa-group pull-right"></i>{% group_name %} List
   {% if request.user.is_staff %}
     <a class="btn btn-primary" href="{% url 'courses:block_create' %}" role="button">New</a>
   {% endif %}
@@ -13,17 +14,15 @@
 {% block content %}
 <table class="table table-striped">
   <tr>
-    <th>Block</th>
-    <th>Start Time</th>
-    <th>End Time</th>
+    <th>Name</th>
+    <th>Description</th>
     <th>Current Teacher</th>
     <th>Action</th>
   </tr>
   {% for object in object_list %}
   <tr>
-    <td>{{ object }}</td>
-    <td>{{ object.start_time }}</td>
-    <td>{{ object.end_time }}</td>
+    <td>{{ object.name }}</td>
+    <td>{{ object.description|truncatechars:40 }}</td>
     <td>{{ object.current_teacher }}</td>
     <td>
       <a class="btn btn-warning" href="{% url 'courses:block_update' object.id %}" role="button" title="Edit this block">

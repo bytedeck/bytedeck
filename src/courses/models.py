@@ -342,7 +342,7 @@ class DateType(models.Model):
 class BlockManager(models.Manager):
 
     def grouped_teachers_blocks(self):
-        blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'block')
+        blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'name')
         grouped = {}
 
         # Group by {teacher : [ blocks ]}
@@ -353,10 +353,9 @@ class BlockManager(models.Manager):
         return grouped
 
 
-class Block(models.Model):
-    block = models.CharField(max_length=50, unique=True)
-    start_time = models.TimeField(blank=True, null=True)
-    end_time = models.TimeField(blank=True, null=True)
+class Block(IsAPrereqMixin, models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True, null=True)
     current_teacher = models.ForeignKey(settings.AUTH_USER_MODEL,
                                         null=True, blank=True,
                                         limit_choices_to={'is_staff': True},
@@ -365,11 +364,18 @@ class Block(models.Model):
 
     objects = BlockManager()
 
-    def __str__(self):
-        return self.block
-
     class Meta:
-        ordering = ["start_time"]
+        ordering = ['name']
+        verbose_name = 'Group'
+
+    def __str__(self):
+        return self.name
+
+    def condition_met_as_prerequisite(self, user, num_required=1):
+        """ Returns True if the user has a current course in this block/group.  `num_required` is not used.
+        """
+        # num_required is not used for this one
+        return CourseStudent.objects.current_courses(user).filter(block=self).exists()
 
 
 class ExcludedDate(models.Model):
@@ -502,14 +508,12 @@ class CourseStudentManager(models.Manager):
 
 
 class CourseStudent(models.Model):
-    GRADE_CHOICES = ((9, 9), (10, 10), (11, 11), (12, 12), (13, 'Adult'))
-
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
-    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True)
+    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True, verbose_name="Group")
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
-    # grade = models.PositiveIntegerField(choices=GRADE_CHOICES, null=True, blank=True)
-    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True)
+    # grade is deprecated, shouldn't be used anywhere any more
+    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)
     xp_adjustment = models.IntegerField(default=0)
     xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
     final_xp = models.PositiveIntegerField(blank=True, null=True)
@@ -529,9 +533,8 @@ class CourseStudent(models.Model):
     def __str__(self):
         return self.user.get_username() \
             + ", " + str(self.semester) if self.semester else "" \
-            + ", " + str(self.block.block) if self.block else "" \
-            + ": " + str(self.course) \
-            + " " + str(self.grade_fk.value) if self.grade_fk else ""
+            + ", " + str(self.block.name) if self.block else "" \
+            + ": " + str(self.course)
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')

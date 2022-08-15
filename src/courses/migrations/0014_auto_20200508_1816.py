@@ -10,7 +10,7 @@ def load_initial_data(apps, schema_editor):
     # add some initial data if none has been created yet
     if not Block.objects.exists():
         Block.objects.create(
-            block="Default",
+            name="Default",
         )
 
 

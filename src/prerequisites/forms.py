@@ -4,6 +4,7 @@ from crispy_forms import layout
 
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
+from courses.models import Block
 
 from prerequisites.models import Prereq
 
@@ -33,7 +34,16 @@ def hardcoded_prereq_model_choice():
     from courses.models import Course, Grade, Rank
     from quest_manager.models import Category, Quest
     from badges.models import Badge
-    return [(Category, 'title'), (Quest, 'name'), (Course, 'title'), (Grade, 'name'), (Rank, 'name'), (Prereq, 'name'), (Badge, 'name')]
+    return [
+        (Category, Category.dal_autocomplete_search_fields()), 
+        (Quest, Quest.dal_autocomplete_search_fields()), 
+        (Block, Block.dal_autocomplete_search_fields()),
+        (Course, Course.dal_autocomplete_search_fields()), 
+        (Grade, Grade.dal_autocomplete_search_fields()), 
+        (Rank, Rank.dal_autocomplete_search_fields()), 
+        (Prereq, Prereq.dal_autocomplete_search_fields()), 
+        (Badge, Badge.dal_autocomplete_search_fields()),
+    ]
 
 
 class PrereqFormInline(autocomplete.FutureModelForm):

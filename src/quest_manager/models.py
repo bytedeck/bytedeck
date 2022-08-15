@@ -114,10 +114,15 @@ class XPItem(models.Model):
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
-    visible_to_students = models.BooleanField(default=True)
-    archived = models.BooleanField(default=False,
-                                   help_text='Setting this will prevent it from appearing in admin quest lists.  '
-                                             'To un-archive a quest, you will need to access it through Site Administration.')
+    visible_to_students = models.BooleanField(
+        default=True, verbose_name="draft",
+        help_text="If checked, this quest will not be visible to students and will appear in your Drafts tab."
+    )
+    archived = models.BooleanField(
+        default=False,
+        help_text='Setting this will prevent it from appearing in admin quest lists.  '
+        'To un-archive a quest, you will need to access it through Site Administration.'
+    )
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
     max_xp = models.IntegerField(

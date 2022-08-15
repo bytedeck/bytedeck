@@ -1,4 +1,5 @@
 {% extends "profile_manager/base.html" %}
+{% load utility_tags %}
 
 {% block heading_inner %}{{ object.get_preferred_name }}'s Profile
     <div class="btn-group" role="group">
@@ -65,7 +66,7 @@
               {% for course in courses %}
                 <div class="pull-right"> {{xp_per_course|floatformat:0}} / {{course.course.xp_for_100_percent}} XP </div>
                 <div>
-                    {{course.course}} {{course.grade_fk}}
+                    {{course.course}}
                 </div>
                 <div class="progress progress-xp"><!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
                   <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
@@ -118,12 +119,12 @@
           {% if courses %}
               {% for course in courses %}
                 <li class="list-group-item">
-                  {{course.course}} {{course.grade_fk}}
+                  {{course.course}}
                   {% if request.user.is_staff %}
                     (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
                   {% endif %}
                   <br/>
-                  <small>{{course.block}} Block, Semester {{course.semester}}
+                  <small>{{course.block}}, Semester {{course.semester}}
                   {% if course.xp_adjustment != 0 %}<br/>XP Adjustment: {{course.xp_adjustment}} XP
                   (reason: {{course.xp_adjust_explanation}})
                   {% endif %}
@@ -141,12 +142,12 @@
          {% if courses_old %}
              {% for course in courses_old %}
                <li class="list-group-item text-muted">
-                 {{course.course}} {{course.grade_fk}}
+                 {{course.course}}
                  {% if request.user.is_staff %}
                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
                  {% endif %}
                  <br/>
-                 <small>{{course.block}} Block, {{course.semester}}
+                 <small>{{course.block}}, {{course.semester}}
                  <br/>Final XP: {{course.final_xp}}
                  </small>
                </li>
@@ -296,7 +297,7 @@
       
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-tags"></i>
-        <h3 class="panel-title">XP earned by Tag</h3>
+        <h3 class="panel-title">XP earned by {% tag_name %}</h3>
       </div>
 
       <div class="list-group">

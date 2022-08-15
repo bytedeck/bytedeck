@@ -1,0 +1,31 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+{{ block.super }}
+<script type="text/javascript">
+(function($) {
+    $(document).ready(function() {
+        // https://stackoverflow.com/a/4017627/2700631
+        $('table#result_list tbody tr').each(function() {
+            $max_users_cell = $(this).children('td.field-max_active_users')
+            max_users = Number($max_users_cell.text());
+
+            $active_users_cell = $(this).children('td.field-active_user_count')
+            active_users = Number($active_users_cell.text());
+            if (active_users > max_users) {
+                $active_users_cell.css('background-color', 'gold');
+                $max_users_cell.css('background-color', 'gold');
+            }
+
+            // paid_until = $(this).children('td.field-paid_until').text();
+            // trial_end = $(this).children('td.field-trial_end_date').text();
+
+            // console.log(paid_until);
+            // console.log(trial_end);
+
+
+        });
+    });
+})(django.jQuery);
+</script>
+{% endblock %}

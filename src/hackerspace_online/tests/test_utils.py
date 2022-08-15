@@ -61,7 +61,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         Block = apps.get_model("courses", "block")
 
         self.client.force_login(self.teacher)
-        form_data = generate_form_data(model_form=BlockForm, block="NEW BLOCK NAME")
+        form_data = generate_form_data(model_form=BlockForm, name="NEW BLOCK NAME")
 
         # form valid test
         form = BlockForm(form_data)
@@ -72,7 +72,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         # assert changes
-        self.assertTrue(Block.objects.filter(block="NEW BLOCK NAME").exists())
+        self.assertTrue(Block.objects.filter(name="NEW BLOCK NAME").exists())
 
     def test_valid_CourseStudentForm(self):
         """ 
@@ -87,7 +87,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
         Block = apps.get_model("courses", "block")
         Course = apps.get_model("courses", "course")
         Semester = apps.get_model("siteconfig", "siteconfig").get().active_semester
-        Grade = apps.get_model("courses", "grade")
+        # Grade = apps.get_model("courses", "grade")
         
         CourseStudent = apps.get_model("courses", "coursestudent")
 
@@ -96,7 +96,7 @@ class Utils_generate_form_data_Test(TenantTestCase):
             block=baker.make(Block),
             course=baker.make(Course),
             semester=Semester,
-            grade_fk=baker.make(Grade)
+            # grade_fk=baker.make(Grade)
         )
         form_data_invalid = generate_form_data(CourseStudent)
 

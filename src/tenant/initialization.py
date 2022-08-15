@@ -115,7 +115,7 @@ def create_initial_course():
 
 def create_initial_blocks():
     default_user = SiteConfig.get().deck_owner
-    Block.objects.create(block="Default", current_teacher=default_user)
+    Block.objects.create(name="Default", current_teacher=default_user)
 
 
 def create_initial_markranges():

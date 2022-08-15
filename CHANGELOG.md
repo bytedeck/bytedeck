@@ -4,6 +4,20 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.19.0] 2022-08-14 - Beta Release Candidate 02
+* Groups (name changed from Blocks) is now a prerequisite option
+* New Site Config optios: Customize the name of Tags and Groups
+* Deprecate 'Grade' field as part of course regsitration.  It will no longer appear and can't be selected for new course registrations
+* Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
+  - Students page now has new tabs to access: Inactive students, Staff users.
+* Minor tweaks and bugfixes:
+  - Change quest "visible to students" field to "drafts"
+  - Tenant list: fix 'active user' calculation to only include students currently registered in a course
+  - Tenant list: add 'last staff login' column
+  - Tenant list: Make columns sortable and filterable
+  - Prereq edit buttons only visible to staff
+  - Add useful info to Common Quest Info list page
+
 ### [1.18.0] 2022-08-09 - Beta Release Candidate 01 + TAGS!
 * Tags:
   - Tags list can be accessed via Admin menu under Course Setup
