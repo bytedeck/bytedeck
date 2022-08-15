@@ -4,7 +4,7 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.19.0] 2022-08-14 - Beta Release Candidate 02 + TAGS!
+### [1.19.0] 2022-08-14 - Beta Release Candidate 02
 * Groups (name changed from Blocks) is now a prerequisite option
 * New Site Config optios: Customize the name of Tags and Groups
 * Deprecate 'Grade' field as part of course regsitration.  It will no longer appear and can't be selected for new course registrations
