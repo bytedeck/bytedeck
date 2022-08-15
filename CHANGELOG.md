@@ -11,7 +11,7 @@ This file chronologically records all notable changes to this website, including
 * Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
   - Students page now has new tabs to access: Inactive students, Staff users.
 * Minor tweaks and bugfixes:
-  - Change quest "visible to students" field to "drafts"
+  - Change quest field "visible to students" field to "published" and added help text explaining Drafts tab
   - Tenant list: fix 'active user' calculation to only include students currently registered in a course
   - Tenant list: add 'last staff login' column
   - Tenant list: Make columns sortable and filterable
