@@ -30,7 +30,19 @@
   </div>
   {{s.quest.submission_details|safe}}
 </li>
-<li class="list-group-item list-group-item-info">Submission Comments</li>
-{% with s.get_comments as target_comments %}
-  {% include "comments/comments.html" %}
-{% endwith %}
+{% if s.is_returned or completed %}
+  <li class="list-group-item list-group-item-info">Submission Comments</li>
+  {% with s.get_comments as target_comments %}
+    {% include "comments/comments.html" %}
+  {% endwith %}
+  <li class="list-group-item list-group-item-info">
+    Quick Reply Form 
+    <small>(To provide a fully formatted comment, include images, or attach files, click the 
+      {% if s.is_returned %} 
+        Continue 
+      {% else %}
+        View Details
+      {% endif %}
+      button above)</small>
+  </li>
+{% endif %}

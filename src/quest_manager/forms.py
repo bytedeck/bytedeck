@@ -271,6 +271,10 @@ class SubmissionQuickReplyForm(forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
+class SubmissionQuickReplyFormStudent(forms.Form):
+    comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+
 class CommonDataForm(forms.ModelForm):
 
     class Meta:

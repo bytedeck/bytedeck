@@ -30,7 +30,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
-                    SubmissionQuickReplyForm, TAQuestForm, CommonDataForm)
+                    SubmissionQuickReplyForm, SubmissionQuickReplyFormStudent, TAQuestForm, CommonDataForm)
 from .models import Quest, QuestSubmission, Category, CommonData
 
 User = get_user_model()
@@ -399,6 +399,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     past_submissions_count = past_submissions.count()
 
+    quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
+
     if in_progress_tab_active:
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
@@ -450,6 +452,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_tab_active": completed_tab_active,
         "past_tab_active": past_tab_active,
         "drafts_tab_active": drafts_tab_active,
+        "quick_reply_form": quick_reply_form
     }
     return render(request, template, context)
 
@@ -876,8 +879,10 @@ def complete(request, submission_id):
 
         if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
             form = SubmissionFormCustomXP(request.POST, request.FILES)
-        else:
+        elif request.FILES:
             form = SubmissionForm(request.POST, request.FILES)
+        else:
+            form = SubmissionQuickReplyFormStudent(request.POST)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
