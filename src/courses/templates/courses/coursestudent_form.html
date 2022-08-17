@@ -1,19 +1,24 @@
 {% extends "courses/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Join a course{% endblock %}
+{% block heading_inner %}{{ heading }}{% endblock %}
 
 {% block content %}
 
-<p>{% if form.instance.user and form.instance.user != user %}Adding a course for {{form.instance.user}}
-{% else %}Please enter information about your course as it appears on your schedule
+{% if submit_btn_value != 'Update' %}
+  <p>
+  {% if form.instance.user and form.instance.user != user %}
+    Adding a course for {{form.instance.user}}
+  {% else %}
+    Please select the options for your course as directed by your teacher.
+  {% endif %}
+  </p>
 {% endif %}
-</p>
 <div class="row">
   <div class="col-sm-6">
     <form method="post">{% csrf_token %}
         {{ form | crispy }}
-        <input type="submit" value="Join" class="btn btn-primary" />
+        <input type="submit" value="{{ submit_btn_value }}" class="btn btn-primary" />
     </form>
   </div>
 </div>
