@@ -6,9 +6,22 @@
             <p></p>
             <ul>
                 {% for quest in quests %}
-                    <li><a href="{{ quest.get_absolute_url }}">{{ quest }}</a></li>
+                    {% if view != 'student' %}
+
+                        <li><a href="{{ quest.get_absolute_url }}">{{ quest }} ({{ quest.xp }} XP)</a></li>
+
+                    {% else %}
+                    {% with quest=quest.0 xp=quest.1 %}
+
+                        <li><a href="{{ quest.get_absolute_url }}">{{ quest }} ({{ xp }} XP)</a></li>
+
+                    {% endwith %}
+                    {% endif %}
+
                 {% empty %}
+
                     <li>None.</li>
+
                 {% endfor %}
             </ul>
         </div>
@@ -20,9 +33,22 @@
             <p></p>
             <ul>
                 {% for badge in badges %}
-                    <li><a href="{{ badge.get_absolute_url }}">{{ badge }}</a></li>
+                    {% if view != 'student' %}
+
+                        <li><a href="{{ badge.get_absolute_url }}">{{ badge }} ({{ badge.xp }} XP)</a></li>
+
+                    {% else %}
+                    {% with badge=badge.0 xp=badge.1 %}
+
+                        <li><a href="{{ badge.get_absolute_url }}">{{ badge }} ({{ xp }} XP)</a></li>
+                    
+                    {% endwith %}
+                    {% endif %}
+
                 {% empty %}
+
                     <li>None.</li>
+
                 {% endfor %}
             </ul>
         </div>
