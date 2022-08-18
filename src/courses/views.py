@@ -11,17 +11,19 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
-from django.views.generic.base import TemplateView
 
 from hackerspace_online.decorators import staff_member_required
 
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
+from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
+from quest_manager.models import Quest
+from badges.models import Badge
 
 import numpy
 
@@ -402,7 +404,7 @@ def ajax_progress_chart(request, user_id=0):
         raise Http404
 
 
-class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, TemplateView):
+class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
     _BINS = 10
     _BIN_WIDTH = 10
 
@@ -488,5 +490,92 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, TemplateView):
             'data': {
                 'user_id': user_id,  # int
                 'students': student_histogram,  # list[int]
+            }
+        })
+
+
+class Ajax_TagChart(NonPublicOnlyViewMixin, View):
+
+    def dispatch(self, request, *args, **kwargs):
+        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+        if not is_ajax or not request.user.is_authenticated:
+            raise Http404()
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, *args, **kwargs):
+        self.user = self.get_user()
+        json_data = self.get_json_data()
+
+        return HttpResponse(json_data, content_type='application/json')
+
+    def get_user(self):
+        pk = self.kwargs['user_id']
+        return get_object_or_404(User, pk=pk)
+
+    def get_quest_dataset(self, user_tags):
+        """  Quest dataset for chart.js to use to display bar chart for quest objects
+
+        Args:
+            user_tags (str, QS[Tag]): all tags related to user
+
+        Returns:
+            list[dict[str, list[int]]]: returns dictionary of str, list[int]
+                el 0 -> str: name of quest object so we can use that as helptext label
+                el 1 -> list[int]: 
+                    list has 2 values, 0 or xp. list[index] == 0 means that quest doesn't have tag for user_tags[index].
+                    If list[index] == quest.xp then quest has tag user_tags[index]
+        """
+        quest_ids = list(get_quest_submission_by_tag(self.user, user_tags).values_list('quest__id', flat=True))
+        quest_queryset = Quest.objects.filter(id__in=quest_ids)  # all quests related to user
+
+        quest_dataset = []
+        for quest in quest_queryset:
+            quest_tags = quest.tags.all().values_list('name', flat=True)
+            xp_in_tag = [quest.xp if tag in quest_tags else 0 for tag in user_tags]
+
+            quest_dataset.append({'name': quest.name, 'dataset': xp_in_tag})
+            
+        return quest_dataset
+
+    def get_badge_dataset(self, user_tags):
+        """  Badge dataset for chart.js to use to display bar chart for badge objects
+
+        Args:
+            user_tags (str, QS[Tag]): all tags related to user
+
+        Returns:
+            list[dict[str, list[int]]]: returns dictionary of str, list[int]
+                el 0 -> str: name of badge object so we can use that as helptext label
+                el 1 -> list[int]: 
+                    list has 2 values, 0 or xp. list[index] == 0 means that badge doesn't have tag for user_tags[index].
+                    If list[index] == badge.xp then badge has tag user_tags[index]
+        """
+        badge_ids = list(get_badge_assertion_by_tags(self.user, user_tags).values_list('badge__id', flat=True))
+        badge_queryset = Badge.objects.filter(id__in=badge_ids)  # all badges related to user
+
+        badge_dataset = []
+        for badge in badge_queryset:
+            badge_tags = badge.tags.all().values_list('name', flat=True)
+            xp_in_tag = [badge.xp if tag in badge_tags else 0 for tag in user_tags]
+
+            badge_dataset.append({'name': badge.name, 'dataset': xp_in_tag})
+            
+        return badge_dataset
+
+    def get_json_data(self):
+        # get names from get_user_tags_and_xp to get it in order by tag xp
+        _tag_and_xp = get_user_tags_and_xp(self.user) or [('', '')]  # use 'or' so zip has a return value
+        names, _ = zip(*_tag_and_xp)
+        names = list(map(str, names))  
+
+        quest_dataset = self.get_quest_dataset(names)
+        badge_dataset = self.get_badge_dataset(names)
+        
+        return json.dumps({
+            'labels': names,  # list[str]
+            'data': {
+                'quest_dataset': quest_dataset,  # list[dict[str, list[int]]]
+                'badge_dataset': badge_dataset,  # list[dict[str, list[int]]]
             }
         })

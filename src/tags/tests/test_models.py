@@ -5,7 +5,7 @@ from django.db.utils import ProgrammingError
 from model_bakery import baker
 
 from taggit.models import Tag
-from tags.models import total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp
+from tags.models import total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
@@ -56,6 +56,50 @@ class TagHelper:
         badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
 
         return badge, badge_assertion
+
+
+class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTestCase):
+    """ 
+        Specialized TestClass for both get_quest_submission_by_tags and get_badge_assertion_by_tags
+    """ 
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_multiple_quest_submission_tagged(self):
+        """  check if multiple tags can be caught by get_quest_submission_by_tag """
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag0')
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag1')
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag2')
+
+        quest_submission_qs = get_quest_submission_by_tag(self.user, ['tag0', 'tag1', 'tag2'])
+        self.assertEqual(quest_submission_qs.count(), 6)
+
+    def test_multiple_badge_assertion_tagged(self):
+        """  check if multiple tags can be caught by get_badge_assertion_by_tags """
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag0')
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag1')
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag2')
+
+        badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['tag0', 'tag1', 'tag2'])
+        self.assertEqual(badge_assertion_qs.count(), 6)
 
 
 class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):

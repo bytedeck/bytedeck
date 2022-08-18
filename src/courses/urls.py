@@ -39,6 +39,7 @@ urlpatterns = [
     path('marks/<int:user_id>', views.mark_calculations, name='marks'),
     path('ajax/progress_chart/<int:user_id>/', views.ajax_progress_chart, name='ajax_progress_chart'),
     path('ajax/marks_bar_chart/<int:user_id>/', views.Ajax_MarkDistributionChart.as_view(), name='mark_distribution_chart'),
+    path('ajax/tag_progress_chart/<int:user_id>/', views.Ajax_TagChart.as_view(), name='ajax_tag_progress_chart'),
 
     # Course
     path('list/', views.CourseList.as_view(), name='course_list'),
