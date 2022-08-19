@@ -1,6 +1,6 @@
 {% extends "courses/base.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
-{% load jchart %}
 
 {% block heading %}
 Mark Calculations
@@ -129,6 +129,7 @@ for {{user}}
 
         <!-- Tab panes -->
         <div class="tab-content">
+          
           <div role="tabpanel" class="tab-pane active" id="progress">
             <div class="well chart-container">
               <div class="loading">
@@ -140,9 +141,19 @@ for {{user}}
               </canvas>
             </div>
           </div>
+
           <div role="tabpanel" class="tab-pane" id="distribution">
             <div class="well chart-container">
-              {% render_chart 'courses:mark_distribution_chart' user.id %}
+
+              <div class="loading">
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Calculating data for chart...
+              </div>
+
+              <canvas id="chart-mark-distribution" class="mark-chart">
+                <!-- content will be set by js in chart_mark_distribution.html -->
+              </canvas>
+
             </div>
           </div>
 
@@ -176,6 +187,7 @@ for {{user}}
           )
       });
   </script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
   {% include 'courses/chart_xp_progress.html' %}
   {% include 'courses/chart_mark_distribution.html' %}
 

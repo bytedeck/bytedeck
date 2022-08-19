@@ -11,8 +11,6 @@ from django.utils import timezone
 
 import numpy
 from colorful.fields import RGBColorField
-from jchart import Chart
-from jchart.config import DataSet, rgba
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -563,98 +561,3 @@ def coursestudent_post_save_callback(instance, **kwargs):
     If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
     """
     instance.user.profile.xp_invalidate_cache()
-
-
-class MarkDistributionHistogram(Chart):
-    chart_type = 'bar'
-    scales = {
-        'xAxes': [{
-            'barPercentage': 1.05,
-            'categoryPercentage': 1.05,
-            'gridLines': {
-                'offsetGridLines': False,
-                'display': False,
-            },
-            'stacked': True,
-            # 'scaleLabel': {
-            #   'display': True,
-            #   'labelString': 'Current mark as a percentage'
-            # }
-        }],
-        'yAxes': [{
-            'stacked': True,
-            # 'scaleLabel': {
-            #     'display': True,
-            #     'labelString': '# of students in this mark range'
-            # }
-        }]
-
-    }
-    options = {
-        'maintainAspectRatio': False,
-    }
-    histogram = {'labels': [], 'data': []}
-    bin_size = 10
-
-    def get_labels(self, **kwargs):
-
-        if not self.histogram['labels']:
-            self.generate_histogram()
-        return self.histogram['labels']
-
-    def get_datasets(self, user_id):
-
-        if not self.histogram['data']:
-            self.generate_histogram()
-
-        user_data = self.generate_user_data(user_id)  # needs to be before getting histogram data
-        all_course_data = self.histogram['data']
-
-        course_dataset = DataSet(label='# of other students in this mark range',
-                                 data=all_course_data,
-                                 borderWidth=1,
-                                 backgroundColor=rgba(128, 128, 128, 0.3),
-                                 borderColor=rgba(0, 0, 0, 0.2),
-                                 )
-        # course_dataset['stack'] = 'marks'
-
-        user_dataset = DataSet(label='You',
-                               data=user_data,
-                               )
-        # user_dataset['stack'] = 'marks'
-
-        return [course_dataset, user_dataset, ]
-
-    def generate_user_data(self, user_id):
-        """ Create a list for the histogram filled with 0's except the bin with the user's mark
-        """
-        user = User.objects.get(id=user_id)
-        user_mark = user.profile.mark()
-        data = []
-        index = 0
-        for mark_bin in range(0, 100 + self.bin_size, self.bin_size):
-            if mark_bin <= user_mark < mark_bin + self.bin_size:
-                data.append(1)
-                # Remove this data point from the main data
-                self.histogram['data'][index] -= 1
-            else:
-                data.append(0)
-            index += 1
-        return data
-
-    def generate_histogram(self):
-        data = Semester.objects.get_current().get_student_mark_list(students_only=True)
-        # data = numpy.random.normal(0, 20, 1000)
-        right_edge = 100 + self.bin_size
-        bins = numpy.arange(0, right_edge, self.bin_size)
-        bins_list = bins.tolist()  # numpy uses some weird ass array format, lets get a list from it
-        bins_list.append(999)  # include everything >100 in the last bin
-        hist, bin_edges = numpy.histogram(data, bins_list)
-        self.histogram['data'] = hist.tolist()
-
-        # do some work to get labels correct
-        # don't wan't the last bin 999 to appear as a label on the chart
-        bin_labels = [str(bin_label) + "%" for bin_label in bins_list]
-        bin_labels[-1] = ""
-        bin_labels[-2] = "100%+"
-        self.histogram['labels'] = bin_labels

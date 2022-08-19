@@ -11,6 +11,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.views.generic.base import TemplateView
 
 from hackerspace_online.decorators import staff_member_required
 
@@ -21,6 +22,8 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
+
+import numpy
 
 
 # Create your views here.
@@ -397,3 +400,93 @@ def ajax_progress_chart(request, user_id=0):
         return HttpResponse(json_data, content_type='application/json')
     else:
         raise Http404
+
+
+class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, TemplateView):
+    _BINS = 10
+    _BIN_WIDTH = 10
+
+    def dispatch(self, request, *args, **kwargs):
+        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+        if not is_ajax or not request.user.is_authenticated:
+            raise Http404() 
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, *args, **kwargs):
+        self.user = self.get_user()
+        json_data = self.get_json_data()
+
+        return HttpResponse(json_data, content_type='application/json')
+
+    def get_user(self):
+        pk = self.kwargs['user_id']
+        return get_object_or_404(User, pk=pk)
+
+    def get_datasets(self):
+        """query datasets for both histograms ( marks over 100% will be capped at 100% )
+
+        Returns:
+            tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
+        """
+        # grab dataset
+        user_mark = self.user.profile.mark() or 0  # can be nonetype
+        student_marks = Semester.get_student_mark_list(Semester, students_only=True)
+        # only remove user's mark from student_marks if user is part of active sem
+        if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():
+            student_marks.remove(user_mark)
+
+        # limit marks, so marks > 100 can show on histogram
+        user_mark = min(user_mark, 100)
+        student_marks = numpy.clip(student_marks, 0, 100)
+
+        return user_mark, student_marks
+
+    def generate_histograms(self):
+        """generates histograms
+
+        Returns:
+            tuple[list[int], list[int], list[int]]: 
+
+                for first two list in tuple:
+                    histogram of values using student and queried user's marks 
+
+                last el in tuple:
+                    histogram's bins in list form
+        """
+        user_mark, student_marks = self.get_datasets()
+
+        # histogram length will be len(bin)-1, so bin length has to be self._BIN_SIZE+1
+        bins = numpy.arange(0, self._BINS * (self._BIN_WIDTH + 1) + 1, self._BIN_WIDTH)  
+        student_histogram, _ = numpy.histogram(student_marks, bins=bins)
+        user_histogram, _ = numpy.histogram(user_mark, bins=bins)
+
+        return student_histogram, user_histogram, bins
+
+    def get_json_data(self):
+        student_histogram, user_histogram, bins = self.generate_histograms()
+
+        # combine histogram
+        student_histogram = numpy.add(student_histogram, user_histogram)
+        # make histogram json serializable (int64 -> int)
+        student_histogram = list(map(int, student_histogram))
+
+        # this will tell use where in the student_histogram user data point was added
+        user_histogram = list(user_histogram)
+        user_id = user_histogram.index(max(user_histogram))
+
+        # labels
+        # 0%, 10%, 20%, ... , 100%+
+        bin_labels = [str(bin_) + "%" for bin_ in bins[:len(bins) - 1]]
+        bin_labels[-1] += "+"
+        # last dataset (index 11) will be hidden with maintainAspectRatio=False
+        # add empty label so it can show
+        bin_labels.append("")
+
+        return json.dumps({
+            'labels': bin_labels,  # list[str]
+            'data': {
+                'user_id': user_id,  # int
+                'students': student_histogram,  # list[int]
+            }
+        })

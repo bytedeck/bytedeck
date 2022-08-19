@@ -1,105 +1,126 @@
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
-<!-- https://github.com/chartjs/Chart.Zoom.js/blob/master/samples/zoom.html -->
-<!-- <script type="text/javascript" src="https://raw.githubusercontent.com/chartjs/Chart.Zoom.js/master/Chart.Zoom.min.js"></script></script> -->
-
 <script type="text/javascript">
+  {% if request.user.pk == user.pk %}
+  var userLabel = "Your mark range";
+  {% else %}
+  var userLabel = "{{user.username}}'s mark range";
+  {% endif %}
 
-  /*jshint esversion: 6 */
-
-  var ctx2 = document.getElementById("chart-mark-distribution");
-
-  data = {
-        labels: ["Red", "Blue", "Yellow", "Green", "Purple", "Orange"],
-        datasets: [{
-            label: '# of Votes',
-            data: [12, 19, 3, 5, 2, 3],
-            backgroundColor: [
-                'rgba(255, 99, 132, 0.2)',
-                'rgba(54, 162, 235, 0.2)',
-                'rgba(255, 206, 86, 0.2)',
-                'rgba(75, 192, 192, 0.2)',
-                'rgba(153, 102, 255, 0.2)',
-                'rgba(255, 159, 64, 0.2)'
-            ],
-            borderColor: [
-                'rgba(255,99,132,1)',
-                'rgba(54, 162, 235, 1)',
-                'rgba(255, 206, 86, 1)',
-                'rgba(75, 192, 192, 1)',
-                'rgba(153, 102, 255, 1)',
-                'rgba(255, 159, 64, 1)'
-            ],
-            borderWidth: 1
-        }]
+  function InstantiateGraph(binLabels, studentData, userIndex) {
+    var COLORS = {
+      students: {bg: 'rgba(128, 128, 128, 0.3)', border: 'rgba(0, 0, 0, 0.2)'},
+      you: {
+        {% if request.user.profile.dark_theme %}
+          // dark theme
+          bg: 'rgba(150, 150, 150, 0.5)', 
+          border: 'rgba(0, 0, 0, 0.1)'
+        {% else %}
+          // light theme
+          bg: 'rgba(25, 25, 25, 0.5)', 
+          border: 'rgba(0, 0, 0, 0.1)'
+        {% endif %}
+      },
     }
 
-  options = {
-        scales: {
-            yAxes: [{
-                ticks: {
-                    beginAtZero:true
-                }
-            }]
+    // set bar colors to be student colors if userIndex is == to barIndex
+    var studentBGs = Array.from({ length: studentData.length }, _ => COLORS.students.bg);
+    var studentBorders = Array.from({ length: studentData.length }, _ => COLORS.students.border);
+    studentBGs[userIndex] = COLORS.you.bg;
+    studentBorders[userIndex] = COLORS.you.border;
+
+    // generate chart
+    var MCtx = document.getElementById("chart-mark-distribution").getContext('2d');
+    var MarkChart = new Chart(MCtx, {
+        type: 'bar',
+        data: {
+          labels: binLabels,
+          datasets: [
+            // Student distribution
+            {
+              label: '# of students at each mark range',
+              data: studentData,
+              backgroundColor: studentBGs,
+              borderColor: studentBorders,
+              borderWidth: 1,
+              stack: 0,
+            },
+            // You (Empty dataset, so label can show)
+            {
+              label: userLabel,
+              backgroundColor: COLORS.you.bg,
+              borderColor: COLORS.you.border,
+              borderWidth: 1,
+              stack: 0,
+            }, 
+          ]
+        },
+        
+        options: {
+          maintainAspectRatio: false,
+          scales: {
+            xAxes: [{
+              barPercentage: 0.99,  
+              categoryPercentage: 0.99,
+              gridLines: {
+                offsetGridLines: false,
+                display: false,
+              }
+            }],
+            y: {
+                beginAtZero: true,
+            }
+          },
+          tooltips: {
+            callbacks: {
+              // custom title text
+              title: function(tooltipItem, data) { 
+                var index = tooltipItem[0].index;
+
+                // -2 since we have to skip overempty label
+                if (index >= data.labels.length-2)
+                  return data.labels[data.labels.length-2]; 
+
+                return `${data.labels[index].slice(0, -1)}-${data.labels[index+1]}`; 
+              },
+              // show different label when hovering over bar where user is in
+              label: function(tooltipItem, data) {  
+                var label = data.datasets[tooltipItem.datasetIndex].label;
+                var label_text = `${label}: ${tooltipItem.yLabel}`;
+
+                if (tooltipItem.index == userIndex )
+                  return (tooltipItem.yLabel > 1) ? ` ${userLabel}: ${tooltipItem.yLabel} students` : ` ${userLabel}`;
+
+                return " " + label_text;
+              },
+
+            },
+          },
+
+          // should stop data hiding when clicking on label
+          legend: {
+            onClick: (e) => e.stopPropagation()
+          },
+
         }
-    }
+    });
 
-  var myBarChart = new Chart(ctx2, {
-    type: 'bar',
-    data: data,
-    options: options
-  });
+  }
+  
+  window.onload = function() {
+    $.ajax({
+      url: "{% url 'courses:mark_distribution_chart' user.id %}",
+      type: "GET",
+      dataType:"json",
+      success: function(json) {
 
-
-{#  function ajax_update_plot() {#}
-{#    // user in this view is the request.user, if a student,#}
-{#    // or the user matching the id in the url#}
-{#    $.ajax({#}
-{#      type: "POST",#}
-{#      url: "{% url 'courses:ajax_progress_chart' user.id %}",#}
-{#      data: {#}
-{#        csrfmiddlewaretoken: "{{ csrf_token }}",#}
-{#      },#}
-{#      success: function(data){#}
-{#        // console.log(data.xp_data);#}
-{#        XPData.data = data.xp_data;#}
-{#        console.log(data.xp_data);#}
-{#        generate_trend(data.days_in_semester);#}
-{#        generate_mark_lines(data.days_in_semester);#}
-{#        myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;#}
-{##}
-{#        //console.log(myChart);#}
-{##}
-{#        $('div.loading').remove();#}
-{#        $('#myChart').show("slow");#}
-{#        myChart.update();#}
-{##}
-{#      }#}
-{#    });#}
-{#  }#}
-
-  // prevent page from scrolling when scrolling to zoom chart
-  //http://stackoverflow.com/questions/1459676/prevent-scroll-bubbling-from-element-to-window
-  // here we store the window scroll position to lock; -1 means unlocked
-  var forceWindowScrollY = -1;
-
-  $(window).scroll(function(event) {
-    if(forceWindowScrollY != -1 && window.scrollY != forceWindowScrollY) {
-      $(window).scrollTop(forceWindowScrollY);
-    }
-  });
-
-  $("#chart-mark-distribution").hover(function() {
-    if(forceWindowScrollY == -1) {
-      forceWindowScrollY = $(window).scrollTop();
-    }
-  }, function() {
-    forceWindowScrollY = -1;
-  });
-
-
-{#  $(document).ready(function() {#}
-{#    ajax_update_plot();#}
-{#  });#}
+        InstantiateGraph(
+          json.labels,
+          json.data.students,
+          json.data.user_id,
+        );
+        
+      }
+    });
+  }
 
 
 </script>
