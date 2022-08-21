@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.db import connections, transaction
 from django.db.models.signals import post_save
 from django.db.utils import OperationalError
+from django.urls import reverse
 
 from django_tenants.models import TenantMixin
 from django_tenants.signals import post_schema_sync
@@ -105,7 +106,8 @@ class Command(BaseCommand):
             template_name='public/flatpage-wide.html',
         )
         homepage.sites.add(site)
-        self.stdout.write(f" homepage: {public_tenant.get_root_url()}{homepage.url}\n")
+        absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])
+        self.stdout.write(f" homepage: {public_tenant.get_root_url()}{absolute_url}\n")
 
         # Connect again
         post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
