@@ -14,7 +14,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
-from django.test import tag
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -185,7 +184,6 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # the view should have redirect to the same submission:
         self.assertRedirects(response, sub.get_absolute_url())
 
-    @tag("do")
     def test_student_no_quests_help_text(self):
         """ 
             When student has no quests but have:
