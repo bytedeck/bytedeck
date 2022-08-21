@@ -243,7 +243,7 @@ class ViewTestUtilsMixin():
 
     def assert302(self, url_name, *args, **kwargs):
         """
-        Assert that a GET response to reverse(url_name, *args, **kwargs) gives a 403 Permission Denied.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) gives a 302 Redirect.
         For example, when an unauthenticated user attempts to access a view with the LoginRequiredMixin
         Provide any url and path parameters as args or kwargs.
         """
