@@ -5,6 +5,8 @@
 <script type="text/javascript">
 (function($) {
     $(document).ready(function() {
+        // Indicate which tenants have more than the max number of active users
+
         // https://stackoverflow.com/a/4017627/2700631
         $('table#result_list tbody tr').each(function() {
             $max_users_cell = $(this).children('td.field-max_active_users')
@@ -12,7 +14,7 @@
 
             $active_users_cell = $(this).children('td.field-active_user_count')
             active_users = Number($active_users_cell.text());
-            if (active_users > max_users) {
+            if (active_users > max_users && max_users > -1) {  // -1 indicates unlimited
                 $active_users_cell.css('background-color', 'gold');
                 $max_users_cell.css('background-color', 'gold');
             }
