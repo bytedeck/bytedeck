@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
+from django.test import tag
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -184,6 +185,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # the view should have redirect to the same submission:
         self.assertRedirects(response, sub.get_absolute_url())
 
+    @tag("do")
     def test_student_no_quests_help_text(self):
         """ 
             When student has no quests but have:
@@ -214,13 +216,13 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         Quest.objects.all().delete()
         self.assertFalse(Quest.objects.get_available(user).exists())
 
-        # quest should be in 'in-progress' ===
+        # quest should be in 'in-progress'
         quest = baker.make(Quest)
         QuestSubmission.objects.create_submission(user, quest)
 
         # conditions for msg to show
         inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)  # should exist
-        available = Quest.objects.get_available(user, True)  # should not exist
+        available = Quest.objects.get_available(user)  # should not exist
         self.assertTrue(inprogress.exists()) 
         self.assertFalse(available.exists())
 
@@ -252,7 +254,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # No new quests and conditions above do not apply ===
 
         # assert last 3 conditions as false
-        available = Quest.objects.get_available(user, True)
+        available = Quest.objects.get_available(user)
         inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)
         approval = QuestSubmission.objects.filter(user=user, is_approved=False, is_completed=True)
         self.assertFalse(available.exists())
@@ -264,6 +266,26 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(url)
         self.assertContains(response, "No quests are available.")
         self.assertContains(response, "There are currently no new quest available to you!")
+
+        # Only hidden quests #################################################
+    
+        # add a new quest available to the user
+        quest = baker.make(Quest, name="hide me")
+        # but adding a new quest won't make it appear in their available list, because the available list is cached 
+        # and doesn't recalculate during tests (celery tasks are not run), so let force a recalculation
+        from prerequisites.tasks import update_quest_conditions_for_user
+        update_quest_conditions_for_user(user.id)
+
+        # Make sure it's available
+        self.assertTrue(Quest.objects.get_available(user).exists())
+
+        # Now hide it
+        user.profile.hide_quest(quest.id)
+        self.assertEqual(user.profile.num_hidden_quests(), 1)  # Sanity check that the quest is hidden
+        self.assertFalse(Quest.objects.get_available(user).exists())  # Should not show up here cus hidden
+        response = self.client.get(url)
+        self.assertContains(response, "You have no new quests available")
+        self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
 
 
 class SubmissionViewTests(TenantTestCase):
