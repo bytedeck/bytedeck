@@ -13,7 +13,7 @@ from courses.forms import SemesterForm, ExcludedDateFormset
 import random
 import datetime
 import itertools
-
+import json
 
 User = get_user_model()
 
@@ -696,3 +696,102 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
 
         self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
+
+
+class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.teacher = baker.make(User, is_staff=True)
+
+        self.block = baker.make(Block)
+        self.course = baker.make(Course)
+        self.semester = SiteConfig.get().active_semester
+        self.inactive_semester = baker.make(Semester)
+
+    def create_student_course(self, xp):
+        """
+        Quick helper function to create student course
+
+        Args:
+            xp (int): how much xp will be stored in new_user.profile.xp_cached
+
+        Returns:
+            CourseStudent: instance of course student that uses self.block, self.course, self.semester as its variables
+        """
+        user = baker.make(User)
+
+        user.profile.xp_cached = xp
+        user.profile.save()
+
+        return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
+
+    def test_non_ajax_status_code(self):
+        self.assert404('courses:mark_distribution_chart', args=[self.teacher.pk])
+
+    def test_ajax_status_code_for_anonymous(self):
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_status_code_for_students(self):
+        user = baker.make(User)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_ajax_status_code_for_teachers(self):
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_no_users_outside_active_semester_in_histogram_values(self):
+        """ histogram values should only belong to users who belong in the active semester""" 
+        # create inactive semester students
+        inactive_sem_students = [self.create_student_course(100) for i in range(5)]
+        for cs in inactive_sem_students:
+            cs.semester = (self.inactive_semester)
+            cs.save()
+
+        # create active semester students
+        active_sem_students = [self.create_student_course(100) for i in range(7)]
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        json_response = json.loads(response.content)
+
+        # total students in hist should be total + user
+        total_students = sum(json_response['data']['students'])
+        self.assertNotEqual(total_students, len(inactive_sem_students))
+        self.assertEqual(total_students, len(active_sem_students))
+
+    def test_no_test_users_in_histogram_values(self):
+        """ test users should not show up in histogram values """
+        # create test users students
+        test_account_students = [self.create_student_course(100) for i in range(5)]
+        for cs in test_account_students:
+            cs.user.profile.is_test_account = True
+            cs.user.profile.save()
+
+        # create active semester students
+        active_sem_students = [self.create_student_course(100) for i in range(7)]
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        json_response = json.loads(response.content)
+
+        # total students in hist should be total + users
+        total_students = sum(json_response['data']['students'])
+        self.assertNotEqual(total_students, len(test_account_students))
+        self.assertEqual(total_students, len(active_sem_students))
