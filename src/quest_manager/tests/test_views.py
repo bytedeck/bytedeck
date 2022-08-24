@@ -1534,10 +1534,12 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Staff access only
         self.assert403('quests:categories')
-        self.assert403('quests:category_detail', kwargs={"pk": 1})
         self.assert403('quests:category_create')
         self.assert403('quests:category_update', args=[1])
         self.assert403('quests:category_delete', args=[1])
+
+        # Student access
+        self.assert200('quests:category_detail', kwargs={"pk": 1})
 
     def test_all_page_status_codes_for_staff(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
@@ -1553,10 +1555,36 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_CategoryDetail_view(self):
-        """ Admin should be able to view course details """
+        """ Admin and students should be able to view course details 
+        
+        Students accessing the category detail view should only see active quests
+        Admin should see every quest assigned to the campaign
+        """
+
+        # campaign with visible and non-visible quest created to test visibility for Admin and Student
+        view_test_campaign = baker.make(Category)
+        baker.make(Quest, visible_to_students=True, campaign=view_test_campaign)
+        baker.make(Quest, visible_to_students=False, campaign=view_test_campaign)
+
+        # Admin should be able to access view
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": 1}))
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
         self.assertEqual(response.status_code, 200)
+
+        # Admin should be able to see every quest assigned to the viewed campaign
+        displayed_quests = response.context["category_displayed_quests"]
+        intended_quests = Quest.objects.filter(campaign=view_test_campaign)
+        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
+
+        # Students should be able to access view
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
+        self.assertEqual(response.status_code, 200)
+
+        # Students should only be able to see active quests assigned to the viewed campaign
+        displayed_quests = response.context["category_displayed_quests"]
+        intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
+        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
 
     def test_CategoryCreate_view(self):
 
