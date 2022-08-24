@@ -1,0 +1,25 @@
+{% extends "profile_manager/base.html" %}
+{% load utility_tags %}
+
+{% block head_title %}{% tag_name %} Chart{% endblock %}
+{% block heading_inner %}{% tag_name %} Chart for <a href="{% url 'profiles:profile_detail' user.pk %}">{{user.username}}</a>{% endblock %}
+
+{% block content %}
+    <div role="tabpanel" class="tab-pane" id="tag-distribution">
+        <div class="well chart-container">
+        <div class="loading">
+            <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+            &nbsp;Calculating data for chart...
+        </div>
+
+        <canvas id="TagChart" class="xp-chart">
+            <!-- content will be set by js in chart_tags_progress.html -->
+        </canvas>
+        </div>
+    </div>
+{% endblock %}
+
+{% block js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js" integrity="sha384-86mmuxXJYGTFcyG3Tr7nKO2BYpngqxq/EYijDDr0VCbSXm5HK6tfJbGl4HSwEoUk" crossorigin="anonymous"></script>
+{% include 'courses/chart_tags_progress.html' %}
+{% endblock %}

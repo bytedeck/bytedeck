@@ -7,7 +7,7 @@ from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView
 
 from hackerspace_online.decorators import staff_member_required
@@ -275,6 +275,15 @@ class PasswordReset(FormView):
 
     def get_success_url(self):
         return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
+
+
+class TagChart(NonPublicOnlyViewMixin, TemplateView):
+    template_name = 'profile_manager/tag_chart.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user"] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
+        return context
 
 
 @non_public_only_view

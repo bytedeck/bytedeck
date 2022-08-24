@@ -105,7 +105,7 @@
 
   }
   
-  window.onload = function() {
+  window.addEventListener("load", function() {
     $.ajax({
       url: "{% url 'courses:mark_distribution_chart' user.id %}",
       type: "GET",
@@ -120,7 +120,7 @@
         
       }
     });
-  }
+  }, false);
 
 
 </script>

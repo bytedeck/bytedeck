@@ -122,14 +122,17 @@ for {{user}}
 
       <p>Here are some pretty charts I made just for you, to help you visualize your progress so far:</p>
       <div>
+
         <ul class="nav nav-pills" role="tablist">
           <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
           <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+          <li role="presentation"><a href="#tag-distribution" role="tab" data-toggle="tab">Tags Distribution</a></li>
         </ul>
 
         <!-- Tab panes -->
         <div class="tab-content">
-          
+
+          {# == XP Progress == #}
           <div role="tabpanel" class="tab-pane active" id="progress">
             <div class="well chart-container">
               <div class="loading">
@@ -142,6 +145,7 @@ for {{user}}
             </div>
           </div>
 
+          {# == Mark Distribution == #}
           <div role="tabpanel" class="tab-pane" id="distribution">
             <div class="well chart-container">
 
@@ -157,25 +161,24 @@ for {{user}}
             </div>
           </div>
 
+          {# == Tags Distribution == #}
+          <div role="tabpanel" class="tab-pane" id="tag-distribution">
+            <div class="well chart-container">
+              <div class="loading">
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Calculating data for chart...
+              </div>
+
+              <canvas id="TagChart" class="xp-chart">
+                <!-- content will be set by js in chart_tags_progress.html -->
+              </canvas>
+            </div>
+          </div>
+
 
         </div> <!-- tab-content -->
       </div>  <!-- tab container -->
 
-      {% comment %} Need to update this to use new Mark Ranges {% endcomment %}
-      {% comment %} <h3>Chillax Line</h3>
-      <p>{% if obj.semester.chillax_line_started %}
-        You are free to chillax if your XP {% if num_courses > 1 %}in all courses{% endif %} is at or above:
-          {% if num_courses > 1 %}
-              {# Multiply by 2 #}
-              {% widthratio obj.semester.chillax_line 1 2 %}
-          {% else %}
-              {{ obj.semester.chillax_line}}
-          {% endif %}
-          XP
-      {% else %}
-        The Chillax Line has not started yet.  It will begin the day after 1st Interim marks are taken.
-      {% endif %}
-      </p> {% endcomment %}
     {% endif %}
 
 {% endblock %}
@@ -187,8 +190,9 @@ for {{user}}
           )
       });
   </script>
-  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js" integrity="sha384-86mmuxXJYGTFcyG3Tr7nKO2BYpngqxq/EYijDDr0VCbSXm5HK6tfJbGl4HSwEoUk" crossorigin="anonymous"></script>
   {% include 'courses/chart_xp_progress.html' %}
   {% include 'courses/chart_mark_distribution.html' %}
+  {% include 'courses/chart_tags_progress.html' %}
 
 {% endblock %}

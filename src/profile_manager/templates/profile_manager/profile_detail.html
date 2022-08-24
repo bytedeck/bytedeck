@@ -297,7 +297,10 @@
       
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-tags"></i>
-        <h3 class="panel-title">XP earned by {% tag_name %}</h3>
+        <h3 class="panel-title">
+          XP earned by {% tag_name %}
+          &nbsp;&nbsp;<a class="btn btn-xs btn-warning" href="{% url 'profiles:tag_chart' pk=object.user.pk %}" role="button"><i class="fa fa-line-chart"></i></a>
+        </h3>
       </div>
 
       <div class="list-group">
