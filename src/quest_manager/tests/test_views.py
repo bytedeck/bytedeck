@@ -22,7 +22,7 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
-from quest_manager.models import Category, Quest, QuestSubmission, CommonData
+from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
@@ -1480,6 +1480,29 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
+
+    def test_available_quest_list_ordering(self):
+        """Parses for queryset used as context for "Available Quests" list and asserts equal to a 
+        manually ordered queryset.
+        """
+
+        # log in as teacher and access available quests view
+        self.client.force_login(self.test_teacher)
+        staff_response = self.client.get(reverse('quests:available'))
+
+        # log in as student and access available quests view
+        self.client.force_login(self.test_student)
+        student_response = self.client.get(reverse('quests:available'))
+
+        # get queryset from view context and order it as intended
+        for response in [staff_response, student_response]:
+            displayed_order = response.context['available_quests']
+
+            # proper quest ordering is pulled directly from the parent model XPItem's "ordering" meta value
+            intended_order = displayed_order.order_by(*XPItem._meta.ordering)
+
+            # assert ordered view is unchanged from displayed view
+            self.assertQuerysetEqual(displayed_order, intended_order)
 
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):

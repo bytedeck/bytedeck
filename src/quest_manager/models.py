@@ -150,7 +150,11 @@ class XPItem(models.Model):
 
     class Meta:
         abstract = True
-        ordering = ["-sort_order", "-time_expired", "-date_expired", "name"]
+        # manual ordering of a quest queryset places quests with smaller sort_order values above larger ones by default
+        # as such, the original value for sort_order (-sort_order,) orders quests upside-down 
+        # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
+        # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
+        ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
 
     def __str__(self):
         return self.name
@@ -383,7 +387,7 @@ class QuestManager(models.Manager):
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
-        return qs.get_list_not_submitted_or_inprogress(user)
+        return qs.not_submitted_or_inprogress(user)
 
     def all_drafts(self, user):
         qs = self.get_queryset().filter(visible_to_students=False)
