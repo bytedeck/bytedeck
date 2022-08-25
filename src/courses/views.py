@@ -20,7 +20,7 @@ from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_b
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import BlockForm, CourseStudentForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
+from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 from quest_manager.models import Quest
 from badges.models import Badge
@@ -172,8 +172,30 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data()
+        ctx['heading'] = 'Add student to course'
+        ctx['submit_btn_value'] = 'Add'
+        return ctx
+
     def get_success_url(self):
         return reverse('profiles:profile_detail', args=(self.object.user.profile.id, ))
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
+    model = CourseStudent
+    form_class = CourseStudentStaffForm
+    template_name = 'courses/coursestudent_form.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data()
+        ctx['heading'] = f'Update {self.object.user.username}\'s course'
+        ctx['submit_btn_value'] = 'Update'
+        return ctx
+
+    def get_success_url(self):
+        return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
 class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, CreateView):
@@ -187,6 +209,12 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         kwargs = super(CreateView, self).get_form_kwargs()
         kwargs['instance'] = CourseStudent(user=self.request.user)
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data()
+        ctx['heading'] = 'Join a course'
+        ctx['submit_btn_value'] = 'Join'
+        return ctx
 
 
 @method_decorator(staff_member_required, name='dispatch')

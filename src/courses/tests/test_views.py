@@ -8,7 +8,7 @@ from model_bakery import baker
 from courses.models import Block, Course, CourseStudent, Semester, Rank, ExcludedDate
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
-from courses.forms import SemesterForm, ExcludedDateFormset
+from courses.forms import SemesterForm, ExcludedDateFormset, CourseStudentStaffForm
 
 import random
 import datetime
@@ -222,6 +222,22 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:course_update', args=[1])
         self.assert200('courses:course_delete', args=[1])
 
+    def test_course_student_update_status_codes(self):
+        course_student = baker.make(CourseStudent)
+        # anon
+        self.client.logout()
+        self.assertRedirectsLogin('courses:update', args=[course_student.id])
+
+        # stud
+        self.client.force_login(self.test_student1)
+        self.assert403('courses:update', args=[course_student.id])
+        self.client.logout()
+
+        # staff
+        self.client.force_login(self.test_teacher)
+        self.assert200('courses:update', args=[course_student.id])
+        self.client.logout()
+
     def test_end_active_semester__staff(self):
         ''' End_active_semester view should redirect to semester list view '''
         self.client.force_login(self.test_teacher)
@@ -243,8 +259,30 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
+    def test_CourseStudentUpdate_view(self):
+        """ Staff can update a student's course """
+
+        course_student = baker.make(
+            CourseStudent, 
+            user=self.test_student1, 
+            course=self.course, 
+            block=self.block, 
+            semester=SiteConfig.get().active_semester
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+
     def test_CourseAddStudent_view(self):
-        '''Admin can add a student to a course'''
+        '''Staff can add a student to a course'''
 
         # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
         # and redirects to profiles:profile_detail

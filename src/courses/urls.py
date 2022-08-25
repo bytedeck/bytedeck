@@ -26,6 +26,7 @@ urlpatterns = [
     # CourseStudent
     path('add/student/', views.CourseStudentCreate.as_view(), name='create'),
     path('join/<int:user_id>/', views.CourseAddStudent.as_view(), name='join'),
+    path('edit/<pk>/', views.CourseStudentUpdate.as_view(), name='update'),
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),

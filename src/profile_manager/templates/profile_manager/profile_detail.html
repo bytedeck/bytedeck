@@ -121,7 +121,7 @@
                 <li class="list-group-item">
                   {{course.course}}
                   {% if request.user.is_staff %}
-                    (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                    (<a href="{% url 'courses:update' course.id %}">edit</a>)
                   {% endif %}
                   <br/>
                   <small>{{course.block}}, Semester {{course.semester}}
@@ -144,7 +144,7 @@
                <li class="list-group-item text-muted">
                  {{course.course}}
                  {% if request.user.is_staff %}
-                   (<a href="/admin/courses/coursestudent/{{course.id}}/">edit</a>)
+                   (<a href="{% url 'courses:update' course.id %}">edit</a>)
                  {% endif %}
                  <br/>
                  <small>{{course.block}}, {{course.semester}}

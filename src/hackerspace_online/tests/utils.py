@@ -90,7 +90,7 @@ def model_to_form_data(model, model_form):
         >>> form.is_valid()
         True
     """
-    fields = model_form._meta.fields or model._meta.fields
+    fields = model_form._meta.fields or [field.name for field in model._meta.fields]
     exclude = model_form._meta.exclude or []
 
     json_data = serializers.serialize('json', [model])
