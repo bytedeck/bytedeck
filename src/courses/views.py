@@ -22,8 +22,9 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
-from quest_manager.models import Quest
-from badges.models import Badge
+
+from django.db.models import Q
+from django.db.models.functions import Greatest
 
 import numpy
 
@@ -554,17 +555,54 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                     list has 2 values, 0 or xp. list[index] == 0 means that quest doesn't have tag for user_tags[index].
                     If list[index] == quest.xp then quest has tag user_tags[index]
         """
-        quest_ids = list(get_quest_submission_by_tag(self.user, user_tags).values_list('quest__id', flat=True))
-        quest_queryset = Quest.objects.filter(id__in=quest_ids)  # all quests related to user
+        submissions_queryset = get_quest_submission_by_tag(self.user, user_tags).order_by('quest', 'ordinal')
+        
+        # use this to keep track of how much xp submission has
+        # since xp_earned can change if it does not meet the cut off
+        submissions_xp = submissions_queryset.annotate(xp_earned=Greatest('quest__xp', 'xp_requested')).values('id', 'xp_earned')
+        submissions_xp = {sub['id']: sub['xp_earned'] for sub in submissions_xp}  # convert to dict for easier access
 
-        quest_dataset = []
-        for quest in quest_queryset:
-            quest_tags = quest.tags.all().values_list('name', flat=True)
-            xp_in_tag = [quest.xp if tag in quest_tags else 0 for tag in user_tags]
-
-            quest_dataset.append({'name': quest.name, 'dataset': xp_in_tag})
+        # change xp_earned or remove submissions if they go over max_xp
+        quest_ids = submissions_queryset.filter(quest__max_xp__gt=-1).distinct('quest').values_list('quest', flat=True)
+        keep_submissions_id = [] 
+        for quest_id in quest_ids:
             
-        return quest_dataset
+            submissions_for_quest = submissions_queryset.filter(quest_id=quest_id)
+            current_xp_total = 0
+            for submission in submissions_for_quest:
+                keep_submissions_id.append(submission.id)
+
+                # change xp earned to match max_xp cutoff
+                # since all other sub after this will be 0 stop here
+                if submissions_xp[submission.id] + current_xp_total > submission.quest.max_xp:
+                    new_xp_amount = submission.quest.max_xp - current_xp_total
+                    submissions_xp[submission.id] = new_xp_amount
+                    break
+                
+                current_xp_total += submissions_xp[submission.id]
+
+        # remove ids not in keep_submissions_id since they should have xp_earned of 0 anyway
+        # exception of quest__max_xp=-1 since they dont have max xp
+        submissions_queryset = submissions_queryset.filter(Q(quest__max_xp=-1) | Q(id__in=keep_submissions_id)).order_by('quest', 'ordinal')
+
+        # formats quest_queryset for chart.js
+        submission_dataset = []
+        for submission in submissions_queryset:
+            quest = submission.quest
+            quest_tags = quest.tags.all().values_list('name', flat=True)
+
+            # gets xp in all related to quest tags
+            xp_earned = submissions_xp[submission.id]
+            xp_in_tag = [xp_earned if tag in quest_tags else 0 for tag in user_tags]
+
+            # account for ordinal in name
+            name = quest.name
+            if submissions_queryset.filter(quest__id=quest.id).count() > 1:
+                name += f" ({submission.ordinal})"
+
+            submission_dataset.append({'name': name, 'dataset': xp_in_tag})
+            
+        return submission_dataset
 
     def get_badge_dataset(self, user_tags):
         """  Badge dataset for chart.js to use to display bar chart for badge objects
@@ -579,17 +617,26 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                     list has 2 values, 0 or xp. list[index] == 0 means that badge doesn't have tag for user_tags[index].
                     If list[index] == badge.xp then badge has tag user_tags[index]
         """
-        badge_ids = list(get_badge_assertion_by_tags(self.user, user_tags).values_list('badge__id', flat=True))
-        badge_queryset = Badge.objects.filter(id__in=badge_ids)  # all badges related to user
+        # use assertions instead of badges so we can count for multiple of same assertion
+        assertion_queryset = get_badge_assertion_by_tags(self.user, user_tags).order_by('badge_id', 'ordinal')
 
-        badge_dataset = []
-        for badge in badge_queryset:
+        # formats badge_queryset for chart.js
+        assertion_dataset = []
+        for assertion in assertion_queryset:
+            badge = assertion.badge
             badge_tags = badge.tags.all().values_list('name', flat=True)
+
+            # gets xp in all related to badge tags
             xp_in_tag = [badge.xp if tag in badge_tags else 0 for tag in user_tags]
 
-            badge_dataset.append({'name': badge.name, 'dataset': xp_in_tag})
+            # account for ordinal in name
+            name = badge.name
+            if assertion_queryset.filter(badge__id=badge.id).count() > 1:
+                name += f" ({assertion.ordinal})"
+
+            assertion_dataset.append({'name': name, 'dataset': xp_in_tag})
             
-        return badge_dataset
+        return assertion_dataset
 
     def get_json_data(self):
         # get names from get_user_tags_and_xp to get it in order by tag xp

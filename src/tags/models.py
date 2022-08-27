@@ -107,7 +107,8 @@ def get_quest_submission_total_xp(user, tags):
         quest_xp_sum[sub_xp['quest']] += sub_xp['xp_earned']
 
     # putting quest as value will squish all same quests to one QS
-    submissions = submissions.values('quest', 'quest__max_xp')
+    # distinct is on since quest_sub with different xp requested will not squish
+    submissions = submissions.order_by('quest__id').distinct('quest__id').values('quest', 'quest__max_xp')
 
     for sub in submissions:
         xp = quest_xp_sum[sub['quest']]
