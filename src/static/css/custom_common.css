@@ -338,6 +338,19 @@ ol > ol > ol {
     list-style-type: lower-roman;
 }
 
+/* style used for list view dropdown buttons across site */
+.list-submenu-dropdown {
+    margin-left: 15px;
+}
+
+/* SEE THEME SPECIFIC STYLESHEET For color */
+.list-submenu-dropdown a{
+    text-shadow: none;
+}
+
+.list-submenu-dropdown a:hover {
+    color: black;
+}
 
 /************ BADGES/Achievements **********************/
 .panel-body-badge {
@@ -418,19 +431,6 @@ ol > ol > ol {
 }
 
 /************ ANNOUNCEMENT *******************/
-
-.announcement-dropdown {
-    margin-left: 15px;
-}
-
-/* SEE THEME SPECIFIC STYLESHEET For color */
-.announcement-dropdown a{
-    text-shadow: none;
-}
-
-.announcement-dropdown a:hover {
-    color: black;
-}
 
 .announcement-content {
     overflow-wrap: break-word;

@@ -9,14 +9,6 @@
     {% endif %}
 
     {% if  request.user.is_staff or request.user == q.editor %}
-        <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
-          title = "Edit the quest" >
-          <i class="fa fa-edit"></i>
-        </a>
-        <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button"
-          title = "Create a copy of this quest" >
-          <i class="fa fa-copy"></i>
-        </a>
         <a class="btn btn-default" href="{% url 'quests:approved_for_quest' q.id %}" role="button"
           title = "View past submissions of this quest" >
           <i class="fa fa-folder-open-o"></i>
@@ -25,10 +17,20 @@
           title="View summary data for this quest" >
           <i class="fa fa-fw fa-bar-chart"></i>
         </a>
-        <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
-          title = "Delete this quest" >
-          <i class="fa fa-trash-o"></i>
-        </a>
+        {% if not '/quests/ajax_quest_info/' in request.path_info %} <!-- these buttons shouldn't load if the quest is being previewed -->
+          <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
+            title = "Delete this quest" >
+            <i class="fa fa-trash-o"></i>
+          </a>
+          <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
+            title = "Edit the quest" >
+            <i class="fa fa-edit"></i>
+          </a>
+          <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button"
+            title = "Create a copy of this quest" >
+            <i class="fa fa-copy"></i>
+          </a>
+        {% endif %}
 
     {% else %}
 

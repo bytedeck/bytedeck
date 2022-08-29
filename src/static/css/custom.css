@@ -156,6 +156,13 @@ a.list-group-item-muted {
     border-color: #ddd;
 }
 
+/*************** Lists *******************/
+
+/* color for list view dropdown buttons across the site */
+.list-submenu-dropdown a{
+    color: #777;
+}
+
 /***********Submission ********************************/
 
 /***********ACCORDIAN COMMENTS *******************************/
@@ -180,15 +187,10 @@ a.list-group-item-muted {
     color: #555;
 }
 
-/* COMMENT and annoucnement higlights */
+/* COMMENT and announcement highlights */
 
 @keyframes temporaryHighlight {
     0% { background:  gold}
     50% { background: gold }
     100% { background: inherit }
-}
-
-/* Announcement menu button */
-.announcement-dropdown a{
-    color: #777;
 }
