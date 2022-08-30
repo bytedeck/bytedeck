@@ -55,9 +55,34 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Category
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class CategoryDetail(NonPublicOnlyViewMixin, DetailView):
+class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+    """The only category view non-staff users should have access to
+
+    A view that contains campaign information as well as a comprehensive list of 
+    quests in a given campaign that eschews the complexity and unreliability of maps, 
+    and changes dynamically based on the credentials of the user accessing it.
+    """
     model = Category
+
+    def get_context_data(self, **kwargs):
+        """Sets context data passed to the Category Detail view template
+
+        Currently only exists as a picker for which list of quests those who access the view will see:
+        - Staff users will see a complete list of quests currently in the viewed campaign
+        - Students or other non-staff users will only see active quests
+
+        Returns a dictionary containing default context info as well as a queryset that contains the 
+        appropriate quests a user will see; "category_displayed_quests".
+        """
+        if self.request.user.is_staff:
+            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
+        else:
+            # students shouldn't be able to see inactive quests when they access this view
+            # filtering before calling get_active, while likely less costly, changes the object
+            # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
+            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
+        
+        return super().get_context_data(**kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')
