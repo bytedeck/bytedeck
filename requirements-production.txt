@@ -1,6 +1,6 @@
 django-tenants>=3.4,<3.5
 backports.csv>=1.0.7,<1.1
-beautifulsoup4>=4.8,<4.9
+beautifulsoup4>=4.8,<4.12
 celery>=5.2.2,<5.3
 Django>=3.2,<3.3
 django-allauth>=0.41.0,<0.42
