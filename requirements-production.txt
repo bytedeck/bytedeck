@@ -21,7 +21,7 @@ django-redis>=5.2.0,<5.3
 django-select2>=6.3.1,<6.4
 django-summernote>=0.8,<0.9
 django-url-or-relative-url-field>=0.1.1,<0.2
-django-resized>=0.3.11,<0.4
+django-resized>=0.3.11,<1.1
 django-utils-six==2.0
 numpy>=1.21,<1.22
 Pillow>=9.0.0,<9.1
