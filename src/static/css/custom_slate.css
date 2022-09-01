@@ -213,6 +213,13 @@ a.list-group-item-muted {
   border-color: #2B669A;*/
 }
 
+/*************** Lists *******************/
+
+/* color for list view dropdown buttons across the site */
+.list-submenu-dropdown a{
+  color: rgb(200, 200, 200);
+}
+
 /***********ACCORDIAN COMMENTS *******************************/
 
 /************ TABS *****************************************/
@@ -283,15 +290,10 @@ input, textarea {
     color: #c8c8c8 !important;
 }
 
-/* COMMENT and annoucnement higlights */
+/* COMMENT and announcement highlights */
 
 @keyframes temporaryHighlight {
   0% { background:  black}
   50% { background:  black}
   100% { background: inherit }
-}
-
-/* Announcement menu button */
-.announcement-dropdown a{
-    color: rgb(200, 200, 200);
 }

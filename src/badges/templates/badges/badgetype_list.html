@@ -14,7 +14,9 @@
     <th>Title</th>
     <th>Icon</th>
     <th>Sort Order</th>
-    <th>Action</th>
+    <!-- empty header exists to extend header table to full length of object list table -->
+    <!-- header table coloring won't fill space completely otherwise -->
+    <th></th>
   </tr>
   {% for object in object_list %}
   <tr>
@@ -22,12 +24,16 @@
     <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
     <td>{{ object.sort_order }}</td>
     <td>
-      <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this badge_type">
-        <i class="fa fa-edit"></i>
-      </a>
-      <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this badge type">
-        <i class="fa fa-trash-o"></i>
-      </a>
+      <div class="dropdown list-submenu-dropdown pull-right">
+        <a class="dropdown-toggle" type="button" id="list-submenu-dropdown-id" data-toggle="dropdown"
+          aria-haspopup="true" aria-expanded="false">
+          <i class="fa fa-fw fa-ellipsis-v"></i>
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="list-submenu-dropdown-id">
+          <li><a href="{% url 'badges:badge_type_delete' object.id %}">Delete</a></li>
+          <li><a href="{% url 'badges:badge_type_update' object.id %}">Edit</a></li>
+        </ul>
+      </div>
     </td>
   </tr>
   {% endfor %}

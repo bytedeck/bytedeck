@@ -48,16 +48,16 @@
         </span>
         <!-- </a> -->
 
-        <div class="dropdown announcement-dropdown pull-right">
-          <a class="dropdown-toggle" type="button" id="announcement-dropdown-id" data-toggle="dropdown"
+        <div class="dropdown list-submenu-dropdown pull-right">
+          <a class="dropdown-toggle" type="button" id="list-submenu-dropdown-id" data-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
             <i class="fa fa-fw fa-ellipsis-v"></i>
           </a>
-          <ul class="dropdown-menu" aria-labelledby="announcement-dropdown-id">
+          <ul class="dropdown-menu" aria-labelledby="list-submenu-dropdown-id">
             {% if request.user.is_staff %}
-            <li class="announcement--delete"><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
-            <li class="announcement--edit"><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
-            <li class="announcement--copy"><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
+            <li class="list-submenu-action"><a href="{% url 'announcements:delete' object.id %}">Delete</a></li>
+            <li class="list-submenu-action"><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
+            <li class="list-submenu-action"><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
             {% if object.draft %}
               <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
             {% endif %}
@@ -160,20 +160,8 @@
       $(e.trigger).attr('title', 'Copied').tooltip('fixTitle').tooltip('show');
       $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
     });
-
-    // https://stackoverflow.com/a/37406402/3788603
-    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
-      e.stopPropagation();
-      $('.announcement-dropdown.open').removeClass('open');
-      $(this).closest('.dropdown').toggleClass('open');
-    });
-
-    $('.announcement--delete, .announcement--edit, .announcement--copy').click(function(e) {
-      e.stopPropagation();
-      $('.announcement-dropdown.open').removeClass('open');
-      $(this).closest('.dropdown').toggleClass('open');
-    });
-
-
   </script>
 {% endblock %}
+
+<!-- prevents dropdown button from triggering click events in parent div -->
+{% include "list_view_dropdown_fix.html" %}

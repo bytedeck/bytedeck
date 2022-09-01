@@ -13,7 +13,10 @@
     <div class="col-sm-1 col-xs-2 col-icon"></div>
     <div class="col-sm-5 col-xs-8">Quest</div>
     <div class="col-sm-1 col-xs-2 text-right">XP</div>
-    <div class="col-sm-2 hidden-xs text-center">Campaign</div>
+    <!-- don't need to label campaigns if accessing from a campaign detail view -->
+    {% if not '/quests/campaigns/' in request.path_info %}
+      <div class="col-sm-2 hidden-xs text-center">Campaign</div>
+    {% endif %}
     <div class="col-sm-1 hidden-xs text-center">Expiry</div>
     <div class="col-sm-2 hidden-xs"><!-- status_icons --></div>
   </div>
@@ -48,9 +51,12 @@
               {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
             </div>
             <div class="col-sm-1 col-xs-2 text-right">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</div>
-            <div class="col-sm-2 hidden-xs text-center"><small>
-              {% if q.campaign %}{{q.campaign}}{% endif %}
-            </small></div>
+            <!-- don't need to label campaigns if accessing from a campaign detail view -->
+            {% if not '/quests/campaigns/' in request.path_info %}
+              <div class="col-sm-2 hidden-xs text-center"><small>
+                {% if q.campaign %}{{q.campaign}}{% endif %}
+              </small></div>
+            {% endif %}
             <div class="col-sm-1 hidden-xs text-right"><small>
               {% if q.date_expired %}{{q.date_expired}}<br>{% endif %}
               {% if q.time_expired %}{{q.time_expired}}
@@ -58,7 +64,20 @@
               {% endif %}
             </small></div>
             <div id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></div>
-
+            <!-- edit/delete/copy submenu -->
+            {% if  request.user.is_staff or request.user == q.editor %}
+              <div class="dropdown list-submenu-dropdown col-sm-1 hidden-xs pull-right">
+                <a class="dropdown-toggle" type="button" id="quest-dropdown-id" data-toggle="dropdown"
+                  aria-haspopup="true" aria-expanded="false">
+                  <i class="fa fa-fw fa-ellipsis-v"></i>
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="quest-dropdown-id">
+                  <li class="list-submenu-action"><a href="{% url 'quests:quest_delete' q.id %}">Delete</a></li>
+                  <li class="list-submenu-action"><a href="{% url 'quests:quest_update' q.id %}">Edit</a></li>
+                  <li class="list-submenu-action"><a href="{% url 'quests:quest_copy' q.id %}">Copy</a></li>
+                </ul>
+              </div>
+            {% endif %}
           </h4>
         </div> <!-- row -->
       </div> <!-- accordian section heading -->
@@ -87,3 +106,6 @@
 {% else %}
   <p>No quests are available.</p>
 {% endif %}
+
+<!-- prevents dropdown button from triggering click events in parent div -->
+{% include "list_view_dropdown_fix.html" %}

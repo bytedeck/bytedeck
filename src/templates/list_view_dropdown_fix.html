@@ -1,0 +1,11 @@
+{% block js %}
+  <script>
+    // this code stops click events in the parent div of a pressed submenu element
+    // solution adapted from https://stackoverflow.com/a/37406402/3788603
+    $('.list-submenu-dropdown .dropdown-toggle, .list-submenu-action').click(function(e) {
+      e.stopPropagation();
+      $('.list-submenu-dropdown.open').removeClass('open');
+      $(this).closest('.dropdown').toggleClass('open');
+    });
+  </script>
+{% endblock %}
