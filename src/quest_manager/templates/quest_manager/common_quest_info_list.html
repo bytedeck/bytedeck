@@ -15,24 +15,24 @@
         a quest it will appear on that quest's page to the left, under the menu buttons.</p>
 
     <table class="table table-striped">
-        <thead class="thead-light">
-            <tr class="row">
-                <th class="col-sm-5" scope="col">Title</th>
-                <th class="col-sm-5" scope="col">Active</th>
-                <th class="col-sm-2" scope="col">Action</th>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Active</th>
+                <th>Action</th>
             </tr>
         </thead>
 
         <tbody>
             {% for object in object_list %}
-                <tr class="row">
-                    <td class="class-sm">
+            <tr {% if not object.active %} class="text-muted" {% endif %}>
+                    <td>
                         {{object.title}}
                     </td>
-                    <td class="class-sm">
+                    <td>
                         {{object.active}}
                     </td>
-                    <td class="class-sm">
+                    <td>
                         <a class="btn btn-warning" href="{% url 'quest_manager:commonquestinfo_update' pk=object.pk %}" role="button" title="Edit this page">
                             <i class="fa fa-edit"></i>
                         </a>

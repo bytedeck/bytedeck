@@ -22,44 +22,47 @@
 </p>
 
 <table class="table table-striped">
-  <tr>
-    <th>First Day</th>
-    <th>Last Day</th>
-    <th>Total Days</th>
-    <th># Excluded Dates</th>
-    <th>Closed</th>
-    <!-- <th>Active</th> -->
-    <th>Action</th>
-  </tr>
-  {% for object in object_list %}
-  <tr {% if object == config.active_semester %}class="success" title="This is your currently active semester."{% endif %}>
-    <td>{{ object.first_day }}</td>
-    <td>{{ object.last_day }}</td>
-    <td>{{ object.num_days }}</td>
-    <td>{{ object.excludeddate_set.count }}</td>
-    <td>{{ object.closed }}</td>
-
-    <!-- <td>{% if object == config.active_semester %}True{% else %}False{% endif %}</td> -->
-    <td>
-      {% if not object.closed %}
-      <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
-        <i class="fa fa-edit"></i>
-      </a>
-      {% endif %}
-      {% if not object.closed and object == config.active_semester%} 
-      <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button" 
-        title="WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements, and delete any in-progress submissions.">
-        <i class="fa fa-calendar-times-o"></i>
-      </a>
-      {% endif %}
-      {% if not object.closed and object != config.active_semester %}
-      <a class="btn btn-success" href="{% url 'courses:semester_activate' object.id %}" role="button" title="Activate this semester">
-        <i class="fa fa-calendar-check-o"></i>
-      </a>
-      {% endif %}
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>First Day</th>
+      <th>Last Day</th>
+      <th>Total Days</th>
+      <th># Excluded Dates</th>
+      <th>Closed</th>
+      <!-- <th>Active</th> -->
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr {% if object == config.active_semester %}class="success" title="This is your currently active semester."{% endif %}>
+      <td>{{ object.first_day }}</td>
+      <td>{{ object.last_day }}</td>
+      <td>{{ object.num_days }}</td>
+      <td>{{ object.excludeddate_set.count }}</td>
+      <td>{{ object.closed }}</td>
+      <!-- <td>{% if object == config.active_semester %}True{% else %}False{% endif %}</td> -->
+      <td>
+        {% if not object.closed %}
+        <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
+          <i class="fa fa-edit"></i>
+        </a>
+        {% endif %}
+        {% if not object.closed and object == config.active_semester%}
+        <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button"
+          title="WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements, and delete any in-progress submissions.">
+          <i class="fa fa-calendar-times-o"></i>
+        </a>
+        {% endif %}
+        {% if not object.closed and object != config.active_semester %}
+        <a class="btn btn-success" href="{% url 'courses:semester_activate' object.id %}" role="button" title="Activate this semester">
+          <i class="fa fa-calendar-check-o"></i>
+        </a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 
 {% endblock %}

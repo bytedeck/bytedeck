@@ -12,29 +12,31 @@
 
 {% block content %}
 <table class="table table-striped">
-  <tr>
-    <th>Title</th>
-    <th>Icon</th>
-    <th>XP for 100%</th>
-    <th>Active</th>
-    <th>Action</th>
-  </tr>
-  {% for object in object_list %}
-  <tr>
-    <td>{{ object.title }}</td>
-    <td>{% if object.icon %}<img src="{{ object.icon.url }}" width="50" height="50">{% endif %}</td>
-    <td>{{ object.xp_for_100_percent }}</td>
-    <td>{{ object.active }}</td>
-    <td>
-      <a class="btn btn-warning" href="{% url 'courses:course_update' object.id %}" role="button" title="Edit this course">
-        <i class="fa fa-edit"></i>
-      </a>
-      <a class="btn btn-danger" href="{% url 'courses:course_delete' object.id %}" role="button" title="Delete this course">
-        <i class="fa fa-trash-o"></i>
-      </a>
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>XP for 100%</th>
+      <th>Active</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr {% if not object.active %} class="text-muted" {% endif %}>
+      <td>{{ object.title }}</td>
+      <td>{{ object.xp_for_100_percent }}</td>
+      <td>{{ object.active }}</td>
+      <td>
+        <a class="btn btn-warning" href="{% url 'courses:course_update' object.id %}" role="button" title="Edit this course">
+          <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'courses:course_delete' object.id %}" role="button" title="Delete this course">
+          <i class="fa fa-trash-o"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
 
