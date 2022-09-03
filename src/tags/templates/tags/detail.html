@@ -11,7 +11,7 @@
 
 {% block content %}
 
-<br>
+{% if user_obj %}<p>Total XP earned: {{ user_xp_by_this_tag }}</p>{% else %}{% endif %}
 {% include 'tags/snippets/related-xp-item.html' with type='default' %}
 
 {% endblock %}
