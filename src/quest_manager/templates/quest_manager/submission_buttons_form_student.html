@@ -1,0 +1,17 @@
+<div class="btn-group" role="group">
+
+    {% if not completed %}
+        <button type='submit' name='complete' class='btn btn-info'
+                title='RE-SUBMIT this quest for approval'>
+        <i class="fa fa-fw fa-check"></i>
+        Re-Submit Quest
+        </button>
+    {% else %}
+        <button type='submit' name='comment' class='btn btn-primary'
+                title='Add a comment to this submission'>
+        <i class="fa fa-fw fa-comment"></i>
+        Add Comment
+        </button>
+    {% endif %}
+
+</div>

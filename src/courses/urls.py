@@ -1,7 +1,5 @@
 from django.urls import path
 
-from jchart.views import ChartView
-
 from utilities.views import ModelAutocomplete
 from courses import views
 from courses import models
@@ -28,6 +26,7 @@ urlpatterns = [
     # CourseStudent
     path('add/student/', views.CourseStudentCreate.as_view(), name='create'),
     path('join/<int:user_id>/', views.CourseAddStudent.as_view(), name='join'),
+    path('edit/<pk>/', views.CourseStudentUpdate.as_view(), name='update'),
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),
@@ -40,9 +39,8 @@ urlpatterns = [
     path('marks/', views.mark_calculations, name='my_marks'),
     path('marks/<int:user_id>', views.mark_calculations, name='marks'),
     path('ajax/progress_chart/<int:user_id>/', views.ajax_progress_chart, name='ajax_progress_chart'),
-
-    path('charts/bar_chart/<int:user_id>)/', ChartView.from_chart(models.MarkDistributionHistogram()),
-         name='mark_distribution_chart'),
+    path('ajax/marks_bar_chart/<int:user_id>/', views.Ajax_MarkDistributionChart.as_view(), name='mark_distribution_chart'),
+    path('ajax/tag_progress_chart/<int:user_id>/', views.Ajax_TagChart.as_view(), name='ajax_tag_progress_chart'),
 
     # Course
     path('list/', views.CourseList.as_view(), name='course_list'),

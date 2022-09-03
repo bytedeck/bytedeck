@@ -162,7 +162,7 @@ class QuestManagerTest(TenantTestCase):
     # def test_quest_qs_get_list_not_submitted_or_inprogress(self):
     #     """
     #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that
-    #     have not been started (in progress or submitted for completion),
+    #     have not been started (in progress or submitted for approval),
     #     or if it has been completed already, that it is a repeatable quest past the repeat time
     #     """
     #     self.make_test_quests_and_submissions_stack()

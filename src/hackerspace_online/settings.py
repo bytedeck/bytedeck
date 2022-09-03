@@ -74,7 +74,6 @@ SHARED_APPS = (
     'bootstrap_datepicker_plus',
     'embed_video',
     'django_select2',
-    'jchart',
     'url_or_relative_url_field',
     'import_export',
     'colorful',
@@ -176,9 +175,6 @@ INSTALLED_APPS = (
 
     # https://github.com/applegrew/django-select2
     'django_select2',
-
-    # https://github.com/matthisk/django-jchart
-    'jchart',
 
     # https://github.com/timonweb/django-url-or-relative-url-field
     'url_or_relative_url_field',

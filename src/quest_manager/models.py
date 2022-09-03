@@ -29,7 +29,10 @@ class Category(IsAPrereqMixin, models.Model):
     """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
-    active = models.BooleanField(default=True)
+    active = models.BooleanField(
+        default=True,
+        help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
+    )
 
     class Meta:
         verbose_name = "campaign"
@@ -147,7 +150,11 @@ class XPItem(models.Model):
 
     class Meta:
         abstract = True
-        ordering = ["-sort_order", "-time_expired", "-date_expired", "name"]
+        # manual ordering of a quest queryset places quests with smaller sort_order values above larger ones by default
+        # as such, the original value for sort_order (-sort_order,) orders quests upside-down 
+        # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
+        # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
+        ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
 
     def __str__(self):
         return self.name
@@ -191,14 +198,19 @@ class XPItem(models.Model):
         """
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
 
-        # not available yet today
+        # an XPItem object is inactive if its availability date is in the future
         if self.date_available > now_local.date():
             return False
 
-        # available today, but not time yet
+        # an XPItem object is inactive on the day it's made available if its availability time is in the future
         if self.date_available == now_local.date() and self.time_available > now_local.time():
             return False
+        
+        # a Quest object is inactive if it's a part of an inactive campaign
+        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
+            return False
 
+        # an XPitem object is active if all of the previous criteria are met and it's both visible to students and not expired
         return self.visible_to_students and not self.expired()
 
     def is_available(self, user):
@@ -276,6 +288,12 @@ class QuestQuerySet(models.query.QuerySet):
 
     def visible(self):
         return self.filter(visible_to_students=True)
+    
+    def active_or_no_campaign(self):
+        """With self as an argument, returns a filtered queryset 
+        containing only quests in active campaigns or quests without campaigns.
+        """
+        return self.exclude(campaign__active=False)
 
     def not_archived(self):
         return self.exclude(archived=True)
@@ -345,30 +363,31 @@ class QuestManager(models.Manager):
         return qs
 
     def get_active(self):
-        return self.get_queryset().datetime_available().not_expired().visible()
+        return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
 
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
         2. Quests that are not visible to students or archived
-        3. Quests who's prerequisites have not been met
-        4. Quests that are not currently submitted for approval or already in progress
-        5. Quests who's maximum repeats have been completed
-        6. Quests who's repeat time has not passed since last completion
-        7. Check for blocking quests (available and in-progress), if present, remove all others
+        3. Quests that are a part of an inactive campaign
+        4. Quests whose prerequisites have not been met
+        5. Quests that are not currently submitted for approval or already in progress
+        6. Quests whose maximum repeats have been completed
+        7. Quests whose repeat time has not passed since last completion
+        8. Check for blocking quests (available and in-progress), if present, remove all others
         """
-        qs = self.get_active().select_related('campaign')  # exclusions 1 & 2
-        qs = qs.get_conditions_met(user)  # 3
-        available_quests = qs.not_submitted_or_inprogress(user)  # 4,5 & 6
+        qs = self.get_active().select_related('campaign')  # exclusions 1, 2 & 3
+        qs = qs.get_conditions_met(user)  # 4
+        available_quests = qs.not_submitted_or_inprogress(user)  # 5, 6 & 7
 
-        available_quests = available_quests.block_if_needed(user=user)  # 7
+        available_quests = available_quests.block_if_needed(user=user)  # 8
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
-        return qs.get_list_not_submitted_or_inprogress(user)
+        return qs.not_submitted_or_inprogress(user)
 
     def all_drafts(self, user):
         qs = self.get_queryset().filter(visible_to_students=False)

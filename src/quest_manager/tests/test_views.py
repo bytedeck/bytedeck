@@ -22,7 +22,7 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
-from quest_manager.models import Category, Quest, QuestSubmission, CommonData
+from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
@@ -214,13 +214,13 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         Quest.objects.all().delete()
         self.assertFalse(Quest.objects.get_available(user).exists())
 
-        # quest should be in 'in-progress' ===
+        # quest should be in 'in-progress'
         quest = baker.make(Quest)
         QuestSubmission.objects.create_submission(user, quest)
 
         # conditions for msg to show
         inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)  # should exist
-        available = Quest.objects.get_available(user, True)  # should not exist
+        available = Quest.objects.get_available(user)  # should not exist
         self.assertTrue(inprogress.exists()) 
         self.assertFalse(available.exists())
 
@@ -252,7 +252,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # No new quests and conditions above do not apply ===
 
         # assert last 3 conditions as false
-        available = Quest.objects.get_available(user, True)
+        available = Quest.objects.get_available(user)
         inprogress = QuestSubmission.objects.all_not_completed(user, blocking=True)
         approval = QuestSubmission.objects.filter(user=user, is_approved=False, is_completed=True)
         self.assertFalse(available.exists())
@@ -264,6 +264,26 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(url)
         self.assertContains(response, "No quests are available.")
         self.assertContains(response, "There are currently no new quest available to you!")
+
+        # Only hidden quests #################################################
+    
+        # add a new quest available to the user
+        quest = baker.make(Quest, name="hide me")
+        # but adding a new quest won't make it appear in their available list, because the available list is cached 
+        # and doesn't recalculate during tests (celery tasks are not run), so let force a recalculation
+        from prerequisites.tasks import update_quest_conditions_for_user
+        update_quest_conditions_for_user(user.id)
+
+        # Make sure it's available
+        self.assertTrue(Quest.objects.get_available(user).exists())
+
+        # Now hide it
+        user.profile.hide_quest(quest.id)
+        self.assertEqual(user.profile.num_hidden_quests(), 1)  # Sanity check that the quest is hidden
+        self.assertFalse(Quest.objects.get_available(user).exists())  # Should not show up here cus hidden
+        response = self.client.get(url)
+        self.assertContains(response, "You have no new quests available")
+        self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
 
 
 class SubmissionViewTests(TenantTestCase):
@@ -368,7 +388,7 @@ class SubmissionViewTests(TenantTestCase):
 
     def test_hidden_submission_does_not_contain_submit_button(self):
         """
-        Make sure that submit for completion button is hidden since it's not available
+        Make sure that submit for approval button is hidden since it's not available
         for students to submit anymore.
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -570,9 +590,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
             )
         return response
 
-    def test_complete(self):
+    def test_complete_quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
-        Are redirected to their available quests page, submission is marked completed and has a completion time
+        Are redirected to their available quests page, submission is marked completed and has a completion time.
+        Tests for file-less submissions are labeled under the quick reply form because of the form selection
+        logic in the view being tested, but are still possible from the standard submission form.
         """
         comment = "test submission comment"
         response = self.post_complete(submission_comment=comment)
@@ -587,7 +609,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, comment)
 
-    def test_no_comment_verification_not_required(self):
+    def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
         """
         self.sub.quest.verification_required = False
@@ -600,7 +622,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertSuccessMessage(response)
 
-    def test_no_comment_but_verification_required(self):
+    def test_no_comment_but_verification_required_quick_reply_form(self):
         """ When a quest requires teacher's approval, it means they must include either files or a comment
         """
         self.sub.quest.verification_required = True
@@ -1459,6 +1481,29 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
 
+    def test_available_quest_list_ordering(self):
+        """Parses for queryset used as context for "Available Quests" list and asserts equal to a 
+        manually ordered queryset.
+        """
+
+        # log in as teacher and access available quests view
+        self.client.force_login(self.test_teacher)
+        staff_response = self.client.get(reverse('quests:available'))
+
+        # log in as student and access available quests view
+        self.client.force_login(self.test_student)
+        student_response = self.client.get(reverse('quests:available'))
+
+        # get queryset from view context and order it as intended
+        for response in [staff_response, student_response]:
+            displayed_order = response.context['available_quests']
+
+            # proper quest ordering is pulled directly from the parent model XPItem's "ordering" meta value
+            intended_order = displayed_order.order_by(*XPItem._meta.ordering)
+
+            # assert ordered view is unchanged from displayed view
+            self.assertQuerysetEqual(displayed_order, intended_order)
+
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
@@ -1489,10 +1534,12 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Staff access only
         self.assert403('quests:categories')
-        self.assert403('quests:category_detail', kwargs={"pk": 1})
         self.assert403('quests:category_create')
         self.assert403('quests:category_update', args=[1])
         self.assert403('quests:category_delete', args=[1])
+
+        # Student access
+        self.assert200('quests:category_detail', kwargs={"pk": 1})
 
     def test_all_page_status_codes_for_staff(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
@@ -1508,10 +1555,36 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_CategoryDetail_view(self):
-        """ Admin should be able to view course details """
+        """ Admin and students should be able to view course details 
+        
+        Students accessing the category detail view should only see active quests
+        Admin should see every quest assigned to the campaign
+        """
+
+        # campaign with visible and non-visible quest created to test visibility for Admin and Student
+        view_test_campaign = baker.make(Category)
+        baker.make(Quest, visible_to_students=True, campaign=view_test_campaign)
+        baker.make(Quest, visible_to_students=False, campaign=view_test_campaign)
+
+        # Admin should be able to access view
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": 1}))
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
         self.assertEqual(response.status_code, 200)
+
+        # Admin should be able to see every quest assigned to the viewed campaign
+        displayed_quests = response.context["category_displayed_quests"]
+        intended_quests = Quest.objects.filter(campaign=view_test_campaign)
+        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
+
+        # Students should be able to access view
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
+        self.assertEqual(response.status_code, 200)
+
+        # Students should only be able to see active quests assigned to the viewed campaign
+        displayed_quests = response.context["category_displayed_quests"]
+        intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
+        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
 
     def test_CategoryCreate_view(self):
 

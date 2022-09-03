@@ -24,7 +24,7 @@
   </div>
 </div>
 
-{% if category.quest_set.all %}
+{% if category_displayed_quests %}
   <div class="row panel-heading">
     <div class="col-sm-1 col-xs-2 col-icon"></div>
     <div class="col-sm-5 col-xs-8">Quest</div>
@@ -34,7 +34,7 @@
   <div class="panel-group panel-group-packed" id="accordion-available"
     role="tablist" aria-multiselectable="true">
 
-  {% for q in category.quest_set.all %}
+  {% for q in category_displayed_quests %}
 
     <div class="panel accordian
       {% if not q.visible_to_students %}panel-danger

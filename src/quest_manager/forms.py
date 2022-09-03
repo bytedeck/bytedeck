@@ -54,6 +54,7 @@ class QuestForm(forms.ModelForm):
     campaign = forms.ModelChoiceField(
         queryset=Category.objects.all(),
         required=False,
+        limit_choices_to={'active': True}
     )
 
     class Meta:
@@ -268,6 +269,10 @@ class SubmissionQuickReplyForm(forms.Form):
     def __init__(self, *args, **kwds):
         super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
+
+
+class SubmissionQuickReplyFormStudent(forms.Form):
+    comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
 
 class CommonDataForm(forms.ModelForm):

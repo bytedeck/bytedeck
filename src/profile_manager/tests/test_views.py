@@ -93,6 +93,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('profiles:profile_detail', args=[s_pk])
         self.assert200('profiles:profile_update', args=[s_pk])
+        self.assert200('profiles:tag_chart', args=[s_pk])
 
         self.assert200('profiles:profile_list_current')
 
@@ -125,6 +126,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('profiles:profile_list_current')
         self.assert200('profiles:profile_list_staff')
         self.assert200('profiles:profile_list_inactive')
+        self.assert200('profiles:tag_chart', args=[s_pk])
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)

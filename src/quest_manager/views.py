@@ -24,13 +24,14 @@ from hackerspace_online.decorators import staff_member_required
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
+from quest_manager.models import XPItem
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import (QuestForm, SubmissionForm, SubmissionFormCustomXP, SubmissionFormStaff,
-                    SubmissionQuickReplyForm, TAQuestForm, CommonDataForm)
+                    SubmissionQuickReplyForm, SubmissionQuickReplyFormStudent, TAQuestForm, CommonDataForm)
 from .models import Quest, QuestSubmission, Category, CommonData
 
 User = get_user_model()
@@ -54,9 +55,34 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Category
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class CategoryDetail(NonPublicOnlyViewMixin, DetailView):
+class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+    """The only category view non-staff users should have access to
+
+    A view that contains campaign information as well as a comprehensive list of 
+    quests in a given campaign that eschews the complexity and unreliability of maps, 
+    and changes dynamically based on the credentials of the user accessing it.
+    """
     model = Category
+
+    def get_context_data(self, **kwargs):
+        """Sets context data passed to the Category Detail view template
+
+        Currently only exists as a picker for which list of quests those who access the view will see:
+        - Staff users will see a complete list of quests currently in the viewed campaign
+        - Students or other non-staff users will only see active quests
+
+        Returns a dictionary containing default context info as well as a queryset that contains the 
+        appropriate quests a user will see; "category_displayed_quests".
+        """
+        if self.request.user.is_staff:
+            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
+        else:
+            # students shouldn't be able to see inactive quests when they access this view
+            # filtering before calling get_active, while likely less costly, changes the object
+            # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
+            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
+        
+        return super().get_context_data(**kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -387,6 +413,12 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             available_quests = Quest.objects.get_available(request.user, remove_hidden)
         else:
             available_quests = Quest.objects.get_available_without_course(request.user)
+    
+    # this logic is in place as a temporary fix to issue #1162 (https://github.com/bytedeck/bytedeck/issues/1162)
+    # once a solution is found for the root cause of this issue, this line should be deleted.
+    # likely stems from PR #1158 (https://github.com/bytedeck/bytedeck/pull/1158)
+    # proper quest ordering is pulled directly from the parent model XPItem's "ordering" meta value
+    available_quests = available_quests.order_by(*XPItem._meta.ordering)
 
     available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
 
@@ -398,6 +430,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     past_submissions_count = past_submissions.count()
+
+    quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
 
     if in_progress_tab_active:
         in_progress_submissions = paginate(in_progress_submissions, page)
@@ -450,6 +484,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_tab_active": completed_tab_active,
         "past_tab_active": past_tab_active,
         "drafts_tab_active": drafts_tab_active,
+        "quick_reply_form": quick_reply_form
     }
     return render(request, template, context)
 
@@ -876,8 +911,10 @@ def complete(request, submission_id):
 
         if submission.quest.xp_can_be_entered_by_students and not submission.is_approved:
             form = SubmissionFormCustomXP(request.POST, request.FILES)
-        else:
+        elif request.FILES:
             form = SubmissionForm(request.POST, request.FILES)
+        else:
+            form = SubmissionQuickReplyFormStudent(request.POST)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')

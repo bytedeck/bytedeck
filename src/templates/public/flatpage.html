@@ -1,9 +1,14 @@
 {% extends 'public/base.html' %}
+{% load static %}
+
+{% block navbar_brand %}
+<a class="navbar-brand ml-5" href="/"><img class="BD-nav-img" src="{% static 'public/images/bytedeck-header-brand-dark.png' %}"></a>
+{% endblock %}
 
 {% block content %}
 <div class="BG-BD-White" id="top">
     <div class="row justify-content-center" >
-        <div class="col-lg-11 col-xl-10 BD-content1">
+        <div class="col-md-11 col-lg-10 col-xl-8 BD-content1">
         {{ flatpage.content | safe }}
         </div>
     </div>

@@ -9,8 +9,8 @@ from django.views.generic.list import ListView
 
 from hackerspace_online.decorators import staff_member_required
 
-from badges.models import Badge, BadgeAssertion
-from quest_manager.models import Quest, QuestSubmission
+from badges.models import Badge
+from quest_manager.models import Quest
 from siteconfig.models import SiteConfig
 
 from tags.forms import TagForm
@@ -20,6 +20,7 @@ from tenant.views import NonPublicOnlyViewMixin
 
 # from dal import autocomplete
 from taggit.models import Tag
+from .models import get_quest_submission_by_tag, get_badge_assertion_by_tags, total_xp_by_tags
 
 # USE GENERIC utilities.views.ModelAutoComplete instead, might need this in the future if further customization is needed
 # class TagAutocomplete(autocomplete.Select2QuerySetView):
@@ -47,18 +48,13 @@ class TagList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     template_name = 'tags/list.html'
 
 
-class TagDetailMixin(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+class TagDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+    """ abstract view for TagDetailStudent and TagDetailStaff """
     model = Tag
     template_name = 'tags/detail.html'
 
-    def get_context_data(self, **kwargs):
-        kwargs['quests'] = self.get_quest_queryset()
-        kwargs['badges'] = self.get_badge_queryset()
 
-        return super().get_context_data(**kwargs)
-
-
-class TagDetailStudent(TagDetailMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+class TagDetailStudent(TagDetail):
 
     def get_object(self):
         pk = self.request.GET.get('tag_pk')
@@ -75,31 +71,62 @@ class TagDetailStudent(TagDetailMixin, NonPublicOnlyViewMixin, LoginRequiredMixi
 
         return super().get(*args, **kwargs)
 
-    def get_quest_queryset(self):
-        # returns all quest objects related to tag and user
-        return QuestSubmission.objects.filter(
-                    user=self.user, quest__tags__name=self.object.name
-                ).order_by('quest__id').distinct('quest__id').select_related('quest').all()
+    def get_quest_submissions(self):
+        submissions = get_quest_submission_by_tag(self.user, [self.object.name]).order_by('quest', 'ordinal')
 
-    def get_badge_queryset(self):
-        # returns all badge objects related to tag and user
-        return BadgeAssertion.objects.filter(
-                    user=self.user, badge__tags__name=self.object.name
-                ).order_by('badge__id').distinct('badge__id').select_related('badge').all()
+        # inject 'is_multiple' var into QuestSubmission object (basically the same as annotate)
+        # conditional if there are multiple submissions pointing to quest
+        for submission in submissions:
+            ordinal_check = submission.ordinal > 1
+            multiple = submissions.filter(quest__id=submission.quest.id).count() > 1
+
+            setattr(submission, 'is_multiple', ordinal_check or multiple)
+
+        return submissions
+
+    def get_badge_assertions(self):
+        assertions = get_badge_assertion_by_tags(self.user, [self.object.name]).order_by('badge', 'ordinal')
+
+        # inject 'is_multiple' var into BadgeAssertion object (basically the same as annotate)
+        # conditional if there are multiple assertions pointing to badge
+        for assertion in assertions:
+            ordinal_check = assertion.ordinal > 1
+            multiple = assertions.filter(badge__id=assertion.badge.id).count() > 1
+
+            setattr(assertion, 'is_multiple', ordinal_check or multiple)
+
+        return assertions
 
     def get_context_data(self, **kwargs):
         kwargs['user_obj'] = self.user
+        kwargs['user_xp_by_this_tag'] = total_xp_by_tags(self.user, [self.object])
+
+        submissions = self.get_quest_submissions()
+        kwargs['quest_submissions'] = submissions
+        kwargs['quest_submission_length'] = len(submissions)
+
+        assertions = self.get_badge_assertions()
+        kwargs['badge_assertions'] = assertions
+        kwargs['badge_assertion_length'] = len(assertions)
+
         return super().get_context_data(**kwargs) 
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class TagDetailStaff(TagDetailMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
+class TagDetailStaff(TagDetail):
 
-    def get_quest_queryset(self):
-        return Quest.objects.filter(tags__name=self.object.name)
+    def get_context_data(self, **kwargs):
+        kwargs['view'] = 'staff'
 
-    def get_badge_queryset(self):
-        return Badge.objects.filter(tags__name=self.object.name)
+        quests = Quest.objects.filter(tags__name=self.object.name)
+        kwargs['quests'] = quests
+        kwargs['quest_length'] = len(quests)
+
+        badges = Badge.objects.filter(tags__name=self.object.name)
+        kwargs['badges'] = badges
+        kwargs['badge_length'] = len(badges)
+
+        return super().get_context_data(**kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')

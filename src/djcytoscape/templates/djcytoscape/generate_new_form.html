@@ -1,19 +1,25 @@
 {% extends "djcytoscape/base.html" %}
 {% load crispy_forms_tags %}
 {% block heading_inner %}Generate a New Quest Map{% endblock%}
+
+{% block head %}
+  {{ form.media }}
+{% endblock %}
+
 {% block content %}
+
     {% if interlink %}
         <p>This quest map doesn't exist yet, but you can create it here.  Students who attempt to click the link that
         took you here will see a Page not found (404) error page until the map is created.</p>
 
         <p>Additional settings can be edited after the map has been generated.</p>
     {% endif %}
+    
     <form action="" method="post">
-    {% csrf_token %}
-    {{ form|crispy }}
-    <input type="submit" value="Generate a new Map starting from this Quest" class="btn btn-success"/>
-    <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
-</form>
+        {% csrf_token %}
+        {{ form|crispy }}
+        <input type="submit" value="Generate a new Map starting from this object." class="btn btn-success"/>
+        <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
+    </form>
+
 {% endblock %}
-
-

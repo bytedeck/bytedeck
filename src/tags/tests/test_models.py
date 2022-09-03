@@ -5,7 +5,10 @@ from django.db.utils import ProgrammingError
 from model_bakery import baker
 
 from taggit.models import Tag
-from tags.models import total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp
+from tags.models import (
+    total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags,
+    get_quest_submission_total_xp, get_badge_assertion_total_xp,
+)
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
@@ -56,6 +59,50 @@ class TagHelper:
         badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
 
         return badge, badge_assertion
+
+
+class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTestCase):
+    """ 
+        Specialized TestClass for both get_quest_submission_by_tags and get_badge_assertion_by_tags
+    """ 
+    def setUp(self):
+        self.user = baker.make(User)
+
+    def test_multiple_quest_submission_tagged(self):
+        """  check if multiple tags can be caught by get_quest_submission_by_tag """
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag0')
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag1')
+
+        for i in range(2):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('tag2')
+
+        quest_submission_qs = get_quest_submission_by_tag(self.user, ['tag0', 'tag1', 'tag2'])
+        self.assertEqual(quest_submission_qs.count(), 6)
+
+    def test_multiple_badge_assertion_tagged(self):
+        """  check if multiple tags can be caught by get_badge_assertion_by_tags """
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag0')
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag1')
+
+        for i in range(2):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('tag2')
+
+        badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['tag0', 'tag1', 'tag2'])
+        self.assertEqual(badge_assertion_qs.count(), 6)
 
 
 class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
@@ -203,9 +250,12 @@ class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
         self.assertEqual(tag_names, unpacked_tag_tuples)
 
 
-class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
+class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTestCase):
     """ 
-        Specialized TestClass for testing total_xp_by_tags function
+        Specialized TestClass for testing function: 
+            total_xp_by_tags 
+            get_quest_submission_total_xp
+            get_badge_assertion_total_xp
     """ 
 
     def setUp(self):
@@ -236,8 +286,57 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
             total_xp_by_tags(self.user, Tag.objects.all())
         except ProgrammingError:
             self.fail("total_xp_by_tags raised ProgrammingError when using queryset as input")
-        
+
     # QUEST ONLY TESTS
+
+    def test_submission_with_xp_requested(self):
+        """ 
+            Verify that the xp_requested value is being used instead of quest.xp.
+            This could happen when `quest.xp_can_be_entered_by_students = True`, which means the
+            submissions might have an `xp_requested` value.
+        """
+
+        # Sanity check: should be no XP by this tag yet
+        self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 0)
+
+        quest = baker.make(Quest, xp=50, xp_can_be_entered_by_students=True)
+        quest.tags.add("TEST")
+        baker.make(
+            QuestSubmission, 
+            quest=quest, 
+            xp_requested=100,  # Requesting 100 XP and it's been approved
+            user=self.user, 
+            is_completed=True, 
+            is_approved=True, 
+            semester=SiteConfig().get().active_semester,
+        )
+
+        # Method should recognize the 100 XP requested and approved, instead of quest.xp = 50:
+        self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 100)
+
+    def test_submission_with_max_xp_surpassed(self):
+        """ 
+            Verify that no more than quest.max_xp is counted toward a tag's XP when there are multiple submissions of the same quest.
+            Create 3 submissions of a 50XP quest, but quest.max_xp=100 so this method should return 100
+        """
+
+        # Sanity check: should be no XP by this tag yet
+        self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 0)
+
+        quest = baker.make(Quest, xp=50, max_xp=100)  # Can earn no more than 100 XP for this quest
+        quest.tags.add("TEST")
+        baker.make(
+            QuestSubmission, 
+            quest=quest, 
+            user=self.user, 
+            is_completed=True, 
+            is_approved=True, 
+            semester=SiteConfig().get().active_semester,
+            _quantity=3  # 3 submissions of this quest approved = 150 XP, but max counted should be 100
+        )
+
+        # Method should recognize a max of 100XP, instead of 150 (3 * quest.xp):
+        self.assertEqual(total_xp_by_tags(self.user, ["TEST"]), 100)  
 
     def test_one_tag_quests_only(self):
         """ 
@@ -251,6 +350,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
             quest.tags.add("TAG")
 
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), sum(xp_list))
+        self.assertEqual(get_quest_submission_total_xp(self.user, ["TAG"]), sum(xp_list))
 
     def test_multiple_separate_tags_quests_only(self):
         """ 
@@ -266,6 +366,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
             quest.tags.add(tag_name)
 
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
+        self.assertEqual(get_quest_submission_total_xp(self.user, tag_list), sum(xp_list))
 
     def test_multiple_crossing_tags_quests_only(self):
         """ 
@@ -283,6 +384,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
 
         unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
+        self.assertEqual(get_quest_submission_total_xp(self.user, unpacked_tag_tuples), sum(xp_list))
 
     def test_one_tag_multiple_quests_only(self):
         """ 
@@ -299,6 +401,8 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
         calculated_xp = total_xp_by_tags(self.user, ["TAG"])
         expected_xp = sum(xp_list[i] * quantity_list[i] for i in range(len(xp_list)))
         self.assertEqual(calculated_xp, expected_xp)
+
+        self.assertEqual(get_quest_submission_total_xp(self.user, ["TAG"]), expected_xp)
 
     def test_one_tag_quests_only__different_semesters(self):
         """ 
@@ -321,6 +425,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
             submissions[0].save()
 
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), 100)
+        self.assertEqual(get_quest_submission_total_xp(self.user, ["TAG"]), 100)
 
     # BADGE ONLY TESTS
 
@@ -334,8 +439,9 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
         for xp in xp_list:
             badge, _ = self.create_badge_and_assertions(xp)
             badge.tags.add("TAG")
-
+        
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), sum(xp_list))
+        self.assertEqual(get_badge_assertion_total_xp(self.user, ["TAG"]), sum(xp_list))
 
     def test_multiple_separate_tags_badges_only(self):
         """ 
@@ -351,6 +457,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
             badge.tags.add(tag_name)
 
         self.assertEqual(total_xp_by_tags(self.user, tag_list), sum(xp_list))
+        self.assertEqual(get_badge_assertion_total_xp(self.user, tag_list), sum(xp_list))
 
     def test_multiple_crossing_tags_badges_only(self):
         """ 
@@ -368,6 +475,7 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
 
         unpacked_tag_tuples = [tag_tuple[index] for tag_tuple in tag_tuples for index in range(len(tag_tuple))]
         self.assertEqual(total_xp_by_tags(self.user, unpacked_tag_tuples), sum(xp_list))
+        self.assertEqual(get_badge_assertion_total_xp(self.user, unpacked_tag_tuples), sum(xp_list))
 
     def test_one_tag_multiple_badges_only(self):
         """ 
@@ -385,12 +493,14 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
         expected_xp = sum(xp_list[i] * quantity_list[i] for i in range(len(xp_list)))
         self.assertEqual(calculated_xp, expected_xp)
 
+        self.assertEqual(get_badge_assertion_total_xp(self.user, ["TAG"]), expected_xp)
+
     def test_one_tag_badge_only__different_semesters(self):
         """ 
             See if correct xp is returned using only one tag + badges with multiple BadgeAssertions in different semesters
         """ 
         # generate quest in active sem
-        badge, assertions = self.create_quest_and_submissions(100)
+        badge, assertions = self.create_badge_and_assertions(100)
         badge.tags.add("TAG")
 
         assertions[0].semester = SiteConfig().get().active_semester
@@ -399,13 +509,14 @@ class Tag_total_xp_by_tags_Tests(TagHelper, TenantTestCase):
         # generate quests outside of active sem
         semester_set = baker.make("courses.semester", _quantity=2)
         for semester in semester_set:
-            badge, assertions = self.create_quest_and_submissions(399)
+            badge, assertions = self.create_badge_and_assertions(399)
             badge.tags.add("TAG")
 
             assertions[0].semester = semester
             assertions[0].save()
 
         self.assertEqual(total_xp_by_tags(self.user, ["TAG"]), 100)
+        self.assertEqual(get_badge_assertion_total_xp(self.user, ["TAG"]), 100)
 
     # QUEST + BADGE TESTS
 
