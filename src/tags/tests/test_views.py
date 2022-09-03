@@ -137,30 +137,34 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
             Students should only have access to quest and badges they have completed/earned
         """ 
         # generate quests + badges and link to tag
-        quest_set = baker.make('quest_manager.quest', _quantity=5)
-        badge_set = baker.make('badges.badge', _quantity=5)
+        quest_set = baker.make('quest_manager.quest', xp=1, _quantity=5)
+        badge_set = baker.make('badges.badge', xp=1, _quantity=5)
         [quest.tags.add(self.tag.name) for quest in quest_set]
         [badge.tags.add(self.tag.name) for badge in badge_set]
 
         # only assign first set element from quest and badge to user
-        baker.make( 
-            'quest_manager.questsubmission',
-            quest=quest_set[0], 
-            user=self.test_student, 
-            is_completed=True, 
-            is_approved=True, 
-            semester=SiteConfig().get().active_semester,
-        )
-        baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
+        # make 2 submission/assertion to check if total xp is calculated correctly
+        for i in range(2):
+            baker.make( 
+                'quest_manager.questsubmission',
+                quest=quest_set[0], 
+                user=self.test_student, 
+                is_completed=True, 
+                is_approved=True, 
+                semester=SiteConfig().get().active_semester,
+            )
+            baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
 
         self.client.force_login(self.test_student)
         response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))
 
         # check if only the quest and badges self.test_student has completed shows up in view
         self.assertContains(response, quest_set[0].name)
+        self.assertContains(response, quest_set[0].xp * 2)
         [self.assertNotContains(response, quest.name) for quest in quest_set[1:]]
 
         self.assertContains(response, badge_set[0].name)
+        self.assertContains(response, badge_set[0].xp * 2)
         [self.assertNotContains(response, badge.name) for badge in badge_set[1:]]
 
         # assert title shows up -> <tag_name> Tag Details for <user_username>
