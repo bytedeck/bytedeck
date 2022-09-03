@@ -4,9 +4,22 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.19.1] 2022-08-24 - Beta Release Candidate 03
+* Visual representation of tags by student, linked to in profile and in mark calculations page
+* Students now have a quick reply option for returned and completed submissions.
+* Campaign "active" field now works.  Quests that are part of inactive campaigns will not be visible to students and won't show up on maps (a quick way for teachers to make a group of quests dissappear)
+* Homepage/landing page is now a Flatpage.  For development it's created during initdb, home urkl `/` redirects to the flatpage.  This allows for easier editing of the homepage in production.
+* Minor tweaks and bugfixes:
+  - Narrow public tenant flatpage template
+  - Use full wordmark on public flatpages
+  - New map creation uses a better widget to get the initial object
+  - bugfix: Mark Distribution graphs no more negative values
+  - bugfix: quests sort properly again
+  - bugfix: account for -1 (unlimited) users in public tenant list higlighting
+
 ### [1.19.0] 2022-08-14 - Beta Release Candidate 02
 * Groups (name changed from Blocks) is now a prerequisite option
-* New Site Config optios: Customize the name of Tags and Groups
+* New Site Config options: Customize the name of Tags and Groups
 * Deprecate 'Grade' field as part of course regsitration.  It will no longer appear and can't be selected for new course registrations
 * Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
   - Students page now has new tabs to access: Inactive students, Staff users.
