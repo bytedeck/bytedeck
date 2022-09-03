@@ -6,6 +6,7 @@ This file chronologically records all notable changes to this website, including
 
 ### [1.19.1] 2022-09-03 - Beta Release
 * Visual representation of tags by student, linked to in profile and in mark calculations page
+* Tag chart for students (via profile) now works properly and is accurate!
 * Students now have a quick reply option for returned and completed submissions.
 * Campaign "active" field now works.  Quests that are part of inactive campaigns will not be visible to students and won't show up on maps (a quick way for teachers to make a group of quests dissappear)
 * Homepage/landing page is now a Flatpage.  For development it's created during initdb, home url `/` redirects to the flatpage.  This allows for easier editing of the homepage in production.
@@ -16,12 +17,15 @@ This file chronologically records all notable changes to this website, including
   - tweak: Use full wordmark on public flatpages
   - tweak: New map creation uses a better widget to get the initial object
   - tweak: campaign detail views are now accessible to students
+  - tweak: change portfolia "Public link" to "personal link"
+  - tweak: Tag detail view for students now shows total XP earned and links to all submissions (including all repeats of a quest)
+  - tweak: "This page if visible to staff only." added to staff only lists.
   - bugfix: tags by XP and tag charts now account for max xp per quest and student xp requested values 
   - bugfix: Mark Distribution graphs no more negative values
   - bugfix: quests sort properly again
   - bugfix: account for -1 (unlimited) users in public tenant list higlighting
   - security: update several dependancies
-  - many minor typos corrected
+  - many very minor tweaks and typos corrected
 
 ### [1.19.0] 2022-08-14 - Beta Release Candidate 02
 * Groups (name changed from Blocks) is now a prerequisite option
