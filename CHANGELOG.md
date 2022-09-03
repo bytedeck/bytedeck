@@ -19,6 +19,7 @@ This file chronologically records all notable changes to this website, including
   - tweak: change portfolia "Public link" to "personal link"
   - tweak: Tag detail view for students now shows total XP earned and links to all submissions (including all repeats of a quest)
   - tweak: "This page if visible to staff only." added to staff only lists.
+  - tweak: Change submit button test to "Submit Quest for Approval" (previousyl said "Submit Quest for Completion")
   - bugfix: tags by XP and tag charts now account for max xp per quest and student xp requested values 
   - bugfix: Mark Distribution graphs no more negative values
   - bugfix: quests sort properly again

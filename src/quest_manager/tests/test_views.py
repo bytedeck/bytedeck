@@ -397,7 +397,7 @@ class SubmissionViewTests(TenantTestCase):
         s4_pk = self.sub4.pk
 
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
-        self.assertNotContains(response, 'Submit Quest for Completion')
+        self.assertNotContains(response, 'Submit Quest for Approval')
 
     def test_drop_button_not_visible_when_submission_approved(self):
         """
