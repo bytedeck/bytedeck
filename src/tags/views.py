@@ -20,7 +20,7 @@ from tenant.views import NonPublicOnlyViewMixin
 
 # from dal import autocomplete
 from taggit.models import Tag
-from .models import get_quest_submission_by_tag, get_badge_assertion_by_tags
+from .models import get_quest_submission_by_tag, get_badge_assertion_by_tags, total_xp_by_tags
 
 # USE GENERIC utilities.views.ModelAutoComplete instead, might need this in the future if further customization is needed
 # class TagAutocomplete(autocomplete.Select2QuerySetView):
@@ -99,6 +99,7 @@ class TagDetailStudent(TagDetail):
 
     def get_context_data(self, **kwargs):
         kwargs['user_obj'] = self.user
+        kwargs['user_xp_by_this_tag'] = total_xp_by_tags(self.user, [self.object])
 
         submissions = self.get_quest_submissions()
         kwargs['quest_submissions'] = submissions

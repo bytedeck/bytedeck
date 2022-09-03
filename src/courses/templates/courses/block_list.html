@@ -12,27 +12,34 @@
 {% endblock %}
 
 {% block content %}
+<p>This page if visible to staff only.</p>
 <table class="table table-striped">
-  <tr>
-    <th>Name</th>
-    <th>Description</th>
-    <th>Current Teacher</th>
-    <th>Action</th>
-  </tr>
-  {% for object in object_list %}
-  <tr>
-    <td>{{ object.name }}</td>
-    <td>{{ object.description|truncatechars:40 }}</td>
-    <td>{{ object.current_teacher }}</td>
-    <td>
-      <a class="btn btn-warning" href="{% url 'courses:block_update' object.id %}" role="button" title="Edit this block">
-        <i class="fa fa-edit"></i>
-      </a>
-      <a class="btn btn-danger" href="{% url 'courses:block_delete' object.id %}" role="button" title="Delete this block">
-        <i class="fa fa-trash-o"></i>
-      </a>
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Current Teacher</th>
+      <th>Active</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr {% if not object.active %} class="text-muted" {% endif %}>
+      <td>{{ object.name }}</td>
+      <td>{{ object.description|truncatechars:40 }}</td>
+      <td>{{ object.current_teacher }}</td>
+      <td>{{ object.active }}</td>
+      <td>
+        <a class="btn btn-warning" href="{% url 'courses:block_update' object.id %}" role="button" title="Edit this block">
+          <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'courses:block_delete' object.id %}" role="button" title="Delete this block">
+          <i class="fa fa-trash-o"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
