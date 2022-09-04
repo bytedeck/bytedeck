@@ -90,7 +90,7 @@ def model_to_form_data(model, model_form):
         >>> form.is_valid()
         True
     """
-    fields = model_form._meta.fields or model._meta.fields
+    fields = model_form._meta.fields or [field.name for field in model._meta.fields]
     exclude = model_form._meta.exclude or []
 
     json_data = serializers.serialize('json', [model])
@@ -243,7 +243,7 @@ class ViewTestUtilsMixin():
 
     def assert302(self, url_name, *args, **kwargs):
         """
-        Assert that a GET response to reverse(url_name, *args, **kwargs) gives a 403 Permission Denied.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) gives a 302 Redirect.
         For example, when an unauthenticated user attempts to access a view with the LoginRequiredMixin
         Provide any url and path parameters as args or kwargs.
         """

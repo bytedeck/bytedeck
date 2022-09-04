@@ -9,28 +9,33 @@
 {% endblock %}
 
 {% block content %}
+<p>This page if visible to staff only.</p>
 <table class="table table-striped">
-  <tr>
-    <th>Title</th>
-    <th>Icon</th>
-    <th>Sort Order</th>
-    <th>Action</th>
-  </tr>
-  {% for object in object_list %}
-  <tr>
-    <td>{{ object.name }}</td>
-    <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
-    <td>{{ object.sort_order }}</td>
-    <td>
-      <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this badge_type">
-        <i class="fa fa-edit"></i>
-      </a>
-      <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this badge type">
-        <i class="fa fa-trash-o"></i>
-      </a>
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Icon</th>
+      <th>Sort Order</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr>
+      <td>{{ object.name }}</td>
+      <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
+      <td>{{ object.sort_order }}</td>
+      <td>
+        <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this badge_type">
+          <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this badge type">
+          <i class="fa fa-trash-o"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
 

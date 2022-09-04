@@ -7,7 +7,9 @@ from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from djcytoscape.forms import GenerateQuestMapForm, QuestMapForm, get_model_options
+
+from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 
 from .test_models import generate_real_primary_map
 
@@ -81,11 +83,71 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('djcytoscape:update', args=[self.map.id])
         self.assert200('djcytoscape:delete', args=[self.map.id])
 
+        self.assert200('djcytoscape:generate_unseeded')
+        self.assert200('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': self.map.id})
+
         # These will need their own tests:
         # self.assert200('djcytoscape:regenerate', args=[self.map.id])
         # self.assert200('djcytoscape:regenerate_all')
-        # self.assert200('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
-        # self.assert200('djcytoscape:generate_unseeded')
+    
+    def test_ScapeGenerateMap__POST(self):
+        """ Assert a teacher can generate a map using ScapeGenerateMapView """
+        self.client.force_login(self.test_teacher)
+
+        # generate form data
+        content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
+        object_ = content_type.model_class().objects.first()
+
+        form_data = generate_form_data(model_form=GenerateQuestMapForm, name='New Name')
+        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'}) 
+
+        # check if map name exists
+        self.assertFalse(CytoScape.objects.filter(name='New Name').exists())
+
+        # response tests
+        response = self.client.post(reverse('djcytoscape:generate_unseeded'), data=form_data)
+        
+        # assert map exists
+        self.assertTrue(CytoScape.objects.filter(name='New Name').exists())
+        
+        # assert values are the same as form data values
+        map_ = CytoScape.objects.get(name='New Name')
+        self.assertEqual(map_.initial_content_type, content_type)
+        self.assertEqual(map_.initial_object_id, object_.id)
+
+        # assert redirects to quest_map page
+        self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[map_.pk]))
+
+    def test_ScapeUpdateView__POST(self):
+        """ Assert a teacher can update a map using ScapeGenerateMapView """
+        self.client.force_login(self.test_teacher)
+
+        # generate form data
+        content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
+        object_ = content_type.model_class().objects.first()
+        
+        form_data = generate_form_data(model_form=QuestMapForm, name='Updated Name')
+        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'}) 
+
+        # response tests
+        response = self.client.post(reverse('djcytoscape:update', args=[self.map.pk]), data=form_data)
+        self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[self.map.pk]))
+
+        # assert map exists
+        self.assertTrue(CytoScape.objects.filter(name='Updated Name').exists())
+        
+        # assert values are updated
+        map_ = CytoScape.objects.get(name='Updated Name')
+        self.assertEqual(map_.initial_content_type, content_type)
+        self.assertEqual(map_.initial_object_id, object_.id)
+
+    def test_Form_get_model_options__correct_models(self):
+        """ Quick test to see if the hardcoded model list is equal to CytoScape.ALLOWED_INITIAL_CONTENT_TYPES """
+
+        dynamically_loaded_models = [ct.model_class() for ct in ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES)]
+        hard_coded_models = [option[0] for option in get_model_options()]
+
+        self.assertEqual(dynamically_loaded_models, hard_coded_models)
 
 
 class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):

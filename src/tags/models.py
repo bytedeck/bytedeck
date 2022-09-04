@@ -1,6 +1,7 @@
 from django.apps import apps
 from django.db import models
 from django.db.models import Sum
+from django.db.models.functions import Greatest
 
 from taggit.models import Tag
 from taggit.managers import TaggableManager
@@ -34,37 +35,122 @@ def get_tags_from_user(user):
     return (quest_tags | badge_tags).distinct()
 
 
+def get_quest_submission_by_tag(user, tags):
+    """
+    Returns queryset of quest submission objects that are related to tag and user
+    only searches for ones with active_semester_only=True and do_not_grant_xp=False
+
+    Args:
+        user (UserModel): user object
+        tags (list[str], Queryset<Tag>): a queryset or list of Tag objects
+
+    Returns:
+        QS: queryset of quest submission objects that are related to tag and user
+    """
+    # get model through here to prevent circular imports
+    QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
+
+    return QuestSubmission.objects.all_approved(user, active_semester_only=True).filter(
+        quest__tags__name__in=list(tags),
+        is_completed=True, 
+        do_not_grant_xp=False
+    ).distinct()
+
+
+def get_badge_assertion_by_tags(user, tags):
+    """
+    Returns queryset of badge assertion objects that are related to tag and user
+    only searches for ones with active_semester_only=True and do_not_grant_xp=False
+
+    Args:
+        user (UserModel): user object
+        tags (list[str], Queryset<Tag>): a queryset or list of Tag objects
+
+    Returns:
+        QS: queryset of badge assertion objects that are related to tag and user
+    """
+    # get model through here to prevent circular imports
+    BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
+
+    return BadgeAssertion.objects.all_for_user(user).filter(
+        badge__tags__name__in=list(tags),
+        semester=SiteConfig.get().active_semester, 
+        do_not_grant_xp=False
+    ).distinct()
+    
+
+def get_quest_submission_total_xp(user, tags):
+    """ 
+    returns total quest xp related to user and tags
+
+    Args:
+        user (UserModel): user object
+        tags (list[str], Queryset<Tag>): a queryset or list of Tag objects
+
+    Returns:
+        int: total quest xp related to user and tags
+    """
+    total_xp = 0
+    submissions = get_quest_submission_by_tag(user, tags).distinct()
+
+    # annotate with xp_earned, since xp could come from xp_requested on the submission, or from the quest's xp value
+    # take the greater value (since custom entry have the quest.xp as a minimum)
+    submissions = submissions.annotate(xp_earned=Greatest('quest__xp', 'xp_requested'))
+
+    # calculate sum here since using annotate(sum()) will somehow count the amount of tags
+    # this just calculates the xp sum of submission related to quest
+    # key: quest.id  value: quest total xp
+    quest_xp_sum = {}
+    submissions_xp = submissions.values('id', 'quest', 'xp_earned')
+    for sub_xp in submissions_xp:
+        quest_xp_sum.setdefault(sub_xp['quest'], 0)
+        quest_xp_sum[sub_xp['quest']] += sub_xp['xp_earned']
+
+    # putting quest as value will squish all same quests to one QS
+    # distinct is on since quest_sub with different xp requested will not squish
+    submissions = submissions.order_by('quest__id').distinct('quest__id').values('quest', 'quest__max_xp')
+
+    for sub in submissions:
+        xp = quest_xp_sum[sub['quest']]
+
+        if sub['quest__max_xp'] == -1:  # no limit
+            total_xp += xp
+        else:
+            # Prevent xp going over the maximum gainable xp
+            # quest__max_xp is None if quest is deleted, so `or 0`
+            total_xp += min(xp, sub['quest__max_xp'] or 0)  
+
+    return total_xp
+
+
+def get_badge_assertion_total_xp(user, tags):
+    """ 
+    returns total quest xp related to user and tags
+
+    Args:
+        user (UserModel): user object
+        tags (list[str], Queryset<Tag>): a queryset or list of Tag objects
+
+    Returns:
+        int: total badge xp related to user and tags
+    """
+    # sum can be none since aggregate() will always return a dictionary of keys of whatever arg you put in.
+    # if there are no badges or quests linked to the user, aggregate will return a dictionary like: { 'badge__xp__sum': None }
+    return get_badge_assertion_by_tags(user, tags).aggregate(Sum("badge__xp"))['badge__xp__sum'] or 0
+
+
 def total_xp_by_tags(user, tags):
     """
     Returns user's total xp over active_semester filtered by tags
 
     Args:
+        user (UserModel): user object
         tags (list[str], Queryset<Tag>): a queryset or list of Tag objects
 
     Returns:
         int : total xp of user related to tag
     """
-    # get models through here to prevent circular imports
-    QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
-    BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
-
-    # get all objects with xp that is related to user and tag
-    # sum can be none since aggregate() will always return a dictionary of keys of whatever arg you put in.
-    # if there are no badges or quests linked to the user, aggregate will return a dictionary like: { 'badge__xp__sum': None }
-    xp_list = [
-        # QuestSubmission xp sum  
-        QuestSubmission.objects.all_approved(user, active_semester_only=True).filter(
-            is_completed=True, 
-            quest__tags__name__in=list(tags)
-        ).exclude(do_not_grant_xp=True).distinct().aggregate(Sum("quest__xp"))['quest__xp__sum'],
-        
-        # BadgeAssertion xp sum 
-        BadgeAssertion.objects.all_for_user(user).filter(
-            semester=SiteConfig.get().active_semester, 
-            badge__tags__name__in=list(tags)
-        ).exclude(do_not_grant_xp=True).distinct().aggregate(Sum("badge__xp"))['badge__xp__sum'],
-    ]
-    return sum(xp for xp in xp_list if xp is not None)
+    return get_quest_submission_total_xp(user, tags) + get_badge_assertion_total_xp(user, tags)
 
 
 def get_user_tags_and_xp(user):

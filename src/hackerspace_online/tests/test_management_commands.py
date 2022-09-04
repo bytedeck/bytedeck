@@ -1,9 +1,15 @@
 from io import StringIO
+
+from django.contrib.auth import get_user_model
+from django.contrib.flatpages.models import FlatPage
+from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
 
 # from hackerspace_online.management.commands import find_replace
-# from tenant.models import Tenant
+from tenant.models import Tenant
+
+User = get_user_model()
 
 
 class FindReplaceTest(TestCase):
@@ -41,3 +47,37 @@ class FindReplaceTest(TestCase):
         # out = self.call_command(self.tenant.name)
         # print(out)
         # self.assertEqual(out, "In dry run mode (--write not passed)\n")
+
+
+class InitDbTest(TestCase):
+    """ Note that this is NOT a TenantTestCase
+    """
+
+    def call_command(self, *args, **kwargs):
+        out = StringIO()
+        call_command(
+            "initdb",
+            *args,
+            stdout=out,
+            stderr=StringIO(),
+            **kwargs,
+        )
+        return out.getvalue()
+
+    def test_initdb(self):
+        """ Test that initdb command sets up the public tenant, including:
+        - a Tenant object called 'public'
+        - a superuser
+        - a Site object
+        - a Flatpage object with url /pages/home/
+        """
+        output = self.call_command()
+        print("*** INITDB Management Command: ", output)
+
+        Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
+        
+        user = User.objects.get(username='admin')
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(Site.objects.exists())
+
+        FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist

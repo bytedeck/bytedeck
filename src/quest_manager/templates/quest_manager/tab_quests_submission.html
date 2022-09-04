@@ -66,6 +66,18 @@
               </p>
           </li>
         </ul>
+        <!-- will load a student quick reply form for submissions that have been returned or handed in -->
+        {% if s.is_returned or completed %}
+          <li class="list-group-item">
+            <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
+                  action="{% url 'quests:complete' s.id %}">{% csrf_token %}
+              {{ quick_reply_form | crispy }}
+              <div>
+                {% include "quest_manager/submission_buttons_form_student.html" %}
+              </div>
+            </form>
+          </li>
+        {% endif %}
       </div>
 
     </div>

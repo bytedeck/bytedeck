@@ -8,12 +8,12 @@ from model_bakery import baker
 from courses.models import Block, Course, CourseStudent, Semester, Rank, ExcludedDate
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
-from courses.forms import SemesterForm, ExcludedDateFormset
+from courses.forms import SemesterForm, ExcludedDateFormset, CourseStudentStaffForm
 
 import random
 import datetime
 import itertools
-
+import json
 
 User = get_user_model()
 
@@ -222,6 +222,22 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:course_update', args=[1])
         self.assert200('courses:course_delete', args=[1])
 
+    def test_course_student_update_status_codes(self):
+        course_student = baker.make(CourseStudent)
+        # anon
+        self.client.logout()
+        self.assertRedirectsLogin('courses:update', args=[course_student.id])
+
+        # stud
+        self.client.force_login(self.test_student1)
+        self.assert403('courses:update', args=[course_student.id])
+        self.client.logout()
+
+        # staff
+        self.client.force_login(self.test_teacher)
+        self.assert200('courses:update', args=[course_student.id])
+        self.client.logout()
+
     def test_end_active_semester__staff(self):
         ''' End_active_semester view should redirect to semester list view '''
         self.client.force_login(self.test_teacher)
@@ -243,8 +259,30 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
+    def test_CourseStudentUpdate_view(self):
+        """ Staff can update a student's course """
+
+        course_student = baker.make(
+            CourseStudent, 
+            user=self.test_student1, 
+            course=self.course, 
+            block=self.block, 
+            semester=SiteConfig.get().active_semester
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+
     def test_CourseAddStudent_view(self):
-        '''Admin can add a student to a course'''
+        '''Staff can add a student to a course'''
 
         # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
         # and redirects to profiles:profile_detail
@@ -696,3 +734,102 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         form = response.context['form']
 
         self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
+
+
+class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.teacher = baker.make(User, is_staff=True)
+
+        self.block = baker.make(Block)
+        self.course = baker.make(Course)
+        self.semester = SiteConfig.get().active_semester
+        self.inactive_semester = baker.make(Semester)
+
+    def create_student_course(self, xp):
+        """
+        Quick helper function to create student course
+
+        Args:
+            xp (int): how much xp will be stored in new_user.profile.xp_cached
+
+        Returns:
+            CourseStudent: instance of course student that uses self.block, self.course, self.semester as its variables
+        """
+        user = baker.make(User)
+
+        user.profile.xp_cached = xp
+        user.profile.save()
+
+        return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
+
+    def test_non_ajax_status_code(self):
+        self.assert404('courses:mark_distribution_chart', args=[self.teacher.pk])
+
+    def test_ajax_status_code_for_anonymous(self):
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_status_code_for_students(self):
+        user = baker.make(User)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_ajax_status_code_for_teachers(self):
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_no_users_outside_active_semester_in_histogram_values(self):
+        """ histogram values should only belong to users who belong in the active semester""" 
+        # create inactive semester students
+        inactive_sem_students = [self.create_student_course(100) for i in range(5)]
+        for cs in inactive_sem_students:
+            cs.semester = (self.inactive_semester)
+            cs.save()
+
+        # create active semester students
+        active_sem_students = [self.create_student_course(100) for i in range(7)]
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        json_response = json.loads(response.content)
+
+        # total students in hist should be total + user
+        total_students = sum(json_response['data']['students'])
+        self.assertNotEqual(total_students, len(inactive_sem_students))
+        self.assertEqual(total_students, len(active_sem_students))
+
+    def test_no_test_users_in_histogram_values(self):
+        """ test users should not show up in histogram values """
+        # create test users students
+        test_account_students = [self.create_student_course(100) for i in range(5)]
+        for cs in test_account_students:
+            cs.user.profile.is_test_account = True
+            cs.user.profile.save()
+
+        # create active semester students
+        active_sem_students = [self.create_student_course(100) for i in range(7)]
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        json_response = json.loads(response.content)
+
+        # total students in hist should be total + users
+        total_students = sum(json_response['data']['students'])
+        self.assertNotEqual(total_students, len(test_account_students))
+        self.assertEqual(total_students, len(active_sem_students))

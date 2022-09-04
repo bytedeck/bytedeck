@@ -1,29 +1,63 @@
 <div class="panel-group">
 
     <div class="panel panel-{{type}}">
-        <div class="panel-heading">Related Quests ({{quests|length}}) <i class="fa fa-shield fa-fw"></i></div>
+        <div class="panel-heading">Related Quests ({% firstof quest_length quest_submission_length "0" %}) <i class="fa fa-shield fa-fw"></i></div>
         <div class="panel-body">
-            <p></p>
             <ul>
-                {% for quest in quests %}
-                    <li><a href="{{ quest.get_absolute_url }}">{{ quest }}</a></li>
-                {% empty %}
-                    <li>None.</li>
-                {% endfor %}
+                {% if view == 'staff' %}
+
+                    {% for quest in quests %}
+                        <li><a href="{{ quest.get_absolute_url }}">{{ quest }} ({{ quest.xp }} XP)</a></li>
+                    {% empty %} 
+                        <li>None.</li>
+                    {% endfor %}
+
+                {% else %}
+
+                    {% for submission in quest_submissions %}
+                        <li>
+                            <a href="{{ submission.quest.get_absolute_url }}">
+                                {{ submission }}
+                                {% if submission.is_multiple %}({{submission.ordinal}}){% endif %} 
+                                ({% firstof submission.xp_requested submission.quest.xp %} XP)
+                            </a>
+                        </li>
+                    {% empty %} 
+                        <li>None.</li>
+                    {% endfor %}
+
+                {% endif %}
             </ul>
         </div>
     </div>
     <br>
     <div class="panel panel-{{type}}">
-        <div class="panel-heading">Related Badges ({{badges|length}}) <i class="fa fa-certificate fa-fw"></i></div>
+        <div class="panel-heading">Related Badges ({% firstof badge_length badge_assertion_length "0" %}) <i class="fa fa-certificate fa-fw"></i></div>
         <div class="panel-body">
-            <p></p>
             <ul>
-                {% for badge in badges %}
-                    <li><a href="{{ badge.get_absolute_url }}">{{ badge }}</a></li>
-                {% empty %}
-                    <li>None.</li>
-                {% endfor %}
+                {% if view == 'staff' %}
+
+                    {% for badge in badges %}
+                        <li><a href="{{ badge.get_absolute_url }}">{{ badge }} ({{ badge.xp }} XP)</a></li>
+                    {% empty %}
+                        <li>None.</li>
+                    {% endfor %}
+                    
+                {% else %}
+
+                    {% for assertion in badge_assertions %}
+                        <li>
+                            <a href="{{ assertion.badge.get_absolute_url }}">
+                                {{ assertion }}
+                                {% if assertion.is_multiple %}({{assertion.ordinal}}){% endif %} 
+                                ({{assertion.badge.xp}} XP)
+                            </a>
+                        </li>
+                    {% empty %}
+                        <li>None.</li>
+                    {% endfor %}
+                
+                {% endif %}
             </ul>
         </div>
     </div>

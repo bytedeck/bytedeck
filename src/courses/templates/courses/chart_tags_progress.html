@@ -1,0 +1,164 @@
+<script>
+
+    function InstantiateChart(labels, questDataset, badgeDataset) {
+        var COLORS = {
+            quest: {
+                {% if request.user.profile.dark_theme %}
+                // dark theme
+                bgColor: 'rgba(65, 65, 65, 1)', 
+                brColor: 'rgba(20, 20, 20, 0.75)'
+                {% else %}
+                // light theme
+                bgColor: 'rgba(140, 140, 140, 1)',
+                brColor: 'rgba(12, 12, 12, 0.5)'
+                {% endif %}
+            },
+            badge: {
+                {% if request.user.profile.dark_theme %}
+                // dark theme
+                bgColor: 'rgba(90, 90, 90, 1)', 
+                brColor: 'rgba(20, 20, 20, 0.75)'
+                {% else %}
+                // light theme
+                bgColor: 'rgba(191, 191, 191, 1)', 
+                brColor: 'rgba(64, 64, 64, 0.5)'
+                {% endif %}
+            },
+        }
+        
+        // generate datasets
+        datasets = []
+
+        // append Quest XP
+        for (var questData of questDataset) {
+            datasets.push({
+                label: questData.name,
+                data: questData.dataset,
+                backgroundColor: COLORS.quest.bgColor,
+                borderColor: COLORS.quest.brColor,
+                borderWidth: 1,
+                stack: 0,
+            });
+        }
+
+        // append Badge XP
+        for (var badgeData of badgeDataset) {
+            datasets.push({
+                label: badgeData.name,
+                data: badgeData.dataset,
+                backgroundColor: COLORS.badge.bgColor,
+                borderColor: COLORS.badge.brColor,
+                borderWidth: 1,
+                stack: 0,
+            });
+        }
+
+        // this is for labels to show
+        // this also needs to be on top of questDataset + badgeDataset stack
+        // to prevent visual bugs
+        datasets.push({
+            label: 'Quest XP',
+            backgroundColor: COLORS.quest.bgColor,
+            borderColor: COLORS.quest.brColor,
+            borderWidth: 1,
+            stack: 0,
+        });
+        datasets.push({
+            label: 'Badge XP',
+            backgroundColor: COLORS.badge.bgColor,
+            borderColor: COLORS.badge.brColor,
+            borderWidth: 1,
+            stack: 0,
+        });
+
+        // instantiate chart
+        var TCtx = document.getElementById('TagChart').getContext('2d');
+        var TagChart = new Chart(TCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets : datasets,
+            },
+            options: {
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero:true
+                        }
+                    }]
+                },
+
+                tooltips: {
+                    callbacks: { 
+                        // custom label formatting
+                        label: function(tooltipItem, data) {  
+                            var label = data.datasets[tooltipItem.datasetIndex].label;
+                            return ` ${label} ${tooltipItem.yLabel} XP`;  
+                        },
+                    },
+                },
+                
+                legend: {
+                    // make 'Quest XP', 'Badge XP' (which are labels with empty datasets) work in hiding questDataset and badgeDataset
+                    onClick: function(e, legendItem) {
+                        const chart = this.chart;
+                        const index = legendItem.datasetIndex;
+                        var metaList = [];
+
+                        switch(legendItem.text) {
+                            // if pressed on Quest XP adds questDataset to hide list
+                            case 'Quest XP':
+                                var questIndexes = questDataset.length;
+                                metaList = Array.from(new Array(questIndexes), (_, i) => chart.getDatasetMeta(i));
+                                break;
+                            // if pressed on Badge XP adds questDataset to hide list
+                            case 'Badge XP':
+                                var badgeIndexes = badgeDataset.length;
+                                var start = questDataset.length
+                                metaList = Array.from(new Array(badgeIndexes), (_, i) => chart.getDatasetMeta(i + start));
+                                break;
+                        }
+                        // hides everything in metaList
+                        metaList.forEach(function(meta) {
+                            meta.hidden = meta.hidden === null? !chart.data.datasets[index].hidden : null;
+                        });
+                        
+                        // updates legendItems
+                        Chart.defaults.global.legend.onClick.call(this, e, legendItem);
+                    },
+
+                    // disable label if not 'Quest XP', 'Badge XP'
+                    labels: {
+                        filter: function(label) {
+                            return ['Quest XP', 'Badge XP'].includes(label.text);
+                        },
+                    },
+                },
+
+            }
+        });
+
+    }
+
+
+    window.addEventListener("load", function() {
+        $.ajax({
+            url: "{% url 'courses:ajax_tag_progress_chart' user.id %}",
+            dataType:"json",
+            type:"GET",
+            success:function(json) {
+
+                InstantiateChart(
+                    json.labels, 
+                    json.data.quest_dataset,
+                    json.data.badge_dataset,
+                );
+
+                // destroy loading if exists
+                $('div.loading').remove();
+
+            },
+        });     
+    }, false);
+
+</script>

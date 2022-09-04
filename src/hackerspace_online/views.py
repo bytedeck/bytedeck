@@ -21,7 +21,7 @@ def home(request):
     For non_public tenants: redirect to default pages based on who is authenticated
     """
     if connection.schema_name == get_public_schema_name():
-        return LandingPageView.as_view()(request)
+        return LandingRedirectView.as_view()(request)
 
     else:  # Non public tenants
         if request.user.is_staff:
@@ -47,6 +47,13 @@ class FaviconRedirectView(RedirectView):
             return static('icon/favicon.ico')
         else:  # tenants
             return SiteConfig.get().get_favicon_url()
+
+
+class LandingRedirectView(PublicOnlyViewMixin, RedirectView):
+    permanent = True
+
+    def get_redirect_url(self, *args, **kwargs):
+        return reverse('django.contrib.flatpages.views.flatpage', args=['home'])
 
 
 class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):

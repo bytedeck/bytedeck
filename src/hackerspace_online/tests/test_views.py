@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.core import mail
+# from django.core import mail
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
@@ -48,24 +48,31 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
     @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
     @patch('tenant.views.connection', schema_name=get_public_schema_name())
     def test_home_public_tenant(self, mock_connection1, mock_connection2):
-        """Home view for public tenant should render the public landing page directly"""
-        self.assert200('home')
+        """Home view for public tenant should permanent redirect (301) to the public flatpage called 'home'
+        """
+        self.assertRedirects(
+            response=self.client.get(reverse('home')),
+            status_code=301,  
+            target_status_code=404,  # the flatpage doesn't actually exist at this point in the test, but its creation is tested elsewhere
+            expected_url='/pages/home'
+        )
 
-    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
-    @patch('tenant.views.connection', schema_name=get_public_schema_name())
-    def test_home_public_contact_form(self, mock_connection1, mock_connection2):
-        form_data = {
-            'name': 'First Last',
-            'email': 'test@example.com',
-            'message': 'Test Message',
-            'g-recaptcha-response': 'PASSED',
-        }
-        response = self.client.post(reverse('home'), data=form_data)
-        # Form submission redirects to same home page
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
-        # The view should be sent via email with form info if successfull
-        self.assertEqual(len(mail.outbox), 1)
+    # Contact Form removed
+    # @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    # @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    # def test_home_public_contact_form(self, mock_connection1, mock_connection2):
+    #     form_data = {
+    #         'name': 'First Last',
+    #         'email': 'test@example.com',
+    #         'message': 'Test Message',
+    #         'g-recaptcha-response': 'PASSED',
+    #     }
+    #     response = self.client.post(reverse('home'), data=form_data)
+    #     # Form submission redirects to same home page
+    #     self.assertEqual(response.status_code, 302)
+    #     self.assertEqual(response.url, reverse('home'))
+    #     # The view should be sent via email with form info if successfull
+    #     self.assertEqual(len(mail.outbox), 1)
 
     def test_favicon(self):
         """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
