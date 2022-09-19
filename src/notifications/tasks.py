@@ -81,7 +81,7 @@ def create_email_notification_tasks():
     # https://docs.djangoproject.com/en/3.2/ref/applications/#django.apps.AppConfig.ready
     # Can't import models at the module level, so need to import in the method.
     from django_celery_beat.models import CrontabSchedule, PeriodicTask
-    from tenant.utils import get_root_url
+    
     minute = 0
 
     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
@@ -107,7 +107,7 @@ def create_email_notification_tasks():
             'task': 'notifications.tasks.email_notifications_to_users',
             'queue': 'default',
             'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
-                'root_url': get_root_url(),
+                'root_url': tenant.get_root_url(),
             }),
             # Inject the schema name into the task's header, as that's where tenant-schema-celery
             # will be looking for it to ensure it is tenant aware
