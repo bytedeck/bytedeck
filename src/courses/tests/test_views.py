@@ -142,6 +142,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         ''' If not logged in then all views should redirect to home page '''
         self.assertRedirectsLogin('courses:create')
         self.assertRedirectsLogin('courses:join', args=[1])
+        self.assertRedirectsLogin('courses:coursestudent_delete', args=[1])
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
@@ -167,7 +168,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Refer to rank specific tests for Rank CRUD views
 
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in then all views should redirect to home page '''
+        ''' Test student access to views '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:create')
         self.assert200('courses:ranks')
@@ -182,6 +183,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Staff access only
         self.assert403('courses:join', args=[self.test_student1.id])
         self.assert403('courses:end_active_semester')
+        self.assert403('courses:coursestudent_delete', args=[1])
 
         self.assert403('courses:semester_list')
         self.assert403('courses:semester_create')
@@ -325,6 +327,22 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(add_course_url, data=self.valid_form_data)
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
+
+    def test_CourseStudentDelete_view(self):
+        """ Teacher should be able to delete a student from a course (StudentCourse object)
+        and should redirect to the student's profile when complete. """
+        self.client.force_login(self.test_teacher)
+        course_student = baker.make(CourseStudent, user=self.test_student1)
+
+        # can access the Delete View
+        response = self.client.get(reverse('courses:coursestudent_delete', args=[course_student.id]))
+        self.assertEqual(response.status_code, 200)
+
+        before_delete_count = CourseStudent.objects.count()
+        response = self.client.post(reverse('courses:coursestudent_delete', args=[course_student.id]))
+        after_delete_count = CourseStudent.objects.count()
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
 
     def test_CourseList_view(self):
         """ Admin should be able to view course list """

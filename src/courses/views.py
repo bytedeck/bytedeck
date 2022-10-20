@@ -219,6 +219,14 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CourseStudentDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = CourseStudent
+
+    def get_success_url(self) -> str:
+        return reverse("profiles:profile_detail", args=[self.object.user.profile.id])
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Semester
 
