@@ -10,7 +10,7 @@ LMS originating from Timberline Secondary School's Digital Hackerspace
 
 ### Installing Tools
 
-Although bytedeck uses several tools, you only need to set up a two of them thanks to docker!
+Although bytedeck uses several tools, you only need to set up two of them thanks to docker!
 
 The instructions below will help you get bytedeck running using [docker](https://www.docker.com/), and then help you set up a development environment with [VS Code](https://code.visualstudio.com/).
 
