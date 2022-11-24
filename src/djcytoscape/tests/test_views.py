@@ -145,7 +145,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Quick test to see if the hardcoded model list is equal to CytoScape.ALLOWED_INITIAL_CONTENT_TYPES """
 
         dynamically_loaded_models = [ct.model_class() for ct in ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES)]
-        hard_coded_models = [option[0] for option in get_model_options()]
+        hard_coded_models = [option for option in get_model_options()]
 
         self.assertEqual(dynamically_loaded_models, hard_coded_models)
 

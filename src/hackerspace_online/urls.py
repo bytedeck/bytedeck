@@ -47,12 +47,10 @@ urlpatterns += [
     url(r'^achievements/', AchievementRedirectView.as_view()),
     url(r'^badges/', include('badges.urls', namespace='badges')),
     url(r'^maps/', include('djcytoscape.urls', namespace='maps')),
-    url(r'^maps/dal/', include('djcytoscape.urls_dal')),
     url(r'^portfolios/', include('portfolios.urls', namespace='portfolios')),
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
     url(r'^config/', include('siteconfig.urls', namespace='config')),
     url(r'^decks/', include('tenant.urls', namespace='decks')),
-    url(r'^prerequisites/', include('prerequisites.urls')),
 
     url(r'^tags/', include('tags.urls', namespace='tags')),
 
