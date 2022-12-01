@@ -16,7 +16,8 @@ If you're interested in contributing to this repo, please work through these ste
 5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
 6. Write code!
 7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):   
-`./src/manage.py test src --failfast --parallel && flake8 src`
+   * venv: `./src/manage.py test src --failfast --parallel && flake8 src`
+   * docker: `docker-compose exec web bash -c "./src/manage.py test src --failfast --parallel && flake8 src"`
 8. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:  
 `git commit -am "Useful description of your changes; Closes #123"`
 8. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
