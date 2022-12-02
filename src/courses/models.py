@@ -537,11 +537,10 @@ class CourseStudent(models.Model):
         ordering = ['-semester', 'block']
 
     def __str__(self):
-        return self.user.get_username() \
-               + ", " + str(self.semester) if self.semester else "" \
-                                                                 + ", " + str(self.block.name) if self.block else "" \
-                                                                                                                  + ": " + str(
-            self.course)
+        return f"{self.user.get_username()}" \
+               f'{", " + str(self.semester) if self.semester else ""}' \
+               f'{", " + str(self.block.name) if self.block else ""}' \
+               f': {self.course}'
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')
