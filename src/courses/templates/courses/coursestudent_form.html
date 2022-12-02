@@ -19,6 +19,7 @@
     <form method="post">{% csrf_token %}
         {{ form | crispy }}
         <input type="submit" value="{{ submit_btn_value }}" class="btn btn-primary" />
+        {% if object.id %}<a class="btn btn-danger" href="{% url 'courses:coursestudent_delete' object.id %}" role="button">Delete</a>{% endif %}
     </form>
   </div>
 </div>

@@ -1,15 +1,18 @@
 from django import forms
 
-from djcytoscape.models import CytoScape
+from django_select2.forms import Select2Widget
+from queryset_sequence import QuerySetSequence
 
-from dal import autocomplete
+from utilities.forms import FutureModelForm
+from utilities.fields import ContentObjectChoiceField
+
+from .models import CytoScape
 
 
 def get_model_options():
-    """ 
+    """
         provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
-        formatted for autocomplete.Select2GenericForeignKeyModelField use
-
+        formatted for utilities.fields.ContentObjectModelField use
         from prerequisites.forms:
             Can't always dynamically load this list due to accessing contenttypes too early
             So instead provide a hard coded list which is checked during testing to ensure it matches
@@ -19,11 +22,10 @@ def get_model_options():
     from badges.models import Badge
     from courses.models import Rank
 
-    models = [Quest, Rank, Badge]
-    return [(model, model.dal_autocomplete_search_fields()) for model in models]
+    return [Quest, Rank, Badge]
 
 
-class GenerateQuestMapForm(autocomplete.FutureModelForm):
+class GenerateQuestMapForm(FutureModelForm):
 
     class Meta:
         model = CytoScape
@@ -32,13 +34,14 @@ class GenerateQuestMapForm(autocomplete.FutureModelForm):
             'initial_content_object',
             'parent_scape',
         ]
-   
+
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
     
-    initial_content_object = autocomplete.Select2GenericForeignKeyModelField(
-        label="Initial Object",
+    initial_content_object = ContentObjectChoiceField(
+        label='Initial Object',
         required=True,
-        model_choice=get_model_options(), 
+        queryset=QuerySetSequence(*[klass.objects.all() for klass in get_model_options()]),
+        widget=Select2Widget,
     )
 
     parent_scape = forms.ModelChoiceField(
@@ -50,11 +53,6 @@ class GenerateQuestMapForm(autocomplete.FutureModelForm):
     def __init__(self, *args, **kwargs):
         self.autobreak = kwargs.pop('autobreak', None)
         super().__init__(*args, **kwargs)
-
-        # force initial set it here since initial_content_object doesn't seem to accept manual initial values
-        # if statement since UpdateView seems to work with initial, so we use that instead
-        if not self.initial.get('initial_content_object'):
-            self.initial['initial_content_object'] = kwargs['initial'].get('initial_content_object')
 
         self.fields['initial_content_object'].widget.attrs['data-placeholder'] = 'Type to search'
 

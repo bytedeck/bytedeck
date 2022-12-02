@@ -10,7 +10,7 @@ LMS originating from Timberline Secondary School's Digital Hackerspace
 
 ### Installing Tools
 
-Although bytedeck uses several tools, you only need to set up a two of them thanks to docker!
+Although bytedeck uses several tools, you only need to set up two of them thanks to docker!
 
 The instructions below will help you get bytedeck running using [docker](https://www.docker.com/), and then help you set up a development environment with [VS Code](https://code.visualstudio.com/).
 
@@ -146,7 +146,7 @@ or to run in a local venv (assuming you have activated it), start all the docker
 `./src/manage.py runserver`
 
 
-### Advanced: Inspecting the database with pgadmin4
+### Advanced / Optional: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
 1. Run the pg-admin container:  
 `docker-compose up pg-admin`
@@ -167,28 +167,8 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 8. You'll probably want to look at Schemas > (pick a schema) > Tables
 
 
-## Contributing Quick Reference
+## Contributing
 
-For full details on code contributions, please see [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md)
+See [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md) if you plan to contribute code!
 
-1. Move into your cloned directory. `cd ~/Developer/bytedeck`
-2. Initialize pre-commit hooks: `git init --template=.git-template && chmod +x .git/hooks/pre-commit`
-3. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
-4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
-5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
-6. Write code!
-7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):   
-`./src/manage.py test src --failfast --parallel && flake8 src`
-8. Commit your changes (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:  
-`git commit -am "Useful description of your changes; Closes #123"`
-9. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
-10. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
-11. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
-12. Select your recently pushed branch and create a pull request (you should see a button for this)
-![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)
 
-13. Complete pull request.
-14. Start work on another feature by checking out the develop branch again: `git checkout develop`
-15. Start again at Step 4 and repeat!
-
-If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).

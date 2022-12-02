@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.utils import timezone
+from django.conf import settings
 
 from django_celery_beat.models import PeriodicTask
 from django_tenants.test.cases import TenantTestCase
@@ -79,7 +80,7 @@ class AnnouncementTasksTests(TenantTestCase):
                            course=course,
                            semester=semester)
         emails = get_users_to_email()
-        self.assertEqual(len(emails), 12)  # 11 + deck owner = 12
+        self.assertEqual(len(emails), 12 if settings.TENANT_DEFAULT_OWNER_EMAIL else 11)  # 11 + deck owner = 12
 
     def test_send_announcement_emails(self):
 
