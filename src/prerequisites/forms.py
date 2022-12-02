@@ -1,16 +1,12 @@
+from dal import autocomplete
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
+from courses.models import Block
 
-from django_select2.forms import Select2Widget
-from queryset_sequence import QuerySetSequence
-
-from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
-
-from .models import Prereq
+from prerequisites.models import Prereq
 
 
 def popover_labels(model, field_strings):
@@ -35,27 +31,30 @@ def hardcoded_prereq_model_choice():
     """ Can't always dynamically load this list due to accessing contenttypes too early
     So instead provide a hard coded list which is checked during testing to ensure it matches
     what the dynamically loaded list would have produced """
-    from courses.models import Block, Course, Grade, Rank
+    from courses.models import Course, Grade, Rank
     from quest_manager.models import Category, Quest
     from badges.models import Badge
-
     return [
-        Category, Quest, Block, Course, Grade, Rank, Prereq, Badge,
+        (Category, Category.dal_autocomplete_search_fields()), 
+        (Quest, Quest.dal_autocomplete_search_fields()), 
+        (Block, Block.dal_autocomplete_search_fields()),
+        (Course, Course.dal_autocomplete_search_fields()), 
+        (Grade, Grade.dal_autocomplete_search_fields()), 
+        (Rank, Rank.dal_autocomplete_search_fields()), 
+        (Prereq, Prereq.dal_autocomplete_search_fields()), 
+        (Badge, Badge.dal_autocomplete_search_fields()),
     ]
 
 
-class PrereqFormInline(FutureModelForm):
+class PrereqFormInline(autocomplete.FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        widget=Select2Widget,
+    prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+        model_choice=hardcoded_prereq_model_choice()
     )
 
-    or_prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        required=False,
-        widget=Select2Widget,
+    or_prereq_object = autocomplete.Select2GenericForeignKeyModelField(
+        model_choice=hardcoded_prereq_model_choice()
     )
         
     class Meta:
@@ -75,6 +74,7 @@ class PrereqFormInline(FutureModelForm):
         self.fields['or_prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
+        self.fields['or_prereq_object'].required = False
 
 
 class PrereqFormsetHelper(FormHelper):

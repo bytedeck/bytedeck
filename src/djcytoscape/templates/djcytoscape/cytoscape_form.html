@@ -3,8 +3,7 @@
 {% block heading_inner %}Update Quest Map{% endblock%}
 
 {% block head %}
-    {{ form.media.css }}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
+  {{ form.media }}
 {% endblock %}
 
 {% block content %}
@@ -17,16 +16,5 @@
     <a href="{% url 'maps:index' %}" role="button" class="btn btn-danger">Cancel</a>
     <input type="submit" value="Update" class="btn btn-success"/>
 </form>
-
-{% endblock %}
-
-{% block js %}
-    {{ form.media.js }}
-
-
-    <script>
-        $.fn.select2.defaults.set( "theme", "bootstrap" );
-    </script>
-
 
 {% endblock %}
