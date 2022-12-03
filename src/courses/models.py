@@ -89,7 +89,7 @@ class RankManager(models.Manager):
         """
         if user_xp < 0:
             user_xp = 0
-        
+
         rank = self.get_queryset().get_ranks_lte(user_xp).last()
         if not rank:
             rank = self.create_zero_rank()
@@ -98,7 +98,7 @@ class RankManager(models.Manager):
     def get_next_rank(self, user_xp=0):
         """Return the next closest Rank with an XP value > user_xp"""
         return self.get_queryset().get_ranks_gt(user_xp).first()
-        
+
     def create_zero_rank(self):
         zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
         zero_rank.save()
@@ -183,7 +183,10 @@ class SemesterManager(models.Manager):
             return Semester.QUEST_AWAITING_APPROVAL
 
         # need to calculate all user XP and store in their Course
-        CourseStudent.objects.calc_semester_grades(active_sem)
+        try:
+            CourseStudent.objects.calc_semester_grades(active_sem)
+        except ValueError:
+            return Semester.STUDENTS_WITH_NEGATIVE_XP
 
         QuestSubmission.objects.remove_in_progress()
 
@@ -198,9 +201,9 @@ def default_end_date():
 
 
 class Semester(models.Model):
-
     CLOSED = -1
     QUEST_AWAITING_APPROVAL = -2
+    STUDENTS_WITH_NEGATIVE_XP = -3
 
     first_day = models.DateField(null=True, default=date.today)
     last_day = models.DateField(null=True, default=default_end_date)
@@ -277,7 +280,8 @@ class Semester(models.Model):
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
-        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward', holidays=excluded_days)
+        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward',
+                                                  holidays=excluded_days)
         return date_after_fraction.item()
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
@@ -313,7 +317,8 @@ class Semester(models.Model):
     def reset_students_xp_cached(self):
 
         from profile_manager.models import Profile
-        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile', flat=True)
+        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile',
+                                                                                                          flat=True)
         profile_ids = set(profile_ids)
         profiles = Profile.objects.filter(id__in=profile_ids)
 
@@ -470,6 +475,9 @@ class CourseStudentManager(models.Manager):
         coursestudents = self.get_queryset().get_semester(semester)
         for coursestudent in coursestudents:
             coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+            if coursestudent.final_xp < 0:
+                raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                 f"Fix it before closing the semester")
             coursestudent.active = False
             coursestudent.save()
 
@@ -529,14 +537,14 @@ class CourseStudent(models.Model):
         ordering = ['-semester', 'block']
 
     def __str__(self):
-        return self.user.get_username() \
-            + ", " + str(self.semester) if self.semester else "" \
-            + ", " + str(self.block.name) if self.block else "" \
-            + ": " + str(self.course)
+        return f"{self.user.get_username()}" \
+               f'{", " + str(self.semester) if self.semester else ""}' \
+               f'{", " + str(self.block.name) if self.block else ""}' \
+               f': {self.course}'
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')
-        # return reverse('courses:detail', kwargs={'pk': self.pk})
+    # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property
     def calc_mark(self, xp):
