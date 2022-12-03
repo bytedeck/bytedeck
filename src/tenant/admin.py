@@ -79,7 +79,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
         'paid_until', 'trial_end_date',
         'max_active_users', 'active_user_count', 'total_user_count',
-        'max_quests', 'quest_count',        
+        'max_quests', 'quest_count',
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name', 'owner_email']
@@ -107,7 +107,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             if tenant.name != get_public_schema_name():
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
-                    print(tenant)
         return qs
 
 
