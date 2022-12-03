@@ -34,7 +34,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('utilities:menu_item_create')
         self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
         self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
-    
+
     def test_all_page_status_codes_for_students(self):
         ''' If not logged in as admin then all views should redirect to 403 '''
         self.client.force_login(self.test_student)
@@ -44,13 +44,13 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:menu_item_create')
         self.assert403('utilities:menu_item_update', args=[1])
         self.assert403('utilities:menu_item_delete', args=[1])
-    
+
     def test_MenuItemList_view(self):
         ''' Admin should be able to view menu item list '''
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('utilities:menu_items'))
         self.assertEqual(response.status_code, 200)
-    
+
     def test_MenuItemCreate_view(self):
         ''' Admin should be able to create a menu item '''
         self.client.force_login(self.test_teacher)
@@ -66,38 +66,22 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         test_menuitem = MenuItem.objects.get(label=data['label'])
         self.assertEqual(test_menuitem.label, data['label'])
-    
+
     def test_MenuItemCreate_view__displays_leading_slash_error(self):
         """ Menu Item create view should display correct error text when a bad url is submitted"""
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
             'fa_icon': 'fa-gift',
-            'url': (reverse('courses:ranks'))[1:],
+            'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
         }
 
         # tests Menu Item creation without leading slash ((reverse('courses:ranks'))[1:]) == 'courses/ranks/'
         response = self.client.post(reverse('utilities:menu_item_create'), data=data)
-        leading_slash_error = "URL is missing a leading slash."
+        leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
-
-    def test_MenuItemCreate_view__displays_trailing_slash_error(self):
-        """ Menu Item create view should display correct error text when a bad url is submitted"""
-        self.client.force_login(self.test_teacher)
-        data = {
-            'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
-            'url': (reverse('courses:ranks'))[:-1],
-            'open_link_in_new_tab': False,
-            'sort_order': 0,
-        }
-
-        # tests Menu Item creation without leading slash ((reverse('courses:ranks'))[:-1]) == '/courses/ranks'
-        response = self.client.post(reverse('utilities:menu_item_create'), data=data)
-        trailing_slash_error = "URL is missing a trailing slash."
-        self.assertContains(response, trailing_slash_error)      
 
     def test_MenuItemUpdate_view(self):
         """ Admin should be able to update a Menu Item """
@@ -122,41 +106,25 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         data = {
             'label': 'My Updated Name',
             'fa_icon': 'fa-bath',
-            'url': (reverse('courses:ranks'))[1:],
+            'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
         }
 
         # tests Menu Item updating without leading slash
         response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
-        leading_slash_error = "URL is missing a leading slash."
+        leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
-
-    def test_MenuItemUpdate_view__displays_trailing_slash_error(self):
-        """ Menu Item update view should display correct error text when a bad url is submitted"""
-        self.client.force_login(self.test_teacher)
-        data = {
-            'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
-            'url': (reverse('courses:ranks'))[:-1],
-            'open_link_in_new_tab': False,
-            'sort_order': 0,
-        }
-
-        # tests Menu Item updating without trailing slash
-        response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
-        trailing_slash_error = "URL is missing a trailing slash."
-        self.assertContains(response, trailing_slash_error)
 
 
 class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
-        """ 
+        """
             This is basically baker.make(FlatPage) but it actually works
         """
-        def random_string(length): 
+        def random_string(length):
             return ''.join(random.choice(string.ascii_letters) for i in range(length))
         data = {}
 
@@ -215,7 +183,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:flatpage_delete', args=[1])
 
     def test_all_page_status_codes_for_staff(self):
-        """ 
+        """
             Should return 200 for all cases
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -229,10 +197,10 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('utilities:flatpage_delete', args=[pk])
 
     def test_login_requirements_for_flatpage(self):
-        """ 
-            Flatpage with login required can only be accessed by users, 
+        """
+            Flatpage with login required can only be accessed by users,
             while flatpages without can be accessed by all
-        """ 
+        """
 
         # check all exists in flatpage_list first
         response = self.client.get(reverse('utilities:flatpage_list'))
@@ -262,7 +230,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assert200URL(flatpage.get_absolute_url())
 
     def test_flatpagelist__list(self):
-        """ 
+        """
             Confirm that all flatpages are properly displayed
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -301,20 +269,20 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200URL(flatpages.first().get_absolute_url())
 
     def test_flatpageupdate__update(self):
-        """ 
+        """
             Confirm that flatpages are being updated using update view
-        """ 
+        """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
         pre_update_data = {
-            'url': '/pre_update_data-test-url/', 
-            'title': 'pre_update_data-test-title', 
+            'url': '/pre_update_data-test-url/',
+            'title': 'pre_update_data-test-title',
             'content': 'pre_update_data content content content',
         }
         post_update_data = {
-            'url': '/post_update_data-test-url/', 
-            'title': 'post_update_data-test-title', 
+            'url': '/post_update_data-test-url/',
+            'title': 'post_update_data-test-title',
             'content': 'post_update_data content1 content1 content1',
             'sites': [Site.objects.first().id],  # neccessary
         }
@@ -345,9 +313,9 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, post_update_data['content'])
 
     def test_flatpagedelete__delete(self):
-        """ 
+        """
             Confirm that flatpages are being properly deleted
-        """ 
+        """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
