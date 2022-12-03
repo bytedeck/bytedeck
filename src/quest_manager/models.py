@@ -49,7 +49,7 @@ class Category(IsAPrereqMixin, models.Model):
             return self.icon.url
         else:
             return SiteConfig.get().get_default_icon_url()
-    
+
     def current_quests(self):
         """ Returns a queryset containing every currently available quest in this campaign."""
         return self.quest_set.all().visible().not_archived()
@@ -151,7 +151,7 @@ class XPItem(models.Model):
     class Meta:
         abstract = True
         # manual ordering of a quest queryset places quests with smaller sort_order values above larger ones by default
-        # as such, the original value for sort_order (-sort_order,) orders quests upside-down 
+        # as such, the original value for sort_order (-sort_order,) orders quests upside-down
         # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
         # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
         ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
@@ -205,7 +205,7 @@ class XPItem(models.Model):
         # an XPItem object is inactive on the day it's made available if its availability time is in the future
         if self.date_available == now_local.date() and self.time_available > now_local.time():
             return False
-        
+
         # a Quest object is inactive if it's a part of an inactive campaign
         if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
             return False
@@ -232,7 +232,7 @@ class XPItem(models.Model):
         return self.max_repeats != 0
 
 
-class QuestQuerySet(models.query.QuerySet):
+class QuestQuerySet(models.QuerySet):
 
     def exclude_hidden(self, user):
         """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
@@ -288,9 +288,9 @@ class QuestQuerySet(models.query.QuerySet):
 
     def visible(self):
         return self.filter(visible_to_students=True)
-    
+
     def active_or_no_campaign(self):
-        """With self as an argument, returns a filtered queryset 
+        """With self as an argument, returns a filtered queryset
         containing only quests in active campaigns or quests without campaigns.
         """
         return self.exclude(campaign__active=False)
@@ -391,6 +391,7 @@ class QuestManager(models.Manager):
 
     def all_drafts(self, user):
         qs = self.get_queryset().filter(visible_to_students=False)
+
         if user.is_staff:
             return qs
         else:  # TA
@@ -455,6 +456,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
                                        object_id_field='or_prereq_object_id')
 
     objects = QuestManager()
+
+    # Python by default doesn't inherit inner classes. In this case, the default ordering provided in XPItem.Meta is
+    # not inherited, therefore we are doing it here.
+    class Meta(XPItem.Meta):
+        pass
 
     @classmethod
     def get_model_name(cls):
