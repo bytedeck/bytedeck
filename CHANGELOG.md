@@ -4,6 +4,19 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.19.2] 2022-12-04
+* Add courses as a column and sort option in student profile list.
+* Bugfixes:
+  - Advanced prerequisites form now loads (though slow and needs more work)
+  - New map form (same problem as above)
+  - Handle negative XP when closing a semester
+  - Quest list alphabetical sort
+  - Last staff login (Bytedeck)
+  - URLs for menu items now accepts external urls properly
+  - Missing delete option added for student's courses
+  - Custom pages (flatpages) auto generated Table of Contents repaired. Add this to the top of a custom page's HTML and it will generate a simple ToC based on "Heading 3" styled text (i.e `<h3>`):  
+  ```<div id="TOC"></div>```
+
 ### [1.19.1] 2022-09-03 - Beta Release
 * Visual representation of tags by student, linked to in profile and in mark calculations page
 * Students now have a quick reply option for returned and completed submissions.
