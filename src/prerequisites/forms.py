@@ -76,7 +76,6 @@ class PrereqFormInline(FutureModelForm):
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
 
-
         count_attrs = {
             'class': 'form-control',
             'style': 'width: 50px;'
