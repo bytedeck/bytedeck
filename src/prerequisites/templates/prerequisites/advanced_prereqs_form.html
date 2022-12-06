@@ -3,7 +3,7 @@
 {% load static %}
 
 {% block head %}
-  {{ form.media }}
+  {{ form.media.css }}
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
 {% endblock %}
 
@@ -58,6 +58,7 @@
 
 
 {% block js %}
+{{ form.media.js }}
 <script>
   $.fn.select2.defaults.set( "theme", "bootstrap" );
     
@@ -74,6 +75,7 @@
     var $newRow = $("<tr>").append($('tr.empty-form').html().replace(/__prefix__/g, numForms));
     $('#id_prereq_formset table>tbody').append($newRow);
     $totalFormsInput.val(parseInt(numForms) + 1);
+    $('.django-select2:not([name*="__prefix__"])').djangoSelect2(); // re-initialize select2 fields
   });
 
   // When DELETE buttons are ticked, highlight the row in red
