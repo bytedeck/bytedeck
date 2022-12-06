@@ -77,6 +77,14 @@ class PrereqFormInline(FutureModelForm):
         self.fields['or_prereq_object'].label = "Alternate Element"
 
 
+        count_attrs = {
+            'class': 'form-control',
+            'style': 'width: 50px;'
+        }
+        self.fields['prereq_count'].widget.attrs.update(count_attrs)
+        self.fields['or_prereq_count'].widget.attrs.update(count_attrs)
+
+
 class PrereqFormsetHelper(FormHelper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
