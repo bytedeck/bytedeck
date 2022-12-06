@@ -7,6 +7,49 @@ from django_summernote.widgets import SummernoteInplaceWidget
 from utilities.models import VideoResource, MenuItem
 
 
+class FutureModelForm(forms.ModelForm):
+    """
+    ModelForm which adds extra API to form fields.
+
+    Form fields may define new methods for FutureModelForm:
+
+    - ``FormField.value_from_object(instance, name)`` should return the initial
+      value to use in the form, overrides ``ModelField.value_from_object()``
+      which is what ModelForm uses by default,
+    - ``FormField.save_object_data(instance, name, value)`` should set instance
+      attributes. Called by ``save()`` **before** writing the database, when
+      ``instance.pk`` may not be set, it overrides
+      ``ModelField.save_form_data()`` which is normally used in this occasion
+      for non-m2m and non-virtual model fields.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Override that uses a form field's ``value_from_object()``."""
+        super().__init__(*args, **kwargs)
+
+        for name, field in self.fields.items():
+            if not hasattr(field, 'value_from_object'):
+                continue
+
+            try:
+                self.initial[name] = field.value_from_object(self.instance, name)
+            except:  # noqa
+                continue
+
+    def _post_clean(self):
+        """Override that uses the form field's ``save_object_data()``."""
+        super()._post_clean()
+
+        for name, field in self.fields.items():
+            if not hasattr(field, 'save_object_data'):
+                continue
+
+            value = self.cleaned_data.get(name, None)
+            if value:
+                field.save_object_data(self.instance, name, value)
+
+
 class VideoForm(forms.ModelForm):
     class Meta:
         model = VideoResource
