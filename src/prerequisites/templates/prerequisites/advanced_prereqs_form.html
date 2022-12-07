@@ -73,10 +73,9 @@
     var numForms = $totalFormsInput.val();
     // forms are zero index (e.g. 0, 1), so new form index = numForms (e.g. 2)
     var $newRow = $("<tr>").append($('tr.empty-form').html().replace(/__prefix__/g, numForms));
-    $newRow.find('.select2-container').remove();
-    $newRow.find('.django-select2').djangoSelect2(); // re-initialize select2 fields
     $('#id_prereq_formset table>tbody').append($newRow);
     $totalFormsInput.val(parseInt(numForms) + 1);
+    $('.django-select2:not([name*="__prefix__"])').djangoSelect2(); // re-initialize select2 fields
   });
 
   // When DELETE buttons are ticked, highlight the row in red

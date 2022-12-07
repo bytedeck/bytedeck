@@ -8,7 +8,7 @@ from django_select2.forms import Select2Widget
 from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import CachedContentObjectChoiceField
 
 from .models import Prereq
 
@@ -47,12 +47,12 @@ def hardcoded_prereq_model_choice():
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = ContentObjectChoiceField(
+    prereq_object = CachedContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
         widget=Select2Widget,
     )
 
-    or_prereq_object = ContentObjectChoiceField(
+    or_prereq_object = CachedContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
         required=False,
         widget=Select2Widget,
@@ -75,6 +75,13 @@ class PrereqFormInline(FutureModelForm):
         self.fields['or_prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
+
+        count_attrs = {
+            'class': 'form-control',
+            'style': 'width: 50px;'
+        }
+        self.fields['prereq_count'].widget.attrs.update(count_attrs)
+        self.fields['or_prereq_count'].widget.attrs.update(count_attrs)
 
 
 class PrereqFormsetHelper(FormHelper):

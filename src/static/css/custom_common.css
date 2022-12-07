@@ -512,6 +512,10 @@ td.notification-icons {
     padding-bottom: 0px !important;
 }
 
+.icon-spacing {
+    margin: 0 0.15rem;
+}
+
 /*td.notification-icons .fa {
   margin-top: 8px;
 }*/
