@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context
+from model_bakery import baker
 
 from tenant.models import Tenant, check_tenant_name
 
@@ -41,6 +42,18 @@ class TenantModelTest(TenantTestCase):
     def test_tenant_get_root_url(self):
         self.assertEqual(self.tenant.get_root_url(), "https://tenant.test.com")
         self.assertEqual(self.tenant_localhost.get_root_url(), "http://my-dev-schema.localhost:8000")
+
+    def test_tenant_last_staff_login_populated(self):
+        """ When a staff logins to a tenant, the last_staff_login should have the correct value """
+        self.assertIsNone(self.tenant.last_staff_login)
+
+        staff = baker.make(User, is_staff=True)
+        self.client.force_login(staff)
+        self.tenant.update_cached_fields()
+
+        staff.refresh_from_db()
+        self.assertIsNotNone(self.tenant.last_staff_login)
+        self.assertEqual(self.tenant.last_staff_login, staff.last_login)
 
 
 class CheckTenantNameTest(SimpleTestCase):

@@ -24,9 +24,10 @@ urlpatterns = [
     path('blocks/autocomplete/', ModelAutocomplete.as_view(model=models.Block), name='block_autocomplete'),
 
     # CourseStudent
-    path('add/student/', views.CourseStudentCreate.as_view(), name='create'),
-    path('join/<int:user_id>/', views.CourseAddStudent.as_view(), name='join'),
-    path('edit/<pk>/', views.CourseStudentUpdate.as_view(), name='update'),
+    path('student/add/', views.CourseStudentCreate.as_view(), name='create'),
+    path('student/<int:user_id>/join/', views.CourseAddStudent.as_view(), name='join'),
+    path('student/<pk>/edit/', views.CourseStudentUpdate.as_view(), name='update'),
+    path('student/<pk>/delete/', views.CourseStudentDelete.as_view(), name='coursestudent_delete'),
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),

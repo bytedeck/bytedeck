@@ -90,7 +90,7 @@ def create_users():
     owner, _ = User.objects.update_or_create(
         username=settings.TENANT_DEFAULT_OWNER_USERNAME, 
         defaults={
-            "email": 'owner@example.com',
+            "email": settings.TENANT_DEFAULT_OWNER_EMAIL,
             "is_superuser": False,
             "is_staff": True,
         },

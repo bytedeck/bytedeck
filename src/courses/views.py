@@ -219,6 +219,14 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class CourseStudentDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = CourseStudent
+
+    def get_success_url(self) -> str:
+        return reverse("profiles:profile_detail", args=[self.object.user.profile.id])
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Semester
 
@@ -374,11 +382,13 @@ def end_active_semester(request):
     semester_warnings = {
         Semester.CLOSED: 'Semester is already closed, no action taken.',
         Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester until they are approved or returned",
+        Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't close the Semester until it is fixed.",
         'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0, in-progress quests have been deleted, and \
         announcements have been archived.',
     }
 
-    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL):
+    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL,
+                   Semester.STUDENTS_WITH_NEGATIVE_XP):
         sem.reset_students_xp_cached()
         Announcement.objects.archive_announcements()
 
