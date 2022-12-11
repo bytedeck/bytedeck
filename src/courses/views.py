@@ -61,7 +61,7 @@ def mark_calculations(request, user_id=None):
     # only show mark ranges where student is enrolled in and is also active
     user_courses = user.profile.current_courses().values_list('course', flat=True)
     assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
-    all_ranges = MarkRange.objects.filter(active=True, courses=None) 
+    all_ranges = MarkRange.objects.filter(active=True, courses=None)
 
     # combine assigned_ranges and all_ranges, then order by min mark
     markranges = (assigned_ranges | all_ranges).order_by('minimum_mark')
@@ -257,7 +257,7 @@ class SemesterCreateUpdateFormsetMixin:
         ctx['helper'] = ExcludedDateFormsetHelper()
         return ctx
 
-    # formsets 
+    # formsets
 
     def get_formset_queryset(self):
         return self.get_object().excludeddate_set.all().order_by('date')
@@ -271,10 +271,10 @@ class SemesterCreateUpdateFormsetMixin:
             'semester': self.object,
         }
         return form_kwargs
-        
+
     def get_formset(self):
         return self.formset_class(**self.get_formset_kwargs(), queryset=self.get_formset_queryset())
-    
+
     # form
 
     def form_valid(self, form, formset):
@@ -450,7 +450,7 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
     def dispatch(self, request, *args, **kwargs):
         is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
         if not is_ajax or not request.user.is_authenticated:
-            raise Http404() 
+            raise Http404()
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -487,10 +487,10 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
         """generates histograms
 
         Returns:
-            tuple[list[int], list[int], list[int]]: 
+            tuple[list[int], list[int], list[int]]:
 
                 for first two list in tuple:
-                    histogram of values using student and queried user's marks 
+                    histogram of values using student and queried user's marks
 
                 last el in tuple:
                     histogram's bins in list form
@@ -498,7 +498,7 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
         user_mark, student_marks = self.get_datasets()
 
         # histogram length will be len(bin)-1, so bin length has to be self._BIN_SIZE+1
-        bins = numpy.arange(0, self._BINS * (self._BIN_WIDTH + 1) + 1, self._BIN_WIDTH)  
+        bins = numpy.arange(0, self._BINS * (self._BIN_WIDTH + 1) + 1, self._BIN_WIDTH)
         student_histogram, _ = numpy.histogram(student_marks, bins=bins)
         user_histogram, _ = numpy.histogram(user_mark, bins=bins)
 
@@ -561,12 +561,12 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
         Returns:
             list[dict[str, list[int]]]: returns dictionary of str, list[int]
                 el 0 -> str: name of quest object so we can use that as helptext label
-                el 1 -> list[int]: 
+                el 1 -> list[int]:
                     list has 2 values, 0 or xp. list[index] == 0 means that quest doesn't have tag for user_tags[index].
                     If list[index] == quest.xp then quest has tag user_tags[index]
         """
-        submissions_queryset = get_quest_submission_by_tag(self.user, user_tags).order_by('quest', 'ordinal')
-        
+        submissions_queryset = get_quest_submission_by_tag(self.user, user_tags).order_by('quest_id', 'ordinal')
+
         # use this to keep track of how much xp submission has
         # since xp_earned can change if it does not meet the cut off
         submissions_xp = submissions_queryset.annotate(xp_earned=Greatest('quest__xp', 'xp_requested')).values('id', 'xp_earned')
@@ -574,9 +574,9 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
 
         # change xp_earned or remove submissions if they go over max_xp
         quest_ids = submissions_queryset.filter(quest__max_xp__gt=-1).distinct('quest').values_list('quest', flat=True)
-        keep_submissions_id = [] 
+        keep_submissions_id = []
         for quest_id in quest_ids:
-            
+
             submissions_for_quest = submissions_queryset.filter(quest_id=quest_id)
             current_xp_total = 0
             for submission in submissions_for_quest:
@@ -588,7 +588,7 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                     new_xp_amount = submission.quest.max_xp - current_xp_total
                     submissions_xp[submission.id] = new_xp_amount
                     break
-                
+
                 current_xp_total += submissions_xp[submission.id]
 
         # remove ids not in keep_submissions_id since they should have xp_earned of 0 anyway
@@ -611,7 +611,7 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                 name += f" ({submission.ordinal})"
 
             submission_dataset.append({'name': name, 'dataset': xp_in_tag})
-            
+
         return submission_dataset
 
     def get_badge_dataset(self, user_tags):
@@ -623,7 +623,7 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
         Returns:
             list[dict[str, list[int]]]: returns dictionary of str, list[int]
                 el 0 -> str: name of badge object so we can use that as helptext label
-                el 1 -> list[int]: 
+                el 1 -> list[int]:
                     list has 2 values, 0 or xp. list[index] == 0 means that badge doesn't have tag for user_tags[index].
                     If list[index] == badge.xp then badge has tag user_tags[index]
         """
@@ -645,18 +645,18 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                 name += f" ({assertion.ordinal})"
 
             assertion_dataset.append({'name': name, 'dataset': xp_in_tag})
-            
+
         return assertion_dataset
 
     def get_json_data(self):
         # get names from get_user_tags_and_xp to get it in order by tag xp
         _tag_and_xp = get_user_tags_and_xp(self.user) or [('', '')]  # use 'or' so zip has a return value
         names, _ = zip(*_tag_and_xp)
-        names = list(map(str, names))  
+        names = list(map(str, names))
 
         quest_dataset = self.get_quest_dataset(names)
         badge_dataset = self.get_badge_dataset(names)
-        
+
         return json.dumps({
             'labels': names,  # list[str]
             'data': {
