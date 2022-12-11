@@ -48,10 +48,14 @@ def generate_notification_email(user, root_url):
     subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
     to_email_address = user.email
     unread_notifications = Notification.objects.all_unread(user)
+    submissions_awaiting_approval = None
+
     if user.is_staff:
         submissions_awaiting_approval = QuestSubmission.objects.all_awaiting_approval(teacher=user)
-    else:
-        submissions_awaiting_approval = None
+
+    # Do not generate email notification for users that are not currently enrolled
+    if not user.is_staff and not user.profile.has_current_course:
+        return None
 
     if unread_notifications or submissions_awaiting_approval:
         text_content = str(unread_notifications)
@@ -69,7 +73,7 @@ def generate_notification_email(user, root_url):
         return email_msg
     else:
         return None
-    
+
 
 def create_email_notification_tasks():
     """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
@@ -81,7 +85,7 @@ def create_email_notification_tasks():
     # https://docs.djangoproject.com/en/3.2/ref/applications/#django.apps.AppConfig.ready
     # Can't import models at the module level, so need to import in the method.
     from django_celery_beat.models import CrontabSchedule, PeriodicTask
-    
+
     minute = 0
 
     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
