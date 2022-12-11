@@ -891,6 +891,9 @@ class QuestSubmission(models.Model):
 
     class Meta:
         ordering = ["time_approved", "time_completed"]
+        constraints = [
+            models.UniqueConstraint(fields=["quest", "user", "ordinal", "semester"], name="unique_quest_submission"),
+        ]
 
     objects = QuestSubmissionManager()
 
