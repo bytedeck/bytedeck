@@ -4,13 +4,13 @@ from crispy_forms import layout
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
-from django_select2.forms import Select2Widget
 from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
-from utilities.fields import CachedContentObjectChoiceField
+from utilities.fields import ContentObjectChoiceField
 
 from .models import Prereq
+from .widgets import CustomContentObjectSelect2Widget
 
 
 def popover_labels(model, field_strings):
@@ -47,15 +47,15 @@ def hardcoded_prereq_model_choice():
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = CachedContentObjectChoiceField(
+    prereq_object = ContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        widget=Select2Widget,
+        widget=CustomContentObjectSelect2Widget(),
     )
 
-    or_prereq_object = CachedContentObjectChoiceField(
+    or_prereq_object = ContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
         required=False,
-        widget=Select2Widget,
+        widget=CustomContentObjectSelect2Widget(),
     )
         
     class Meta:

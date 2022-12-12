@@ -4,9 +4,6 @@ from badges import views
 
 from django.conf.urls import url
 
-from badges.models import Badge
-from utilities.views import ModelAutocomplete
-
 app_name = 'badges'
 
 urlpatterns = [
@@ -18,7 +15,6 @@ urlpatterns = [
     url(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.BadgePrereqsUpdate.as_view(), name='badge_prereqs_update'),
     url(r'^(?P<badge_id>[0-9]+)/copy/$', views.badge_copy, name='badge_copy'),
     url(r'^(?P<pk>[0-9]+)/delete/$', views.BadgeDelete.as_view(), name='badge_delete'),
-    path('autocomplete/', ModelAutocomplete.as_view(model=Badge), name='badge_autocomplete'),
 
     # Badge Assertions
     url(r'^(?P<badge_id>[0-9]+)/grant/(?P<user_id>[0-9]+)/$', views.assertion_create, name='grant'),

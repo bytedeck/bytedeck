@@ -1,6 +1,5 @@
 
 from datetime import date
-from dal import autocomplete
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -10,7 +9,7 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from django_summernote.widgets import SummernoteInplaceWidget
-from django_select2.forms import ModelSelect2MultipleWidget
+from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from utilities.fields import RestrictedFileFormField
@@ -33,22 +32,20 @@ class QuestForm(forms.ModelForm):
         # to_field_name="name",
         required=False,
         queryset=Quest.objects.all(),
-        # widget=ModelSelect2Widget(
-        #     model=Quest,
-        #     search_fields=['name__icontains'],
-        # ),
-        widget=autocomplete.ModelSelect2(url='quests:quest_autocomplete'),
+        widget=ModelSelect2Widget(
+            model=Quest,
+            search_fields=['name__icontains'],
+        ),
     )
 
     new_badge_prerequisite = forms.ModelChoiceField(
-        # widget=ModelSelect2Widget(
-        #     model=Badge,
-        #     search_fields=['name__icontains'],
-        # ),
-        queryset=Badge.objects.all(),
         # to_field_name="name",
         required=False,
-        widget=autocomplete.ModelSelect2(url='badges:badge_autocomplete'),
+        queryset=Badge.objects.all(),
+        widget=ModelSelect2Widget(
+            model=Badge,
+            search_fields=['name__icontains'],
+        ),
     )
 
     campaign = forms.ModelChoiceField(
