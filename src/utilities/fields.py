@@ -1,8 +1,6 @@
 import six
-import hashlib
 
 from django import forms
-from django.core.cache import cache
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.forms.models import ModelChoiceIterator
@@ -118,29 +116,6 @@ class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceFiel
     def value_from_object(self, instance, name):
         """Get the attribute, for FutureModelForm."""
         return getattr(instance, name)
-
-
-class CachedContentObjectChoiceIterator(ContentObjectChoiceIterator):
-
-    def _cache_key(self, qs):
-        """Cache key used to identify this query"""
-        base_key = hashlib.md5(str(qs.query).encode('utf-8')).hexdigest()
-        return cache.make_key('.'.join((qs.model._meta.db_table, 'queryset', base_key)), version=None)
-
-    def __iter__(self):
-        if self.field.empty_label is not None:
-            yield ('', self.field.empty_label)
-        for qs in self.queryset.get_querysets():
-            cache_key = self._cache_key(qs)
-            choices = cache.get(cache_key, None)
-            if choices is None:
-                choices = [self.choice(obj) for obj in qs]
-                cache.set(cache_key, choices, 500)
-            yield (str(qs.model._meta.verbose_name), choices)
-
-
-class CachedContentObjectChoiceField(ContentObjectChoiceField):
-    iterator = CachedContentObjectChoiceIterator
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit

@@ -1,19 +1,151 @@
+import json
+import random
+import string
+
+from django import forms
+from django.core import signing
 from django.contrib.auth import get_user_model
-from django.contrib.sites.models import Site
+from django.contrib.auth.models import Group
+from django.utils.encoding import smart_text
 from django.contrib.flatpages.models import FlatPage
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
+from utilities.fields import ContentObjectChoiceField
+from utilities.widgets import ContentObjectSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
-import random
-import string
-
-
 User = get_user_model()
+
+
+def random_string(n):
+    return "".join(
+        random.choice(string.ascii_uppercase + string.digits) for _ in range(n)
+    )
+
+
+class ContentObjectsSelect2WidgetForm(forms.Form):
+    f = ContentObjectChoiceField(
+        queryset=QuerySetSequence(
+            Group.objects.all(),
+        ),
+        widget=ContentObjectSelect2Widget(search_fields=['name__icontains']),
+    )
+
+
+class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
+    queryset = QuerySetSequence(Group.objects.all())
+    search_fields = [
+        'name__icontains'
+    ]
+
+    def label_from_instance(self, obj):
+        return str(obj.name).upper()
+
+
+class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        self.groups = Group.objects.bulk_create(
+            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
+        )
+
+    def _ct_pk(self, obj):
+        return "{}-{}".format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+
+    def test_get(self):
+        group = self.groups[0]
+        form = ContentObjectsSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        assert {'id': self._ct_pk(group), 'text': smart_text(group)} in data['results'][0]['children']
+
+    def test_no_field_id(self):
+        group = self.groups[0]
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'term': group.name})
+        assert response.status_code == 404
+
+    def test_wrong_field_id(self):
+        group = self.groups[0]
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': 123, 'term': group.name})
+        assert response.status_code == 404
+
+    def test_field_id_not_found(self):
+        group = self.groups[0]
+        field_id = signing.dumps(123456789)
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 404
+
+    def test_pagination(self):
+        url = reverse('utilities:querysetsequence_auto-json')
+        widget = ContentObjectSelect2Widget(
+            max_results=10,
+            queryset=QuerySetSequence(Group.objects.all()),
+            search_fields=['name__icontains']
+        )
+        widget.render('name', None)
+        field_id = signing.dumps(id(widget))
+
+        response = self.client.get(url, {'field_id': field_id, 'term': ''})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['more'] is True
+
+        response = self.client.get(url, {'field_id': field_id, 'term': '', 'page': 1000})
+        assert response.status_code == 404
+
+        response = self.client.get(url, {'field_id': field_id, 'term': '', 'page': 'last'})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['more'] is False
+
+    def test_label_from_instance(self):
+        url = reverse('utilities:querysetsequence_auto-json')
+
+        form = ContentObjectsSelect2WidgetForm()
+        form.fields['f'].widget = CustomContentObjectSelect2Widget()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+
+        # artist = artists[0]
+        group = self.groups[0]
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 200
+
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        assert {'id': self._ct_pk(group), 'text': smart_text(group.name.upper())} in data['results'][0]['children']
+
+    def test_url_check(self):
+        from django_select2.cache import cache
+
+        group = self.groups[0]
+        form = ContentObjectsSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+        cache_key = form.fields['f'].widget._get_cache_key()
+        widget_dict = cache.get(cache_key)
+        widget_dict['url'] = 'yet/another/url'
+        cache.set(cache_key, widget_dict)
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 404
 
 
 class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
