@@ -1,4 +1,5 @@
 from django.urls import reverse_lazy
+from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -15,32 +16,55 @@ from siteconfig.models import SiteConfig
 
 from tags.forms import TagForm
 
-# from utilities.forms import TagForm, 
 from tenant.views import NonPublicOnlyViewMixin
 
-# from dal import autocomplete
+from django_select2.views import AutoResponseView
 from taggit.models import Tag
 from .models import get_quest_submission_by_tag, get_badge_assertion_by_tags, total_xp_by_tags
 
-# USE GENERIC utilities.views.ModelAutoComplete instead, might need this in the future if further customization is needed
-# class TagAutocomplete(autocomplete.Select2QuerySetView):
-#     """ https://django-autocomplete-light.readthedocs.io/en/master/taggit.html#view-example
-#     """
-#     def get_queryset(self):
-#         # Don't forget to filter out results depending on the visitor !
-#         if not self.request.user.is_authenticated:
-#             return Tag.objects.none()
-
-#         # order_by() added to prevent this warning:
-#         # UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'taggit.models.Tag'> QuerySet.
-#         qs = Tag.objects.all().order_by('name')
-
-#         if self.q:
-#             qs = qs.filter(name__istartswith=self.q)
-
-#         return qs
-
 User = get_user_model()
+
+
+class AutoResponseView(AutoResponseView):
+    """
+    View that handles requests from heavy model widgets.
+
+    The view only supports HTTP's GET method.
+    """
+
+    def get(self, request, *args, **kwargs):
+        """
+        Return a :class:`.django.http.JsonResponse`.
+        Example::
+            {
+                'results': [
+                    {
+                        'text': "foo",
+                        'id': "foo"
+                    }
+                ],
+                'more': true
+            }
+        """
+        self.widget = self.get_widget_or_404()
+        self.term = kwargs.get('term', request.GET.get('term', ''))
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return JsonResponse(
+            {
+                'results': [
+                    {'text': self.widget.label_from_instance(obj), 'id': obj.slug}
+                    for obj in context['object_list']
+                ],
+                'more': context['page_obj'].has_next(),
+            },
+        )
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+
+        return super().get_queryset().order_by("name")
 
 
 class TagList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):

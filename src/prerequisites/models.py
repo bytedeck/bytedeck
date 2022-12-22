@@ -185,17 +185,6 @@ class IsAPrereqMixin:
         else:
             return False
 
-    @staticmethod
-    def dal_autocomplete_search_fields():
-        """ 
-        For Django Autocomplete Light, should return a field on the model, 
-        or something more complicated as described in
-        https://django-autocomplete-light.readthedocs.io/en/master/gfk.html#form-example
-
-        override this static method in the class to choose different search fields
-        """
-        return "name"
-
 
 # class PrereqQuerySet(models.query.QuerySet):
 #     """
