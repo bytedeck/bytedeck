@@ -25,16 +25,25 @@ from .models import get_quest_submission_by_tag, get_badge_assertion_by_tags, to
 User = get_user_model()
 
 
-class AutoResponseView(AutoResponseView):
+class TaggitAutoResponseView(AutoResponseView):
     """
-    View that handles requests from heavy model widgets.
+    Override `django_select2.views.AutoResponseView` class
+    to work with taggit's TagField.
 
     The view only supports HTTP's GET method.
     """
 
     def get(self, request, *args, **kwargs):
         """
+        Override `get` method to return a list of tags (slugs)
+        instead of primary keys.
+
+        This is needed because `django_select2.views.AutoResponseView`
+        returns primary keys of selected options, and the taggit's TagField
+        expects tag names.
+
         Return a :class:`.django.http.JsonResponse`.
+
         Example::
             {
                 'results': [
@@ -53,6 +62,7 @@ class AutoResponseView(AutoResponseView):
         return JsonResponse(
             {
                 'results': [
+                    # render slug (tag) instead of primary key
                     {'text': self.widget.label_from_instance(obj), 'id': obj.slug}
                     for obj in context['object_list']
                 ],
@@ -133,7 +143,7 @@ class TagDetailStudent(TagDetail):
         kwargs['badge_assertions'] = assertions
         kwargs['badge_assertion_length'] = len(assertions)
 
-        return super().get_context_data(**kwargs) 
+        return super().get_context_data(**kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')
