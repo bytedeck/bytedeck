@@ -1,5 +1,3 @@
-import six
-
 from django.urls import reverse
 from django.utils.itercompat import is_iterable
 
@@ -8,6 +6,7 @@ from django_select2.forms import ModelSelect2TagWidget
 
 
 class TaggitSelect2Widget(ModelSelect2TagWidget):
+    """Select2 tag widget for taggit's TagField."""
 
     model = Tag
     search_fields = ["name__icontains"]
@@ -35,7 +34,7 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
             if not v:
                 continue
 
-            v = v.split(',') if isinstance(v, six.string_types) else v
+            v = v.split(',') if isinstance(v, str) else v
             v = [v] if not is_iterable(v) else v
             for t in v:
                 values.add(self.option_value(t))
@@ -44,7 +43,7 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
     def options(self, name, value, attrs=None):
         """Return only select options."""
         # When the data hasn't validated, we get the raw input
-        if isinstance(value, six.text_type):
+        if isinstance(value, str):
             value = value.split(',')
 
         for v in value:
@@ -73,7 +72,7 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
         This is needed because Select2 uses a multiple select even in tag mode,
         and the model field expects a comma-separated list of tags.
         """
-        value = six.text_type(',').join(super().value_from_datadict(data, files, name))
+        value = ','.join(super().value_from_datadict(data, files, name))
         if value and ',' not in value:
             value = '%s,' % value
         return value

@@ -1,10 +1,10 @@
 from django import forms
 
-from django_select2.forms import Select2Widget
 from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
 from utilities.fields import ContentObjectChoiceField
+from utilities.widgets import ContentObjectSelect2Widget
 
 from .models import CytoScape
 
@@ -41,7 +41,7 @@ class GenerateQuestMapForm(FutureModelForm):
         label='Initial Object',
         required=True,
         queryset=QuerySetSequence(*[klass.objects.all() for klass in get_model_options()]),
-        widget=Select2Widget,
+        widget=ContentObjectSelect2Widget(search_fields=["name__icontains"]),
     )
 
     parent_scape = forms.ModelChoiceField(

@@ -5,7 +5,7 @@ from tags import views
 app_name = 'tags'
 
 urlpatterns = [
-    path("auto.json", views.AutoResponseView.as_view(), name="auto-json"),
+    path("auto.json", views.TaggitAutoResponseView.as_view(), name="auto-json"),
 
     path('', views.TagList.as_view(), name='list'),
     path('create/', views.TagCreate.as_view(), name='create'),
