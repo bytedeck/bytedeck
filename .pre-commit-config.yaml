@@ -20,13 +20,13 @@ repos:
     hooks:
       - id: django-check
         name: Check django project for potential problems
-        entry: sh -c 'python manage.py check'
+        entry: sh -c 'python src/manage.py check'
         types: [python]
         pass_filenames: false
         language: system
       - id: django-check-migrations
         name: Check django project for missing migrations.
-        entry: sh -c 'python manage.py makemigrations --check --dry-run'
+        entry: sh -c 'python src/manage.py makemigrations --check --dry-run'
         files: "models.py"
         types: [python]
         pass_filenames: false
