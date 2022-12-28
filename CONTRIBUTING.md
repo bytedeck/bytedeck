@@ -1,20 +1,3 @@
-
-Conversation opened. 1 read message.
-
-Skip to content
-Using Gmail with screen readers
-1 of 1,275
-(no subject)
-Inbox
-Cheryl Couture
-	
-Attachments12:05 PM (3 hours ago)
-	
-to me
-
- One attachment  •  Scanned by Gmail
-	
-
 # Contributing
 
 ## Quick Reference Guide to Making Code Contributions
