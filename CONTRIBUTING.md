@@ -82,6 +82,3 @@ We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/ha
 
 ## License
 By contributing, you agree that your contributions will be licensed under its [GNU GPL3 License](https://github.com/timberline-secondary/hackerspace/blob/develop/license.txt).
-
-CONTRIBUTING.md
-Displaying CONTRIBUTING.md.
