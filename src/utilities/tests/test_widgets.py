@@ -26,9 +26,9 @@ def random_string(n):
 
 class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
     queryset = QuerySetSequence(Group.objects.all())
-    search_fields = [
-        'name__icontains'
-    ]
+    search_fields = {
+        'auth': {'group': ['name__icontains']},
+    }
 
     def label_from_instance(self, obj):
         return str(obj.name).upper()
@@ -116,11 +116,11 @@ class TestContentObjectSelect2Widget(TenantTestCase):
     def test_get_search_fields(self):
         widget = ContentObjectSelect2Widget()
         with self.assertRaises(NotImplementedError):
-            widget.get_search_fields()
+            widget.get_search_fields(Group)
 
-        widget.search_fields = ['name__icontains']
-        assert isinstance(widget.get_search_fields(), collections.Iterable)
-        assert all(isinstance(x, text_type) for x in widget.get_search_fields())
+        widget.search_fields = {'auth': {'group': ['name__icontains']}}
+        assert isinstance(widget.get_search_fields(Group), collections.Iterable)
+        assert all(isinstance(x, text_type) for x in widget.get_search_fields(Group))
 
     def test_filter_queryset(self):
         widget = CustomContentObjectSelect2Widget()
@@ -132,14 +132,14 @@ class TestContentObjectSelect2Widget(TenantTestCase):
 
     def test_queryset_kwarg(self):
         widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
         result = widget.filter_queryset(group.name)
         assert result.exists()
 
     def test_ajax_view_registration(self):
         widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
@@ -153,16 +153,16 @@ class TestContentObjectSelect2Widget(TenantTestCase):
         from django_select2.cache import cache
 
         widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         cached_widget = cache.get(widget._get_cache_key())
         assert cached_widget['max_results'] == widget.max_results
-        assert list(cached_widget['search_fields']) == widget.search_fields
+        assert dict(cached_widget['search_fields']) == widget.search_fields
         qs = widget.get_queryset()
         assert isinstance(cached_widget['queryset'][0][0], qs.get_querysets()[0].__class__)
         assert text_type(cached_widget['queryset'][0][1]) == text_type(qs.get_querysets()[0].query)
 
     def test_get_url(self):
         widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         assert isinstance(widget.get_url(), text_type)

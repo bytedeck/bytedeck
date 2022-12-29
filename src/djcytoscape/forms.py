@@ -41,7 +41,13 @@ class GenerateQuestMapForm(FutureModelForm):
         label='Initial Object',
         required=True,
         queryset=QuerySetSequence(*[klass.objects.all() for klass in get_model_options()]),
-        widget=ContentObjectSelect2Widget(search_fields=["name__icontains"]),
+        widget=ContentObjectSelect2Widget(
+            search_fields={
+                'quest_manager': {'quest': ['name__icontains']},
+                'badges': {'badge': ['name__icontains']},
+                'courses': {'rank': ['name__icontains']},
+            },
+        ),
     )
 
     parent_scape = forms.ModelChoiceField(

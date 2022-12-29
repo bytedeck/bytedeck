@@ -8,9 +8,9 @@ from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
 from utilities.fields import ContentObjectChoiceField
+from utilities.widgets import ContentObjectSelect2Widget
 
 from .models import Prereq
-from .widgets import CustomContentObjectSelect2Widget
 
 
 def popover_labels(model, field_strings):
@@ -49,13 +49,43 @@ class PrereqFormInline(FutureModelForm):
 
     prereq_object = ContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        widget=CustomContentObjectSelect2Widget(),
+        widget=ContentObjectSelect2Widget(
+            search_fields={
+                'quest_manager': {
+                    'category': ['title__icontains'],
+                    'quest': ['name__icontains'],
+                },
+                'courses': {
+                    'block': ['name__icontains'],
+                    'course': ['title__icontains'],
+                    'grade': ['name__icontains'],
+                    'rank': ['name__icontains'],
+                },
+                'prerequisites': {'prereq': ['name__icontains']},
+                'badges': {'badge': ['name__icontains']},
+            },
+        ),
     )
 
     or_prereq_object = ContentObjectChoiceField(
         queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
         required=False,
-        widget=CustomContentObjectSelect2Widget(),
+        widget=ContentObjectSelect2Widget(
+            search_fields={
+                'quest_manager': {
+                    'category': ['title__icontains'],
+                    'quest': ['name__icontains'],
+                },
+                'courses': {
+                    'block': ['name__icontains'],
+                    'course': ['title__icontains'],
+                    'grade': ['name__icontains'],
+                    'rank': ['name__icontains'],
+                },
+                'prerequisites': {'prereq': ['name__icontains']},
+                'badges': {'badge': ['name__icontains']},
+            },
+        ),
     )
         
     class Meta:
