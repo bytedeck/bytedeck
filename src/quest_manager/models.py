@@ -85,10 +85,6 @@ class Category(IsAPrereqMixin, models.Model):
     def autocomplete_search_fields():  # for grapelli prereq selection
         return ("title__icontains",)
 
-    @staticmethod
-    def dal_autocomplete_search_fields():
-        return "title"
-
     @property
     def name(self):
         return self.title
@@ -779,25 +775,21 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
-        # this logic should probably be removed from this location?
-        # When would I want to return None that isn't already handled?
-        if self.not_submitted_or_inprogress(user, quest):
-            last_submission = self.last_submission(user, quest)
-            if last_submission:
-                ordinal = last_submission.ordinal + 1
-            else:
-                ordinal = 1
+        last_submission = self.last_submission(user, quest)
 
-            new_submission = QuestSubmission(
-                quest=quest,
-                user=user,
-                ordinal=ordinal,
-                semester_id=SiteConfig.get().active_semester.pk,
-            )
-            new_submission.save()
-            return new_submission
+        if last_submission:
+            ordinal = last_submission.ordinal + 1
         else:
-            return None
+            ordinal = 1
+
+        new_submission = QuestSubmission(
+            quest=quest,
+            user=user,
+            ordinal=ordinal,
+            semester_id=SiteConfig.get().active_semester.pk,
+        )
+        new_submission.save()
+        return new_submission
 
     def calculate_xp(self, user):
         """

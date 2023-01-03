@@ -18,7 +18,7 @@
 {% crispy form form.helper %}
 
 <hr>
-<p>Each row in the form above is considered a prerequisite.  If there are multiple prerequisites, then they must all be met before the student 
+<p>Each row in the form above is considered a prerequisite.  If there are multiple prerequisites, then they must all be met before the student
   will earn: <i>{{object.prereq_parent_str}}</i></p>
 <div class="panel panel-default">
   <div class="panel-heading"><h3 class="panel-title">Form field descriptions</h3></div>
@@ -28,13 +28,13 @@
       <dd>The object (badge, quest, rank, etc.) that students must achieve to meet the prerequisite and earn: <i>{{object.prereq_parent_str}}</i>.</dd>
       <br>
       <dt>Count</dt>
-      <dd>The minimum number of times the Required Element must be achieved.  This can be used for badges, or quests that are repeatable.  
-        For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 3, then they will meet the prerequisite if 
+      <dd>The minimum number of times the Required Element must be achieved.  This can be used for badges, or quests that are repeatable.
+        For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 3, then they will meet the prerequisite if
         they have earned 3 or more Nickels. For most element types this field is ignored.</dd>
       <br>
       <dt>NOT</dt>
-      <dd>This inverts the requirement.  For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 1, 
-        then they will meet the prerequisite as long as they have NOT earned the Nickel badge.  If <b>Count</b> = 3, then 
+      <dd>This inverts the requirement.  For example, if <b>Required Element</b> = <i>(badge) Nickel</i> and <b>Count</b> = 1,
+        then they will meet the prerequisite as long as they have NOT earned the Nickel badge.  If <b>Count</b> = 3, then
         they will meet the prerequisite as long as they have NOT earned three or more Nickel badges, i.e. they have only earned 0, 1 or 2.</dd>
       <br>
       <dt>Alternate Element</dt>
@@ -61,7 +61,7 @@
 {{ form.media.js }}
 <script>
   $.fn.select2.defaults.set( "theme", "bootstrap" );
-    
+
   // Button to dynamically add additional forms to the formset
   var $addFormBtn = $("<a>").attr("id", "add-form");
   $addFormBtn.html('Add Another Prerequisite <i class="fa fa-plus-circle"></i>');
@@ -102,7 +102,7 @@
   $( document ).ready(function() {
     $("[for='id_prerequisites-prereq-parent_content_type-parent_object_id-0-DELETE']").addClass(
       // '<i class="fa fa-lg fa-trash-o text-danger"></i>'
-      'text-danger'
+      'text-danger control-label-right'
     )
   });
 

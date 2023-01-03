@@ -1057,5 +1057,15 @@ padding-right: 20px !important;
     text-align: right;
 }
 
+#id_prereq_formset .control-label-right {
+    text-align: right;
+}
+
+.select2-results__group {
+    /* Set to match bs3 .panel-info */
+    background-color: #d9edf7;
+    border-color: #bce8f1;
+}
+
 
 
