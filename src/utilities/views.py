@@ -28,7 +28,7 @@ from queryset_sequence import QuerySetSequence
 
 class QuerySetSequenceAutoResponseView(AutoResponseView):
     """
-    View that handles requests from heavy model widgets.
+    View that handles requests from ContentObjectSelect2Widget widgets.
 
     The view only supports HTTP's GET method.
 
@@ -37,6 +37,10 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
 
     def get(self, request, *args, **kwargs):
         """
+        This is needed because `django_select2.views.AutoResponseView`
+        returns primary keys of selected options, and the ContentObjectChoiceField
+        expects ctypeid-objectid for result.
+
         Return a :class:`.django.http.JsonResponse`.
 
         Example::
@@ -77,8 +81,10 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
 
     def get_result_value(self, result):
         """Return ctypeid-objectid for result."""
-        return '%s-%s' % (ContentType.objects.get_for_model(result).pk,
-                          result.pk)
+        return '{}-{}'.format(
+            ContentType.objects.get_for_model(result).pk,
+            result.pk,
+        )
 
     def get_model_name(self, model):
         """Return the name of the model, fetch parent if model is a proxy."""
@@ -97,7 +103,7 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
             Http404: If the widget can not be found or no id is provided.
 
         Returns:
-            HeavySelect2Mixin: Widget from cache.
+            ContentObjectSelect2Widget: Widget from cache.
 
         """
         from django_select2.cache import cache
@@ -183,7 +189,7 @@ class FlatPageCreateView(NonPublicOnlyViewMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context["title"] = "Create"
         context['heading_title'] = "Create New Custom Page"
-        return context 
+        return context
 
     def get_form_kwargs(self, *args, **kwargs):
         fkwargs = super().get_form_kwargs(*args, **kwargs)

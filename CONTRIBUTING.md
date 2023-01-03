@@ -15,10 +15,10 @@ If you're interested in contributing to this repo, please work through these ste
 4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
 5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
 6. Write code!
-7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):   
+7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
    * venv: `./src/manage.py test src --failfast --parallel && flake8 src`
    * docker: `docker-compose exec web bash -c "./src/manage.py test src --failfast --parallel && flake8 src"`
-8. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:  
+8. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:
 `git commit -am "Useful description of your changes; Closes #123"`
 8. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
 9. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
@@ -33,6 +33,39 @@ If you're interested in contributing to this repo, please work through these ste
 15. Engage in the review of your pull request on github (there will likely be some back and forth discussion between you and the maintainer before the PR is accepted)
 16. Start work on another feature by checking out the develop branch again: `git checkout develop`
 17. Go to Step 4 and repeat!
+
+## Detailed Expectations for all Pull Requests:
+
+### Test Requirements
+* All issues labelled "bug" require a test for the bug that fails as a result of the bug.
+* All new server-side code must be 100% tested (all logical branches) unless there is a specific reason it is not feasible.
+* When modifying an existing method or class that is not fully tested, at least ensure your additional code is fully tested (this may, incidentally, require you to write additional tests for the existing method/class)
+* Front end tests must only be included 1. to confirm the present or absence of key content on a page: For example, a view/template that renders a button that should only be visible by staff users; or 2. to confirm the correction of a bug in the template content.
+
+### Verifying Coverage
+
+To verify the test coverage of your addtions, you can run coverage during testing; for example, if I made a modification in the Notifications app:
+1. Run the notifications tests with coverage:
+`docker-compose exec web bash -c "coverage run --source=src ./src/manage.py test src/notifications"`
+1. Generate html for the test coverage:
+`docker-compose exec web bash -c "coverage html"`
+1. View the test coverage by opening `/htmlcov/index.html` in your browser and navigating to your code
+1. Confirm that all logical branches of your codes is covered.  Here's an example of missing test coverage:
+![image](https://user-images.githubusercontent.com/10604391/209511048-3c3e5035-71d3-4cd3-9c8f-894af9d85475.png)
+
+### Pull Requests
+
+1. Please do not expect your pull request to accept the first time, at least until you are familiar with the project and its expectations.  Expect some requests for clarification (if your code is not well documented) or other minor changes to match the code standards of the project.
+
+1. Except in the most trivial cases, provide a detailed description in your PR that fully details the changes you made, in plain English, and how they address the issue.  The project's expectation is described at https://www.pullrequest.com/blog/writing-a-great-pull-request-description/
+
+### Documentation
+Please ensure your code is well documented. Do not assume that your code is obvious to reviewers, other developers, or even your future self:
+1. All methods and classes must include a docstring that fully explains what the purpose of the function is, why it's needed, and what it's being used for.
+1. All non-trivial code should have a comment describing why it's doing what it's doing.
+1. If what the code is doing is not immediately obvious, describe what it is doing  (for example, fancy list comprehensions, advanced queryset filters, use of non-standard library methods, etc)
+1. If you found code on stack overflow, a blog, or elsewhere, link to in within a code comment. This often provides addition context that is helpful to reviewers or future developers.
+1. Be prepared for requests to add more documentation/comments during review.
 
 ## Other considerations when contributing
 
