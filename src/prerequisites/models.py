@@ -185,6 +185,15 @@ class IsAPrereqMixin:
         else:
             return False
 
+    @staticmethod
+    def content_object_search_fields():
+        """
+        For ContentObjectSelect2Widget, should return a field on the model.
+
+        Override this static method in the class to choose different search fields
+        """
+        return ["name__icontains"]
+
 
 # class PrereqQuerySet(models.query.QuerySet):
 #     """
