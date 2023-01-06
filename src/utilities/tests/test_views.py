@@ -35,15 +35,18 @@ class ContentObjectsSelect2WidgetForm(forms.Form):
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),
-        widget=ContentObjectSelect2Widget(search_fields=['name__icontains']),
+        widget=ContentObjectSelect2Widget(
+            search_fields={
+                'auth': {'group': ['name__icontains']}}
+        )
     )
 
 
 class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
     queryset = QuerySetSequence(Group.objects.all())
-    search_fields = [
-        'name__icontains'
-    ]
+    search_fields = {
+        'auth': {'group': ['name__icontains']},
+    }
 
     def label_from_instance(self, obj):
         return str(obj.name).upper()
@@ -97,7 +100,9 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         widget = ContentObjectSelect2Widget(
             max_results=10,
             queryset=QuerySetSequence(Group.objects.all()),
-            search_fields=['name__icontains']
+            search_fields={
+                'auth': {'group': ['name__icontains']},
+            }
         )
         widget.render('name', None)
         field_id = signing.dumps(id(widget))

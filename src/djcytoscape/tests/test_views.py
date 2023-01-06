@@ -7,11 +7,8 @@ from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
-from djcytoscape.forms import GenerateQuestMapForm, QuestMapForm, get_model_options
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
-
-from .test_models import generate_real_primary_map
 
 User = get_user_model()
 
@@ -92,6 +89,8 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
     
     def test_ScapeGenerateMap__POST(self):
         """ Assert a teacher can generate a map using ScapeGenerateMapView """
+        from djcytoscape.forms import GenerateQuestMapForm
+
         self.client.force_login(self.test_teacher)
 
         # generate form data
@@ -120,6 +119,8 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_ScapeUpdateView__POST(self):
         """ Assert a teacher can update a map using ScapeGenerateMapView """
+        from djcytoscape.forms import QuestMapForm
+
         self.client.force_login(self.test_teacher)
 
         # generate form data
@@ -140,14 +141,6 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         map_ = CytoScape.objects.get(name='Updated Name')
         self.assertEqual(map_.initial_content_type, content_type)
         self.assertEqual(map_.initial_object_id, object_.id)
-
-    def test_Form_get_model_options__correct_models(self):
-        """ Quick test to see if the hardcoded model list is equal to CytoScape.ALLOWED_INITIAL_CONTENT_TYPES """
-
-        dynamically_loaded_models = [ct.model_class() for ct in ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES)]
-        hard_coded_models = [option for option in get_model_options()]
-
-        self.assertEqual(dynamically_loaded_models, hard_coded_models)
 
 
 class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -173,6 +166,8 @@ class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
 class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
+        from .test_models import generate_real_primary_map
+
         self.map = generate_real_primary_map()
         self.client = TenantClient(self.tenant)
         self.staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)

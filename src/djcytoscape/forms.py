@@ -1,28 +1,21 @@
 from django import forms
-
-from queryset_sequence import QuerySetSequence
+from django.contrib.contenttypes.models import ContentType
 
 from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
-from utilities.widgets import ContentObjectSelect2Widget
+from utilities.fields import AllowedContentObjectChoiceField as ContentObjectChoiceField
 
 from .models import CytoScape
 
 
-def get_model_options():
-    """
-        provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
-        formatted for utilities.fields.ContentObjectModelField use
-        from prerequisites.forms:
-            Can't always dynamically load this list due to accessing contenttypes too early
-            So instead provide a hard coded list which is checked during testing to ensure it matches
-            what the dynamically loaded list would have produced
-    """
-    from quest_manager.models import Quest
-    from badges.models import Badge
-    from courses.models import Rank
+class AllowedContentObjectChoiceField(ContentObjectChoiceField):
 
-    return [Quest, Rank, Badge]
+    def get_allowed_model_classes(self):
+        model_classes = [
+            ct.model_class() for ct in ContentType.objects.filter(
+                CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
+            )
+        ]
+        return model_classes
 
 
 class GenerateQuestMapForm(FutureModelForm):
@@ -37,12 +30,7 @@ class GenerateQuestMapForm(FutureModelForm):
 
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
     
-    initial_content_object = ContentObjectChoiceField(
-        label='Initial Object',
-        required=True,
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in get_model_options()]),
-        widget=ContentObjectSelect2Widget(search_fields=["name__icontains"]),
-    )
+    initial_content_object = AllowedContentObjectChoiceField(label='Initial Object')
 
     parent_scape = forms.ModelChoiceField(
         label='Parent Quest Map', 

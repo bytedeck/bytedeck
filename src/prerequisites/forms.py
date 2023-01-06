@@ -4,13 +4,11 @@ from crispy_forms import layout
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
-from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import AllowedContentObjectChoiceField as ContentObjectChoiceField
 
 from .models import Prereq
-from .widgets import CustomContentObjectSelect2Widget
 
 
 def popover_labels(model, field_strings):
@@ -31,32 +29,18 @@ def popover_labels(model, field_strings):
     return fields_html
 
 
-def hardcoded_prereq_model_choice():
-    """ Can't always dynamically load this list due to accessing contenttypes too early
-    So instead provide a hard coded list which is checked during testing to ensure it matches
-    what the dynamically loaded list would have produced """
-    from courses.models import Block, Course, Grade, Rank
-    from quest_manager.models import Category, Quest
-    from badges.models import Badge
+class AllowedContentObjectChoiceField(ContentObjectChoiceField):
 
-    return [
-        Category, Quest, Block, Course, Grade, Rank, Prereq, Badge,
-    ]
+    def get_allowed_model_classes(self):
+        return Prereq.all_registered_model_classes()
 
 
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        widget=CustomContentObjectSelect2Widget(),
-    )
+    prereq_object = AllowedContentObjectChoiceField()
 
-    or_prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        required=False,
-        widget=CustomContentObjectSelect2Widget(),
-    )
+    or_prereq_object = AllowedContentObjectChoiceField(required=False)
         
     class Meta:
         model = Prereq

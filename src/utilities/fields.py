@@ -2,9 +2,14 @@ import six
 
 from django import forms
 from django.contrib.contenttypes.models import ContentType
+from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import ValidationError
 from django.forms.models import ModelChoiceIterator
 from django.template.defaultfilters import filesizeformat
+
+from queryset_sequence import QuerySetSequence
+
+from .widgets import ContentObjectSelect2Widget
 
 
 class ContentObjectChoiceIterator(ModelChoiceIterator):
@@ -116,6 +121,43 @@ class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceFiel
     def value_from_object(self, instance, name):
         """Get the attribute, for FutureModelForm."""
         return getattr(instance, name)
+
+
+class AllowedContentObjectChoiceField(ContentObjectChoiceField):
+
+    widget = ContentObjectSelect2Widget
+
+    def __init__(self, *args, **kwargs):
+        model_classes = []
+        try:
+            model_classes = self.get_allowed_model_classes()
+        except ContentType.DoesNotExist:
+            # table doesn't exist yet
+            pass
+        except ProgrammingError:
+            # django.db.utils.ProgrammingError: no such table:
+            # django_content_type (e.g. postgresql)
+            pass
+        except OperationalError:
+            # django.db.utils.OperationalError: no such table:
+            # django_content_type (e.g. sqlite)
+            pass
+
+        super().__init__(QuerySetSequence(*[x.objects.all() for x in model_classes]), *args, **kwargs)
+
+        search_fields = {}
+        for qs in self.queryset.get_querysets():
+            klass = qs.model
+            search_fields.setdefault(klass._meta.app_label, {}).update({
+                klass._meta.model_name: klass.content_object_search_fields()
+            })
+        self.widget.search_fields = search_fields
+
+    def get_allowed_model_classes(self):
+        """Returns a list of allowed Model classes"""
+        raise NotImplementedError(
+            '%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__
+        )
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit

@@ -7,33 +7,34 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
 from django_select2.forms import HeavySelect2Widget
-
-from .fields import ContentObjectChoiceIterator
+from queryset_sequence import QuerySetSequence
 
 
 class ContentObjectSelect2Mixin(object):
     queryset = None
-    search_fields = []
+    search_fields = {}
     """
     Model lookups that are used to filter the QuerySetSequence.
 
     Example::
-        search_fields = [
-                'title__icontains',
-            ]
+        search_fields = {
+            'myapp': {'mymodel': ['title__icontains']}
+        }
     """
 
     max_results = 25
 
     @property
     def empty_label(self):
+        from utilities.fields import ContentObjectChoiceIterator
+
         if isinstance(self.choices, ContentObjectChoiceIterator):
             return self.choices.field.empty_label
         return ''
 
     def __init__(self, *args, **kwargs):
         self.queryset = kwargs.pop('queryset', self.queryset)
-        self.search_fields = kwargs.pop("search_fields", self.search_fields)
+        self.search_fields = kwargs.pop('search_fields', self.search_fields)
         self.max_results = kwargs.pop('max_results', self.max_results)
         defaults = {'data_view': 'utilities:querysetsequence_auto-json'}
         defaults.update(kwargs)
@@ -52,19 +53,19 @@ class ContentObjectSelect2Mixin(object):
         cache.set(
             self._get_cache_key(),
             {
-                "queryset": [(qs.none(), qs.query) for qs in queryset.get_querysets()],
-                "cls": self.__class__,
-                "search_fields": tuple(self.search_fields),
-                "max_results": int(self.max_results),
-                "url": str(self.get_url()),
-                "dependent_fields": {},  # not implemented
+                'queryset': [(qs.none(), qs.query) for qs in queryset.get_querysets()],
+                'cls': self.__class__,
+                'search_fields': dict(self.search_fields),
+                'max_results': int(self.max_results),
+                'url': str(self.get_url()),
+                'dependent_fields': {},  # not implemented
             },
         )
 
-    def get_search_fields(self):
+    def get_search_fields(self, model):
         """Return list of lookup names."""
         if self.search_fields:
-            return self.search_fields
+            return self.search_fields[model._meta.app_label][model._meta.model_name]
         raise NotImplementedError(
             '%s, must implement "search_fields".' % self.__class__.__name__
         )
@@ -83,17 +84,24 @@ class ContentObjectSelect2Mixin(object):
         """
         if queryset is None:
             queryset = self.get_queryset()
-        search_fields = self.get_search_fields()
-        select = Q()
 
-        if search_fields and term:
-            for bit in term.split():
-                or_queries = [Q(**{orm_lookup: bit}) for orm_lookup in search_fields]
-                select &= reduce(operator.or_, or_queries)
-            or_queries = [Q(**{orm_lookup: term}) for orm_lookup in search_fields]
-            select |= reduce(operator.or_, or_queries)
+        queryset_models = []
+        for qs in queryset.get_querysets():
+            model = qs.model
 
-        return queryset.filter(select).distinct()
+            select = Q()
+            search_fields = self.get_search_fields(model)
+            if search_fields and term:
+                for bit in term.split():
+                    or_queries = [Q(**{orm_lookup: bit}) for orm_lookup in search_fields]
+                    select &= reduce(operator.or_, or_queries)
+                or_queries = [Q(**{orm_lookup: term}) for orm_lookup in search_fields]
+                select |= reduce(operator.or_, or_queries)
+
+            queryset_models.append(model.objects.filter(select))
+
+        # Aggregate querysets
+        return QuerySetSequence(*queryset_models)
 
     def get_queryset(self):
         if self.queryset is not None:
@@ -159,9 +167,9 @@ class ContentObjectSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
     Example usage::
 
         class MyWidget(ContentObjectSelect2Widget):
-            search_fields = [
-                'title__icontains',
-            ]
+            search_fields = {
+                'myapp': {'mymodel': ['title__icontains']}
+            }
 
         class MyModelForm(FutureModelForm):
             my_field = ContentObjectChoiceField(
@@ -181,7 +189,9 @@ class ContentObjectSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
             my_choice = ContentObjectChoiceField(
                 queryset=QuerySetSequence(...),
                 widget=ContentObjectSelect2Widget(
-                    search_fields=['title__icontains']
+                    search_fields={
+                        'myapp': {'mymodel': ['title__icontains']}
+                    }
                 )
             )
 
