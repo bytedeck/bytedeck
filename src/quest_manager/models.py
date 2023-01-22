@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import Q, Max, Sum
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 # from django.shortcuts import get_object_or_404
 # from django.templatetags.static import static
 from django.urls import reverse
@@ -342,7 +342,7 @@ class QuestQuerySet(models.QuerySet):
             return self.filter(editor=user.id)
 
     def get_pk_met_list(self, user):
-        model_name = '{}.{}'.format(Quest._meta.app_label, Quest._meta.model_name)
+        model_name = f'{Quest._meta.app_label}.{Quest._meta.model_name}'
         pk_met_list = PrereqAllConditionsMet.objects.filter(user=user, model_name=model_name).first()
         if not pk_met_list:
             from prerequisites.tasks import update_quest_conditions_for_user
@@ -460,7 +460,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
 
     @classmethod
     def get_model_name(cls):
-        return '{}.{}'.format(cls._meta.app_label, cls._meta.model_name)
+        return f'{cls._meta.app_label}.{cls._meta.model_name}'
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
@@ -740,6 +740,14 @@ class QuestSubmissionManager(models.Manager):
         else:
             return 0
 
+    def get_next_ordinal(self, user, quest):
+        """
+        Gets the next ordinal based on the maximum value of ordinal
+        """
+        qs = self.all_for_user_quest(user, quest, False)
+
+        return qs.aggregate(next_ordinal=Coalesce(models.Max('ordinal'), models.Value(0)) + models.Value(1))["next_ordinal"]
+
     def last_submission(self, user, quest):
         qs = self.all_for_user_quest(user, quest, False).order_by('ordinal')
 
@@ -775,20 +783,15 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
-        last_submission = self.last_submission(user, quest)
-
-        if last_submission:
-            ordinal = last_submission.ordinal + 1
-        else:
-            ordinal = 1
 
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
-            ordinal=ordinal,
+            ordinal=self.get_next_ordinal(user, quest),
             semester_id=SiteConfig.get().active_semester.pk,
         )
         new_submission.save()
+
         return new_submission
 
     def calculate_xp(self, user):
@@ -957,9 +960,9 @@ class QuestSubmission(models.Model):
     def get_previous(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
         if self.ordinal > 1:
-            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
-        else:
-            return None
+            return QuestSubmission.objects.filter(quest=self.quest, user=self.user, ordinal=self.ordinal - 1).first()
+
+        return None
 
     def get_minutes_to_complete(self):
         """Returns the difference in minutes between first_time_complete and the (creation) timestamp.
