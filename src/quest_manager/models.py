@@ -1,5 +1,6 @@
 import uuid
 import json
+import logging
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
@@ -11,6 +12,7 @@ from django.db.models.functions import Greatest
 # from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
+from django.forms import model_to_dict
 
 from siteconfig.models import SiteConfig
 
@@ -22,6 +24,8 @@ from tags.models import TagsModelMixin
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
+
+logger = logging.getLogger(__name__)
 
 
 class Category(IsAPrereqMixin, models.Model):
@@ -342,7 +346,7 @@ class QuestQuerySet(models.QuerySet):
             return self.filter(editor=user.id)
 
     def get_pk_met_list(self, user):
-        model_name = '{}.{}'.format(Quest._meta.app_label, Quest._meta.model_name)
+        model_name = f'{Quest._meta.app_label}.{Quest._meta.model_name}'
         pk_met_list = PrereqAllConditionsMet.objects.filter(user=user, model_name=model_name).first()
         if not pk_met_list:
             from prerequisites.tasks import update_quest_conditions_for_user
@@ -460,7 +464,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
 
     @classmethod
     def get_model_name(cls):
-        return '{}.{}'.format(cls._meta.app_label, cls._meta.model_name)
+        return f'{cls._meta.app_label}.{cls._meta.model_name}'
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
@@ -954,12 +958,37 @@ class QuestSubmission(models.Model):
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
 
+    def _fix_ordinal(self):
+        # NOTE: There is a rare bug that we are unable to reproduce as of the moment where a QuestSubmission has the same ordinal.
+        # This is just a temporary hack where it will automatically fix the incorrect ordinal
+        broken_ordinal_start = self.ordinal - 1
+        submissions = QuestSubmission.objects.filter(quest=self.quest, user=self.user, ordinal__gte=self.ordinal - 1).order_by('time_completed')
+        logger.debug(
+            "This method should rarely be called. Anomalies found: {submissions}".format(
+                submissions=[f"{model_to_dict(submission)}" for submission in submissions]
+            )
+        )
+
+        for submission in submissions:
+            submission.ordinal = broken_ordinal_start
+            submission.save()
+
+            broken_ordinal_start += 1
+
     def get_previous(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
-        if self.ordinal > 1:
-            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
-        else:
+
+        if self.ordinal is None or self.ordinal <= 1:
             return None
+
+        try:
+            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
+        except QuestSubmission.MultipleObjectsReturned:
+            self._fix_ordinal()
+
+        # Attempt to fetch to previoius after the ordinals are fixed
+        self.refresh_from_db()
+        return self.get_previous()
 
     def get_minutes_to_complete(self):
         """Returns the difference in minutes between first_time_complete and the (creation) timestamp.
