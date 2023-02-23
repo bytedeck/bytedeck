@@ -1,6 +1,5 @@
 import uuid
 import json
-import logging
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
@@ -12,7 +11,6 @@ from django.db.models.functions import Greatest
 # from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
-from django.forms import model_to_dict
 
 from siteconfig.models import SiteConfig
 
@@ -24,8 +22,6 @@ from tags.models import TagsModelMixin
 
 # from django.contrib.contenttypes.models import ContentType
 # from django.contrib.contenttypes import generic
-
-logger = logging.getLogger(__name__)
 
 
 class Category(IsAPrereqMixin, models.Model):
@@ -961,13 +957,9 @@ class QuestSubmission(models.Model):
     def _fix_ordinal(self):
         # NOTE: There is a rare bug that we are unable to reproduce as of the moment where a QuestSubmission has the same ordinal.
         # This is just a temporary hack where it will automatically fix the incorrect ordinal
+        # See issue for context: https://github.com/bytedeck/bytedeck/issues/1260
         broken_ordinal_start = self.ordinal - 1
         submissions = QuestSubmission.objects.filter(quest=self.quest, user=self.user, ordinal__gte=self.ordinal - 1).order_by('time_completed')
-        logger.debug(
-            "This method should rarely be called. Anomalies found: {submissions}".format(
-                submissions=[f"{model_to_dict(submission)}" for submission in submissions]
-            )
-        )
 
         for submission in submissions:
             submission.ordinal = broken_ordinal_start
