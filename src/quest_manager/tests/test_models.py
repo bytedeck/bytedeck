@@ -1,5 +1,6 @@
 import datetime
 import re
+from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -414,9 +415,14 @@ class SubmissionTestModel(TenantTestCase):
 
         self.assertEqual(second_sub.ordinal, third_sub.ordinal)
 
+        # Mock fhe _fix_ordinal so we can test that it was called.
+        # See SO solution: https://stackoverflow.com/a/50970342
+        fourth_sub._fix_ordinal = MagicMock(side_effect=fourth_sub._fix_ordinal)
+
         # This should fix the ordinals
-        # self.assertEqual(fourth_sub.get_previous(), QuestSubmission.objects.get(pk=third_sub.pk))
         self.assertEqual(fourth_sub.get_previous(), QuestSubmission.objects.get(pk=third_sub.pk))
+        self.assertTrue(fourth_sub._fix_ordinal.called)
+        self.assertEqual(fourth_sub._fix_ordinal.call_count, 1)
 
         third_sub.refresh_from_db()
         self.assertEqual(third_sub.ordinal, old_third_submission_ordinal)
