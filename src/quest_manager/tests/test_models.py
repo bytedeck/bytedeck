@@ -410,6 +410,10 @@ class SubmissionTestModel(TenantTestCase):
         third_sub.ordinal = second_sub.ordinal
         third_sub.save()
 
+        # Assert that MultipleObjectsReturned is raised now since we now have 2 records with the same ordinal
+        with self.assertRaises(QuestSubmission.MultipleObjectsReturned):
+            QuestSubmission.objects.get(quest=repeat_quest, user=self.student, ordinal=second_sub.ordinal)
+
         fourth_sub.ordinal = old_third_submission_ordinal
         fourth_sub.save()
 
