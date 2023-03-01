@@ -25,6 +25,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
         """
 
         announcement = baker.make(Announcement)
+        # save_announcement_signal() method called via `@receiver(post_save, sender=Announcement)`
 
         # by default announcements are drafts, so no periodic task for it should exist
         # announcement publishing tasks should have the ID in the name somewhere
@@ -66,3 +67,22 @@ class AnnouncementsSignalsTest(TenantTestCase):
         with schema_context(PUBLIC_SCHEMA):
             with self.assertRaises(ObjectDoesNotExist):
                 PeriodicTask.objects.get(name__contains=announcement.id)
+
+    def test_save_announcement_signal__when_PeriodicTask_exists(self):
+        """
+        Test that after an announcement is saved, if the PeriodicTask already exists, the method doesn't crash and the
+        PeriodicTask is re-used instead.
+
+        This is because there PeriodicTask doesn't have an update_or_create() method for some reason, so we need to use get
+        and catch the exception https://github.com/celery/django-celery-beat/issues/106
+        """
+        announcement = baker.make(Announcement, auto_publish=True)
+        # Task should exist (created by signal)
+        task = PeriodicTask.objects.get(name__contains=announcement.id)
+
+        # change the announcement and resave to force recall of `save_announcement_signal()`
+        announcement.title = "New Title"
+        announcement.save()
+        task2 = PeriodicTask.objects.get(name__contains=announcement.id)
+        # Didn't create a new PeriodicTask object
+        self.assertEqual(task, task2)
