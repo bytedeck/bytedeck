@@ -524,7 +524,9 @@ SOCIALACCOUNT_PROVIDERS = {
             'email',
         ],
         'AUTH_PARAMS': {
-            'access_type': 'online',
+            'access_type': 'offline',
+            # https://developers.google.com/identity/openid-connect/openid-connect#prompt
+            'prompt': 'select_account',
         },
         'OAUTH_PKCE_ENABLED': True,
     }
