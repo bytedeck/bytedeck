@@ -1,7 +1,7 @@
 from django.contrib.sites.models import Site
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
+from django_tenants.utils import get_public_schema_name, tenant_context
 
 from tenant.models import Tenant
 
