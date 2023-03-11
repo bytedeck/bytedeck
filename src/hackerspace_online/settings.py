@@ -100,6 +100,8 @@ TENANT_APPS = (
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
+    'django.contrib.sites',  # required inside TENANT_APPS for allauth to work
+
     'hackerspace_online',
 
     # https://github.com/summernote/django-summernote
@@ -515,15 +517,6 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # AllAuth Configuration
-# SOCIALACCOUNT_PROVIDERS = \
-#     {'facebook':
-#          {'SCOPE': ['email', 'public_profile'],
-#           'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
-#           'METHOD': 'oauth2',
-#           # 'LOCALE_FUNC': 'path.to.callable',
-#           'VERIFIED_EMAIL': False,
-#           'VERSION': 'v2.3'}
-#      }
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'SCOPE': [
