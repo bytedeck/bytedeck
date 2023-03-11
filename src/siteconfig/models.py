@@ -15,20 +15,20 @@ User = get_user_model()
 
 
 def get_default_deck_owner():
-    """ 
+    """
         This is run once during site initialization
 
         Also need to initialize owner if none exists yet.
         (Since initialization.py loads after everything else)
-    """ 
-    
+    """
+
     # handle existing decks by getting an existing staff user that is NOT bytedeck_admin:
     admin_username = settings.TENANT_DEFAULT_ADMIN_USERNAME
     non_admin_staff_qs = User.objects.filter(is_staff=True).exclude(username=admin_username)
 
     if non_admin_staff_qs.exists():  # i.e. there are more staff than just the admin user
         return non_admin_staff_qs.first().pk  # return the first one (assumes sorted by pk, so should be the oldest one?)
-        
+
     else:  # no other staff users available yet, so we'll have to create them
         deck_owner = User.objects.create(
             username=settings.TENANT_DEFAULT_OWNER_USERNAME,
@@ -152,6 +152,12 @@ class SiteConfig(models.Model):
         help_text="Set up at least one Mark Range in admin for this to do anything."
     )
 
+    enable_google_signin = models.BooleanField(
+        verbose_name="Enable sign-in via Google",
+        default=False,
+        help_text="Used to enable or disable google sign-in"
+    )
+
     approve_oldest_first = models.BooleanField(
         verbose_name="Sort quests awaiting approval with oldest on top", default=False,
         help_text="Check this if you want to have the quest that have been waiting the longest to appear on top of the list."
@@ -183,7 +189,7 @@ class SiteConfig(models.Model):
         default="Tag", max_length=20,
         help_text="A custom name specific to your deck to replace \"Tag\".   For example, \"Competency\", \"Learning Outcome\", \
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
-    )        
+    )
 
     deck_owner = models.ForeignKey(
         User, on_delete=models.PROTECT, default=get_default_deck_owner, limit_choices_to={'is_staff': True}, related_name="deck_owner",

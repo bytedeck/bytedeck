@@ -571,6 +571,11 @@ ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 #  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 ACCOUNT_PRESERVE_USERNAME_CASING = False
+SOCIALACCOUNT_AUTO_SIGNUP = False
+SOCIALACCOUNT_FORMS = {
+    'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
+}
+SOCIALACCOUNT_EMAIL_REQUIRED = True
 
 
 #################################
