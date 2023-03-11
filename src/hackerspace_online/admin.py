@@ -37,7 +37,7 @@ admin.site.register(Group, GroupCustomAdmin)
 
 # Remove a few more models from admin for now to simplify
 admin.site.unregister(Attachment)
-admin.site.unregister(SocialAccount)
+# admin.site.unregister(SocialAccount)
 admin.site.unregister(SocialToken)
-admin.site.unregister(SocialApp)
+# admin.site.unregister(SocialApp)
 admin.site.unregister(EmailAddress)
