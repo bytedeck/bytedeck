@@ -1,5 +1,7 @@
+from django.contrib.sites.models import Site
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 
 from tenant.models import Tenant
 
@@ -24,3 +26,19 @@ def change_domain_urls(sender, *args, **kwargs):
                 tenant.save()
             public_tenant.domain_url = kwargs['instance'].domain
             public_tenant.save()
+
+
+def handle_tenant_site_domain_update(sender, tenant, **kwargs):
+
+    if not tenant:
+        return
+
+    if tenant.schema_name == get_public_schema_name():
+        return
+
+    # Update the first Site.domain since it will be used for OAuth
+    # Doing it this way so that we don't trigger any `post_save` signals
+
+    with tenant_context(tenant):
+        domain = tenant.get_primary_domain().domain
+        Site.objects.update(name=domain, domain=domain)
