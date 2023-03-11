@@ -129,7 +129,7 @@ TENANT_APPS = (
 INSTALLED_APPS = (
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
-    
+
     'django_tenants',
     'tenant.apps.TenantConfig',
 
@@ -576,6 +576,7 @@ SOCIALACCOUNT_FORMS = {
     'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
 }
 SOCIALACCOUNT_EMAIL_REQUIRED = True
+SOCIALACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomSocialAccountAdapter"
 
 
 #################################
