@@ -96,11 +96,21 @@ class CustomLoginFormTest(TenantTestCase):
         CustomLoginForm()
 
     def test_valid_data(self):
+
+        # django-allauth forms require `request` to be passed when instantiating the form
+        # normally, forms are used from within a django view and the view passes the request object to the form
+        # but in this case, we are just performing a test to the form itself so we need to have access to
+        # a WSGIRqeuest object, hence a small http call is performed
+        # See issue: https://github.com/pennersr/django-allauth/issues/3002
+        client = TenantClient(self.tenant)
+        wsgi_request = client.get(reverse('account_login')).wsgi_request
+
         form = CustomLoginForm(
             {
                 'login': 'testuser',
                 'password': 'testuser',
-            }
+            },
+            request=wsgi_request,
         )
         self.assertTrue(form.is_valid())
 
