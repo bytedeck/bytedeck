@@ -32,7 +32,7 @@ Add yourself to the docker group:
 
 #### Make sure you have Python3.8
 
-Using a different version of Python will probably give you errors when installing the dependancies due to slight changes between versions:
+Using a different version of Python will probably give you errors when installing the dependencies due to slight changes between versions:
 `sudo apt install python3.8`
 
 ### Getting the Code
@@ -92,7 +92,7 @@ This will create your docker containers and initialize the database by running m
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 
-10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up).  the db container should already be running:
+10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you won't see any errors if they come up).  the db container should already be running:
 `docker-compose up -d redis celery celery-beat`
 11. To view errors in the containers when they are running in the background, you can use:
 `docker-compose logs -f`
@@ -128,6 +128,49 @@ New tenants will come with some basic initial data already installed, but if you
 2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
 3. use Ctrl + D or `exit()` to close the Python shell.
 
+
+### Enabling Google Sign In (Optional)
+
+
+Here are the steps, assuming that you now have a functional tenant:
+
+1. Obtain Google credentials: https://developers.google.com/workspace/guides/create-credentials#oauth-client-id
+2. Make sure that in the Authorized URIs, add `http://hackerspace.mylocal.com:8000/accounts/google/login/callback/`. We will explain why we are using `mylocal.com` later but for now, just add this.
+3. Go to Social Applications: http://hackerspace.localhost:8000/admin/socialaccount/socialapp/
+4. Click Add Social Application
+5. Fill in `Client Id` and `Secret Key`. And then add the `Available Sites` to `Chosen Sites`
+6. Click Save
+7. Go to your Site Configuration: http://hackerspace.localhost:8000/config/ and click `Enable sign-in via Google`
+8. Done
+
+When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping
+our localhost to `mylocal.com` so we can access our tenant via `http://hackerspace.mylocal.com:8000`.
+
+We need to modify our hosts file aka `/etc/hosts`.
+
+Add the following, preferably at the bottom of the file:
+
+```conf
+127.0.0.1 mylocal.com hackerspace.mylocal.com
+```
+
+Next, we need to update the`ALLOWED_HOSTS` in our .env file:
+
+```bash
+ALLOWED_HOSTS=.localhost,.mylocal.com
+```
+
+For the final step, we need to let `django-tenants` know that `hackerspace.mylocal.com` is also a valid domain.
+
+Run `$ ./src/manage.py shell` and type in the following commands
+
+```python
+from tenant.models import Tenant
+tenant = Tenant.objects.get(schema_name='hackerspace')
+tenant.domains.create(domain='hackerspace.mylocal.com', is_primary=False)
+```
+
+Done! You should now be able to access your site via `http://hackerspace.mylocal.com:8000/` and use the Google Sign In.
 
 ## Contributing
 
