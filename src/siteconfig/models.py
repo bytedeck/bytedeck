@@ -1,3 +1,5 @@
+from allauth.socialaccount.models import SocialApp
+from allauth.socialaccount.providers.google.provider import GoogleProvider
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
@@ -10,6 +12,7 @@ from django.conf import settings
 
 from django_tenants.utils import get_public_schema_name
 from redis import exceptions as redis_exceptions
+
 
 User = get_user_model()
 
@@ -246,6 +249,14 @@ class SiteConfig(models.Model):
         else:  # assume it's an id
             self.active_semester = get_object_or_404(Semester, id=semester)
         self.save()
+
+    @property
+    def has_valid_google_provider(self):
+        try:
+            SocialApp.objects.get_current(provider=GoogleProvider.id)
+            return True
+        except SocialApp.DoesNotExist:
+            return False
 
     @classmethod
     def cache_key(cls):
