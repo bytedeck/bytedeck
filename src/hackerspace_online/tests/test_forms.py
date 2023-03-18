@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.test.utils import override_settings
 from datetime import timedelta
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.models import SocialAccount, SocialLogin
 from django import forms
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
@@ -8,7 +10,7 @@ from django.shortcuts import reverse
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from hackerspace_online.forms import CustomSignupForm, PublicContactForm, CustomLoginForm
+from hackerspace_online.forms import CustomSignupForm, CustomSocialAccountSignupForm, PublicContactForm, CustomLoginForm
 
 User = get_user_model()
 
@@ -85,6 +87,100 @@ class CustomSignUpFormTest(TenantTestCase):
         user = User.objects.get(username=form_data['username'].lower())
 
         self.assertIsNotNone(user)
+
+
+class CustomSocialSignUpFormTest(TenantTestCase):
+
+    def setUp(self):
+        pass
+
+    def get_social_login(self):
+        return SocialLogin(
+            user=User(email="user@example.com", first_name="firsttest", last_name="lasttest"),
+            account=SocialAccount(provider="google"),
+            email_addresses=[
+                EmailAddress(
+                    email="user@example.com",
+                    verified=True,
+                    primary=True
+                ),
+            ]
+        )
+
+    def test_init(self):
+        CustomSocialAccountSignupForm(sociallogin=self.get_social_login())
+
+    def test_complete_fields(self):
+        """
+        Test in case there are changes from CustomSignupForm
+        """
+        form = CustomSocialAccountSignupForm(sociallogin=self.get_social_login())
+
+        social_signup_form_fields = [
+            'first_name',
+            'last_name',
+            'access_code',
+            'username',
+            'email',
+        ]
+
+        self.assertEqual(len(form.fields), len(social_signup_form_fields))
+        self.assertListEqual(sorted(social_signup_form_fields), sorted(form.fields.keys()))
+
+    def test_valid_data(self):
+        form = CustomSocialAccountSignupForm(
+            sociallogin=self.get_social_login(),
+            data={
+                'username': 'sample.username',
+                'access_code': '314159',
+            }
+        )
+
+        form.data = {**form.initial, **form.data}
+
+        self.assertTrue(form.is_valid())
+
+    def test_bad_access_codecoverage(self):
+        """ Test that a social sign up form with the wrong access code doesn't validate """
+        form = CustomSocialAccountSignupForm(
+            sociallogin=self.get_social_login(),
+            data={
+                'username': "username",
+                'access_code': "wrongcode",
+            }
+        )
+        form.data = {**form.initial, **form.data}
+
+        self.assertFalse(form.is_valid())
+
+        with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
+            form.clean()
+
+    def test_sign_up_via_post(self):
+        self.client = TenantClient(self.tenant)
+        session = self.client.session
+        form_data = {
+            'username': "username",
+            'access_code': "314159",
+        }
+
+        sociallogin = self.get_social_login()
+        session["socialaccount_sociallogin"] = sociallogin.serialize()
+        session.save()
+
+        # email should be pre-populated
+        resp = self.client.get(reverse("socialaccount_signup"))
+        form = resp.context["form"]
+
+        self.assertEqual(form["email"].value(), "user@example.com")
+
+        form_data = {**form.initial, **form_data}
+        response = self.client.post(reverse('socialaccount_signup'), data=form_data, follow=True)
+
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        user = User.objects.get(username="username")
+        self.assertEqual(user.first_name, "firsttest")
 
 
 class CustomLoginFormTest(TenantTestCase):
