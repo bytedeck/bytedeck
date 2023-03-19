@@ -136,6 +136,7 @@ class QuestTestModel(TenantTestCase):
         4. The quest is manually set to be invisible to students (Quest.visible_to_students == False)
         """
 
+        # TODO: This test case is flaky since this throws an error around 7:18 UTC
         # create and test a control quest that will return active
         baker.make(Quest, name="control-quest")
         self.assertEqual(Quest.objects.get(name="control-quest").active, True)
