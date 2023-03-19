@@ -1,10 +1,12 @@
 from django.conf import settings
 from django.test.utils import override_settings
 from datetime import timedelta
+from unittest.mock import patch
 from allauth.account.models import EmailAddress
-from allauth.socialaccount.models import SocialAccount, SocialLogin
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.shortcuts import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -89,7 +91,7 @@ class CustomSignUpFormTest(TenantTestCase):
         self.assertIsNotNone(user)
 
 
-class CustomSocialSignUpFormTest(TenantTestCase):
+class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     def setUp(self):
         pass
@@ -164,6 +166,8 @@ class CustomSocialSignUpFormTest(TenantTestCase):
             'access_code': "314159",
         }
 
+        # Fake the session object to have the `socialaccount_sociallogin` since that's what it looks for
+        # when a user chooses a google account to sign up
         sociallogin = self.get_social_login()
         session["socialaccount_sociallogin"] = sociallogin.serialize()
         session.save()
@@ -181,6 +185,74 @@ class CustomSocialSignUpFormTest(TenantTestCase):
 
         user = User.objects.get(username="username")
         self.assertEqual(user.first_name, "firsttest")
+
+    @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
+    @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
+    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    def test_signin_via_post_connect_existing_account(
+        self,
+        mock_verify_and_unstash_state,
+        mock_complete_login,
+        mock_get_access_token
+    ):
+        """
+        When a student tries to login via OAuth and the email they used in OAuth matches an email in the current DB,
+        automatically login that student
+        """
+
+        test_student = User.objects.create_user(
+            username='test_student',
+            password="password",
+            email='test_student@example.com',
+        )
+        app = SocialApp.objects.create(
+            provider='google',
+            name='Test Google App',
+            client_id='test_client_id',
+            secret='test_secret',
+        )
+        app.sites.add(Site.objects.first())
+        self.client = TenantClient(self.tenant)
+
+        social_login = self.get_social_login()
+        social_login.user.email = test_student.email
+        social_login.email_addresses[0].email = test_student.email
+
+        mock_get_access_token.return_value = {
+            'access_token': 'test_access_token',
+            'expires_in': 3599,
+            'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'token_type': 'Bearer',
+            'id_token': 'test_id_token'
+        }
+        mock_complete_login.return_value = social_login
+        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+
+        # Simulate a student clicking the Google Sign in button
+        url = reverse('google_login')
+        response = self.client.post(url)
+
+        # Check that they get redirected to the google accounts sign in page
+        authorize_url = response.headers['Location']
+        self.assertIn('accounts.google.com', authorize_url)
+        self.assertIn('response_type=code', authorize_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('client_id=test_client_id', authorize_url)
+
+        # There should be no SocialAccount associated to a student at this point
+        self.assertFalse(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+        # Simulate a student entering the correct details or choosing a google account to sign in with
+        response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
+
+        # Student should now be redirected to the quests page after a successful login
+        self.assertRedirects(response, reverse('quests:quests'))
+        mock_get_access_token.assert_called_once()
+        mock_complete_login.assert_called_once()
+
+        # Since there is a match with Google email used during login, that account should now be automatically
+        # associated to that student who logged in
+        self.assertTrue(SocialAccount.objects.filter(user=test_student, provider='google').exists())
 
 
 class CustomLoginFormTest(TenantTestCase):
