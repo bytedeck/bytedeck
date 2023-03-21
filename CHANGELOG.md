@@ -4,6 +4,15 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.19.4] 2023-03-20
+* Add links to public tenant landing page header and footer
+* Bugfixs:
+  - Autofix ordinal duplicates in repeatable quests [#1260](https://github.com/bytedeck/bytedeck/issues/1260)
+  - [#1266](https://github.com/bytedeck/bytedeck/issues/1266)
+
+
+
 ### [1.19.3] 2023-01-02
 * Bugfixs:
   - Advanced prerequisite widget upgrade compelte (replaced DAL with select2)
