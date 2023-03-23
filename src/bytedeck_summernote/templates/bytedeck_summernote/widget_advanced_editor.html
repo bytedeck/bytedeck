@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>django-summernote frame</title>
+        {% for url in css %}
+        <link href="{{ url }}" rel="stylesheet">{% endfor %}
+        {% for url in js %}
+        <script src="{{ url }}"></script>{% endfor %}
+        <style>
+        html, body {
+            margin: 0;
+        }
+        .note-editor {
+            margin-bottom: 0;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="summernote"></div>
+    </body>
+{% comment %}
+Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_iframe_editor.html
+
+Changes because: using "bytedeck_summernote" namespace
+{% endcomment %}
+    {% include "bytedeck_summernote/widget_common.html" with iframe=True %}
+{% comment %} End changes {% endcomment %}
+    <script>
+    initSummernote_{{ id_safe }}();
+    </script>
+</html>
