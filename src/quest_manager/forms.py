@@ -1,4 +1,3 @@
-
 from datetime import date
 
 from django import forms
@@ -8,12 +7,13 @@ from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
-from django_summernote.widgets import SummernoteInplaceWidget
 from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
+
+from badges.models import Badge
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from utilities.fields import RestrictedFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
-from utilities.fields import RestrictedFileFormField
-from badges.models import Badge
 from .models import Category, Quest, CommonData
 
 
@@ -81,9 +81,9 @@ class QuestForm(forms.ModelForm):
         }
 
         widgets = {
-            'instructions': SummernoteInplaceWidget(),
-            'submission_details': SummernoteInplaceWidget(),
-            'instructor_notes': SummernoteInplaceWidget(),
+            'instructions': ByteDeckSummernoteSafeWidget(),
+            'submission_details': ByteDeckSummernoteSafeWidget(),
+            'instructor_notes': ByteDeckSummernoteSafeWidget(),
 
             'date_available': DatePickerInput(format='%Y-%m-%d'),
 
@@ -211,7 +211,7 @@ class TAQuestForm(QuestForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
+    comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeWidget())
 
     attachments = RestrictedFileFormField(required=False,
                                           max_upload_size=16777216,
@@ -278,5 +278,5 @@ class CommonDataForm(forms.ModelForm):
         model = CommonData
         fields = "__all__"
         widgets = {
-            "instructions": SummernoteInplaceWidget()
+            "instructions": ByteDeckSummernoteSafeWidget()
         }

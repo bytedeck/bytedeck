@@ -100,7 +100,10 @@ TENANT_APPS = (
     'django_celery_beat',
 
     'hackerspace_online',
+
+    # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     'taggit',
 
@@ -152,6 +155,7 @@ INSTALLED_APPS = (
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
     'captcha',
@@ -618,7 +622,6 @@ SUMMERNOTE_CONFIG = {
             # You have to include theme file in 'css' or 'css_for_inplace' before using it.
             'theme': 'monokai',
         },
-
     },
 
     # Need authentication while uploading attachments.
