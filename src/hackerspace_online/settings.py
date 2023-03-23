@@ -497,6 +497,7 @@ SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
+SESSION_COOKIE_AGE = env("SESSION_COOKIE_AGE", default=int(60 * 60 * 24 * 7 * 8))  # 8 Weeks
 
 AUTHENTICATION_BACKENDS = (
 
