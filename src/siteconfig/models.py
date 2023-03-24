@@ -1,6 +1,8 @@
+from copy import copy
 from allauth.socialaccount.models import SocialApp
 from allauth.socialaccount.providers.google.provider import GoogleProvider
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import connection, models
@@ -10,7 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
 from django.conf import settings
 
-from django_tenants.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name, schema_context
 from redis import exceptions as redis_exceptions
 
 
@@ -250,13 +252,16 @@ class SiteConfig(models.Model):
             self.active_semester = get_object_or_404(Semester, id=semester)
         self.save()
 
-    @property
-    def has_valid_google_provider(self):
-        try:
-            SocialApp.objects.get_current(provider=GoogleProvider.id)
-            return True
-        except SocialApp.DoesNotExist:
-            return False
+    def _propagate_google_provider(self):
+        with schema_context(get_public_schema_name()):
+            social_app = SocialApp.objects.get_current(provider=GoogleProvider.id)
+            social_app_clone = copy(social_app)
+            social_app_clone.pk = None
+
+        # Sync the public SocialApps with the tenant SocialApp
+        SocialApp.objects.filter(provider=GoogleProvider.id).delete()
+        social_app_clone.save()
+        social_app_clone.sites.add(Site.objects.get_current())
 
     @classmethod
     def cache_key(cls):

@@ -1,3 +1,4 @@
+from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib.auth import get_user_model
 
@@ -24,6 +25,10 @@ class SiteConfigForm(forms.ModelForm):
     def clean_enable_google_signin(self):
         data = self.cleaned_data['enable_google_signin']
 
-        if data is True and not self.instance.has_valid_google_provider:
-            raise forms.ValidationError("You do not have a configured Google Provider")
+        if data is True:
+            try:
+                self.instance._propagate_google_provider()
+            except SocialApp.DoesNotExist:
+                raise forms.ValidationError("No valid Google Provider configured. Please contact your administrator")
+
         return data
