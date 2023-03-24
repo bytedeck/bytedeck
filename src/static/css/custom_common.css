@@ -248,7 +248,9 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     padding-right: 10px;
 }
 
-
+.navbar-header i{
+    color: #585d61;
+}
 /*********************************/
 
 .fullscreen {
@@ -274,7 +276,7 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
 }
 
 #main-container {
-    min-height: 950px;
+    /* min-height: 950px; */
     border-radius: 0px 0px 10px 10px;
     padding-bottom: 30px;
     margin-bottom: 5px;

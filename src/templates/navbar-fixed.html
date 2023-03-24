@@ -220,7 +220,7 @@
                         <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
                     </a><!-- removes whitespace
                  --></li>
-                
+
                 {% if not request.user.is_staff %}
                 <li>
                     <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
@@ -229,7 +229,7 @@
                     </a>
                 </li>
                 {% endif %}
-                
+
                 <li id="extras-menu" class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">

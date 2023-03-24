@@ -1,4 +1,4 @@
-
+/*
 /*
 Darkest: var(--slate-bg-color)
 Med: #32383e
@@ -95,7 +95,9 @@ kbd {
   box-shadow:2px 2px 0 0 #282828 inset, -2px -2px 0 0 #1d1d1d inset;
   color:rgb(200, 200, 200);
 }
-
+.navbar-brand .logo{
+  width: 22px !important;
+}
 
 /************ BADGES/Achievements **********************/
 
@@ -136,7 +138,9 @@ kbd {
 tr.detail-view{
   background-color: #EEE;
 }
-
+navbar-header i{
+  color: #585d61;
+}
 
 /******* Accordian ***********************/
 
@@ -249,9 +253,9 @@ a.list-group-item-muted {
   color: #c8c8c8;
 }
 
-.form-control, 
+.form-control,
 .select2-container--bootstrap .select2-selection {
-  background-color: var(--slate-primary-ui-color) !important; 
+  background-color: var(--slate-primary-ui-color) !important;
 }
 
 .select2-container--bootstrap .select2-search--dropdown .select2-search__field {
