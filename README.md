@@ -136,7 +136,7 @@ Here are the steps, assuming that you now have a functional tenant:
 
 1. Obtain Google credentials: https://developers.google.com/workspace/guides/create-credentials#oauth-client-id
 2. Make sure that in the Authorized URIs, add `http://hackerspace.localhost.net:8000/accounts/google/login/callback/`. We will explain why we are using `localhost.net` later but for now, just add this.
-3. Go to Social Applications: http://hackerspace.localhost:8000/admin/socialaccount/socialapp/
+3. Go to Social Applications: http://localhost:8000/admin/socialaccount/socialapp/
 4. Click Add Social Application
 5. Fill in `Client Id` and `Secret Key`. And then add the `Available Sites` to `Chosen Sites`
 6. Click Save
@@ -146,22 +146,21 @@ Here are the steps, assuming that you now have a functional tenant:
 When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping
 our localhost to `localhost.net` so we can access our tenant via `http://hackerspace.localhost.net:8000`.
 
-We need to modify our hosts file aka `/etc/hosts`.
+We need to modify our hosts file aka `/etc/hosts`. You can also take a look at this [tutorial](https://www.howtogeek.com/27350/beginner-geek-how-to-edit-your-hosts-file/).
 
-Add the following, preferably at the bottom of the file:
+1. Add the following, preferably at the bottom of the file:
 
 ```conf
 127.0.0.1 localhost.net hackerspace.localhost.net
 ```
 
-Next, we need to update the`ALLOWED_HOSTS` in our .env file:
+2. We need to update the`ALLOWED_HOSTS` in our .env file:
 
 ```bash
 ALLOWED_HOSTS=.localhost,.localhost.net
 ```
 
-For the final step, we need to let `django-tenants` know that `hackerspace.localhost.net` is also a valid domain.
-
+3. For the final step, we need to let `django-tenants` know that `hackerspace.localhost.net` is also a valid domain.
 Run `$ ./src/manage.py shell` and type in the following commands
 
 ```python
@@ -170,7 +169,7 @@ tenant = Tenant.objects.get(schema_name='hackerspace')
 tenant.domains.create(domain='hackerspace.localhost.net', is_primary=False)
 ```
 
-Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.
+4. Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.
 
 ## Contributing
 
