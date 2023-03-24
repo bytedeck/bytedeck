@@ -8,6 +8,7 @@ from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
@@ -141,16 +142,17 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
                 enable_google_signin=True
             )
         )
-        # Config should not be updated since we can't enable google sign in if it is not configured properly
+        # Config should not be updated since we can't enable google sign in if it is not configured properly by the public schema admin
         self.assertFalse(SiteConfig.get().enable_google_signin)
 
-        app = SocialApp.objects.create(
-            provider='google',
-            name='Test Google App',
-            client_id='test_client_id',
-            secret='test_secret'
-        )
-        app.sites.add(Site.objects.first())
+        with schema_context(get_public_schema_name()):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret'
+            )
+            app.sites.add(Site.objects.get_current())
 
         self.client.post(
             URL,

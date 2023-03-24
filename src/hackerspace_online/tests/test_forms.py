@@ -9,8 +9,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.shortcuts import reverse
 
+from siteconfig.models import SiteConfig
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.forms import CustomSignupForm, CustomSocialAccountSignupForm, PublicContactForm, CustomLoginForm
 
@@ -109,6 +112,19 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             ]
         )
 
+    def setup_social_app(self):
+        with schema_context(get_public_schema_name()):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret',
+            )
+            app.sites.add(Site.objects.get_current())
+
+        config = SiteConfig.get()
+        config._propagate_google_provider()
+
     def test_init(self):
         CustomSocialAccountSignupForm(sociallogin=self.get_social_login())
 
@@ -205,13 +221,8 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             password="password",
             email='test_student@example.com',
         )
-        app = SocialApp.objects.create(
-            provider='google',
-            name='Test Google App',
-            client_id='test_client_id',
-            secret='test_secret',
-        )
-        app.sites.add(Site.objects.first())
+
+        self.setup_social_app()
         self.client = TenantClient(self.tenant)
 
         social_login = self.get_social_login()
