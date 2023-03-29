@@ -1,0 +1,77 @@
+
+body{
+    padding: 0px !important;
+
+}
+.navbar-brand > img{
+    margin-left: 0px !important;
+    width: 65px !important;
+}
+.btn-mobile-navbar{
+    background: none;
+    border: none !important;
+}
+.icon .admin{
+    font-size: 30px !important  ;
+}
+.navbar-header i{
+    color: #777 !important;
+}
+.icon span{
+
+    color: #777 !important;
+}
+.badge.alert-danger{
+    border-radius: 25px !important;
+}
+.icon .btn-light{
+    color: #777 !important;
+}
+.list-group-item.left-side{
+    border-bottom: 1px solid #ececec !important;
+}
+.list-group-item.right-side{
+    border-bottom: 1px solid #ececec !important;
+}
+
+ .warning{
+    background:  #f9f9e1  !important;
+}
+/* .list-group  ,.dropdown{
+    margin-top: 15px;
+} */
+table > tbody{
+    background-color: #f4e0e0;
+}
+.list-group-item.right-side{
+    padding-left: 15px;
+}
+.bootstrap4 .fixed-table-toolbar {
+    display: flex;
+    justify-content: flex-end;
+}
+.bootstrap-table .toggle {
+    float: left;
+    margin-right: 10px;
+  }
+
+
+/* Move icons and toggle button to right side */
+.table-icons {
+    text-align: right;
+  }
+
+  /* Hide export button if user is not staff */
+  .table-export {
+    display: none;
+  }
+
+  /* Adjust column width to fit icons and toggle button */
+  .table td:nth-child(1) {
+    width: 10%;
+  }
+
+  /* Adjust column width to fit export button */
+  .table td:nth-child(2) {
+    width: 10%;
+  }

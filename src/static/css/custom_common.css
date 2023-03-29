@@ -126,8 +126,7 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
 
 .navbar-brand > img {
     max-height: 100%;
-    width: auto;
-    padding: 7px 10px; /* creates large logo within navbar */
+    padding: 7px 10px;
 
 }
 
@@ -280,12 +279,7 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     border-radius: 0px 0px 10px 10px;
     padding-bottom: 30px;
     margin-bottom: 5px;
-}
 
-body {
-    /*padding to remove gap between navbar and jumbotron*/
-    padding-top: 50px;
-    min-height: 660px; /* 660+50 = 720 */
 }
 
 blockquote {
@@ -974,6 +968,7 @@ div.btn-group.action-btn-group {
 
     .navbar-brand > img {
         margin-left: -7px;
+
     }
 
     .navbar-toggle {
