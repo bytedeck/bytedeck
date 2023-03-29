@@ -2,7 +2,7 @@
 {% load utility_tags %}
 
 {% block head_title %}{% tag_name %} Chart{% endblock %}
-{% block heading_inner %}{% tag_name %} Chart for <a href="{% url 'profiles:profile_detail' user.pk %}">{{user.username}}</a>{% endblock %}
+{% block heading_inner %}{% tag_name %} Chart <small>for <a href="{{ user.profile.get_absolute_url }}">{{user.username}}</a></small>{% endblock %}
 
 {% block content %}
     <div role="tabpanel" class="tab-pane" id="tag-distribution">

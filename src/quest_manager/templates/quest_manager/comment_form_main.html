@@ -20,7 +20,7 @@
       <input type='submit' class='btn btn-primary' value='Add Submission Comment' />
     {% else %}
       <input type='submit' class='btn btn-primary'
-        value='{% if request.user.is_staff %}Submit Comment{% else %}Submit Quest for Completion{% endif %}' />
+        value='{% if request.user.is_staff %}Submit Comment{% else %}Submit Quest for Approval{% endif %}' />
       <a class="btn btn-danger" href="{% url 'quests:drop' target.id %}" role="button">Drop Quest</a>
     {% endif %}
   </div>

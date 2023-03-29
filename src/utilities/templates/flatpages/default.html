@@ -16,3 +16,45 @@
 {% block content %}
   {{ flatpage.content|safe }}
 {% endblock %}
+
+
+{% block content_last %}{% endblock %}
+
+{% block js %}
+  <script>
+    // Generate a Table of Contents from H3 headings when this is added to the template:
+    // <div id="TOC"></div>
+
+    var ToC =
+      "<nav role='navigation' class='table-of-contents'>" +
+        "<h4>Contents:</h4>" +
+        "<ul>";
+
+    $("#main h3").each(function() {
+
+        var $el = $(this);
+        var title = $el.text();
+        $el.attr("id", title);
+
+        var tocEntry =
+            "<li>" +
+            "<a href='#" + title + "'>" +
+            title +
+            "</a>" +
+            "</li>";
+
+        ToC += tocEntry;
+
+    });
+
+
+    ToC +=
+        "</ul>" +
+        "</nav>";
+
+    $("#TOC").append(ToC);
+
+  </script>
+
+
+{% endblock %}

@@ -4,8 +4,8 @@
 
 <!-- Font Awesome -->
 <!-- <link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet"> -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" 
-      integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+      integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw=="
       crossorigin="anonymous">
 
 <!-- Bootstrap -->
@@ -23,18 +23,18 @@
 <link rel="stylesheet" href="{% static 'css/bootstrap-table-accordion.css' %}" >
 
 <!-- KaTeX for math rendering -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css" 
-      integrity="sha512-qcHPGCptLWeJ7IFKmYe3ep1Zh/qfC5/h0r6hXQ82tJO89niMBx/4OUcYT7NJi6POUUXZUTyJtrCmpKP1u3I/HQ==" 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css"
+      integrity="sha512-qcHPGCptLWeJ7IFKmYe3ep1Zh/qfC5/h0r6hXQ82tJO89niMBx/4OUcYT7NJi6POUUXZUTyJtrCmpKP1u3I/HQ=="
       crossorigin="anonymous" />
 
 
 <!-- Custom site-wide styles -->
 {% if request.user.profile.dark_theme %}
-<link href="{{ STATIC_PREFIX }}css/custom_slate.css?v=1.4" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_slate.css?v=1.5" rel="stylesheet">
 {% else %}
-<link href="{{ STATIC_PREFIX }}css/custom.css?v=1.4" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom.css?v=1.5" rel="stylesheet">
 {% endif %}
-<link href="{{ STATIC_PREFIX }}css/custom_common.css?v=1.4" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_common.css?v=1.5" rel="stylesheet">
 <link href="{% static 'css/jquery-packed-img-strip.css' %}" rel="stylesheet">
 
 <!-- Bootstrap DateTimePicker Widget -->

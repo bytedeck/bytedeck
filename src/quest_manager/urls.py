@@ -18,9 +18,6 @@ from quest_manager import views
 from django.conf.urls import url
 from django.urls import path
 
-from quest_manager.models import Category, CommonData, Quest
-from utilities.views import ModelAutocomplete
-
 app_name = 'quest_manager'
 
 urlpatterns = [
@@ -76,7 +73,6 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     url(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
     url(r'^(?P<quest_id>[0-9]+)/skip/$', views.skipped, name='skip_for_quest'),
-    path('autocomplete/', ModelAutocomplete.as_view(model=Quest), name='quest_autocomplete'),
 
     # Quest/Submission Summary Metrics
     path('<int:pk>/summary/', views.QuestSubmissionSummary.as_view(), name='summary'),
@@ -102,10 +98,6 @@ urlpatterns = [
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
-    path('campaigns/autocomplete/', ModelAutocomplete.as_view(model=Category), name='category_autocomplete'),
-
-    # Common Data
-    path('common-quest-info/autocomplete/', ModelAutocomplete.as_view(model=CommonData), name='commonquestinfo_autocomplete'),
 
     path('common-quest-info/list/', views.CommonDataListView.as_view(), name='commonquestinfo_list'),
     path('common-quest-info/create/', views.CommonDataCreateView.as_view(), name='commonquestinfo_create'),

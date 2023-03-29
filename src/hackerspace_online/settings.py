@@ -81,11 +81,6 @@ SHARED_APPS = (
 )
 
 TENANT_APPS = (
-    # https://django-autocomplete-light.readthedocs.io/en/master/install.html
-    'dal',  # must come before grapelli and django.contrib.admin
-    'dal_select2',  # must come before grapelli and django.contrib.admin
-    'dal_queryset_sequence',  # https://django-autocomplete-light.readthedocs.io/en/master/gfk.html#autocompletion-for-genericforeignkey
-
     'django.contrib.auth',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -126,11 +121,6 @@ TENANT_APPS = (
 
 
 INSTALLED_APPS = (
-    # https://django-autocomplete-light.readthedocs.io/en/master/install.html
-    'dal',  # must come before grapelli and django.contrib.admin
-    'dal_select2',  # must come before grapelli and django.contrib.admin
-    'dal_queryset_sequence',  # https://django-autocomplete-light.readthedocs.io/en/master/gfk.html#autocompletion-for-genericforeignkey
-
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
     
@@ -478,6 +468,7 @@ TENANT_DEFAULT_ADMIN_PASSWORD = env('TENANT_DEFAULT_ADMIN_PASSWORD')
 
 TENANT_DEFAULT_OWNER_USERNAME = env('TENANT_DEFAULT_OWNER_USERNAME')
 TENANT_DEFAULT_OWNER_PASSWORD = env('TENANT_DEFAULT_OWNER_PASSWORD')
+TENANT_DEFAULT_OWNER_EMAIL = env('TENANT_DEFAULT_OWNER_EMAIL', default='')
 
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
@@ -506,6 +497,7 @@ SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
+SESSION_COOKIE_AGE = env("SESSION_COOKIE_AGE", default=int(60 * 60 * 24 * 7 * 8))  # 8 Weeks
 
 AUTHENTICATION_BACKENDS = (
 

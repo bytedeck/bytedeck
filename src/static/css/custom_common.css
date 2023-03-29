@@ -512,6 +512,10 @@ td.notification-icons {
     padding-bottom: 0px !important;
 }
 
+.icon-spacing {
+    margin: 0 0.15rem;
+}
+
 /*td.notification-icons .fa {
   margin-top: 8px;
 }*/
@@ -1051,6 +1055,16 @@ padding-right: 20px !important;
 
 #id_prereq_formset td[id$="DELETE"] {
     text-align: right;
+}
+
+#id_prereq_formset .control-label-right {
+    text-align: right;
+}
+
+.select2-results__group {
+    /* Set to match bs3 .panel-info */
+    background-color: #d9edf7;
+    border-color: #bce8f1;
 }
 
 
