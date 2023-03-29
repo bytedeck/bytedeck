@@ -1,11 +1,17 @@
+import json
+
+from django import forms
+from django.core import signing
+from django.contrib.auth import get_user_model
 from django.urls import reverse
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from django.contrib.auth import get_user_model
-
 from model_bakery import baker
 from tags.forms import TagForm
+from tags.widgets import TaggitSelect2Widget
+from taggit.forms import TagField
 from taggit.models import Tag
 from siteconfig.models import SiteConfig
 
@@ -14,31 +20,52 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_dat
 User = get_user_model()
 
 
-class TagAutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
+class TaggitSelect2WidgetForm(forms.Form):
+    tag = TagField(
+        widget=TaggitSelect2Widget(),
+    )
+
+
+class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
+
         Tag.objects.create(name="test-tag")
 
     def test_autocomplete_view(self):
-        """ Make sure django-autocomplete-light view for tag autocomplete widget is accessible"""
-        response = self.client.get(reverse('tags:autocomplete'))
-
+        """ Make sure our custom django-select2 view for tag widget is accessible"""
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.status_code, 200)
 
     def test_autocomplete_view__unauthenticated(self):
         """ The view should return an empty json response if the user is not authenticated """
         self.client.logout()
-        response = self.client.get(reverse('tags:autocomplete'))
+
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.json()['results'], [])
 
     def test_autocomplete_view__authenticated(self):
         """ The view should return tags in json results if the user is authenticated """
         self.client.force_login(baker.make('User'))
-        response = self.client.get(reverse('tags:autocomplete'))
-        json_results = response.json()['results']
-        self.assertEqual(len(json_results), 1)
-        self.assertEqual(json_results[0]['text'], 'test-tag')
+
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        self.assertEqual(len(data['results']), 1)
+        self.assertEqual(data['results'][0]['text'], 'test-tag')
 
 
 class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -137,30 +164,34 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
             Students should only have access to quest and badges they have completed/earned
         """ 
         # generate quests + badges and link to tag
-        quest_set = baker.make('quest_manager.quest', _quantity=5)
-        badge_set = baker.make('badges.badge', _quantity=5)
+        quest_set = baker.make('quest_manager.quest', xp=1, _quantity=5)
+        badge_set = baker.make('badges.badge', xp=1, _quantity=5)
         [quest.tags.add(self.tag.name) for quest in quest_set]
         [badge.tags.add(self.tag.name) for badge in badge_set]
 
         # only assign first set element from quest and badge to user
-        baker.make( 
-            'quest_manager.questsubmission',
-            quest=quest_set[0], 
-            user=self.test_student, 
-            is_completed=True, 
-            is_approved=True, 
-            semester=SiteConfig().get().active_semester,
-        )
-        baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
+        # make 2 submission/assertion to check if total xp is calculated correctly
+        for i in range(2):
+            baker.make( 
+                'quest_manager.questsubmission',
+                quest=quest_set[0], 
+                user=self.test_student, 
+                is_completed=True, 
+                is_approved=True, 
+                semester=SiteConfig().get().active_semester,
+            )
+            baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
 
         self.client.force_login(self.test_student)
         response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))
 
         # check if only the quest and badges self.test_student has completed shows up in view
         self.assertContains(response, quest_set[0].name)
+        self.assertContains(response, quest_set[0].xp * 2)
         [self.assertNotContains(response, quest.name) for quest in quest_set[1:]]
 
         self.assertContains(response, badge_set[0].name)
+        self.assertContains(response, badge_set[0].xp * 2)
         [self.assertNotContains(response, badge.name) for badge in badge_set[1:]]
 
         # assert title shows up -> <tag_name> Tag Details for <user_username>

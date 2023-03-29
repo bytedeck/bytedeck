@@ -340,6 +340,13 @@ class CourseStudentModelTest(TenantTestCase):
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
 
+    @patch('profile_manager.models.Profile.xp_per_course')
+    def test_student_with_negative_xp(self, xp_per_course):
+        """Test if an assertion error is raised when there is a student with negative xp"""
+        xp_per_course.return_value = -10
+        self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
+                          Semester.objects.get_current())
+
 
 class BlockModelTest(TenantTestCase):
 

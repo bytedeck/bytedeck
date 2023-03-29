@@ -1,0 +1,20 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %} Delete Student from Course {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete the student from this course?<p>
+  <p>All quests completed during this course will remain completed.</p>
+  </p>
+  <div class="well">
+    <p>Student: {{object.user.profile}}</p>
+    <p>Course: {{object.course}}</p>
+    <p>Semester: {{object.semester}}</p>
+    <p>Group: {{object.block}}</p>
+  </div>
+  <a href="{% url 'profiles:profile_detail' object.user.profile.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}

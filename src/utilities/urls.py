@@ -20,4 +20,6 @@ urlpatterns = [
     path('menuitem/create/', views.MenuItemCreate.as_view(), name='menu_item_create'),
     path('menuitem/edit/<int:pk>/', views.MenuItemUpdate.as_view(), name='menu_item_update'),
     path('menuitem/delete/<int:pk>/', views.MenuItemDelete.as_view(), name='menu_item_delete'),
+
+    path("fields/querysetsequence_auto.json", views.QuerySetSequenceAutoResponseView.as_view(), name="querysetsequence_auto-json"),
 ]

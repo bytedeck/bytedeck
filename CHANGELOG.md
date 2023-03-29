@@ -4,9 +4,64 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.19.4] 2023-03-20
+* Add links to public tenant landing page header and footer
+* Bugfixs:
+  - Autofix ordinal duplicates in repeatable quests [#1260](https://github.com/bytedeck/bytedeck/issues/1260)
+  - [#1266](https://github.com/bytedeck/bytedeck/issues/1266)
+
+
+
+### [1.19.3] 2023-01-02
+* Bugfixs:
+  - Advanced prerequisite widget upgrade compelte (replaced DAL with select2)
+  - Ordering error issue #1266
+  - Do not return None when creating a new quest submission, issue #1225
+* Development:
+  - Update precommit config
+  - Update Contributing guidelines
+  - Add Pull Request template
+
+### [1.19.2] 2022-12-04
+* Add courses as a column and sort option in student profile list.
+* Bugfixes:
+  - Advanced prerequisites form now loads (though slow and needs more work)
+  - New map form (same problem as above)
+  - Handle negative XP when closing a semester
+  - Quest list alphabetical sort
+  - Last staff login (Bytedeck)
+  - URLs for menu items now accepts external urls properly
+  - Missing delete option added for student's courses
+  - Custom pages (flatpages) auto generated Table of Contents repaired. Add this to the top of a custom page's HTML and it will generate a simple ToC based on "Heading 3" styled text (i.e `<h3>`):
+  ```<div id="TOC"></div>```
+
+### [1.19.1] 2022-09-03 - Beta Release
+* Visual representation of tags by student, linked to in profile and in mark calculations page
+* Students now have a quick reply option for returned and completed submissions.
+* Campaign "active" field now works.  Quests that are part of inactive campaigns will not be visible to students and won't show up on maps (a quick way for teachers to make a group of quests dissappear)
+* Homepage/landing page is now a Flatpage.  For development it's created during initdb, home url `/` redirects to the flatpage.  This allows for easier editing of the homepage in production.
+* Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
+  - Staff can edit student course registrations, and register them in additional courses
+* Minor tweaks and bugfixes:
+  - tweak: Narrow public tenant flatpage template
+  - tweak: Use full wordmark on public flatpages
+  - tweak: New map creation uses a better widget to get the initial object
+  - tweak: campaign detail views are now accessible to students
+  - tweak: change portfolia "Public link" to "personal link"
+  - tweak: Tag detail view for students now shows total XP earned and links to all submissions (including all repeats of a quest)
+  - tweak: "This page if visible to staff only." added to staff only lists.
+  - tweak: Change submit button test to "Submit Quest for Approval" (previousyl said "Submit Quest for Completion")
+  - bugfix: tags by XP and tag charts now account for max xp per quest and student xp requested values
+  - bugfix: Mark Distribution graphs no more negative values
+  - bugfix: quests sort properly again
+  - bugfix: account for -1 (unlimited) users in public tenant list higlighting
+  - security: update several dependancies
+  - many very minor tweaks and typos corrected
+
 ### [1.19.0] 2022-08-14 - Beta Release Candidate 02
 * Groups (name changed from Blocks) is now a prerequisite option
-* New Site Config optios: Customize the name of Tags and Groups
+* New Site Config options: Customize the name of Tags and Groups
 * Deprecate 'Grade' field as part of course regsitration.  It will no longer appear and can't be selected for new course registrations
 * Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
   - Students page now has new tabs to access: Inactive students, Staff users.
@@ -47,7 +102,7 @@ This file chronologically records all notable changes to this website, including
 ### [1.17.0] 2022-07-21 - Summer student contribution 03
 * "Deck owner" is no longer a superuser and will not have access to Django Admin.
 * Campaign list page (currently Admin > Campaigns) updated with quest count, XP available
-* Campign name in quests now link to the detail view of that campaign 
+* Campign name in quests now link to the detail view of that campaign
 * Features that no longer require acces to the Django/Site Admin, and can now be edited in the main site by staff users:
   - Password resetting
   - Ability to set a user as Staff or TA (in profile form)
@@ -88,7 +143,7 @@ This file chronologically records all notable changes to this website, including
   - [#257](https://github.com/bytedeck/bytedeck/issues/257)
   - [#963](https://github.com/bytedeck/bytedeck/issues/963)
   - [#964](https://github.com/bytedeck/bytedeck/issues/964)
-  
+
 
 ### [1.14.1] 2022-05-14
 * Make usernames case insensitive (more mobile friendly due to auto-capitalization on phones)
@@ -184,7 +239,7 @@ This file chronologically records all notable changes to this website, including
   - [#788](https://github.com/bytedeck/bytedeck/issues/788)
 
 ### [1.11.1] 2020-12-15
-* [teachers] Submission summary page improvements 
+* [teachers] Submission summary page improvements
 * Minor styling tweaks
 
 ### [1.11.0] 2020-12-13
@@ -204,7 +259,7 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Archived announcement pagination working
 * [bugfix] Overlapping announcement menus
 * [dev] Refactor contenttypes app/table to hopefully fix several bugs
- 
+
 ### [1.10.1] 2020-11-22
 * Announcement emails only to current students
 * Don't archive draft announcements
@@ -213,7 +268,7 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Funky announcement menu accordian problem
 * [dev] use public CDN instead of local for several resource
 * [dev] version css to bust cache when changed
- 
+
 ### [1.10.0] 2020-11-17 - AWS
 * [dev] Move to AWS
 
@@ -305,7 +360,7 @@ This file chronologically records all notable changes to this website, including
 ### [1.4.0] 2020-06-01
 * [teachers] Badges now have an import ID and can be updated by export/import
 * [dev] Default graphics updated to ByteDeck
-* Bugfixes: 
+* Bugfixes:
   - [#532](https://github.com/timberline-secondary/hackerspace/issues/532)
   - [#529](https://github.com/timberline-secondary/hackerspace/issues/529)
   - [#525](https://github.com/timberline-secondary/hackerspace/issues/525)
@@ -314,7 +369,7 @@ This file chronologically records all notable changes to this website, including
 
 
 ### [1.3.1] 2020-05-23
-* Bugfixes: 
+* Bugfixes:
   - [#508](https://github.com/timberline-secondary/hackerspace/issues/508)
   - [#512](https://github.com/timberline-secondary/hackerspace/issues/512)
   - [#517](https://github.com/timberline-secondary/hackerspace/issues/517)
@@ -378,7 +433,7 @@ This file chronologically records all notable changes to this website, including
 ### [1.0.0] 2020-04-05 - Multi tenancy
 * Multi-tenant support!
 * Bazillians of small bugfixes and tweaks to existing features
- 
+
 ### [0.25.1] 2020-03-29
 * [bugfix] Use new custom course XP in profiles and chart
 
@@ -396,7 +451,7 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] License in footer should be GPL 3
 * [bugfix] Edit button on flat pages visible for all users
 * [bugfix] Removes extra ordinal in last repeat of quest
-* [bugfix] Global chillax line setting in config 
+* [bugfix] Global chillax line setting in config
 
 ### [0.24.0] 2020-01-24
 
@@ -619,7 +674,7 @@ This file chronologically records all notable changes to this website, including
 * [bugfix] Map creation was showing non-visible quests
 * [bugfix] Add manual course XP adjustment to grade calcs
 * Other minor tweaks
- 
+
 ### [0.7.0] 2017-05-28
 
 * Updated Django to 1.11 LTS (support to 2020)

@@ -72,6 +72,9 @@ data-classes="table table-no-bordered table-hover"
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 {% group_name %}
             </th>
+            <th data-sortable='true' data-field='courses' data-visible="false">
+                Courses
+            </th>
             <th data-sortable='true' data-field='xp'
                 {% if request.user.is_staff and config.display_marks_calculation %}data-visible="false"{% endif %}>
                 XP
@@ -81,7 +84,7 @@ data-classes="table table-no-bordered table-hover"
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 Mark
             </th>
-        {% endif %}
+            {% endif %}
 
         {% endif %}
         <th data-sortable='true' data-field='portfolio'
@@ -151,6 +154,10 @@ data-classes="table table-no-bordered table-hover"
 
                     <td>
                         {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                    </td>
+
+                    <td>
+                        {% for course in object.courses %}{{ course }}{% if not forloop.last %}, {% endif %} {% endfor %}
                     </td>
 
                     <td>{% if object.visible_to_other_students or request.user.is_staff %}
