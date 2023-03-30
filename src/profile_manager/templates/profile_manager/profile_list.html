@@ -12,16 +12,16 @@
     {% if request.user.is_staff %}
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"
-            class="btn  {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+            class="btn  border {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
 
             <a href="{% url 'profiles:profile_list' %}"
-            class="btn {% if view_type == VIEW_TYPES.LIST %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+            class="btn border {% if view_type == VIEW_TYPES.LIST %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
 
             <a href="{% url 'profiles:profile_list_inactive' %}"
-            class="btn {% if view_type == VIEW_TYPES.INACTIVE %}btn-primary{% else %}btn-default{% endif %}">Inactive</a>
+            class="btn border {% if view_type == VIEW_TYPES.INACTIVE %}btn-primary{% else %}btn-default{% endif %}">Inactive</a>
 
             <a href="{% url 'profiles:profile_list_staff' %}"
-            class="btn {% if view_type == VIEW_TYPES.STAFF %}btn-primary{% else %}btn-default{% endif %}">Staff</a>
+            class="btn border {% if view_type == VIEW_TYPES.STAFF %}btn-primary{% else %}btn-default{% endif %}">Staff</a>
         </div>
     {% endif %}
     <i class="fa fa-users pull-right"></i>
@@ -33,7 +33,7 @@
 data-sort-name='first'
 data-sort-order='asc'
 data-search='true'
-data-show-columns='true'
+data-show-columns='false'
 {% if request.user.is_staff %}
 data-show-export="true"
 data-export-types="['csv', 'json']"

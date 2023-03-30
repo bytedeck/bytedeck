@@ -3,45 +3,70 @@
 {% load courses_tags %}
 
 <!-- Fixed navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light navbar-fixed-top border-bottom" {% if request.user.is_authenticated and config.color_headers_by_mark %}style='{% color_style_from_mark request.user %}'{% endif %}>
-    <div class="container-fluid">
+<nav class="navbar navbar-expand-lg  p-1navbar-light bg-light navbar-fixed-top border-bottom" {% if request.user.is_authenticated and config.color_headers_by_mark %}style='{% color_style_from_mark request.user %}'{% endif %}>
+    <div class="container-fluid position-relative">
       <!-- Site icon, left side -->
-      <a title="Home" class="m-0 nav-link" href="{% url 'home' %}">
-        <img alt="Logo" class="img-fluid w-50" src="{% site_logo_url %}">
+      <a title="Home" class="m-0 nav-link logo" href="{% url 'home' %}">
+        <img alt="Logo" class="img-fluid" src="{% site_logo_url %}">
     </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <ul class="navbar-nav">
-        <li class="nav-item">
-          <a class="nav-link me-3" aria-current="page" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a>
-        </li>
+    <div class="d-lg-none d-flex w-75" >
 
-        <li class="nav-item">
-          <a class="nav-link me-3" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link me-3" href="{% url 'maps:primary' %}"> <i class="fa fa-map-signs fa-fw"></i></a>
+      <li class="nav-item dropdown navbar-nav ps-3">
+        <a href="#" class="nav-link dropdown-toggle border rounded px-2 py-1"
+        id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+        <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+            {% include 'navbar-fixed-admin-snippet.html' %}
+        </ul>
+    </li>
+      <li id='notifications-menu' class="nav-item dropdown navbar-nav ps-3">
+        <a class="nav-link border rounded  px-2 py-1" href="#" id="notification-dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa fa-bell"></i><span id="notification_badge" class="badge alert-danger notification-badge"></span>
+        </a>
+        <ul class="dropdown-menu notification-dropdown" aria-labelledby="notification-dropdown">
+            <li>
+                <a href="{% url 'notifications:list' %}" class=""><i class="fa fa-lg fa-fw fa-spinner fa-pulse"></i>
+                    Loading notifications...
+                    <!-- via AJAX from javascript.html -->
+                </a>
+            </li>
+        </ul>
+    </li>
+    </div>
+
+
+    <!-- <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarSupportedContent"> -->
+
+      <div class="d-none d-sm-block">
+        <ul class="navbar-nav ">
+          <li class="nav-item">
+            <a class="nav-link ms-3" aria-current="page" href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i></a>
           </li>
 
-        <li class="nav-item">
-          <a class="nav-link ms-2" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i></a>
-        </li>
+          <li class="nav-item">
+            <a class="nav-link ms-3" href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i></a>
+          </li>
+          <li class="nav-item">
+              <a class="nav-link ms-3" href="{% url 'maps:primary' %}"> <i class="fa fa-map-signs fa-fw"></i></a>
+            </li>
 
-      </ul>
-      <div class="collapse navbar-collapse d-flex justify-content-end" id="navbarNavDropdown">
-
-        <ul class="navbar-nav d-flex justify-content-end">
+          <li class="nav-item">
+            <a class="nav-link ms-3" href="{% url 'announcements:list' %}"><i class="fa fa-newspaper-o fa-fw"></i></a>
+          </li>
+        </ul>
+      </div>
+      <div class="collapse navbar-collapse d-flex justify-content-end  main-position" id="navbarNavDropdown">
+         <button class="navbar-toggler me-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse justify-content-lg-end" id="navbarSupportedContent">
+        <ul class="navbar-nav d-flex ">
             {% if request.user.is_authenticated %}
             {% if request.user.is_staff %}
             <!-- Non-mobile Admin Menu-->
-            <li class="nav-item dropdown">
-                <a href="#" class="nav-link dropdown-toggle"
-                id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
-                <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-                    {% include 'navbar-fixed-admin-snippet.html' %}
-                </ul>
-            </li>
+
             {% else %}
             <!-- Students XP & Rank -->
             <li id="menu-xp" class="hidden-xs navbar-xp">
@@ -55,22 +80,33 @@
             </li>
             {% endif %}
             <!-- All users Profile-->
-            <!-- Non-mobile notifications drop-down items -->
-            <li id='notifications-menu' class="nav-item dropdown">
-                <a class="nav-link " href="#" id="notification-dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fa fa-bell"></i><span id="notification_badge" class="badge alert-danger notification-badge"></span>
-                </a>
-                <ul class="dropdown-menu notification-dropdown" aria-labelledby="notification-dropdown">
-                    <li>
-                        <a href="{% url 'notifications:list' %}"><i class="fa fa-lg fa-fw fa-spinner fa-pulse"></i>
-                            Loading notifications...
-                            <!-- via AJAX from javascript.html -->
-                        </a>
-                    </li>
+            <div class="d-none d-sm-block">
+            <ul class=" d-flex navbar-nav">
+              <li class="nav-item dropdown">
+                <a href="#" class="nav-link dropdown-toggle me-3"
+                id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+                <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+                    {% include 'navbar-fixed-admin-snippet.html' %}
                 </ul>
             </li>
+              <!-- Non-mobile notifications drop-down items -->
+              <li id='notifications-menu' class="nav-item dropdown">
+                  <a class="nav-link me-3 " href="#" id="notification-dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      <i class="fa fa-bell"></i><span id="notification_badge" class="badge alert-danger notification-badge"></span>
+                  </a>
+                  <ul class="dropdown-menu notification-dropdown" aria-labelledby="notification-dropdown">
+                      <li>
+                          <a href="{% url 'notifications:list' %}" class=""><i class="fa fa-lg fa-fw fa-spinner fa-pulse"></i>
+                              Loading notifications...
+                              <!-- via AJAX from javascript.html -->
+                          </a>
+                      </li>
+                  </ul>
+              </li>
+            </ul>
+          </div>
             <li id="profile" class="nav-item">
-                 <a title="Profile" class="nav-link" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
+                 <a title="Profile" class="nav-link me-3" href="{% url 'profiles:profile_detail' request.user.profile.id %}">
                     <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
                 </a><!-- removes whitespace-->
              </li>
@@ -85,10 +121,10 @@
             {% endif %}
 
             <li id="extras-menu" class="dropdown">
-                <a href="{% url 'utilities:menu_items' %}" class=" nav-link" data-toggle="dropdown"
+                <a href="{% url 'utilities:menu_items' %}" class=" nav-link nav-link dropdown-toggle " data-toggle="dropdown"
                    role="button" aria-haspopup="true" aria-expanded="false">
-                    <i class="fa fa-bars hidden-xs"></i>
-                 <!-- <span class="visible-xs-block">Links <span class="caret"></span></span> -->
+
+                 <span class="visible-xs-block">Links <span class="caret"></span></span>
                 </a>
                 <ul class="dropdown-menu">
                     {% menu_list %}
@@ -100,12 +136,15 @@
                 </ul>
             </li>
 
-            <li><a href="{% url 'account_logout' %}" class="nav-link">Sign Out</a></li>
+            <li><a href="{% url 'account_logout' %}" class="nav-link ">Sign Out</a></li>
             {% else %}
             <!-- Unauthenticated -->
             <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
             {% endif %}
         </ul>
-      </div>
+
+    </div>
+
+   </div>
     </div>
   </nav>

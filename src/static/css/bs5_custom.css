@@ -3,9 +3,9 @@ body{
     padding: 0px !important;
 
 }
-.navbar-brand > img{
+.logo img{
     margin-left: 0px !important;
-    width: 65px !important;
+    width: 50px !important;
 }
 .btn-mobile-navbar{
     background: none;
@@ -74,4 +74,11 @@ table > tbody{
   /* Adjust column width to fit export button */
   .table td:nth-child(2) {
     width: 10%;
+  }
+
+  @media only screen and (max-width: 768px) {
+    .main-position{
+        position: absolute !important;
+        right: 0px;
+    }
   }
