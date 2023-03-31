@@ -9,25 +9,30 @@
       <a title="Home" class="m-0 nav-link logo" href="{% url 'home' %}">
         <img alt="Logo" class="img-fluid" src="{% site_logo_url %}">
     </a>
+    <!-- <a href="/quests/campaigns/" class="list-group-item border px-3 py-1 rounded d-lg-none dots-menu "><i class="fa fa-ellipsis-v fa-fw"></i></a> -->
+    <li class="nav-item dropdown list-group-item">
+      <a href="#" class="nav-link list-group-item border py-1 px-3 rounded d-lg-none dots-menu "
+      id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false"> <i class="fa fa-ellipsis-v fa-fw"></i></a>
+      <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+      {% include 'navbar-fixed-admin-snippet.html' %}
+      </ul>
+      </li>
     <div class="d-lg-none d-flex w-75" >
-
-      <li class="nav-item dropdown navbar-nav ps-3">
+      <li class="nav-item dropdown navbar-nav ms-2">
         <a href="#" class="nav-link dropdown-toggle border rounded px-2 py-1"
         id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
-        <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+        <ul class="dropdown-menu position-absolute" aria-labelledby="navbarDropdownMenuLink">
             {% include 'navbar-fixed-admin-snippet.html' %}
         </ul>
     </li>
-      <li id='notifications-menu' class="nav-item dropdown navbar-nav ps-3">
-        <a class="nav-link border rounded  px-2 py-1" href="#" id="notification-dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="fa fa-bell"></i><span id="notification_badge" class="badge alert-danger notification-badge"></span>
-        </a>
-        <ul class="dropdown-menu notification-dropdown" aria-labelledby="notification-dropdown">
+      <li id='notifications-menu' class="nav-item dropdown navbar-nav ps-2">
+        <a href="{% url 'notifications:list' %}" class="nav-link border rounded  px-2 py-1 ms-3"><i class="fa fa-bell"></i><span id="notification_badge" class="badge alert-danger notification-badge"></span>
+
+          <!-- via AJAX from javascript.html -->
+      </a>
+        <ul class="dropdown-menu notification-dropdown position-absolute" aria-labelledby="notification-dropdown">
             <li>
-                <a href="{% url 'notifications:list' %}" class=""><i class="fa fa-lg fa-fw fa-spinner fa-pulse"></i>
-                    Loading notifications...
-                    <!-- via AJAX from javascript.html -->
-                </a>
+
             </li>
         </ul>
     </li>
@@ -58,11 +63,11 @@
         </ul>
       </div>
       <div class="collapse navbar-collapse d-flex justify-content-end  main-position" id="navbarNavDropdown">
-         <button class="navbar-toggler me-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse justify-content-lg-end" id="navbarSupportedContent">
-        <ul class="navbar-nav d-flex ">
+          <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbarOffcanvasLg" aria-controls="navbarOffcanvasLg">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+    <div class="offcanvas offcanvas-start  justify-content-lg-end " tabindex="-1" id="navbarOffcanvasLg" aria-labelledby="navbarOffcanvasLgLabel">
+        <ul class="navbar-nav d-flex  justify-content-lg-end">
             {% if request.user.is_authenticated %}
             {% if request.user.is_staff %}
             <!-- Non-mobile Admin Menu-->

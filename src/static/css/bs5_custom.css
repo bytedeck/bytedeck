@@ -75,10 +75,44 @@ table > tbody{
   .table td:nth-child(2) {
     width: 10%;
   }
+  .modal-backdrop{
+    background: none !important;
+    display: none;
 
+  }
+  .dots-menu{
+    margin-left: -23px;
+  }
+  .offcanvas.offcanvas-start{
+    top: 7%;
+    left: 3px;
+    background: #f2f2f2;
+    height: 118px;
+    padding: 2px 13px;
+    width: 100%;
+  }
+  button:focus:not(:focus-visible){
+    outline: none;
+  }
+.offcanvas{
+position: fixed;
+bottom: 0;
+z-index: var(--bs-offcanvas-zindex);
+display: flex;
+flex-direction: column;
+max-width: 100%;
+color: var(--bs-offcanvas-color);
+visibility: hidden;
+background-color: var(--bs-offcanvas-bg);
+background-clip: padding-box;
+outline: 0;
+  }
   @media only screen and (max-width: 768px) {
     .main-position{
         position: absolute !important;
         right: 0px;
+    }
+    .logo img{
+        display: none !important;
     }
   }
