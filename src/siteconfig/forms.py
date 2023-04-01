@@ -22,6 +22,8 @@ class SiteConfigForm(forms.ModelForm):
         if not is_deck_owner:
             self.fields['deck_owner'].disabled = True
 
+        self.fields['enable_google_signin'].disabled = True
+
     def clean_enable_google_signin(self):
         data = self.cleaned_data['enable_google_signin']
 

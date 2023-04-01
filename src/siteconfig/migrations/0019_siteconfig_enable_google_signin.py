@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='siteconfig',
             name='enable_google_signin',
-            field=models.BooleanField(default=False, verbose_name='Enable sign-in via Google'),
+            field=models.BooleanField(default=False, help_text="If you want to enable the ability to 'Sign in with Google' on your deck, please post a request <a href='https://github.com/bytedeck/bytedeck/discussions/1309' target='_blank'>here</a>", verbose_name='Enable sign-in via Google'),
         ),
     ]

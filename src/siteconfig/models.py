@@ -160,6 +160,10 @@ class SiteConfig(models.Model):
     enable_google_signin = models.BooleanField(
         verbose_name="Enable sign-in via Google",
         default=False,
+        help_text=(
+            "If you want to enable the ability to 'Sign in with Google' on your deck, please post a request "
+            "<a href='https://github.com/bytedeck/bytedeck/discussions/1309' target='_blank'>here</a>"
+        )
     )
 
     approve_oldest_first = models.BooleanField(
