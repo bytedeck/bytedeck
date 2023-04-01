@@ -1,12 +1,12 @@
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import connection, transaction
 
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-# from quest_manager.models import Quest
+from django.utils.translation import ngettext
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
@@ -88,6 +88,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
 
+    actions = ['enable_google_signin', 'disable_google_signin']
+
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
             and the schema deleted from the db via psql: `DROP SCHEMA schema_name CASCADE;`. \
@@ -108,6 +110,48 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
         return qs
+
+    @admin.action(description="Enable google signin for tenant(s)")
+    def enable_google_signin(self, request, queryset):
+        from siteconfig.models import SiteConfig
+
+        for tenant in queryset.exclude(schema_name=get_public_schema_name()):
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+                if not config:
+                    continue
+
+                with transaction.atomic():
+                    config._propagate_google_provider()
+                    config.enable_google_signin = True
+                    config.save()
+
+        enabled_count = queryset.count()
+        self.message_user(request, ngettext(
+            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain is added in the Authorized Redirect URIs",
+            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains are added in the Authorized Redirect URIs",
+            enabled_count,
+        ) % enabled_count, messages.SUCCESS)
+
+    @admin.action(description="Disable google signin for tenant(s)")
+    def disable_google_signin(self, request, queryset):
+        from siteconfig.models import SiteConfig
+
+        for tenant in queryset.exclude(schema_name=get_public_schema_name()):
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+                if not config:
+                    continue
+
+                config.enable_google_signin = False
+                config.save()
+
+        disabled_count = queryset.count()
+        self.message_user(request, ngettext(
+            "%d tenant google signin was disabled successfully",
+            "%d tenant google signins were disabled successfully",
+            disabled_count,
+        ) % disabled_count, messages.SUCCESS)
 
 
 admin.site.register(Tenant, TenantAdmin)
