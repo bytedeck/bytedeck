@@ -1,6 +1,4 @@
-from allauth.socialaccount.models import SocialApp
 from django.contrib.auth import get_user_model
-from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.shortcuts import reverse
@@ -8,7 +6,6 @@ from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
-from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
@@ -127,39 +124,3 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         ))
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
-
-    def test_siteconfig_update_enable_google_signin(self):
-        """
-        Test that setting enable_google_signin = True should fail if there are no configured SocialApp
-        """
-        owner_user = self.config.deck_owner
-        self.client.force_login(owner_user)
-        URL = reverse("config:site_config_update_own")
-        self.client.post(
-            URL,
-            data=generate_form_data(
-                model_form=SiteConfigForm,
-                enable_google_signin=True
-            )
-        )
-        # Config should not be updated since we can't enable google sign in if it is not configured properly by the public schema admin
-        self.assertFalse(SiteConfig.get().enable_google_signin)
-
-        with schema_context(get_public_schema_name()):
-            app = SocialApp.objects.create(
-                provider='google',
-                name='Test Google App',
-                client_id='test_client_id',
-                secret='test_secret'
-            )
-            app.sites.add(Site.objects.get_current())
-
-        self.client.post(
-            URL,
-            data=generate_form_data(
-                model_form=SiteConfigForm,
-                enable_google_signin=True
-            )
-        )
-        # Config should now updated since we added a valid Google Provider
-        self.assertTrue(SiteConfig.get().enable_google_signin)
