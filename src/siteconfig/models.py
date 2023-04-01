@@ -253,6 +253,10 @@ class SiteConfig(models.Model):
         self.save()
 
     def _propagate_google_provider(self):
+        """
+        Copies the SocialApp config for GoogleProvider from the public schema down to
+        the tenant's schema SocialApp
+        """
         with schema_context(get_public_schema_name()):
             social_app = SocialApp.objects.get_current(provider=GoogleProvider.id)
             social_app_clone = copy(social_app)
