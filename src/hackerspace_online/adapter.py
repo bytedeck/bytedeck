@@ -16,6 +16,18 @@ class CustomAccountAdapter(DefaultAccountAdapter):
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
 
     def pre_social_login(self, request, sociallogin):
+        """
+        Invoked just after a user successfully authenticates via a
+        social provider, but before the login is actually processed
+        (and before the pre_social_login signal is emitted).
+
+        ---
+
+        Currently using this to automatically connect a google account
+        to an existing user provided that they used the same email address
+        for logging in
+        """
+
         super().pre_social_login(request, sociallogin)
 
         # Attempt to merge accounts with the same email used in their social account
