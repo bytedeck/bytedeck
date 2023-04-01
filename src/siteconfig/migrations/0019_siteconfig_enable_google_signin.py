@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='siteconfig',
             name='enable_google_signin',
-            field=models.BooleanField(default=False, help_text='Used to enable or disable google sign-in', verbose_name='Enable sign-in via Google'),
+            field=models.BooleanField(default=False, verbose_name='Enable sign-in via Google'),
         ),
     ]

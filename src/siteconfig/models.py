@@ -160,7 +160,6 @@ class SiteConfig(models.Model):
     enable_google_signin = models.BooleanField(
         verbose_name="Enable sign-in via Google",
         default=False,
-        help_text="Used to enable or disable google sign-in"
     )
 
     approve_oldest_first = models.BooleanField(
