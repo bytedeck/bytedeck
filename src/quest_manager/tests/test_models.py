@@ -1,5 +1,6 @@
 import datetime
 import re
+from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -58,7 +59,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
 
     def test_category_url(self):
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
-    
+
     def test_current_quests(self):
         """ Test that the queryset of all quests in a campaign is returned correctly """
 
@@ -117,13 +118,13 @@ class QuestTestModel(TenantTestCase):
     def test_quest_creation(self):
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
-        
+
     def test_quest_icon(self):
         pass
 
     def test_quest_url(self):
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
-    
+
     def test_active(self):
         """
         The active method of the Quest model's parent "XPItem" should return the correct values based on a quest object's settings.
@@ -135,6 +136,7 @@ class QuestTestModel(TenantTestCase):
         4. The quest is manually set to be invisible to students (Quest.visible_to_students == False)
         """
 
+        # TODO: This test case is flaky since this throws an error around 7:18 UTC
         # create and test a control quest that will return active
         baker.make(Quest, name="control-quest")
         self.assertEqual(Quest.objects.get(name="control-quest").active, True)
@@ -145,7 +147,7 @@ class QuestTestModel(TenantTestCase):
 
         # create and test a quest that won't be available until one hour later in the same day
         baker.make(
-            Quest, name="future-time-quest", date_available=timezone.localtime(), 
+            Quest, name="future-time-quest", date_available=timezone.localtime(),
             time_available=(timezone.localtime() + timezone.timedelta(hours=1)))
         self.assertEqual(Quest.objects.get(name="future-time-quest").active, False)
 
@@ -349,7 +351,7 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_creation(self):
         self.assertIsInstance(self.submission, QuestSubmission)
-        self.assertEqual(str("Test"), self.submission.quest.name)
+        self.assertEqual("Test", self.submission.quest.name)
 
     def test_submission_url(self):
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
@@ -380,6 +382,55 @@ class SubmissionTestModel(TenantTestCase):
         SiteConfig.get().set_active_semester(first_sub.semester.id)
         second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
         self.assertEqual(first_sub, second_sub.get_previous())
+
+    def test_submission_get_previous_automatic_fix_ordinal(self):
+        """Submissions that have the same ordinals will be automatically fixed"""
+        repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
+        first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
+        self.assertIsNone(first_sub.get_previous())
+        self.assertEqual(first_sub.ordinal, 1)
+        # need to complete so can make another
+        first_sub.mark_completed()
+        SiteConfig.get().set_active_semester(first_sub.semester.id)
+        second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
+        self.assertEqual(second_sub.ordinal, 2)
+        second_sub.mark_completed()
+
+        self.assertEqual(first_sub, second_sub.get_previous())
+
+        third_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
+        self.assertEqual(third_sub.ordinal, 3)
+        third_sub.mark_completed()
+
+        fourth_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
+        self.assertEqual(fourth_sub.ordinal, 4)
+        fourth_sub.mark_completed()
+
+        # Make the 3rd submission's ordinal same with the second
+        old_third_submission_ordinal = third_sub.ordinal
+        third_sub.ordinal = second_sub.ordinal
+        third_sub.save()
+
+        # Assert that MultipleObjectsReturned is raised now since we now have 2 records with the same ordinal
+        with self.assertRaises(QuestSubmission.MultipleObjectsReturned):
+            QuestSubmission.objects.get(quest=repeat_quest, user=self.student, ordinal=second_sub.ordinal)
+
+        fourth_sub.ordinal = old_third_submission_ordinal
+        fourth_sub.save()
+
+        self.assertEqual(second_sub.ordinal, third_sub.ordinal)
+
+        # Mock fhe _fix_ordinal so we can test that it was called.
+        # See SO solution: https://stackoverflow.com/a/50970342
+        fourth_sub._fix_ordinal = MagicMock(side_effect=fourth_sub._fix_ordinal)
+
+        # This should fix the ordinals
+        self.assertEqual(fourth_sub.get_previous(), QuestSubmission.objects.get(pk=third_sub.pk))
+        self.assertTrue(fourth_sub._fix_ordinal.called)
+        self.assertEqual(fourth_sub._fix_ordinal.call_count, 1)
+
+        third_sub.refresh_from_db()
+        self.assertEqual(third_sub.ordinal, old_third_submission_ordinal)
 
     def test_get_minutes_to_complete(self):
         """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""

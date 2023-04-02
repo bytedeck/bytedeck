@@ -21,7 +21,7 @@ def save_announcement_signal(sender, instance, **kwargs):
     If it should, then check if there is already a beat task scheduled and replace it, or create a new schedule
     """
 
-    task_name = "Autopublish task for Announcement #{} on schema {}".format(instance.id, connection.schema_name)
+    task_name = f"Autopublish task for Announcement #{instance.id} on schema {connection.schema_name}"
 
     if instance.draft and instance.auto_publish:
 
@@ -76,6 +76,7 @@ def save_announcement_signal(sender, instance, **kwargs):
             task = PeriodicTask.objects.get(name=task_name)
             for key, value in defaults.items():
                 setattr(task, key, value)
+            print(f"PeriodicTask exists, updating {task}")
             task.save()
         except PeriodicTask.DoesNotExist:
             new_values = {'name': task_name}
