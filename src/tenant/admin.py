@@ -115,7 +115,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     def enable_google_signin(self, request, queryset):
         from siteconfig.models import SiteConfig
 
-        for tenant in queryset.exclude(schema_name=get_public_schema_name()):
+        queryset = queryset.exclude(schema_name=get_public_schema_name())
+        for tenant in queryset:
             with tenant_context(tenant):
                 config = SiteConfig.get()
                 if not config:
@@ -137,7 +138,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     def disable_google_signin(self, request, queryset):
         from siteconfig.models import SiteConfig
 
-        for tenant in queryset.exclude(schema_name=get_public_schema_name()):
+        queryset = queryset.exclude(schema_name=get_public_schema_name())
+        for tenant in queryset:
             with tenant_context(tenant):
                 config = SiteConfig.get()
                 if not config:
