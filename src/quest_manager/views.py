@@ -24,7 +24,6 @@ from hackerspace_online.decorators import staff_member_required
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
-from quest_manager.models import XPItem
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
@@ -58,8 +57,8 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     """The only category view non-staff users should have access to
 
-    A view that contains campaign information as well as a comprehensive list of 
-    quests in a given campaign that eschews the complexity and unreliability of maps, 
+    A view that contains campaign information as well as a comprehensive list of
+    quests in a given campaign that eschews the complexity and unreliability of maps,
     and changes dynamically based on the credentials of the user accessing it.
     """
     model = Category
@@ -71,7 +70,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         - Staff users will see a complete list of quests currently in the viewed campaign
         - Students or other non-staff users will only see active quests
 
-        Returns a dictionary containing default context info as well as a queryset that contains the 
+        Returns a dictionary containing default context info as well as a queryset that contains the
         appropriate quests a user will see; "category_displayed_quests".
         """
         if self.request.user.is_staff:
@@ -81,7 +80,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
             # filtering before calling get_active, while likely less costly, changes the object
             # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
             kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
-        
+
         return super().get_context_data(**kwargs)
 
 
@@ -204,7 +203,7 @@ class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
 
 class QuestPrereqsUpdate(ObjectPrereqsFormView):
     model = Quest
-    
+
 
 class QuestCopy(QuestCreate):
 
@@ -413,12 +412,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             available_quests = Quest.objects.get_available(request.user, remove_hidden)
         else:
             available_quests = Quest.objects.get_available_without_course(request.user)
-    
-    # this logic is in place as a temporary fix to issue #1162 (https://github.com/bytedeck/bytedeck/issues/1162)
-    # once a solution is found for the root cause of this issue, this line should be deleted.
-    # likely stems from PR #1158 (https://github.com/bytedeck/bytedeck/pull/1158)
-    # proper quest ordering is pulled directly from the parent model XPItem's "ordering" meta value
-    available_quests = available_quests.order_by(*XPItem._meta.ordering)
 
     available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
 

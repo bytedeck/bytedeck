@@ -1,14 +1,11 @@
 from django.urls import path
 
-from taggit.models import Tag
-
 from tags import views
-from utilities.views import ModelAutocomplete
 
 app_name = 'tags'
 
 urlpatterns = [
-    path('autocomplete/', ModelAutocomplete.as_view(model=Tag), name='autocomplete'),
+    path("auto.json", views.TaggitAutoResponseView.as_view(), name="auto-json"),
 
     path('', views.TagList.as_view(), name='list'),
     path('create/', views.TagCreate.as_view(), name='create'),

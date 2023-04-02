@@ -45,11 +45,10 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     def queryset_append(self, profiles_qs):
         profiles_qs = profiles_qs.select_related('user__portfolio')
-        # blocks = Block.objects.all()
-        # blocks_dict = {x.pk: x for x in blocks}
 
         for profile in profiles_qs:
             profile.blocks_value = profile.blocks()
+            profile.courses = profile.current_courses().values_list('course__title', flat=True)
             profile.mark_value = profile.mark()
             profile.last_submission_completed_value = profile.last_submission_completed()
         return profiles_qs

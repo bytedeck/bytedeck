@@ -1,19 +1,151 @@
+import json
+import random
+import string
+
+from django import forms
+from django.core import signing
 from django.contrib.auth import get_user_model
-from django.contrib.sites.models import Site
+from django.contrib.auth.models import Group
+from django.utils.encoding import smart_text
 from django.contrib.flatpages.models import FlatPage
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
+from utilities.fields import ContentObjectChoiceField
+from utilities.widgets import ContentObjectSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
-import random
-import string
-
-
 User = get_user_model()
+
+
+def random_string(n):
+    return "".join(
+        random.choice(string.ascii_uppercase + string.digits) for _ in range(n)
+    )
+
+
+class ContentObjectsSelect2WidgetForm(forms.Form):
+    f = ContentObjectChoiceField(
+        queryset=QuerySetSequence(
+            Group.objects.all(),
+        ),
+        widget=ContentObjectSelect2Widget(search_fields=['name__icontains']),
+    )
+
+
+class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
+    queryset = QuerySetSequence(Group.objects.all())
+    search_fields = [
+        'name__icontains'
+    ]
+
+    def label_from_instance(self, obj):
+        return str(obj.name).upper()
+
+
+class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        self.groups = Group.objects.bulk_create(
+            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
+        )
+
+    def _ct_pk(self, obj):
+        return "{}-{}".format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+
+    def test_get(self):
+        group = self.groups[0]
+        form = ContentObjectsSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        assert {'id': self._ct_pk(group), 'text': smart_text(group)} in data['results'][0]['children']
+
+    def test_no_field_id(self):
+        group = self.groups[0]
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'term': group.name})
+        assert response.status_code == 404
+
+    def test_wrong_field_id(self):
+        group = self.groups[0]
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': 123, 'term': group.name})
+        assert response.status_code == 404
+
+    def test_field_id_not_found(self):
+        group = self.groups[0]
+        field_id = signing.dumps(123456789)
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 404
+
+    def test_pagination(self):
+        url = reverse('utilities:querysetsequence_auto-json')
+        widget = ContentObjectSelect2Widget(
+            max_results=10,
+            queryset=QuerySetSequence(Group.objects.all()),
+            search_fields=['name__icontains']
+        )
+        widget.render('name', None)
+        field_id = signing.dumps(id(widget))
+
+        response = self.client.get(url, {'field_id': field_id, 'term': ''})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['more'] is True
+
+        response = self.client.get(url, {'field_id': field_id, 'term': '', 'page': 1000})
+        assert response.status_code == 404
+
+        response = self.client.get(url, {'field_id': field_id, 'term': '', 'page': 'last'})
+        assert response.status_code == 200
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['more'] is False
+
+    def test_label_from_instance(self):
+        url = reverse('utilities:querysetsequence_auto-json')
+
+        form = ContentObjectsSelect2WidgetForm()
+        form.fields['f'].widget = CustomContentObjectSelect2Widget()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+
+        # artist = artists[0]
+        group = self.groups[0]
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 200
+
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        assert {'id': self._ct_pk(group), 'text': smart_text(group.name.upper())} in data['results'][0]['children']
+
+    def test_url_check(self):
+        from django_select2.cache import cache
+
+        group = self.groups[0]
+        form = ContentObjectsSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['f'].widget))
+        cache_key = form.fields['f'].widget._get_cache_key()
+        widget_dict = cache.get(cache_key)
+        widget_dict['url'] = 'yet/another/url'
+        cache.set(cache_key, widget_dict)
+        url = reverse('utilities:querysetsequence_auto-json')
+        response = self.client.get(url, {'field_id': field_id, 'term': group.name})
+        assert response.status_code == 404
 
 
 class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -34,7 +166,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('utilities:menu_item_create')
         self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
         self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
-    
+
     def test_all_page_status_codes_for_students(self):
         ''' If not logged in as admin then all views should redirect to 403 '''
         self.client.force_login(self.test_student)
@@ -44,13 +176,13 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:menu_item_create')
         self.assert403('utilities:menu_item_update', args=[1])
         self.assert403('utilities:menu_item_delete', args=[1])
-    
+
     def test_MenuItemList_view(self):
         ''' Admin should be able to view menu item list '''
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('utilities:menu_items'))
         self.assertEqual(response.status_code, 200)
-    
+
     def test_MenuItemCreate_view(self):
         ''' Admin should be able to create a menu item '''
         self.client.force_login(self.test_teacher)
@@ -66,38 +198,22 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         test_menuitem = MenuItem.objects.get(label=data['label'])
         self.assertEqual(test_menuitem.label, data['label'])
-    
+
     def test_MenuItemCreate_view__displays_leading_slash_error(self):
         """ Menu Item create view should display correct error text when a bad url is submitted"""
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
             'fa_icon': 'fa-gift',
-            'url': (reverse('courses:ranks'))[1:],
+            'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
         }
 
         # tests Menu Item creation without leading slash ((reverse('courses:ranks'))[1:]) == 'courses/ranks/'
         response = self.client.post(reverse('utilities:menu_item_create'), data=data)
-        leading_slash_error = "URL is missing a leading slash."
+        leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
-
-    def test_MenuItemCreate_view__displays_trailing_slash_error(self):
-        """ Menu Item create view should display correct error text when a bad url is submitted"""
-        self.client.force_login(self.test_teacher)
-        data = {
-            'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
-            'url': (reverse('courses:ranks'))[:-1],
-            'open_link_in_new_tab': False,
-            'sort_order': 0,
-        }
-
-        # tests Menu Item creation without leading slash ((reverse('courses:ranks'))[:-1]) == '/courses/ranks'
-        response = self.client.post(reverse('utilities:menu_item_create'), data=data)
-        trailing_slash_error = "URL is missing a trailing slash."
-        self.assertContains(response, trailing_slash_error)      
 
     def test_MenuItemUpdate_view(self):
         """ Admin should be able to update a Menu Item """
@@ -122,41 +238,25 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         data = {
             'label': 'My Updated Name',
             'fa_icon': 'fa-bath',
-            'url': (reverse('courses:ranks'))[1:],
+            'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
         }
 
         # tests Menu Item updating without leading slash
         response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
-        leading_slash_error = "URL is missing a leading slash."
+        leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
-
-    def test_MenuItemUpdate_view__displays_trailing_slash_error(self):
-        """ Menu Item update view should display correct error text when a bad url is submitted"""
-        self.client.force_login(self.test_teacher)
-        data = {
-            'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
-            'url': (reverse('courses:ranks'))[:-1],
-            'open_link_in_new_tab': False,
-            'sort_order': 0,
-        }
-
-        # tests Menu Item updating without trailing slash
-        response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
-        trailing_slash_error = "URL is missing a trailing slash."
-        self.assertContains(response, trailing_slash_error)
 
 
 class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
-        """ 
+        """
             This is basically baker.make(FlatPage) but it actually works
         """
-        def random_string(length): 
+        def random_string(length):
             return ''.join(random.choice(string.ascii_letters) for i in range(length))
         data = {}
 
@@ -215,7 +315,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:flatpage_delete', args=[1])
 
     def test_all_page_status_codes_for_staff(self):
-        """ 
+        """
             Should return 200 for all cases
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -229,10 +329,10 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('utilities:flatpage_delete', args=[pk])
 
     def test_login_requirements_for_flatpage(self):
-        """ 
-            Flatpage with login required can only be accessed by users, 
+        """
+            Flatpage with login required can only be accessed by users,
             while flatpages without can be accessed by all
-        """ 
+        """
 
         # check all exists in flatpage_list first
         response = self.client.get(reverse('utilities:flatpage_list'))
@@ -262,7 +362,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assert200URL(flatpage.get_absolute_url())
 
     def test_flatpagelist__list(self):
-        """ 
+        """
             Confirm that all flatpages are properly displayed
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -301,20 +401,20 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200URL(flatpages.first().get_absolute_url())
 
     def test_flatpageupdate__update(self):
-        """ 
+        """
             Confirm that flatpages are being updated using update view
-        """ 
+        """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
         pre_update_data = {
-            'url': '/pre_update_data-test-url/', 
-            'title': 'pre_update_data-test-title', 
+            'url': '/pre_update_data-test-url/',
+            'title': 'pre_update_data-test-title',
             'content': 'pre_update_data content content content',
         }
         post_update_data = {
-            'url': '/post_update_data-test-url/', 
-            'title': 'post_update_data-test-title', 
+            'url': '/post_update_data-test-url/',
+            'title': 'post_update_data-test-title',
             'content': 'post_update_data content1 content1 content1',
             'sites': [Site.objects.first().id],  # neccessary
         }
@@ -345,9 +445,9 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, post_update_data['content'])
 
     def test_flatpagedelete__delete(self):
-        """ 
+        """
             Confirm that flatpages are being properly deleted
-        """ 
+        """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 

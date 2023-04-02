@@ -100,7 +100,7 @@
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
-              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Completion' />
+              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval' />
               <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
             {% endif %}
           {% endif %}

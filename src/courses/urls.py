@@ -1,8 +1,6 @@
 from django.urls import path
 
-from utilities.views import ModelAutocomplete
 from courses import views
-from courses import models
 
 app_name = 'courses'
 
@@ -14,26 +12,24 @@ urlpatterns = [
     path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
     path('semesters/close/', views.end_active_semester, name='end_active_semester'),
     path('semesters/<pk>/activate/', views.SemesterActivate.as_view(), name='semester_activate'),
-    path('semesters/autocomplete/', ModelAutocomplete.as_view(model=models.Semester), name='semester_autocomplete'),
 
     # Blocks
     path('blocks/', views.BlockList.as_view(), name='block_list'),
     path('blocks/add/', views.BlockCreate.as_view(), name='block_create'),
     path('blocks/<pk>/edit/', views.BlockUpdate.as_view(), name='block_update'),
     path('blocks/<pk>/delete/', views.BlockDelete.as_view(), name='block_delete'),
-    path('blocks/autocomplete/', ModelAutocomplete.as_view(model=models.Block), name='block_autocomplete'),
 
     # CourseStudent
-    path('add/student/', views.CourseStudentCreate.as_view(), name='create'),
-    path('join/<int:user_id>/', views.CourseAddStudent.as_view(), name='join'),
-    path('edit/<pk>/', views.CourseStudentUpdate.as_view(), name='update'),
+    path('student/add/', views.CourseStudentCreate.as_view(), name='create'),
+    path('student/<int:user_id>/join/', views.CourseAddStudent.as_view(), name='join'),
+    path('student/<pk>/edit/', views.CourseStudentUpdate.as_view(), name='update'),
+    path('student/<pk>/delete/', views.CourseStudentDelete.as_view(), name='coursestudent_delete'),
 
     # Ranks
     path('ranks/', views.RankList.as_view(), name='ranks'),
     path('ranks/create/', views.RankCreate.as_view(), name='rank_create'),
     path('ranks/<pk>/edit/', views.RankUpdate.as_view(), name='rank_update'),
     path('ranks/<pk>/delete/', views.RankDelete.as_view(), name='rank_delete'),
-    path('ranks/autocomplete/', ModelAutocomplete.as_view(model=models.Rank), name='rank_autocomplete'),
 
     # Marks
     path('marks/', views.mark_calculations, name='my_marks'),
@@ -47,6 +43,5 @@ urlpatterns = [
     path('create/', views.CourseCreate.as_view(), name='course_create'),
     path('<pk>/edit/', views.CourseUpdate.as_view(), name='course_update'),
     path('<pk>/delete/', views.CourseDelete.as_view(), name='course_delete'),
-    path('autocomplete/', ModelAutocomplete.as_view(model=models.Course), name='course_autocomplete'),
 
 ]

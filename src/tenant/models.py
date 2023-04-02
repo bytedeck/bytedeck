@@ -1,7 +1,7 @@
 import re
 from datetime import date
 
-from django.apps import apps 
+from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.timezone import timedelta
@@ -49,7 +49,7 @@ class Tenant(TenantMixin):
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
     owner_full_name = models.CharField(
-        max_length=255, blank=True, null=True, 
+        max_length=255, blank=True, null=True,
         help_text="The owner of this deck."
     )
     owner_email = models.EmailField(null=True, blank=True)
@@ -142,7 +142,13 @@ class Tenant(TenantMixin):
         """
         Returns the last time a staff member loggin in to the tenant.
         """
-        return User.objects.filter(is_staff=True).order_by('-last_login').first().last_login
+
+        last_staff_logged_in = User.objects.filter(last_login__isnull=False).filter(is_staff=True).order_by('-last_login').first()
+
+        if last_staff_logged_in:
+            return last_staff_logged_in.last_login
+
+        return None
 
     @property
     def primary_domain_url(self):

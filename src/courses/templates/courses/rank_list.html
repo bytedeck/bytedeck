@@ -12,38 +12,42 @@
 
 {% block content %}
     <table class="table table-striped">
-      <tr>
-        <th></th>
-        <th>Rank</th>
-        <th>XP</th>
-        <th>Quest Map</th>
-        {% if request.user.is_staff %}
-        <th>Action</th>
-        {% endif %}
-      </tr>
-      {% for object in object_list %}
+      <thead>
         <tr>
-          <td class="text-center"><i class="{{object.fa_icon}} fa-lg fa-fw text-warning"></i></td>
-          <td>{{object.name}}</td>
-          <td>{{object.xp}} XP</td>
-          <td>
-            {% if object.get_map.get_absolute_url %}
-            <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>
-            {% endif %}
-          </td>
+          <th></th>
+          <th>Rank</th>
+          <th>XP</th>
+          <th>Quest Map</th>
           {% if request.user.is_staff %}
-          
-            <td>
-            <a class="btn btn-warning" href="{% url 'courses:rank_update' object.id %}" role="button" title="Edit this rank">
-              <i class="fa fa-edit"></i>
-            </a>
-            <a class="btn btn-danger" href="{% url 'courses:rank_delete' object.id %}" role="button" title="Delete this rank" style="margin-left: 3px">
-              <i class="fa fa-trash-o"></i>
-            </a>
-          </td>
+          <th>Action</th>
           {% endif %}
         </tr>
-      {% endfor %}
+      </thead>
+      <tbody>
+        {% for object in object_list %}
+          <tr>
+            <td class="text-center"><i class="{{object.fa_icon}} fa-lg fa-fw text-warning"></i></td>
+            <td>{{object.name}}</td>
+            <td>{{object.xp}} XP</td>
+            <td>
+              {% if object.get_map.get_absolute_url %}
+              <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>
+              {% endif %}
+            </td>
+            {% if request.user.is_staff %}
+        
+              <td>
+              <a class="btn btn-warning" href="{% url 'courses:rank_update' object.id %}" role="button" title="Edit this rank">
+                <i class="fa fa-edit"></i>
+              </a>
+              <a class="btn btn-danger" href="{% url 'courses:rank_delete' object.id %}" role="button" title="Delete this rank" style="margin-left: 3px">
+                <i class="fa fa-trash-o"></i>
+              </a>
+            </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
     </table>
 {% endblock %}
 

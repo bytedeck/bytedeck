@@ -11,36 +11,40 @@
 {% endblock %}
 
 {% block content %}
+<p>This page if visible to staff only.</p>
 <table class="table table-striped">
-  <tr>
-    <th>Title</th>
-    <th>Icon</th>
-    <th># of Quests</th>
-    <th>XP Available</th>
-    <th>Active</th>
-    <th>Action</th>
-  </tr>
-  {% for object in object_list %}
-  <tr>
-    <td>{{ object.title }}</td>
-    <td><img class="img-responsive panel-title-img img-rounded" src="{{ object.get_icon_url }}"></td>
-    <td>{{ object.quest_count }}</td>
-    <td>{{ object.xp_sum }}</td>
-
-    <td>{{ object.active }}</td>
-    <td>
-      <a class="btn btn-info" href="{% url 'quests:category_detail' object.id %}" role="button" title="View Details: view the content of this campaign.">
-       <i class="fa fa-fw fa-info-circle"></i>
-      </a>
-      <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button" title="Edit this campaign">
-        <i class="fa fa-edit"></i>
-      </a>
-      <a class="btn btn-danger" href="{% url 'quests:category_delete' object.id %}" role="button" title="Delete this campaign">
-        <i class="fa fa-trash-o"></i>
-      </a>
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Icon</th>
+      <th># of Quests</th>
+      <th>XP Available</th>
+      <th>Active</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+    <tr {% if not object.active %} class="text-muted" {% endif %}>
+      <td>{{ object.title }}</td>
+      <td><img class="img-responsive panel-title-img img-rounded" src="{{ object.get_icon_url }}"></td>
+      <td>{{ object.quest_count }}</td>
+      <td>{{ object.xp_sum }}</td>
+      <td>{{ object.active }}</td>
+      <td>
+        <a class="btn btn-info" href="{% url 'quests:category_detail' object.id %}" role="button" title="View Details: view the content of this campaign.">
+         <i class="fa fa-fw fa-info-circle"></i>
+        </a>
+        <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button" title="Edit this campaign">
+          <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'quests:category_delete' object.id %}" role="button" title="Delete this campaign">
+          <i class="fa fa-trash-o"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
 
