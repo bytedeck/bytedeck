@@ -1,3 +1,4 @@
+from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
@@ -114,6 +115,12 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     @admin.action(description="Enable google signin for tenant(s)")
     def enable_google_signin(self, request, queryset):
         from siteconfig.models import SiteConfig
+
+        try:
+            SocialApp.objects.get(provider='google')
+        except SocialApp.DoesNotExist:
+            self.message_user(request, "You must create a SocialApp record with 'google' as the provider", messages.ERROR)
+            return
 
         queryset = queryset.exclude(schema_name=get_public_schema_name())
         for tenant in queryset:
