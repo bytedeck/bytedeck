@@ -18,12 +18,13 @@ class ProfileForm(forms.ModelForm):
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
     def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+
         super().__init__(*args, **kwargs)
 
         self.fields['grad_year'] = forms.ChoiceField(
             choices=Profile.get_grad_year_choices()
         )
-        
         self.fields['email'].initial = self.instance.user.email
 
     # UNIQUE if NOT NULL
@@ -37,13 +38,22 @@ class ProfileForm(forms.ModelForm):
         user.email = self.cleaned_data['email']
         user.save()
 
+        from allauth.account.utils import send_email_confirmation
+        if self.request:
+            send_email_confirmation(
+                request=self.request,
+                user=user,
+                signup=False,
+                email=user.email,
+            )
+
         return self.instance
 
 
 class UserForm(forms.ModelForm):
-    """ 
+    """
         Staff only form for profile update view
-    """ 
+    """
 
     is_TA = forms.BooleanField(required=False)
 
@@ -70,12 +80,13 @@ class UserForm(forms.ModelForm):
         # update self.instance since ProfileForm changes User model vars
         # super().save() not saving email correctly so we only update the model fields in UserForm.fields
         # This code only updates the UserModel fields that is in self._meta.fields
-        # required since Userform saves over user.email field which is also a field saved in ProfileForm. 
+        # required since Userform saves over user.email field which is also a field saved in ProfileForm.
         # This prevents email field from being overwritten in Userform
         user = self.instance
-        user_fields = list(set(self._meta.fields) & set([field.name for field in user._meta.fields]))
+        user_fields = list(set(self._meta.fields) & {field.name for field in user._meta.fields})
         for name in user_fields:
             user.__dict__[name] = self.cleaned_data[name]
+
         user.save(update_fields=user_fields)
 
         # Use updated profile instance to save profile model

@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.templatetags.static import static
@@ -20,6 +21,9 @@ from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
+
+from allauth.account.signals import email_confirmed
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 
 
 class ProfileQuerySet(models.query.QuerySet):
@@ -73,7 +77,7 @@ class ProfileManager(models.Manager):
 
 def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/<use_id>/<filename>
-    return '{0}/customstyles/{1}'.format(instance.user.username, filename)
+    return f'{instance.user.username}/customstyles/{filename}'
 
 
 class Profile(models.Model):
@@ -423,6 +427,23 @@ def post_delete_user(sender, instance, *args, **kwargs):
         instance.user.delete()
 
 
+@receiver(email_confirmed, sender=EmailConfirmationHMAC)
+def email_confirmed_handler(*args, **kwargs):
+    """
+    After a user has confirmed their email, this will handle converting that email to the primary email
+    and therefore making it the User.email.
+
+    Then, we delete the non-primary email addresses of that user
+    """
+
+    email_address = kwargs.get('email_address')
+
+    if email_address:
+        with transaction.atomic():
+            email_address.set_as_primary()
+            EmailAddress.objects.filter(user=email_address.user, primary=False)
+
+
 def smart_list(value, delimiter=",", func=None):
     """Convert a value to a list, if possible.
     http://tech.yunojuno.com/working-with-django-s-commaseparatedintegerfield
@@ -448,7 +469,7 @@ def smart_list(value, delimiter=",", func=None):
     model signal to ensure that you always get a list back from the field.
 
     """
-    if value in ["", u"", "[]", u"[]", u"[ ]", None]:
+    if value in ["", "", "[]", "[]", "[ ]", None]:
         return []
 
     if isinstance(value, list):
@@ -471,4 +492,4 @@ def smart_list(value, delimiter=",", func=None):
         func = func or (lambda x: x)
         return [func(e) for e in ls]
     except Exception as ex:
-        raise ValueError("Unable to parse value '%s': %s" % (value, ex))
+        raise ValueError(f"Unable to parse value '{value}': {ex}")
