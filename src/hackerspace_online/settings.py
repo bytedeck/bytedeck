@@ -575,6 +575,16 @@ ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 ACCOUNT_PRESERVE_USERNAME_CASING = False
 ACCOUNT_UNIQUE_EMAIL = True
 
+# The maximum amount of email addresses a user can associate to his account.
+# It is safe to change this setting for an already running project –
+# it will not negatively affect users that already exceed the allowed amount.
+# Note that if you set the maximum to 1, users will not be able to change their
+# email address as they are unable to add the new address,
+# followed by removing the old address.
+# Uses the `allauth.account.models.EmailAddress`
+ACCOUNT_MAX_EMAIL_ADDRESSES = 2
+
+
 SOCIALACCOUNT_AUTO_SIGNUP = False
 SOCIALACCOUNT_FORMS = {
     'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
