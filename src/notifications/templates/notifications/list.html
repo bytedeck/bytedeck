@@ -8,10 +8,10 @@
 </small>
 {% endblock %}
 {% block content %}
-
-<table class='table'>
+<div class="table-responsive">
+<table class='table top-0 d-xxl-none notification_table position-absolute'>
 {% for note in notifications %}
-<tr>
+<tr class="">
   <td class='notification-icons'>{{note.font_icon|safe}}</td>
   <td >{{note|safe}} </td>
   <td><small>{{note.timestamp}}<small></td>
@@ -20,6 +20,7 @@
 
 {% endfor %}
 </table>
+</div>
 
 {% if notifications.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">

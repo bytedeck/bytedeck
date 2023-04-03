@@ -843,6 +843,14 @@ kbd
     margin:0 .1em;
     padding:.1em .6em;
 }
+.navbar-nav li a{
+    color: #777;
+  }
+  .nav-item.dropdown li a{
+    text-decoration: none;
+    display: block;
+   padding: 7px 8px;
+  }
 
 /* Make action buttons have a fixed width so they would only expand horizontally */
 div.btn-group.action-btn-group {
@@ -862,7 +870,73 @@ div.btn-group.action-btn-group {
 
 /*xs only*/
 @media (max-width: 767px) {
+/* header */
+.navbar-toggler {
+    width: 45px;
+    display: flex;
+    padding: 6px 9px;
+}
+nav .navbar-toggler:focus{
+    outline: 0;
+    box-shadow: none;
+}
+.main-navdropdown {
+    position: absolute;
 
+}
+.navbar-nav .main-dropdown, .main-navdropdown {
+    top: 42px;
+    width: 100%;
+    left: 0;
+    right: 0;
+    background-color: #fff;
+    z-index: 9;
+    border: 0;
+    padding: 12px 15px;
+  }
+.nav-item.dropdown{
+    position: unset;
+}
+
+  .nav-item.dropdown li a{
+    text-decoration: none;
+    display: block;
+    padding: 0.5rem 0;
+  }
+  .nav-item .dropdown-header {
+    padding-left: 0;
+    margin-top: 10px;
+    color: #777;
+  }
+  .navbar-toggler:hover, .dropdown-toggle:hover {
+    border-color: transparent;
+    background-color: #ddd;
+    transition: all .3s ease-in-out;
+  }
+  .navbar-nav li a{
+    color: #777;
+  }
+  #navbarNavDropdown {
+    right: 15px;
+  }
+  .navbar-toggler.toggle2 {
+    padding: 1px 9px;
+  }
+  .nav-admin{
+    display: flex;
+    margin-right: 64px;
+  }
+  /* .notification_table tr{
+    display: inline-flex;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #ddd;
+  }
+  .notification_table tr td:nth-of-type(2){
+    width: 100%;
+  }
+  .notification_table tr td{
+    border: 0;
+  } */
 
 }
 
@@ -873,12 +947,20 @@ div.btn-group.action-btn-group {
 
 /*sm only*/
 @media (min-width: 768px) and (max-width: 991px) {
+   .notification_table{
+        position: relative !important;
+    }
+    .drop-down-2 .navbar-nav{
+        display: none !important;
+    }
 
 }
 
 /*md and up*/
 @media (min-width: 992px) {
-
+.notification_table{
+    position: relative !important;
+}
 }
 
 /*md only*/

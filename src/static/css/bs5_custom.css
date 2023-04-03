@@ -3,6 +3,7 @@ body{
     padding: 0px !important;
 
 }
+
 .logo img{
     margin-left: 0px !important;
     width: 50px !important;
@@ -41,7 +42,7 @@ body{
     margin-top: 15px;
 } */
 table > tbody{
-    background-color: #f4e0e0;
+    background-color: #fff ;
 }
 .list-group-item.right-side{
     padding-left: 15px;
@@ -54,7 +55,10 @@ table > tbody{
     float: left;
     margin-right: 10px;
   }
+.main-dropdown li a{
+  color: #777 !important;
 
+}
 
 /* Move icons and toggle button to right side */
 .table-icons {
@@ -113,6 +117,15 @@ outline: 0;
         right: 0px;
     }
     .logo img{
-        display: none !important;
+        width: 35px !important;
     }
   }
+  @media (min-width: 768px) and (max-width: 991px) {
+    .notification_table{
+         position: relative !important;
+     }
+     .navbar-nav{
+         display: none !important;
+     }
+
+ }
