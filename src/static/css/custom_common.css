@@ -12,8 +12,6 @@ body {
 h5 {
     font-weight: 700;
 }
-
-
 /********* PROFILE PAGE *************/
 
 .bd-profile-row {
@@ -172,7 +170,11 @@ div.three-wide > :last-of-type, div.two-wide > :last-of-type {
 /*.navbar-text-large-container {*/
     /*margin-bottom: -3px;*/
 /*}*/
-
+.nav-tabs > .active > a{
+    padding: 7px 12px;
+    border-radius: 4px;
+    margin-right: 14px;
+}
 .navbar-nav > li > a {
     border-left: none;
     border-right: none;
@@ -395,7 +397,7 @@ ol > ol > ol {
 }
 
 .caption-badge {
-    height: 58px;
+
     padding-left: 0px !important;
     padding-right: 0px !important;
 }
@@ -512,10 +514,6 @@ td.notification-icons {
     margin: 0 0.15rem;
 }
 
-/*td.notification-icons .fa {
-  margin-top: 8px;
-}*/
-
 td.notification-icons .fa-stack {
     margin-top: -4px;
 }
@@ -529,18 +527,15 @@ td.notification-icons .fa-stack {
  *          SUMMERNOTE WIDGET
  *
  ********************************************/
-
 .panel-summernote, .list-group-item-summernote {
     padding: 0px;
     border-radius: 0px;
     /*DOM height on load so doesn't grow when Summernote finishes loading */
     min-height: 544px;
 }
-
 iframe#id_comment_text_iframe {
     border-radius: 0px;
 }
-
 iframe.summernotewidget.form-control {
     padding: 0px;
     /*border: none;*/
@@ -815,7 +810,10 @@ h3 > img#banner {
   padding-left:0px;
   padding-right: 0px;
 }
-
+.form-control.search-input:focus{
+    outline: none;
+    box-shadow: none;
+}
 
 /*this allows us to use contextual badges (-success, -primary, etc)*/
 .label-as-badge {
@@ -845,30 +843,32 @@ kbd
 }
 .navbar-nav li a{
     color: #777;
+    text-decoration: none;
   }
   .nav-item.dropdown li a{
     text-decoration: none;
     display: block;
    padding: 7px 8px;
   }
-
+.offcanvas .navbar-nav .dropdown ul li{
+    padding: 3px 0px;
+}
+.offcanvas .navbar-nav .dropdown-header{
+    padding: 0px 10px !important;
+}
+.offcanvas .navbar-nav .dropdown-menu{
+    width: 100%;
+    border: 1px solid #d0d0d0;
+    position: absolute;
+    left: -35px;
+}
+.costum-btn .btn{
+    font-size: 15px;
+}
 /* Make action buttons have a fixed width so they would only expand horizontally */
 div.btn-group.action-btn-group {
     width: 100px;
 }
-
-/*Make the container act like container-fluid at small and medium sizes*/
-
-/*LESS to mimic Bootstrap without importing the less files.*/
-/*@screen-xs-max: 767px;
-@screen-sm-min: 768px;
-@screen-sm-max: 991px;
-@screen-md-min: 992px;
-@screen-md-max: 1199px;
-@screen-lg-min: 1200px;*/
-
-
-/*xs only*/
 @media (max-width: 767px) {
 /* header */
 .navbar-toggler {
@@ -879,6 +879,18 @@ div.btn-group.action-btn-group {
 nav .navbar-toggler:focus{
     outline: 0;
     box-shadow: none;
+}
+.icon-avatar{
+    width: 129px;
+}
+.bd-profile-avatar-col{
+    height: 129px;
+}
+.offcanvas .navbar-nav .dropdown-menu {
+    left: -14px;
+    border: none;
+    background: #f2f2f2;
+    width: 470px;
 }
 .main-navdropdown {
     position: absolute;
@@ -926,22 +938,24 @@ nav .navbar-toggler:focus{
     display: flex;
     margin-right: 64px;
   }
-  /* .notification_table tr{
-    display: inline-flex;
-    flex-wrap: wrap;
-    border-bottom: 1px solid #ddd;
-  }
-  .notification_table tr td:nth-of-type(2){
-    width: 100%;
-  }
-  .notification_table tr td{
-    border: 0;
-  } */
 
 }
 
 /*small and up*/
-@media (min-width: 768px) {
+@media (max-width: 768px) {
+    .custom-btn .btn{
+        font-size: 15px;
+
+    }
+    .custom-btn{
+        justify-content: center;
+        align-items: center;
+        display: flex;
+    }
+    .bootstrap4 .fixed-table-toolbar {
+        display: flex;
+        justify-content: center;
+    }
 
 }
 

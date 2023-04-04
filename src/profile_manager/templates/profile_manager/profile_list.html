@@ -10,7 +10,7 @@
 
 {% block heading %}Students
     {% if request.user.is_staff %}
-        <div class="btn-group">
+        <div class="btn-group custom-btn">
             <a href="{% url 'profiles:profile_list_current' %}"
             class="btn  border {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
 
@@ -24,7 +24,7 @@
             class="btn border {% if view_type == VIEW_TYPES.STAFF %}btn-primary{% else %}btn-default{% endif %}">Staff</a>
         </div>
     {% endif %}
-    <i class="fa fa-users pull-right"></i>
+    <i class="fa fa-users pull-right d-none d-none"></i>
 {% endblock %}
 
 {% block content %}

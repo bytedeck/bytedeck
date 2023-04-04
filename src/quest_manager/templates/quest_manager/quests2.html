@@ -21,7 +21,7 @@
 
 {% block content %}
 
-<ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
+<ul id='quest-tabs' class="nav nav-tabs nav-justified mt-3" role="tablist">
   <li role="presentation" {% if available_tab_active %}class="active"{% endif%}>
     <a href="{% url 'quests:available' %}">
       Available

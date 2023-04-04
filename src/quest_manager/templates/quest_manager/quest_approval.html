@@ -20,7 +20,7 @@
       {% endif %}
     {% endif %}
     {% if not past_approvals_all == None %}
-      <div class="btn-group">
+      <div class="btn-group ">
         <a href="{% url 'quests:approved_for_quest' quest.id %}"
            class="btn {% if not past_approvals_all %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
         <a href="{% url 'quests:approved_for_quest_all' quest.id %}"
