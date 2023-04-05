@@ -22,8 +22,8 @@ django-summernote>=0.8,<0.9
 django-url-or-relative-url-field>=0.1.1,<0.2
 django-resized>=0.3.11,<1.1
 django-utils-six==2.0
+Pillow>=9.0.0,<9.3
 numpy==1.22
-Pillow>=9.0.0,<9.1
 psycopg2-binary>=2.8.6,<2.9
 python-memcached>=1.58,<2.0
 tenant-schemas-celery>=2.0,<2.1
