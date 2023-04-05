@@ -9,7 +9,7 @@
 
 {% if available_quests %}
 
-  <div class="row panel-heading">
+  <div class="row panel-heading fs-5 py-2">
     <div class="col-sm-1 col-xs-2 col-icon"></div>
     <div class="col-sm-5 col-xs-8">Quest</div>
     <div class="col-sm-1 col-xs-2 text-right">XP</div>
@@ -41,14 +41,14 @@
           <h4 class="panel-title">
             <!-- COLUMNS -->
             <div class="col-sm-1 col-xs-2 col-icon">
-              <img class="img-responsive panel-title-img img-rounded"
+              <img class="img-responsive panel-title-img img-rounded" height="80"
                 src="{{ q.get_icon_url }}" alt="icon"/>
             </div>
-            <div class="col-sm-5 col-xs-8">{{q.name}}
+            <div class="col-sm-5 col-xs-8 fs-5">{{q.name}}
               {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
             </div>
             <div class="col-sm-1 col-xs-2 text-right">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</div>
-            <div class="col-sm-2 hidden-xs text-center"><small>
+            <div class="col-sm-2 hidden-xs "><small>
               {% if q.campaign %}{{q.campaign}}{% endif %}
             </small></div>
             <div class="col-sm-1 hidden-xs text-right"><small>

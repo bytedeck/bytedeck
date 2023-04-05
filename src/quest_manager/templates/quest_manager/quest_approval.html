@@ -31,11 +31,11 @@
 
 {% block content %}
 
-<ul class="nav nav-tabs nav-justified" role="tablist">
+<ul class="nav nav-tabs nav-justified border-0 pt-2" role="tablist">
   {% for tab in tab_list %}
     <li role="presentation" {% if tab.active %}class="active" {% endif %}>
-      <a href="{{tab.url}}">
-        {% comment %} <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab"> {% endcomment %}
+      <a href="{{tab.url}}" class="text-decoration-none me-3 py-2 px-4 rounded my-2 d-block">
+        {% comment %} <a href="#tab-{{tab.name|slugify}}" role="tab" data-toggle="tab"  class="text-decoration-none"> {% endcomment %}
         {{tab.name}}
         {% comment %} <span class="badge">{{tab.submissions|length}}</span> {% endcomment %}
       </a>
@@ -46,7 +46,7 @@
 <div class="tab-content">
   {% for tab in tab_list %}
   <div role="tabpanel"
-    class="tab-pane fade {% if tab.active %}in active{% endif %}"
+    class="tab-pane fade opacity-100 {% if tab.active %}in active{% endif %}"
     id="tab-{{tab.name|slugify}}">
     {% include 'quest_manager/tab_quests_approvals.html' %}
   </div>

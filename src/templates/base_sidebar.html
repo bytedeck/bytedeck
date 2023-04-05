@@ -8,10 +8,10 @@
 
 {% block content_outer %}
 <div class="row row-offcanvas row-offcanvas-left">
-    <nav class="column col-sm-3 col-xs-1 sidebar-offcanvas" id="sidebar p-0">
+    <nav class="column col-sm-3 col-xs-1 sidebar-offcanvas p-0" id="sidebar">
         {% include 'sidebar.html' %}
     </nav>
-    <div class="col-xs-12 col-sm-9 pt-3" id="main"> <!-- These settings need to compliment the sidebar settings -->
+    <div class="col-xs-12 col-sm-9 py-3 px-3" id="main"> <!-- These settings need to compliment the sidebar settings -->
         {% block pre_heading %}{% endblock %}
         <h1 class="clearfix">{% block heading %}{% endblock %}</h1>
         {% block content %}{% endblock %}

@@ -3,7 +3,7 @@
 
 <!-- sidebar -->
 
-<div id="sidebar_menu" class="pt-3">
+<div id="sidebar_menu" class=" shadow py-3 px-2">
 {#  <ul class="nav sidebar-menu-nav">#}
 {#    <li><a href="#" data-toggle="offcanvas" class="visible-xs text-center"><i class="fa fa-chevron-right fa-fw"></i></a>#}
 {#    </li>#}
@@ -13,19 +13,14 @@
   <h3 class="hidden-xs">
     {% include "banner.html" %}
   </h3>
-
-
   {#    Group Menus #}
   <div class=" list-group hidden-xs sidebar-menu mt-4" id="lg-menu-main">
-    <div class="clearfix dropdown max-height pt-1">
-     <a id="quests-menu" class="list-group-item left-side
+    <div class="clearfix dropdown max-height pt-1 fs-5">
+     <a id="quests-menu" class="list-group-item left-side pull-left nav-link nav-item
         {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info and not '/inprogress/' in request.path_info and not '/drafts/' in request.path_info%}active{% endif %}"
-       href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
+       href="{% url 'quests:quests' %}" style="width: 80%; z-index: 1;"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
 
-      <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
-        <!-- <a id="quests-menu-dropdown"
-          class="list-group-item right-side dropdown-toggle text-center"
-          data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false"> -->
+      <div id="dropdown-button-wrapper" class="fs-5"> <!-- isolates dropdown button highlight -->
           <a href="{% url 'quests:categories' %}" class="list-group-item right-side text-center "><i class="fa fa-ellipsis-v fa-fw"></i></a>
         <ul class="dropdown-menu dropdown-menu-right">
           {% if request.user.is_staff %}
@@ -48,10 +43,10 @@
 {#      <i class="fa fa-shield fa-fw"></i>&nbsp; Quests#}
 {#    </a>#}
       {% if request.user.is_staff %}
-        <div class="clearfix dropdown m-0 p-0">
+        <div class="clearfix dropdown m-0 p-0 fs-5">
             <a id="badges-menu"
-              class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
-              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+              class="list-group-item left-side pull-left {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
+              href="{% url 'badges:list' %}" style="width: 80%; z-index: 1;"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
 
             <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
               <!-- <a id="badges-menu-dropdown"
@@ -71,7 +66,7 @@
         href="{% url 'badges:list' %}">
         <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
       {% endif %}
-    <a id="maps-menu" class="list-group-item mb-4
+    <a id="maps-menu" class="list-group-item mb-4 fs-5
         {% if '/maps/' in request.path_info %}active{% endif %}"
        href="{% url 'maps:primary' %}">
       <i class="fa fa-map-signs fa-fw"></i>&nbsp; Maps
@@ -80,7 +75,7 @@
 
   <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-secondary">
     <a id="announcements-menu"
-       class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}"
+       class="list-group-item fs-5 {% if '/announcements/' in request.path_info %}active{% endif %}"
        href="{% url 'announcements:list' %}">
       <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
       <!-- <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span> -->
@@ -88,7 +83,7 @@
       <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
     </a>
 
-    <a id="groups-menu" class="list-group-item mb-4 {% if '/profiles/list/' in request.path_info %}active{% endif %}"
+    <a id="groups-menu" class="list-group-item mb-4  fs-5 {% if '/profiles/list/' in request.path_info %}active{% endif %}"
        href="{% url 'profiles:profile_list_current' %}">
       <i class="fa fa-users fa-fw"></i>&nbsp; Students
     </a>
@@ -98,13 +93,13 @@
   {#  Student Menus #}
   {% if request.user.is_authenticated %}
     <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-student">
-      <a id="profile-menu " class="list-group-item mt-4
+      <a id="profile-menu " class="list-group-item mt-4 fs-5
           {% if '/profiles/' in request.path_info and not '/list/' in request.path_info %}
           active{% endif %}"
          href="{% url 'profiles:profile_detail' request.user.profile.id %}">
         <i class="fa fa-user fa-fw"></i>&nbsp; Profile
       </a>
-      <a id="portfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
+      <a id="portfolio-menu" class="list-group-item fs-5 {% if '/portfolios/' in request.path_info %}active{% endif %}"
          href="{% url 'portfolios:detail' request.user.id %}">
         <i class="fa fa-picture-o fa-fw"></i>&nbsp; Portfolio
       </a>
@@ -113,7 +108,7 @@
 
   {% if request.user.is_staff %}
     <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-staff">
-      <a class="list-group-item mt-3{% if '/approvals/' in request.path_info %}active{% endif %}"
+      <a class="list-group-item mt-3 fs-5{% if '/approvals/' in request.path_info %}active{% endif %}"
          href="{% url 'quests:approvals' %}">
         <i class="fa fa-shield fa-fw fa-rotate-180"></i>&nbsp;
         <span class="hidden-sm hidden-xs hidden-md">Quest Approvals</span>

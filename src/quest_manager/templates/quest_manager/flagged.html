@@ -30,7 +30,7 @@
       {% for s in submissions %}
         <tr>
           <td>{{ s.id }}</td>
-          <td><img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/></td>
+          <td><img class="img-responsive panel-title-img img-rounded"   src="{{ s.quest.get_icon_url }}" alt="icon"/></td>
           <td>{{ s.quest.name }}</td>
           <td>{% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}</td>
           <td>{{ s.user }}<br />

@@ -9,7 +9,7 @@
 {% endblock %}
 {% block content %}
 <div class="table-responsive">
-<table class='table top-0 notification_table position-absolute'>
+<table class='table top-0 notification_table '>
 {% for note in notifications %}
 <tr class="">
   <td class='notification-icons'>{{note.font_icon|safe}}</td>
@@ -25,7 +25,7 @@
 {% if notifications.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">
     {% if notifications.has_previous %}
-        <li><a href="{% url 'notifications:list' %}?page=1"><<</a></li>
+        <li><a href="{% url 'notifications:list' %}?page=1"></a></li>
         <li><a href="{% url 'notifications:list' %}?page={{ notifications.previous_page_number }}"><</a></li>
     {% endif %}
 

@@ -23,9 +23,9 @@
 
 {% block content %}
 
-  <ul id='quest-tabs' class="nav nav-tabs nav-justified mt-3" role="tablist">
+  <ul id='quest-tabs' class="nav nav-tabs nav-justified " role="tablist">
     <li role="presentation" {% if available_tab_active %}class="active"{% endif %}>
-      <a href="{% url 'quests:available' %}">
+      <a href="{% url 'quests:available' %}" class="px-2 py-2 me-5 my-3 rounded d-block text-decoration-none">
         Available
         <span class="badge">{{ num_available | default:"" }}</span>
       </a>
@@ -56,7 +56,7 @@
 
     {% if request.user.profile.is_TA or request.user.is_staff %}
       <li role="presentation" {% if drafts_tab_active %}class="active"{% endif %}>
-        <a href="{% url 'quests:drafts' %}">
+        <a href="{% url 'quests:drafts' %}" class="px-2 py-2 me-5 my-3 rounded d-block text-decoration-none">
           Drafts
           <span class="badge">{{ num_drafts | default:"" }}</span>
         </a>
@@ -67,7 +67,7 @@
   <!-- Tab panes -->
   <div class="tab-content">
     <div role="tabpanel"
-         class="tab-pane fade {% if available_tab_active %}in active{% endif %}" id="available">
+         class="tab-pane fade opacity-100 {% if available_tab_active %}in active{% endif %}" id="available">
       {% if not request.user.profile.has_current_course and not request.user.is_staff %}
         <p>You have not joined a course yet for this semester.</p>
         <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
