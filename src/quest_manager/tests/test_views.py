@@ -1064,7 +1064,6 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn("new-prereq-quest2", str(quest_to_update.prereqs()))
 
 
-# Can't test any forms with this DAL widget because content_types isn't available yet.
 class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
     """ These tests are mostly of the prerequisites app's ObjectPrereqsFormView and PrereqFormInline,
     However, the QuestPrereqsUpdate view is where those are both used.
@@ -1116,31 +1115,31 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     # TODO: broken
-    # def test_post_save_button__defaults(self):
-    #     """ Save button should redirect to the quest detail view, no changes to form data"""
-    #     self.client.force_login(self.test_teacher)
+    def test_post_save_button__defaults(self):
+        """ Save button should redirect to the quest detail view, no changes to form data"""
+        self.client.force_login(self.test_teacher)
 
-    #     ct = ContentType.objects.get_for_model(self.prereq_quest)
+        ct = ContentType.objects.get_for_model(self.prereq_quest)
 
-    #     forms_data = [
-    #         {
-    #             "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
-    #             "prereq_count": '1',
-    #             # "or_prereq_object": None,
-    #             "or_prereq_count": '1',
-    #             "id": f'{self.parent_quest.pk}'
-    #         },
-    #     ]
+        forms_data = [
+            {
+                "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+                "prereq_count": '1',
+                # "or_prereq_object": None,
+                "or_prereq_count": '1',
+                "id": f'{self.parent_quest.pk}'
+            },
+        ]
 
-    #     formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
-    #     response = self.client.post(
-    #         reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
-    #         data=formset_data
-    #     )
+        formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data=formset_data
+        )
 
-    #     # If successfully submitted, the form should validate and then redirect to the quest's detail page
-    #     # If get 200 then means probably a form is invalid.
-    #     self.assertRedirects(response, self.parent_quest.get_absolute_url())
+        # If successfully submitted, the form should validate and then redirect to the quest's detail page
+        # If get 200 then means probably a form is invalid.
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     def test_post_save_button__delete(self):
         """ Flag the prereq for deletion by setting the DELETE field to true"""
