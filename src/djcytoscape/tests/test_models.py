@@ -194,7 +194,35 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
     def test_regenerate(self):
         """Can regenerate without error on a known good map object"""
         self.map.regenerate()
-
+        
+    def test_maps_dont_include_drafts(self):
+        """Draft (unpublished) quests should not appear in maps (quest.visible_to_students = False)"""
+        
+        # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
+        self.assertIn("/quests/6/", self.map.elements_json)
+        
+        # Make quest 6 a draft and regenerate the map
+        quest_6 = Quest.objects.get(id=6)
+        quest_6.visible_to_students = False  # draft/unpublished
+        quest_6.save()
+        self.map.regenerate()
+        
+        # should no longer be in the map
+        self.assertNotIn("/quests/6/", self.map.elements_json)
+        
+    def test_maps_dont_include_archived_quests(self):
+        # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
+        self.assertIn("/quests/6/", self.map.elements_json)
+        
+        # Archive quest #6 and regenerate the map
+        quest_6 = Quest.objects.get(id=6)
+        quest_6.archived = True
+        quest_6.save()
+        self.map.regenerate()
+        
+        # should no longer be in the map
+        self.assertNotIn("/quests/6/", self.map.elements_json)  
+        
     def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""
         bad_map = CytoScape.objects.create(

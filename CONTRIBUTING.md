@@ -4,6 +4,31 @@
 
 If you're interested in contributing to this repo, please work through these steps carefully.  Bad pull requests waste a lot of time, and these steps will ensure your PR is a good one!  This guide is written with beginngers in mind, but we would appreciate if experienced developers work through this at least once so we're all on the same page!
 
+Save us all some time and frustration by working through these steps carefully, at least once, and understand them all!
+
+### Running Tests and Checking Code Style
+You can run tests either locally, or through the web container.:
+1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):
+   * using venv: `./src/manage.py test src && flake8 src`
+   * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+2. Tests take too long, but you can speed them up a number of ways:
+   * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:     
+     `./src/manage.py test src --parallel --failfast`
+   * Only run tests from a single app, for example: `./src/manage.py test src/announcements`
+   * Only run tests from a single test class: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
+   * Only run a single test: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+
+### Further Development
+After you've got everything set up, you can just run the whole project with:
+`docker-compose up`
+
+And stop it with:
+`docker-compose down`
+
+or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:
+`docker-compose up -d db redis celery celery-beat -d`
+`./src/manage.py runserver`
+
 ### First time only:
 
 1. Move into your cloned directory. For example: `cd ~/Developer/bytedeck`
@@ -82,3 +107,23 @@ We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/ha
 
 ## License
 By contributing, you agree that your contributions will be licensed under its [GNU GPL3 License](https://github.com/timberline-secondary/hackerspace/blob/develop/license.txt).
+
+### Advanced / Optional: Inspecting the database with pgadmin4
+Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
+1. Run the pg-admin container:
+`docker-compose up pg-admin`
+2. Log in:
+   - url: [localhost:8080](http://localhost:8080)
+   - email: admin@admin.com
+   - password: password  (or whatever you changed this to in you `.env` file)
+3. Click "Add New Server"
+4. Give it any Name you want
+5. In the Connection tab set:
+   - Host name/address: db
+   - Port: 5432
+   - Maintenance database: postgres
+   - Username: postgres
+   - Password: Change.Me!  (or whatever you change the db password to in you `.env` file)
+6. Hit Save
+7. At the top left expand the Servers tree to find the database, and explore!
+8. You'll probably want to look at Schemas > (pick a schema) > Tables
