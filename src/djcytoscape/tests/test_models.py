@@ -154,9 +154,8 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
 
     def test_generate_map(self):
         quest = baker.make('quest_manager.Quest')
-        map = CytoScape.generate_map(quest, "test")
+        CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
-    
     
     def test_save__sets_first_scape_as_primary(self):
         newmap = baker.make('djcytoscape.CytoScape')
@@ -203,8 +202,8 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIn("/quests/6/", self.map.elements_json)
         
         # Make quest 6 a draft and regenerate the map
-        quest_6 : Quest = Quest.objects.get(id=6)
-        quest_6.visible_to_students = False # draft/unpublished
+        quest_6 = Quest.objects.get(id=6)
+        quest_6.visible_to_students = False  # draft/unpublished
         quest_6.save()
         self.map.regenerate()
         
@@ -212,18 +211,17 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertNotIn("/quests/6/", self.map.elements_json)
         
     def test_maps_dont_include_archived_quests(self):
-                # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
+        # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
         self.assertIn("/quests/6/", self.map.elements_json)
         
         # Archive quest #6 and regenerate the map
-        quest_6 : Quest = Quest.objects.get(id=6)
+        quest_6 = Quest.objects.get(id=6)
         quest_6.archived = True
         quest_6.save()
         self.map.regenerate()
         
         # should no longer be in the map
         self.assertNotIn("/quests/6/", self.map.elements_json)  
-        
         
     def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""
