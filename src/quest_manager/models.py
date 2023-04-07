@@ -193,6 +193,17 @@ class XPItem(models.Model):
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
+        
+        # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
+        if not self.visible_to_students or self.archived:
+            return False
+        
+        # XPItem/Quest object is inactive if it's a part of an inactive campaign
+        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
+            return False
+        
+        if self.expired():
+            return False
 
         # an XPItem object is inactive if its availability date is in the future
         if self.date_available > now_local.date():
@@ -202,12 +213,8 @@ class XPItem(models.Model):
         if self.date_available == now_local.date() and self.time_available > now_local.time():
             return False
 
-        # a Quest object is inactive if it's a part of an inactive campaign
-        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
-            return False
-
-        # an XPitem object is active if all of the previous criteria are met and it's both visible to students and not expired
-        return self.visible_to_students and not self.expired()
+        # If survived all the conditions, then it's active
+        return True
 
     def is_available(self, user):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
