@@ -135,7 +135,7 @@ class XPItem(models.Model):
         help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
-    date_available = models.DateField(default=timezone.now)  # timezone aware!
+    date_available = models.DateField(default=timezone.localdate)  # timezone aware!
     time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')

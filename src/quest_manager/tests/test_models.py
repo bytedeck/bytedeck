@@ -134,6 +134,7 @@ class QuestTestModel(TenantTestCase):
         2. The quest is expired (Quest.expired == False; date_expired, time_expired are in the past)
         3. The quest is a part of an inactive campaign (Quest.campaign == True and Quest.campaign.active == False)
         4. The quest is manually set to be invisible to students (Quest.visible_to_students == False)
+        5. The quest is archived
         """
 
         # TODO: This test case is flaky since this throws an error around 7:18 UTC
@@ -167,6 +168,10 @@ class QuestTestModel(TenantTestCase):
         # create and test a quest that's invisible to students
         baker.make(Quest, name="invisible-quest", visible_to_students=False)
         self.assertEqual(Quest.objects.get(name="invisible-quest").active, False)
+        
+        # create and test a quest that's archived
+        archived_quest = baker.make(Quest, archived=True)
+        self.assertEqual(archived_quest.active, False)
 
     def test_quest_html_formatting(self):
         test_markup = "<p>this <span>span</span> tag should not break</p>"
