@@ -1,6 +1,7 @@
 # import re
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
@@ -22,7 +23,7 @@ from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
 
-from allauth.account.signals import email_confirmed
+from allauth.account.signals import email_confirmed, user_logged_in
 from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 
 
@@ -442,6 +443,18 @@ def email_confirmed_handler(*args, **kwargs):
         with transaction.atomic():
             email_address.set_as_primary()
             EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
+
+
+@receiver(user_logged_in, sender=User)
+def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
+    """
+    Adds a django message to remind user to verify their email upon login
+    """
+
+    email_address = EmailAddress.objects.filter(email=user.email).first()
+
+    if email_address and email_address.verified is False:
+        messages.info(request, f"Please verify your email address: {user.email}.")
 
 
 def smart_list(value, delimiter=",", func=None):
