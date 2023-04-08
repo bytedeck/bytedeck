@@ -1,6 +1,9 @@
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -176,7 +179,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert404('courses:my_marks')
 
     def test_assert_correct_forms__not_staff(self):
-        """ 
+        """
             test if non staff users have access to ProfileForm and not UserForm in ProfileView
         """
         self.client.force_login(self.test_student1)
@@ -186,7 +189,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(any(isinstance(form, UserForm) for form in response.context["forms"]))
 
     def test_assert_correct_forms__staff(self):
-        """ 
+        """
             test if staff users have access to ProfileForm and UserForm in ProfileView
         """
         self.client.force_login(self.test_teacher)
@@ -195,9 +198,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertTrue(any(isinstance(form, ProfileForm) for form in response.context["forms"]))
         self.assertTrue(any(isinstance(form, UserForm) for form in response.context["forms"]))
-    
+
     def test_update_profile__not_staff(self):
-        """ 
+        """
             Test to see if a user who is_staff=False can use the UserForm using ProfileView
             (They shouldn't)
         """
@@ -233,9 +236,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # check if staff args were ignored
         user_instance = User.objects.get(email=form_data["email"])
         self.assertFalse(user_instance.is_staff)
-    
+
     def test_update_profile__staff(self):
-        """ 
+        """
             Test to see if a user who is_staff=True can use the UserForm using ProfileView
             (They can)
         """
@@ -280,14 +283,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
-    
+
     def test_password_change_status_code__student(self):
         self.client.force_login(self.test_student1)
 
         self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assert403("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assert403("profiles:change_password", kwargs={"pk": self.test_student2.pk})
-    
+
     def test_password_change_status_code__staff(self):
         self.client.force_login(self.test_teacher)
 
@@ -296,9 +299,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
     def test_update_password(self):
-        """ 
+        """
             quick test to see if staff can change their user's password using passwordchange form
-        """ 
+        """
         User = get_user_model()
         user_instance = User.objects.create_user(username="username", password=self.test_password)
 
@@ -318,9 +321,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
     def test_profile_list(self):
-        """ 
+        """
             quick test for ProfileList to see...
-            - if profile_lists have the correct view_type 
+            - if profile_lists have the correct view_type
             - has correct queryset
         """
         # since ProfileList qs only filters for active=True, staff=False, students
@@ -336,14 +339,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
         self.assertTrue(qs.count(), 2)  # these are the test students
-        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True) 
+        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
         self.assertFalse(filtered_qs.exists())
-    
+
     def test_profile_list_current(self):
-        """ 
+        """
             quick test for ProfileListCurrent to see...
-            - if profile_lists have the correct view_type 
-            
+            - if profile_lists have the correct view_type
+
             no need to check for qs since its already tested in test_managers
         """
 
@@ -352,27 +355,67 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].CURRENT)
 
     def test_profile_list_inactive(self):
-        """ 
+        """
             quick test for ProfileListInactive to see...
-            - if profile_lists have the correct view_type 
-            
+            - if profile_lists have the correct view_type
+
             no need to check for qs since its already tested in test_managers
         """
-        
+
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse("profiles:profile_list_inactive"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INACTIVE)
 
     def test_profile_list_staff(self):
-        """ 
+        """
             quick test for ProfileListStaff to see...
-            - if profile_lists have the correct view_type 
+            - if profile_lists have the correct view_type
             - has correct queryset
         """
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("profiles:profile_list_staff"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
-        
+
         qs = response.context['object_list']
         self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+
+    def test_profile_update_email(self):
+        """
+        Test that updating your email sends a confirmation link and logging in will
+        have a reminder to verify email
+        """
+
+        self.client.force_login(self.test_student1)
+
+        # current student does not have an email
+        self.assertFalse(self.test_student1.email)
+
+        email = f"{self.test_student1.username}@example.com"
+
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data.update({
+            "email": email,
+        })
+
+        with patch("profile_manager.views.messages.add_message") as mocked_add_message:
+            self.client.post(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]), data=form_data)
+            message = mocked_add_message.call_args[0][2]
+
+        self.test_student1.refresh_from_db()
+        self.assertEqual(self.test_student1.email, email)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(message, f"Confirmation e-mail sent to {email}.")
+
+        self.client.logout()
+        # Verify that logging in will have a reminder to verify your email
+        form_data = {
+            "login": self.test_student1.username,
+            "password": self.test_password,
+        }
+
+        with patch("profile_manager.models.messages.info") as mocked_messages_info:
+            self.client.post(reverse('account_login'), form_data, follow=True)
+            message = mocked_messages_info.call_args[0][1]
+
+        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
