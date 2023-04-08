@@ -265,6 +265,57 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         # associated to that student who logged in
         self.assertTrue(SocialAccount.objects.filter(user=test_student, provider='google').exists())
 
+    @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
+    @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
+    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    def test_signin_via_post_google_signin_redirects_to_signup_page_on_new_account(
+        self,
+        mock_verify_and_unstash_state,
+        mock_complete_login,
+        mock_get_access_token
+    ):
+        """
+        When a student tries to login via OAuth and they have not yet created an account in ByteDeck,
+        they should simple be redirected to the signup page
+        """
+
+        self.setup_social_app()
+        self.client = TenantClient(self.tenant)
+
+        social_email = "user@example.com"
+        social_login = self.get_social_login()
+        social_login.user.email = social_email
+        social_login.email_addresses[0].email = social_email
+
+        mock_get_access_token.return_value = {
+            'access_token': 'test_access_token',
+            'expires_in': 3599,
+            'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'token_type': 'Bearer',
+            'id_token': 'test_id_token'
+        }
+        mock_complete_login.return_value = social_login
+        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+
+        # Simulate a student clicking the Google Sign in button
+        url = reverse('google_login')
+        response = self.client.post(url)
+
+        # Check that they get redirected to the google accounts sign in page
+        authorize_url = response.headers['Location']
+        self.assertIn('accounts.google.com', authorize_url)
+        self.assertIn('response_type=code', authorize_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('client_id=test_client_id', authorize_url)
+
+        # Simulate a student entering the correct details or choosing a google account to sign in with
+        response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
+
+        # Student should now be redirected to the social sign up page
+        self.assertRedirects(response, reverse('socialaccount_signup'))
+        mock_get_access_token.assert_called_once()
+        mock_complete_login.assert_called_once()
+
 
 class CustomLoginFormTest(TenantTestCase):
 
