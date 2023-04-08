@@ -78,7 +78,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
     @patch("tenant.admin.messages.add_message")
-    def test_enable_google_signin_admin_without_config(self, mocked_add_message):
+    def test_enable_google_signin_admin_without_config(self, mock_add_message):
         """
         Test where we attempt to enable google sign in but the public tenant has not yet configured
         the Google Provider Social App
@@ -92,7 +92,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         public_client.force_login(admin)
 
         self.tenant_model_admin.enable_google_signin(request=request, queryset=queryset)
-        mocked_add_message.assert_called
+        mock_add_message.assert_called
 
         for tenant in queryset:
             with tenant_context(tenant):
@@ -106,7 +106,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     # Getting this error django.contrib.messages.api.MessageFailure:
     #           You cannot add messages without installing django.contrib.messages.middleware.MessageMiddleware
     @patch("tenant.admin.messages.add_message")
-    def test_enable_and_disable_google_signin_admin(self, mocked_add_message):
+    def test_enable_and_disable_google_signin_admin(self, mock_add_message):
         """
         Test where we enable/disable google signin for clients via admin
         """
@@ -162,7 +162,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 self.assertIsNotNone(config)
                 self.assertFalse(config.enable_google_signin)
 
-        mocked_add_message.assert_called()
+        mock_add_message.assert_called()
 
     def test_public_tenant_admin_save_model(self):
 
