@@ -277,6 +277,34 @@ class PasswordReset(FormView):
         return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
+@non_public_only_view
+@login_required
+def profile_resend_email_verification(request):
+
+    from allauth.account.utils import send_email_confirmation
+    from allauth.account.models import EmailAddress
+
+    user = request.user
+    email_address = EmailAddress.objects.filter(email=user.email).first()
+
+    if not email_address or not user.email:
+        messages.error(request, "User does not have an email")
+        return redirect_to_previous_page(request)
+
+    if email_address.verified:
+        messages.info(request, "Your email address has already been verified.")
+        return redirect_to_previous_page(request)
+
+    send_email_confirmation(
+        request=request,
+        user=user,
+        signup=False,
+        email=user.email,
+    )
+
+    return redirect_to_previous_page(request)
+
+
 class TagChart(NonPublicOnlyViewMixin, TemplateView):
     template_name = 'profile_manager/tag_chart.html'
 

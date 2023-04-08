@@ -441,7 +441,7 @@ def email_confirmed_handler(*args, **kwargs):
     if email_address:
         with transaction.atomic():
             email_address.set_as_primary()
-            EmailAddress.objects.filter(user=email_address.user, primary=False)
+            EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
 
 
 def smart_list(value, delimiter=",", func=None):

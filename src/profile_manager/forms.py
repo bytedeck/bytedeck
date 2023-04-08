@@ -1,6 +1,7 @@
 from django import forms
 
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from .models import Profile
 
@@ -26,6 +27,22 @@ class ProfileForm(forms.ModelForm):
             choices=Profile.get_grad_year_choices()
         )
         self.fields['email'].initial = self.instance.user.email
+
+        from allauth.account.models import EmailAddress
+
+        user_email = self.instance.user.email
+
+        if user_email:
+            current_email = EmailAddress.objects.get(email=user_email)
+
+            if not current_email.verified:
+                resend_email_url = reverse('profiles:profile_resend_email_verification')
+                self.fields['email'].help_text = (
+                    '<i class="fa fa-info"></i> Not yet verified. '
+                    f'<a href="{resend_email_url}">Re-send verification link</a>'
+                )
+            else:
+                self.fields['email'].help_text = '<i class="fa fa-check info"></i>Verified'
 
     # UNIQUE if NOT NULL
     def clean_alias(self):
