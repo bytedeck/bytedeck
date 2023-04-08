@@ -126,9 +126,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         for tenant in queryset:
             with tenant_context(tenant):
                 config = SiteConfig.get()
-                if not config:
-                    continue
-
                 with transaction.atomic():
                     config._propagate_google_provider()
                     config.enable_google_signin = True
@@ -149,9 +146,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         for tenant in queryset:
             with tenant_context(tenant):
                 config = SiteConfig.get()
-                if not config:
-                    continue
-
                 config.enable_google_signin = False
                 config.save()
 
