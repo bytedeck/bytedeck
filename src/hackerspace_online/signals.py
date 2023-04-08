@@ -28,10 +28,7 @@ def change_domain_urls(sender, *args, **kwargs):
             public_tenant.save()
 
 
-def handle_tenant_site_domain_update(sender, tenant, **kwargs):
-
-    if not tenant:
-        return
+def handle_tenant_site_domain_update(tenant, **kwargs):
 
     if tenant.schema_name == get_public_schema_name():
         return
