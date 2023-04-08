@@ -23,6 +23,9 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from django.contrib.auth.forms import SetPasswordForm
 
+from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
+
 
 class ViewTypes:
     """ enum for ProfileList and its descendants """
@@ -280,9 +283,6 @@ class PasswordReset(FormView):
 @non_public_only_view
 @login_required
 def profile_resend_email_verification(request):
-
-    from allauth.account.utils import send_email_confirmation
-    from allauth.account.models import EmailAddress
 
     user = request.user
     email_address = EmailAddress.objects.filter(email=user.email).first()

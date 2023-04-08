@@ -429,7 +429,7 @@ def post_delete_user(sender, instance, *args, **kwargs):
 
 
 @receiver(email_confirmed, sender=EmailConfirmationHMAC)
-def email_confirmed_handler(*args, **kwargs):
+def email_confirmed_handler(email_address, **kwargs):
     """
     After a user has confirmed their email, this will handle converting that email to the primary email
     and therefore making it the User.email.
@@ -437,12 +437,9 @@ def email_confirmed_handler(*args, **kwargs):
     Then, we delete the non-primary email addresses of that user
     """
 
-    email_address = kwargs.get('email_address')
-
-    if email_address:
-        with transaction.atomic():
-            email_address.set_as_primary()
-            EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
+    with transaction.atomic():
+        email_address.set_as_primary()
+        EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
 
 
 @receiver(user_logged_in, sender=User)

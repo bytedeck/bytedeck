@@ -28,21 +28,18 @@ class ProfileForm(forms.ModelForm):
         )
         self.fields['email'].initial = self.instance.user.email
 
-        from allauth.account.models import EmailAddress
+        user = self.instance.user
+        email_address = user.emailaddress_set.filter(email=user.email).first()
 
-        user_email = self.instance.user.email
-
-        if user_email:
-            current_email = EmailAddress.objects.get(email=user_email)
-
-            if not current_email.verified:
+        if email_address:
+            if email_address.verified:
+                self.fields['email'].help_text = '<i class="fa fa-check info"></i>Verified'
+            else:
                 resend_email_url = reverse('profiles:profile_resend_email_verification')
                 self.fields['email'].help_text = (
                     '<i class="fa fa-info"></i> Not yet verified. '
                     f'<a href="{resend_email_url}">Re-send verification link</a>'
                 )
-            else:
-                self.fields['email'].help_text = '<i class="fa fa-check info"></i>Verified'
 
     # UNIQUE if NOT NULL
     def clean_alias(self):

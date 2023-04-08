@@ -1,4 +1,6 @@
+import re
 from unittest.mock import patch
+from allauth.account.models import EmailConfirmationHMAC
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
@@ -383,7 +385,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_profile_update_email(self):
         """
         Test that updating your email sends a confirmation link and logging in will
-        have a reminder to verify email
+        have a reminder to verify email address if not yet verified.
         """
 
         self.client.force_login(self.test_student1)
@@ -391,6 +393,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # current student does not have an email
         self.assertFalse(self.test_student1.email)
 
+        # Accessing the resend email verification should just display an error message that they don't have an email
+        with patch("profile_manager.views.messages.error") as mocked_messages_error:
+            response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+            message = mocked_messages_error.call_args[0][1]
+
+        self.assertEqual(message, "User does not have an email")
+
+        # Prepare new data for student
         email = f"{self.test_student1.username}@example.com"
 
         form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
@@ -419,3 +429,48 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             message = mocked_messages_info.call_args[0][1]
 
         self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+
+        self.client.logout()
+
+        self.client.force_login(self.test_student1)
+
+        # Label should still be Not yet verified
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
+        form = response.context['form']
+        self.assertIn("Not yet verified", form.fields['email'].help_text)
+
+        # Resend email verification
+        # with patch("profile_manager.views.send_email_confirmation") as mocked_send_email_confirmation:
+        response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+
+        # We should now have 2 received emails
+        self.assertEqual(len(mail.outbox), 2)
+
+        # Extract the HMAC from the email
+        email_msg = mail.outbox[1].message().as_string()
+        match = re.search(r'https?://\S+/[^/]+/(\S+)/', email_msg)
+        assert match
+        hmac_key = match.group(1)
+
+        # Manually verify the email
+        email_address = EmailConfirmationHMAC.from_key(hmac_key).confirm(response.wsgi_request)
+        assert email_address
+
+        self.assertTrue(email_address.verified)
+
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
+        form = response.context['form']
+        self.assertIn("Verified", form.fields['email'].help_text)
+
+        # Accessing the resend verification should display that email is already verified
+        with patch("profile_manager.views.messages.info") as mocked_messages_info:
+            response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+            message = mocked_messages_info.call_args[0][1]
+
+        self.assertEqual(message, "Your email address has already been verified.")
+
+        # Here, we just check that the messages was never called
+        self.client.logout()
+        with patch("profile_manager.models.messages.info") as mocked_messages_info:
+            self.client.post(reverse('account_login'), form_data, follow=True)
+            mocked_messages_info.assert_not_called()
