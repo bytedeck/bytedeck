@@ -431,10 +431,20 @@ def post_delete_user(sender, instance, *args, **kwargs):
 @receiver(email_confirmed, sender=EmailConfirmationHMAC)
 def email_confirmed_handler(email_address, **kwargs):
     """
-    After a user has confirmed their email, this will handle converting that email to the primary email
-    and therefore making it the User.email.
+    django-allauth has their own model for tracking email address under `allauth.account.models.EmailAddress`
 
-    Then, we delete the non-primary email addresses of that user
+    Every time a user updates their email address under the Profile page, we send a confirmation email in the
+    `profile_manager.ProfileForm.save()` method via `allauth.account.utils.send_email_confirmation`.
+
+    and everytime that function is called, it creates a new EmailAddress record which with verified=False and primary=False
+    as the attributes.
+
+    Whenever they confirm an email address via the link sent to their email, this receiver gets called when that email
+    is confirmed and we make that email the primary email address.
+
+    The old EmailAddress record becomes primary=False and will be deleted so that we always only have one record
+    under EmailAddress for a user.
+
     """
 
     with transaction.atomic():
