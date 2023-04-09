@@ -1,5 +1,7 @@
 {% extends "base_no_sidebar.html" %}
 {% load crispy_forms_tags %}
+{% load i18n %}
+{% load account socialaccount %}
 
 {% load i18n %}
 
@@ -9,6 +11,17 @@
 {% block content %}
 
 <p>{% blocktrans %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktrans %}</p>
+
+<p>or</p>
+
+{% get_providers as socialaccount_providers %}
+
+{% if socialaccount_providers %}
+  <p>{% blocktrans %} Sign up via: {% endblocktrans %}</p>
+  {% if config.enable_google_signin %}
+    <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
+  {% endif %}
+{% endif %}
 
 <form class="signup" id="signup_form" method="post" action="{% url 'account_signup' %}">
   {% csrf_token %}
