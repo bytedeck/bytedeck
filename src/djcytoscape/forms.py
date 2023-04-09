@@ -7,7 +7,7 @@ from utilities.fields import AllowedGFKChoiceField
 from .models import CytoScape
 
 
-class CytoscapeContentObjectChoiceField(AllowedGFKChoiceField):
+class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
     """
     Provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
     formatted for utilities.fields.AllowedGFKChoiceField use
@@ -39,7 +39,7 @@ class GenerateQuestMapForm(FutureModelForm):
 
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
     
-    initial_content_object = CytoscapeContentObjectChoiceField(label='Initial Object')
+    initial_content_object = CytoscapeGFKChoiceField(label='Initial Object')
 
     parent_scape = forms.ModelChoiceField(
         label='Parent Quest Map', 

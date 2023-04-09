@@ -30,7 +30,7 @@ def random_string(n):
     )
 
 
-class ContentObjectsSelect2WidgetForm(forms.Form):
+class GFKSelect2WidgetForm(forms.Form):
     f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
@@ -66,7 +66,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
     def test_get(self):
         group = self.groups[0]
-        form = ContentObjectsSelect2WidgetForm()
+        form = GFKSelect2WidgetForm()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
         url = reverse('utilities:querysetsequence_auto-json')
@@ -123,7 +123,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
     def test_label_from_instance(self):
         url = reverse('utilities:querysetsequence_auto-json')
 
-        form = ContentObjectsSelect2WidgetForm()
+        form = GFKSelect2WidgetForm()
         form.fields['f'].widget = CustomGFKSelect2Widget()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
@@ -141,7 +141,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         from django_select2.cache import cache
 
         group = self.groups[0]
-        form = ContentObjectsSelect2WidgetForm()
+        form = GFKSelect2WidgetForm()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
         cache_key = form.fields['f'].widget._get_cache_key()

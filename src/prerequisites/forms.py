@@ -29,7 +29,7 @@ def popover_labels(model, field_strings):
     return fields_html
 
 
-class PrereqContentObjectChoiceField(AllowedGFKChoiceField):
+class PrereqGFKChoiceField(AllowedGFKChoiceField):
     """
     Can't always dynamically load this list due to accessing contenttypes too early
     So instead provide a hard coded list which is checked during testing to ensure it matches
@@ -42,9 +42,9 @@ class PrereqContentObjectChoiceField(AllowedGFKChoiceField):
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = PrereqContentObjectChoiceField()
+    prereq_object = PrereqGFKChoiceField()
 
-    or_prereq_object = PrereqContentObjectChoiceField(required=False)
+    or_prereq_object = PrereqGFKChoiceField(required=False)
         
     class Meta:
         model = Prereq

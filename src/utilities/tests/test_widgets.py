@@ -34,7 +34,7 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
         return str(obj.name).upper()
 
 
-class ContentObjectsSelect2WidgetForm(forms.Form):
+class GFKSelect2WidgetForm(forms.Form):
     f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
@@ -45,7 +45,7 @@ class ContentObjectsSelect2WidgetForm(forms.Form):
 
 
 class TestGFKSelect2Widget(TenantTestCase):
-    form = ContentObjectsSelect2WidgetForm(initial={'f': '1-1'})
+    form = GFKSelect2WidgetForm(initial={'f': '1-1'})
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
