@@ -18,7 +18,7 @@ def popover_labels(model, field_strings):
             field = model._meta.get_field(field_string)
         except FieldDoesNotExist:
             continue  # if custom field we skip it
-        
+
         if type(field) == GenericForeignKey:
             continue  # if generic foreign key we skip it, it doesn't have these attributes
 
@@ -45,7 +45,7 @@ class PrereqFormInline(FutureModelForm):
     prereq_object = PrereqGFKChoiceField()
 
     or_prereq_object = PrereqGFKChoiceField(required=False)
-        
+
     class Meta:
         model = Prereq
         # fields = ['prereq_content_type', 'prereq_object_id', 'prereq_count', 'prereq_invert']
@@ -59,8 +59,6 @@ class PrereqFormInline(FutureModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
-        self.fields['or_prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
 

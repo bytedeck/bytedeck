@@ -38,11 +38,11 @@ class GenerateQuestMapForm(FutureModelForm):
         ]
 
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
-    
+
     initial_content_object = CytoscapeGFKChoiceField(label='Initial Object')
 
     parent_scape = forms.ModelChoiceField(
-        label='Parent Quest Map', 
+        label='Parent Quest Map',
         required=False,
         queryset=CytoScape.objects.all(),
     )
@@ -50,8 +50,6 @@ class GenerateQuestMapForm(FutureModelForm):
     def __init__(self, *args, **kwargs):
         self.autobreak = kwargs.pop('autobreak', None)
         super().__init__(*args, **kwargs)
-
-        self.fields['initial_content_object'].widget.attrs['data-placeholder'] = 'Type to search'
 
     def save(self, **kwargs):
         obj = self.cleaned_data['initial_content_object']
@@ -76,7 +74,7 @@ class QuestMapForm(GenerateQuestMapForm, forms.ModelForm):
 
         # prevent recursive maps
         self.fields['parent_scape'].queryset = self.fields['parent_scape'].queryset.exclude(id=self.instance.id)
-    
+
     # save with ModelForm default instead of CytoScape.generate_map()
     def save(self, **kwargs):
         return super(forms.ModelForm, self).save(**kwargs)

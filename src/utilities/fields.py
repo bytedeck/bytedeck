@@ -149,6 +149,7 @@ class AllowedGFKChoiceField(GFKChoiceField):
                 klass._meta.model_name: klass.gfk_search_fields()
             })
         self.widget.search_fields = search_fields
+        self.widget.attrs['data-placeholder'] = 'Type to search'
 
     def get_allowed_model_classes(self):
         """Returns a list of allowed Model classes"""
