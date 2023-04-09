@@ -140,8 +140,9 @@ Here are the steps, assuming that you now have a functional tenant:
 4. Click Add Social Application
 5. Fill in `Client Id` and `Secret Key`. And then add the `Available Sites` to `Chosen Sites`
 6. Click Save
-7. Go to your Site Configuration: http://hackerspace.localhost:8000/config/ and click `Enable sign-in via Google`
-8. Done
+7. Go to the Admin tenants page: http://localhost:8000/admin/tenant/tenant/
+8. There should be a checkbox beside the tenant's schema name. Check the checkbox and choose `Enable google signin for tenant(s)` and click `Go`.
+9. Done
 
 When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping
 our localhost to `localhost.net` so we can access our tenant via `http://hackerspace.localhost.net:8000`.
