@@ -185,6 +185,15 @@ class IsAPrereqMixin:
         else:
             return False
 
+    @staticmethod
+    def gfk_search_fields():
+        """
+        For GFKSelect2Widget, should return a field on the model.
+
+        Override this static method in the class to choose different search fields
+        """
+        return ["name__icontains"]
+
 
 # class PrereqQuerySet(models.query.QuerySet):
 #     """

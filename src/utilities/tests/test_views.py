@@ -17,8 +17,8 @@ from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
-from utilities.fields import ContentObjectChoiceField
-from utilities.widgets import ContentObjectSelect2Widget
+from utilities.fields import GFKChoiceField
+from utilities.widgets import GFKSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 User = get_user_model()
@@ -30,20 +30,23 @@ def random_string(n):
     )
 
 
-class ContentObjectsSelect2WidgetForm(forms.Form):
-    f = ContentObjectChoiceField(
+class GFKSelect2WidgetForm(forms.Form):
+    f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),
-        widget=ContentObjectSelect2Widget(search_fields=['name__icontains']),
+        widget=GFKSelect2Widget(
+            search_fields={
+                'auth': {'group': ['name__icontains']}}
+        )
     )
 
 
-class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
+class CustomGFKSelect2Widget(GFKSelect2Widget):
     queryset = QuerySetSequence(Group.objects.all())
-    search_fields = [
-        'name__icontains'
-    ]
+    search_fields = {
+        'auth': {'group': ['name__icontains']},
+    }
 
     def label_from_instance(self, obj):
         return str(obj.name).upper()
@@ -63,7 +66,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
     def test_get(self):
         group = self.groups[0]
-        form = ContentObjectsSelect2WidgetForm()
+        form = GFKSelect2WidgetForm()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
         url = reverse('utilities:querysetsequence_auto-json')
@@ -94,10 +97,12 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
     def test_pagination(self):
         url = reverse('utilities:querysetsequence_auto-json')
-        widget = ContentObjectSelect2Widget(
+        widget = GFKSelect2Widget(
             max_results=10,
             queryset=QuerySetSequence(Group.objects.all()),
-            search_fields=['name__icontains']
+            search_fields={
+                'auth': {'group': ['name__icontains']},
+            }
         )
         widget.render('name', None)
         field_id = signing.dumps(id(widget))
@@ -118,8 +123,8 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
     def test_label_from_instance(self):
         url = reverse('utilities:querysetsequence_auto-json')
 
-        form = ContentObjectsSelect2WidgetForm()
-        form.fields['f'].widget = CustomContentObjectSelect2Widget()
+        form = GFKSelect2WidgetForm()
+        form.fields['f'].widget = CustomGFKSelect2Widget()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
 
@@ -136,7 +141,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         from django_select2.cache import cache
 
         group = self.groups[0]
-        form = ContentObjectsSelect2WidgetForm()
+        form = GFKSelect2WidgetForm()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
         cache_key = form.fields['f'].widget._get_cache_key()

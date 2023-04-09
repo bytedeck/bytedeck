@@ -1,28 +1,30 @@
 from django import forms
-
-from queryset_sequence import QuerySetSequence
+from django.contrib.contenttypes.models import ContentType
 
 from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
-from utilities.widgets import ContentObjectSelect2Widget
+from utilities.fields import AllowedGFKChoiceField
 
 from .models import CytoScape
 
 
-def get_model_options():
+class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
     """
-        provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
-        formatted for utilities.fields.ContentObjectModelField use
-        from prerequisites.forms:
-            Can't always dynamically load this list due to accessing contenttypes too early
-            So instead provide a hard coded list which is checked during testing to ensure it matches
-            what the dynamically loaded list would have produced
-    """
-    from quest_manager.models import Quest
-    from badges.models import Badge
-    from courses.models import Rank
+    Provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
+    formatted for utilities.fields.AllowedGFKChoiceField use
 
-    return [Quest, Rank, Badge]
+    from prerequisites.forms:
+        Can't always dynamically load this list due to accessing contenttypes too early
+        So instead provide a hard coded list which is checked during testing to ensure it matches
+        what the dynamically loaded list would have produced
+    """
+
+    def get_allowed_model_classes(self):
+        model_classes = [
+            ct.model_class() for ct in ContentType.objects.filter(
+                CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
+            )
+        ]
+        return model_classes
 
 
 class GenerateQuestMapForm(FutureModelForm):
@@ -36,16 +38,11 @@ class GenerateQuestMapForm(FutureModelForm):
         ]
 
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
-    
-    initial_content_object = ContentObjectChoiceField(
-        label='Initial Object',
-        required=True,
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in get_model_options()]),
-        widget=ContentObjectSelect2Widget(search_fields=["name__icontains"]),
-    )
+
+    initial_content_object = CytoscapeGFKChoiceField(label='Initial Object')
 
     parent_scape = forms.ModelChoiceField(
-        label='Parent Quest Map', 
+        label='Parent Quest Map',
         required=False,
         queryset=CytoScape.objects.all(),
     )
@@ -53,8 +50,6 @@ class GenerateQuestMapForm(FutureModelForm):
     def __init__(self, *args, **kwargs):
         self.autobreak = kwargs.pop('autobreak', None)
         super().__init__(*args, **kwargs)
-
-        self.fields['initial_content_object'].widget.attrs['data-placeholder'] = 'Type to search'
 
     def save(self, **kwargs):
         obj = self.cleaned_data['initial_content_object']
@@ -79,7 +74,7 @@ class QuestMapForm(GenerateQuestMapForm, forms.ModelForm):
 
         # prevent recursive maps
         self.fields['parent_scape'].queryset = self.fields['parent_scape'].queryset.exclude(id=self.instance.id)
-    
+
     # save with ModelForm default instead of CytoScape.generate_map()
     def save(self, **kwargs):
         return super(forms.ModelForm, self).save(**kwargs)

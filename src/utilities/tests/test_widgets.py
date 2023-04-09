@@ -14,8 +14,8 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
-from utilities.fields import ContentObjectChoiceField
-from utilities.widgets import ContentObjectSelect2Widget
+from utilities.fields import GFKChoiceField
+from utilities.widgets import GFKSelect2Widget
 
 
 def random_string(n):
@@ -24,28 +24,28 @@ def random_string(n):
     )
 
 
-class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
+class CustomGFKSelect2Widget(GFKSelect2Widget):
     queryset = QuerySetSequence(Group.objects.all())
-    search_fields = [
-        'name__icontains'
-    ]
+    search_fields = {
+        'auth': {'group': ['name__icontains']},
+    }
 
     def label_from_instance(self, obj):
         return str(obj.name).upper()
 
 
-class ContentObjectsSelect2WidgetForm(forms.Form):
-    f = ContentObjectChoiceField(
+class GFKSelect2WidgetForm(forms.Form):
+    f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),
         required=False,
-        widget=CustomContentObjectSelect2Widget(),
+        widget=CustomGFKSelect2Widget(),
     )
 
 
-class TestContentObjectSelect2Widget(TenantTestCase):
-    form = ContentObjectsSelect2WidgetForm(initial={'f': '1-1'})
+class TestGFKSelect2Widget(TenantTestCase):
+    form = GFKSelect2WidgetForm(initial={'f': '1-1'})
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
@@ -107,39 +107,39 @@ class TestContentObjectSelect2Widget(TenantTestCase):
         assert any(o in widget_output for o in get_selected_options(group))
 
     def test_get_queryset(self):
-        widget = ContentObjectSelect2Widget()
+        widget = GFKSelect2Widget()
         with self.assertRaises(NotImplementedError):
             widget.get_queryset()
         widget.queryset = QuerySetSequence(Group.objects.all())
         assert isinstance(widget.get_queryset(), QuerySetSequence)
 
     def test_get_search_fields(self):
-        widget = ContentObjectSelect2Widget()
+        widget = GFKSelect2Widget()
         with self.assertRaises(NotImplementedError):
-            widget.get_search_fields()
+            widget.get_search_fields(Group)
 
-        widget.search_fields = ['name__icontains']
-        assert isinstance(widget.get_search_fields(), collections.Iterable)
-        assert all(isinstance(x, text_type) for x in widget.get_search_fields())
+        widget.search_fields = {'auth': {'group': ['name__icontains']}}
+        assert isinstance(widget.get_search_fields(Group), collections.Iterable)
+        assert all(isinstance(x, text_type) for x in widget.get_search_fields(Group))
 
     def test_filter_queryset(self):
-        widget = CustomContentObjectSelect2Widget()
+        widget = CustomGFKSelect2Widget()
         assert widget.filter_queryset(self.groups[0].name[:3]).exists()
 
-        widget = CustomContentObjectSelect2Widget()
+        widget = CustomGFKSelect2Widget()
         qs = widget.filter_queryset(" ".join([self.groups[0].name[:3], self.groups[0].name[3:]]))
         assert qs.exists()
 
     def test_queryset_kwarg(self):
-        widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+        widget = GFKSelect2Widget(
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
         result = widget.filter_queryset(group.name)
         assert result.exists()
 
     def test_ajax_view_registration(self):
-        widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+        widget = GFKSelect2Widget(
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
@@ -152,17 +152,17 @@ class TestContentObjectSelect2Widget(TenantTestCase):
     def test_render(self):
         from django_select2.cache import cache
 
-        widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+        widget = GFKSelect2Widget(
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         cached_widget = cache.get(widget._get_cache_key())
         assert cached_widget['max_results'] == widget.max_results
-        assert list(cached_widget['search_fields']) == widget.search_fields
+        assert dict(cached_widget['search_fields']) == widget.search_fields
         qs = widget.get_queryset()
         assert isinstance(cached_widget['queryset'][0][0], qs.get_querysets()[0].__class__)
         assert text_type(cached_widget['queryset'][0][1]) == text_type(qs.get_querysets()[0].query)
 
     def test_get_url(self):
-        widget = ContentObjectSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields=['name__icontains'])
+        widget = GFKSelect2Widget(
+            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         assert isinstance(widget.get_url(), text_type)

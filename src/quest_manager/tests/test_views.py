@@ -23,7 +23,6 @@ from model_bakery import baker
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
-from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -1193,7 +1192,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
                 "id": f'{self.parent_quest.pk}'
-            },            
+            },
         ]
 
         formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
@@ -2328,20 +2327,28 @@ class Is_staff_or_TA_test(TenantTestCase):
 
     def test_is_staff_or_TA___staff(self):
         """ User is staff, return True """
+        from quest_manager.views import is_staff_or_TA
+
         self.user.is_staff = True
         self.assertTrue(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA___TA(self):
         """ User is TA returns True"""
+        from quest_manager.views import is_staff_or_TA
+
         self.user.profile.is_TA = True
         self.assertTrue(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA___neither(self):
         """ User is not staff or TA, returns False """
+        from quest_manager.views import is_staff_or_TA
+
         self.assertFalse(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA__anonymous(self):
         """ Anonymous user returns False"""
+        from quest_manager.views import is_staff_or_TA
+
         self.assertFalse(is_staff_or_TA(AnonymousUser()))
 
 

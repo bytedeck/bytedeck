@@ -85,6 +85,10 @@ class Category(IsAPrereqMixin, models.Model):
     def autocomplete_search_fields():  # for grapelli prereq selection
         return ("title__icontains",)
 
+    @staticmethod
+    def gfk_search_fields():  # for AllowedGFKChoiceFiled
+        return ["title__icontains"]
+
     @property
     def name(self):
         return self.title
