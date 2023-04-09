@@ -86,7 +86,7 @@ class Category(IsAPrereqMixin, models.Model):
         return ("title__icontains",)
 
     @staticmethod
-    def content_object_search_fields():
+    def gfk_search_fields():  # for AllowedGFKChoiceFiled
         return ["title__icontains"]
 
     @property

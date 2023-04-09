@@ -419,7 +419,7 @@ class Course(IsAPrereqMixin, models.Model):
         return ("title__icontains",)
 
     @staticmethod
-    def content_object_search_fields():
+    def gfk_search_fields():
         return ["title__icontains"]
 
 

@@ -160,19 +160,19 @@ class ContentObjectSelect2Mixin(object):
         return str(obj)
 
 
-class ContentObjectSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
+class GFKSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
     """
     Select2 drop in content object select widget.
 
     Example usage::
 
-        class MyWidget(ContentObjectSelect2Widget):
+        class MyWidget(GFKSelect2Widget):
             search_fields = {
                 'myapp': {'mymodel': ['title__icontains']}
             }
 
         class MyModelForm(FutureModelForm):
-            my_field = ContentObjectChoiceField(
+            my_field = GFKChoiceField(
                 queryset=QuerySetSequence(...),
             )
 
@@ -186,18 +186,18 @@ class ContentObjectSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
     or::
 
         class MyForm(forms.Form):
-            my_choice = ContentObjectChoiceField(
+            my_choice = GFKChoiceField(
                 queryset=QuerySetSequence(...),
-                widget=ContentObjectSelect2Widget(
+                widget=GFKSelect2Widget(
                     search_fields={
                         'myapp': {'mymodel': ['title__icontains']}
                     }
                 )
             )
 
-    .. tip:: The ContentObjectsSelect2Widget will try
+    .. tip:: The GFKSelect2Widget will try
         to get the QuerySetSequence from the fields choices.
         Therefore you don't need to define a QuerySetSequence,
-        if you just drop in the widget for a ContentObjectChoiceField field.
+        if you just drop in the widget for a GFKChoiceField field.
     """
     pass

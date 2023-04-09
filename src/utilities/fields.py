@@ -9,7 +9,7 @@ from django.template.defaultfilters import filesizeformat
 
 from queryset_sequence import QuerySetSequence
 
-from .widgets import ContentObjectSelect2Widget
+from .widgets import GFKSelect2Widget
 
 
 class ContentObjectChoiceIterator(ModelChoiceIterator):
@@ -66,7 +66,7 @@ class GFKChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
     """
     Replacement for ModelChoiceField supporting QuerySetSequence choices.
 
-    ContentObjectChoiceField expects options to look like::
+    GFKChoiceField expects options to look like::
 
         <option value="4">Model #4</option>
 
@@ -125,7 +125,7 @@ class GFKChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
 
 class AllowedGFKChoiceField(GFKChoiceField):
 
-    widget = ContentObjectSelect2Widget
+    widget = GFKSelect2Widget
 
     def __init__(self, *args, **kwargs):
         model_classes = []
@@ -149,7 +149,7 @@ class AllowedGFKChoiceField(GFKChoiceField):
         for qs in self.queryset.get_querysets():
             klass = qs.model
             search_fields.setdefault(klass._meta.app_label, {}).update({
-                klass._meta.model_name: klass.content_object_search_fields()
+                klass._meta.model_name: klass.gfk_search_fields()
             })
         self.widget.search_fields = search_fields
 

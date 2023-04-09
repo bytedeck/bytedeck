@@ -18,7 +18,7 @@ from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
 from utilities.fields import GFKChoiceField
-from utilities.widgets import ContentObjectSelect2Widget
+from utilities.widgets import GFKSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 User = get_user_model()
@@ -35,14 +35,14 @@ class ContentObjectsSelect2WidgetForm(forms.Form):
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),
-        widget=ContentObjectSelect2Widget(
+        widget=GFKSelect2Widget(
             search_fields={
                 'auth': {'group': ['name__icontains']}}
         )
     )
 
 
-class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
+class CustomGFKSelect2Widget(GFKSelect2Widget):
     queryset = QuerySetSequence(Group.objects.all())
     search_fields = {
         'auth': {'group': ['name__icontains']},
@@ -97,7 +97,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
     def test_pagination(self):
         url = reverse('utilities:querysetsequence_auto-json')
-        widget = ContentObjectSelect2Widget(
+        widget = GFKSelect2Widget(
             max_results=10,
             queryset=QuerySetSequence(Group.objects.all()),
             search_fields={
@@ -124,7 +124,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         url = reverse('utilities:querysetsequence_auto-json')
 
         form = ContentObjectsSelect2WidgetForm()
-        form.fields['f'].widget = CustomContentObjectSelect2Widget()
+        form.fields['f'].widget = CustomGFKSelect2Widget()
         assert form.as_p()
         field_id = signing.dumps(id(form.fields['f'].widget))
 
