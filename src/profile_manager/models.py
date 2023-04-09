@@ -489,7 +489,7 @@ def smart_list(value, delimiter=",", func=None):
     model signal to ensure that you always get a list back from the field.
 
     """
-    if value in ["", "", "[]", "[]", "[ ]", None]:
+    if value in ["", "[]", "[ ]", None]:
         return []
 
     if isinstance(value, list):
