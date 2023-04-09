@@ -29,6 +29,10 @@ class ProfileForm(forms.ModelForm):
         self.fields['email'].initial = self.instance.user.email
 
         user = self.instance.user
+
+        # It is possible that the user registered without an email so instead of using
+        # user.emailaddress_set.get(...), let's just use .first() since it would return
+        # None instead of raising a DoesNotExist error
         email_address = user.emailaddress_set.filter(email=user.email).first()
 
         if email_address:
