@@ -2,7 +2,9 @@ from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.db import connection, transaction
+from django.urls import reverse
 
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
@@ -123,6 +125,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             return
 
         queryset = queryset.exclude(schema_name=get_public_schema_name())
+        enabled_tenant_domains = []
         for tenant in queryset:
             with tenant_context(tenant):
                 config = SiteConfig.get()
@@ -131,12 +134,22 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     config.enable_google_signin = True
                     config.save()
 
+                tenant_domain = tenant.get_primary_domain()
+                uri = request.build_absolute_uri().replace(Site.objects.get_current().domain, tenant_domain.domain)
+
+                # Create a URL {tenant}.{domain}/accounts/google/login/callback/
+                uri = uri.replace(request.path, reverse("google_callback"))
+
+                enabled_tenant_domains.append(uri)
+
         enabled_count = queryset.count()
+
+        tenant_domains = ", ".join(enabled_tenant_domains)
         self.message_user(request, ngettext(
-            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain is added in the Authorized Redirect URIs",
-            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains are added in the Authorized Redirect URIs",
+            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain %s is added in the Authorized Redirect URIs",
+            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains %s are added in the Authorized Redirect URIs",
             enabled_count,
-        ) % enabled_count, messages.SUCCESS)
+        ) % (enabled_count, tenant_domains), messages.SUCCESS)
 
     @admin.action(description="Disable google signin for tenant(s)")
     def disable_google_signin(self, request, queryset):
