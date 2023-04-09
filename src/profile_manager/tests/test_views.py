@@ -393,12 +393,15 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # current student does not have an email
         self.assertFalse(self.test_student1.email)
 
+        # begin test of method: profile_manager.views.profile_resend_email_verification
         # Accessing the resend email verification should just display an error message that they don't have an email
         with patch("profile_manager.views.messages.error") as mock_messages_error:
             response = self.client.get(reverse("profiles:profile_resend_email_verification"))
             message = mock_messages_error.call_args[0][1]
 
         self.assertEqual(message, "User does not have an email")
+
+        # end test of method: profile_manager.views.profile_resend_email_verification
 
         # Prepare new data for student
         email = f"{self.test_student1.username}@example.com"
@@ -417,6 +420,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(message, f"Confirmation e-mail sent to {email}.")
 
+        # begin test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
         self.client.logout()
         # Verify that logging in will have a reminder to verify your email
         form_data = {
@@ -429,8 +433,8 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             message = mock_messages_info.call_args[0][1]
 
         self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
-
         self.client.logout()
+        # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
 
         self.client.force_login(self.test_student1)
 
