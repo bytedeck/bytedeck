@@ -396,7 +396,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # begin test of method: profile_manager.views.profile_resend_email_verification
         # Accessing the resend email verification should just display an error message that they don't have an email
         with patch("profile_manager.views.messages.error") as mock_messages_error:
-            response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+            response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
             message = mock_messages_error.call_args[0][1]
 
         self.assertEqual(message, "User does not have an email")
@@ -444,7 +444,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn("Not yet verified", form.fields['email'].help_text)
 
         # Resend email verification
-        response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+        response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
 
         # We should now have 2 received emails
         self.assertEqual(len(mail.outbox), 2)
@@ -463,11 +463,12 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
         form = response.context['form']
+
         self.assertIn("Verified", form.fields['email'].help_text)
 
         # Accessing the resend verification should display that email is already verified
         with patch("profile_manager.views.messages.info") as mock_messages_info:
-            response = self.client.get(reverse("profiles:profile_resend_email_verification"))
+            response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
             message = mock_messages_info.call_args[0][1]
 
         self.assertEqual(message, "Your email address has already been verified.")

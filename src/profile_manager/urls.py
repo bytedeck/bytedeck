@@ -26,7 +26,7 @@ urlpatterns = [
     path('chart/<pk>/', views.TagChart.as_view(), name='tag_chart'),
 
     path('password/change/<int:pk>/', views.PasswordReset.as_view(), name='change_password'),
-    path('resend-email-verification/', views.profile_resend_email_verification, name='profile_resend_email_verification'),
+    path('<pk>/resend-email-verification/', views.ProfileResendEmailVerification.as_view(), name='profile_resend_email_verification'),
 
     # Examples
     # Template View Example

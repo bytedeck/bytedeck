@@ -35,15 +35,15 @@ class ProfileForm(forms.ModelForm):
         # None instead of raising a DoesNotExist error
         email_address = user.emailaddress_set.filter(email=user.email).first()
 
-        if email_address:
-            if email_address.verified:
-                self.fields['email'].help_text = '<i class="fa fa-check info"></i>Verified'
-            else:
-                resend_email_url = reverse('profiles:profile_resend_email_verification')
-                self.fields['email'].help_text = (
-                    '<i class="fa fa-info"></i> Not yet verified. '
-                    f'<a href="{resend_email_url}">Re-send verification link</a>'
-                )
+        if (user.email and email_address is None) or (email_address and email_address.verified is False):
+            resend_email_url = reverse('profiles:profile_resend_email_verification', args=[self.instance.pk])
+            self.fields['email'].help_text = (
+                '<i class="fa fa-info"></i> Not yet verified. '
+                f'<a href="{resend_email_url}">Re-send verification link</a>'
+            )
+
+        if email_address and email_address.verified:
+            self.fields['email'].help_text = '<i class="fa fa-check info"></i>Verified'
 
     # UNIQUE if NOT NULL
     def clean_alias(self):
@@ -53,11 +53,14 @@ class ProfileForm(forms.ModelForm):
         super().save(*args, **kwargs)
 
         user = self.instance.user
-        user.email = self.cleaned_data['email']
-        user.save()
+
+        modified_email = user.email != self.cleaned_data['email']
+        if modified_email:
+            user.email = self.cleaned_data['email']
+            user.save()
 
         from allauth.account.utils import send_email_confirmation
-        if self.request:
+        if self.request and modified_email:
             send_email_confirmation(
                 request=self.request,
                 user=user,
