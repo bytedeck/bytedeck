@@ -1115,32 +1115,31 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
-    # TODO: broken
-    # def test_post_save_button__defaults(self):
-    #     """ Save button should redirect to the quest detail view, no changes to form data"""
-    #     self.client.force_login(self.test_teacher)
+    def test_post_save_button__defaults(self):
+        """ Save button should redirect to the quest detail view, no changes to form data"""
+        self.client.force_login(self.test_teacher)
 
-    #     ct = ContentType.objects.get_for_model(self.prereq_quest)
+        ct = ContentType.objects.get_for_model(self.prereq_quest)
 
-    #     forms_data = [
-    #         {
-    #             "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
-    #             "prereq_count": '1',
-    #             # "or_prereq_object": None,
-    #             "or_prereq_count": '1',
-    #             "id": f'{self.parent_quest.pk}'
-    #         },
-    #     ]
+        forms_data = [
+            {
+                "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+                "prereq_count": '1',
+                # "or_prereq_object": None,
+                "or_prereq_count": '1',
+                "id": f'{self.parent_quest.pk}'
+            },
+        ]
 
-    #     formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
-    #     response = self.client.post(
-    #         reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
-    #         data=formset_data
-    #     )
+        formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data=formset_data
+        )
 
-    #     # If successfully submitted, the form should validate and then redirect to the quest's detail page
-    #     # If get 200 then means probably a form is invalid.
-    #     self.assertRedirects(response, self.parent_quest.get_absolute_url())
+        # If successfully submitted, the form should validate and then redirect to the quest's detail page
+        # If get 200 then means probably a form is invalid.
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     def test_post_save_button__delete(self):
         """ Flag the prereq for deletion by setting the DELETE field to true"""
@@ -1172,53 +1171,52 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         # TODO should no longer have the prereq.. but this doesn't work for some reason....
         # self.assertEqual(self.parent_quest.prereqs().count(), 0)
 
-    # TODO: broken
-    # def test_post_save_button__new_values(self):
-    #     """ New prereq data in form should change the prereqs for the parent quest."""
-    #     self.client.force_login(self.test_teacher)
-    #     new_quest = baker.make(Quest, name="New Quest")
-    #     new_quest_2 = baker.make(Quest, name="New Quest 2")
-    #     ct = ContentType.objects.get_for_model(Quest)
+    def test_post_save_button__new_values(self):
+        """ New prereq data in form should change the prereqs for the parent quest."""
+        self.client.force_login(self.test_teacher)
+        new_quest = baker.make(Quest, name="New Quest")
+        new_quest_2 = baker.make(Quest, name="New Quest 2")
+        ct = ContentType.objects.get_for_model(Quest)
 
-    #     forms_data = [
-    #         {
-    #             "prereq_object": f"{ct.id}-{new_quest.id}",
-    #             "prereq_count": '3',
-    #             # "or_prereq_object": None,
-    #             "or_prereq_count": '1',
-    #             "id": f'{self.parent_quest.pk}'
-    #         },
-    #         {
-    #             "prereq_object": f"{ct.id}-{new_quest_2.id}",
-    #             "prereq_count": '1',
-    #             # "or_prereq_object": None,
-    #             "or_prereq_count": '1',
-    #             "id": f'{self.parent_quest.pk}'
-    #         },
-    #     ]
+        forms_data = [
+            {
+                "prereq_object": f"{ct.id}-{new_quest.id}",
+                "prereq_count": '3',
+                # "or_prereq_object": None,
+                "or_prereq_count": '1',
+                "id": f'{self.parent_quest.pk}'
+            },
+            {
+                "prereq_object": f"{ct.id}-{new_quest_2.id}",
+                "prereq_count": '1',
+                # "or_prereq_object": None,
+                "or_prereq_count": '1',
+                "id": f'{self.parent_quest.pk}'
+            },
+        ]
 
-    #     formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
-    #     response = self.client.post(
-    #         reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
-    #         data=formset_data
-    #     )
+        formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data=formset_data
+        )
 
-    #     # If successfully submitted, the form should validate and then redirect to the quest's detail page
-    #     # If get 200 then means probably a form is invalid.
-    #     self.assertRedirects(response, self.parent_quest.get_absolute_url())
+        # If successfully submitted, the form should validate and then redirect to the quest's detail page
+        # If get 200 then means probably a form is invalid.
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
-    #     # Check that the prereqs were updated
-    #     self.parent_quest.refresh_from_db()
-    #     prereqs = self.parent_quest.prereqs()
-    #     self.assertEqual(prereqs.count(), 2)
+        # Check that the prereqs were updated
+        self.parent_quest.refresh_from_db()
+        prereqs = self.parent_quest.prereqs()
+        self.assertEqual(prereqs.count(), 2)
 
-    #     # TODO For some reason the original prereq is not getting replaced by the first form in the formset.
-    #     # print(prereqs)
-    #     # self.assertEqual(prereqs[0].prereq_object, new_quest)
-    #     # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
+        # TODO For some reason the original prereq is not getting replaced by the first form in the formset.
+        # print(prereqs)
+        # self.assertEqual(prereqs[0].prereq_object, new_quest)
+        # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
 
-    #     # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
-    #     # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
+        # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
+        # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
 
     
 class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
