@@ -6,13 +6,13 @@ from django.core.exceptions import ValidationError
 from django_tenants.test.cases import TenantTestCase
 from queryset_sequence import QuerySetSequence
 
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import GFKChoiceField
 
 
 User = get_user_model()
 
 
-class ContentObjectChoiceFieldTest(TenantTestCase):
+class GFKChoiceFieldTest(TenantTestCase):
 
     def setUp(self):
         self.user1 = User.objects.create(username="johndoe", first_name="John", last_name="Doe")
@@ -23,7 +23,7 @@ class ContentObjectChoiceFieldTest(TenantTestCase):
         return "{}-{}".format(ContentType.objects.get_for_model(obj).pk, obj.pk)
 
     def test_basics(self):
-        f = ContentObjectChoiceField(
+        f = GFKChoiceField(
             queryset=QuerySetSequence(
                 User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]),
                 Group.objects.filter(pk__in=[self.group1.pk]),

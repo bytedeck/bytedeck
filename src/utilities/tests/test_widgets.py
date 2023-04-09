@@ -14,7 +14,7 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import GFKChoiceField
 from utilities.widgets import ContentObjectSelect2Widget
 
 
@@ -35,7 +35,7 @@ class CustomContentObjectSelect2Widget(ContentObjectSelect2Widget):
 
 
 class ContentObjectsSelect2WidgetForm(forms.Form):
-    f = ContentObjectChoiceField(
+    f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),

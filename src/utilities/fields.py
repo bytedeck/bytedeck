@@ -62,7 +62,7 @@ class QuerySetSequenceFieldMixin(object):
         return value.split('-', 1)
 
 
-class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
+class GFKChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
     """
     Replacement for ModelChoiceField supporting QuerySetSequence choices.
 
@@ -123,7 +123,7 @@ class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceFiel
         return getattr(instance, name)
 
 
-class AllowedContentObjectChoiceField(ContentObjectChoiceField):
+class AllowedGFKChoiceField(GFKChoiceField):
 
     widget = ContentObjectSelect2Widget
 

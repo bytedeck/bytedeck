@@ -2,12 +2,21 @@ from django import forms
 from django.contrib.contenttypes.models import ContentType
 
 from utilities.forms import FutureModelForm
-from utilities.fields import AllowedContentObjectChoiceField as ContentObjectChoiceField
+from utilities.fields import AllowedGFKChoiceField
 
 from .models import CytoScape
 
 
-class AllowedContentObjectChoiceField(ContentObjectChoiceField):
+class CytoscapeContentObjectChoiceField(AllowedGFKChoiceField):
+    """
+    Provides ContentTypes that are part of CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
+    formatted for utilities.fields.AllowedGFKChoiceField use
+
+    from prerequisites.forms:
+        Can't always dynamically load this list due to accessing contenttypes too early
+        So instead provide a hard coded list which is checked during testing to ensure it matches
+        what the dynamically loaded list would have produced
+    """
 
     def get_allowed_model_classes(self):
         model_classes = [
@@ -30,7 +39,7 @@ class GenerateQuestMapForm(FutureModelForm):
 
     name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
     
-    initial_content_object = AllowedContentObjectChoiceField(label='Initial Object')
+    initial_content_object = CytoscapeContentObjectChoiceField(label='Initial Object')
 
     parent_scape = forms.ModelChoiceField(
         label='Parent Quest Map', 

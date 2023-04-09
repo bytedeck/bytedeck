@@ -17,7 +17,7 @@ from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import GFKChoiceField
 from utilities.widgets import ContentObjectSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
@@ -31,7 +31,7 @@ def random_string(n):
 
 
 class ContentObjectsSelect2WidgetForm(forms.Form):
-    f = ContentObjectChoiceField(
+    f = GFKChoiceField(
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),

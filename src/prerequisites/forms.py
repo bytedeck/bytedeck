@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 
 
 from utilities.forms import FutureModelForm
-from utilities.fields import AllowedContentObjectChoiceField as ContentObjectChoiceField
+from utilities.fields import AllowedGFKChoiceField
 
 from .models import Prereq
 
@@ -29,8 +29,12 @@ def popover_labels(model, field_strings):
     return fields_html
 
 
-class AllowedContentObjectChoiceField(ContentObjectChoiceField):
-
+class PrereqContentObjectChoiceField(AllowedGFKChoiceField):
+    """
+    Can't always dynamically load this list due to accessing contenttypes too early
+    So instead provide a hard coded list which is checked during testing to ensure it matches
+    what the dynamically loaded list would have produced
+    """
     def get_allowed_model_classes(self):
         return Prereq.all_registered_model_classes()
 
@@ -38,9 +42,9 @@ class AllowedContentObjectChoiceField(ContentObjectChoiceField):
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = AllowedContentObjectChoiceField()
+    prereq_object = PrereqContentObjectChoiceField()
 
-    or_prereq_object = AllowedContentObjectChoiceField(required=False)
+    or_prereq_object = PrereqContentObjectChoiceField(required=False)
         
     class Meta:
         model = Prereq
