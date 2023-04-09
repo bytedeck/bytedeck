@@ -45,7 +45,7 @@ class CustomSignupForm(SignupFormAccessCodeValidatorMixin, SignupForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['username'].help_text = 'Ask your teacher what you should be using for your username. Username is not case sensitive'
+        self.fields['username'].help_text = 'Username is not case sensitive'
 
 
 class CustomSocialAccountSignupForm(SignupFormAccessCodeValidatorMixin, socialaccount_forms.SignupForm):
