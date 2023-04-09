@@ -166,7 +166,17 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         return context
 
 
-class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
+class ProfileOwnerOrIsStaffMixin:
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        profile_user = self.get_object().user
+        if profile_user == self.request.user or self.request.user.is_staff:
+            return super().dispatch(*args, **kwargs)
+        raise Http404("Sorry, this profile isn't yours!")
+
+
+class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateView):
     model = Profile
     profile_form_class = ProfileForm
     user_form_class = UserForm
@@ -182,14 +192,6 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
             forms.append(self.get_user_form())
 
         return forms
-
-    @method_decorator(login_required)
-    def dispatch(self, *args, **kwargs):
-        profile_user = self.get_object().user
-        if profile_user == self.request.user or self.request.user.is_staff:
-            return super().dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this profile isn't yours!")
 
     def post(self, request, *args, **kwargs):
         forms = self.get_forms()
