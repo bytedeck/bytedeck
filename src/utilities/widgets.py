@@ -1,5 +1,4 @@
 import copy
-import six
 import operator
 from functools import reduce
 
@@ -10,7 +9,7 @@ from django_select2.forms import HeavySelect2Widget
 from queryset_sequence import QuerySetSequence
 
 
-class ContentObjectSelect2Mixin(object):
+class GFKSelect2Mixin:
     queryset = None
     search_fields = {}
     """
@@ -26,9 +25,9 @@ class ContentObjectSelect2Mixin(object):
 
     @property
     def empty_label(self):
-        from utilities.fields import ContentObjectChoiceIterator
+        from utilities.fields import GFKChoiceIterator
 
-        if isinstance(self.choices, ContentObjectChoiceIterator):
+        if isinstance(self.choices, GFKChoiceIterator):
             return self.choices.field.empty_label
         return ''
 
@@ -135,7 +134,7 @@ class ContentObjectSelect2Mixin(object):
             results = ctype(ctype_pk).model_class().objects.filter(pk__in=ids)
 
             self.choices += [
-                ('%s-%s' % (ctype_pk, r.pk), self.label_from_instance(r))
+                (f'{ctype_pk}-{r.pk}', self.label_from_instance(r))
                 for r in results
             ]
 
@@ -145,7 +144,7 @@ class ContentObjectSelect2Mixin(object):
 
         """
         # Filter out None values, not needed for autocomplete
-        selected_choices = [six.text_type(c) for c in value if c]
+        selected_choices = [str(c) for c in value if c]
         all_choices = copy.copy(self.choices)
         if self.get_url():
             self.filter_choices_to_render(selected_choices)
@@ -160,7 +159,7 @@ class ContentObjectSelect2Mixin(object):
         return str(obj)
 
 
-class GFKSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
+class GFKSelect2Widget(GFKSelect2Mixin, HeavySelect2Widget):
     """
     Select2 drop in content object select widget.
 
@@ -200,4 +199,3 @@ class GFKSelect2Widget(ContentObjectSelect2Mixin, HeavySelect2Widget):
         Therefore you don't need to define a QuerySetSequence,
         if you just drop in the widget for a GFKChoiceField field.
     """
-    pass
