@@ -8,25 +8,19 @@
 {% block heading %}{% trans "Sign In" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 
 {% block content %}
-  {% if config.enable_google_signin %}
-    <p>{% blocktrans with site.name as site_name %}Please sign in via Google. Or, <a href="{{ signup_url }}">sign up</a>
-    for a {{ site_name }} account and sign in below:{% endblocktrans %}</p>
-
+  <p>{% blocktrans %} Sign in via: {% endblocktrans %}</p>
     <div class="socialaccount_ballot">
+      {% include "socialaccount/snippets/login_extra.html" %}
 
-      <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
-
-      <div class="login-or">{% trans 'or' %}</div>
-
+      {% if config.enable_google_signin %}
+        <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
+      {% endif %}
     </div>
 
-  {% include "socialaccount/snippets/login_extra.html" %}
+    <div class="login-or">{% trans 'or' %}</div>
 
-  {% else %}
-    <p>{% blocktrans %}If you have not created an account yet, then please
+  <p>{% blocktrans %}Sign in with your username and password. If you have not created an account yet, then please
     <a href="{{ signup_url }}">sign up</a> first.{% endblocktrans %}</p>
-  {% endif %}
-
   <form class="login" method="POST" action="{% url 'account_login' %}">
     {% csrf_token %}
     {{ form|crispy }}
