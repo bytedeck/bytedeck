@@ -1,11 +1,17 @@
+import json
+
+from django import forms
+from django.core import signing
+from django.contrib.auth import get_user_model
 from django.urls import reverse
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from django.contrib.auth import get_user_model
-
 from model_bakery import baker
 from tags.forms import TagForm
+from tags.widgets import TaggitSelect2Widget
+from taggit.forms import TagField
 from taggit.models import Tag
 from siteconfig.models import SiteConfig
 
@@ -14,31 +20,52 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_dat
 User = get_user_model()
 
 
-class TagAutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
+class TaggitSelect2WidgetForm(forms.Form):
+    tag = TagField(
+        widget=TaggitSelect2Widget(),
+    )
+
+
+class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
+
         Tag.objects.create(name="test-tag")
 
     def test_autocomplete_view(self):
-        """ Make sure django-autocomplete-light view for tag autocomplete widget is accessible"""
-        response = self.client.get(reverse('tags:autocomplete'))
-
+        """ Make sure our custom django-select2 view for tag widget is accessible"""
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.status_code, 200)
 
     def test_autocomplete_view__unauthenticated(self):
         """ The view should return an empty json response if the user is not authenticated """
         self.client.logout()
-        response = self.client.get(reverse('tags:autocomplete'))
+
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.json()['results'], [])
 
     def test_autocomplete_view__authenticated(self):
         """ The view should return tags in json results if the user is authenticated """
         self.client.force_login(baker.make('User'))
-        response = self.client.get(reverse('tags:autocomplete'))
-        json_results = response.json()['results']
-        self.assertEqual(len(json_results), 1)
-        self.assertEqual(json_results[0]['text'], 'test-tag')
+
+        url = reverse('tags:auto-json')
+        form = TaggitSelect2WidgetForm()
+        assert form.as_p()
+        field_id = signing.dumps(id(form.fields['tag'].widget))
+        response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
+        data = json.loads(response.content.decode('utf-8'))
+        assert data['results']
+        self.assertEqual(len(data['results']), 1)
+        self.assertEqual(data['results'][0]['text'], 'test-tag')
 
 
 class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):

@@ -23,7 +23,6 @@ from model_bakery import baker
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
-from quest_manager.views import is_staff_or_TA
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -42,28 +41,6 @@ def create_two_test_files():
     test_file2 = SimpleUploadedFile(test_filename2, b"file_content2", 'text/plain')
 
     return [test_file1, test_file2]
-
-
-class AutocompleteViewTests(ViewTestUtilsMixin, TenantTestCase):
-
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
-    def test_quest_autocomplete_view(self):
-        """ Make sure autocomplete view for this model is accessible and not throwing errors"""
-        response = self.client.get(reverse('quests:quest_autocomplete'))
-        self.assertEqual(response.status_code, 200)
-
-    def test_commondata_autocomplete_view(self):
-        """ Make sure autocomplete view for this model is accessible and not throwing errors"""
-        response = self.client.get(reverse('quests:commonquestinfo_autocomplete'))
-        self.assertEqual(response.status_code, 200)
-
-    # TODO: Campaign Autocomplete <-- why doesn't this work?  should be same as above tests!!!
-    # def test_category_autocomplete_view(self):
-    #     """ Make sure autocomplete view for this model is accessible and not throwing errors"""
-    #     response = self.client.get(reverse('quests:category_autocomplete'))
-    #     self.assertEqual(response.status_code, 200)
 
 
 class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
@@ -1215,7 +1192,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
                 "id": f'{self.parent_quest.pk}'
-            },            
+            },
         ]
 
         formset_data = self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
@@ -2350,20 +2327,28 @@ class Is_staff_or_TA_test(TenantTestCase):
 
     def test_is_staff_or_TA___staff(self):
         """ User is staff, return True """
+        from quest_manager.views import is_staff_or_TA
+
         self.user.is_staff = True
         self.assertTrue(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA___TA(self):
         """ User is TA returns True"""
+        from quest_manager.views import is_staff_or_TA
+
         self.user.profile.is_TA = True
         self.assertTrue(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA___neither(self):
         """ User is not staff or TA, returns False """
+        from quest_manager.views import is_staff_or_TA
+
         self.assertFalse(is_staff_or_TA(self.user))
 
     def test_is_staff_or_TA__anonymous(self):
         """ Anonymous user returns False"""
+        from quest_manager.views import is_staff_or_TA
+
         self.assertFalse(is_staff_or_TA(AnonymousUser()))
 
 

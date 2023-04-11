@@ -1,5 +1,6 @@
 # from mock import patch
 
+from django.utils.six import text_type
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -190,12 +191,11 @@ class IsAPrereqMixinTest(TenantTestCase):
             instance = baker.make(ct.model_class())
             instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
 
-    def test_dal_autocomplete_search_fields__is_implemented(self):
+    def test_gfk_search_fields__is_implemented(self):
         """ All models implementing this Mixin, also implement this method if the default doesn't suffice """
         prereq_models = IsAPrereqMixin.all_registered_model_classes()
         for model in prereq_models:
-            field_name = model.dal_autocomplete_search_fields()
-            model._meta.get_field(field_name)
+            assert all(isinstance(x, text_type) for x in model.gfk_search_fields())
 
     def test_static_content_type_is_registered(self):
         """A content_type representing a model that implements the IsAPrereqMixin returns True

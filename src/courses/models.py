@@ -419,8 +419,8 @@ class Course(IsAPrereqMixin, models.Model):
         return ("title__icontains",)
 
     @staticmethod
-    def dal_autocomplete_search_fields():
-        return "title"
+    def gfk_search_fields():
+        return ["title__icontains"]
 
 
 class CourseStudentQuerySet(models.query.QuerySet):

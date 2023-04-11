@@ -86,8 +86,8 @@ class Category(IsAPrereqMixin, models.Model):
         return ("title__icontains",)
 
     @staticmethod
-    def dal_autocomplete_search_fields():
-        return "title"
+    def gfk_search_fields():  # for AllowedGFKChoiceFiled
+        return ["title__icontains"]
 
     @property
     def name(self):
@@ -139,7 +139,7 @@ class XPItem(models.Model):
         help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
-    date_available = models.DateField(default=timezone.now)  # timezone aware!
+    date_available = models.DateField(default=timezone.localdate)  # timezone aware!
     time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')
@@ -197,6 +197,17 @@ class XPItem(models.Model):
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
+        
+        # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
+        if not self.visible_to_students or self.archived:
+            return False
+        
+        # XPItem/Quest object is inactive if it's a part of an inactive campaign
+        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
+            return False
+        
+        if self.expired():
+            return False
 
         # an XPItem object is inactive if its availability date is in the future
         if self.date_available > now_local.date():
@@ -206,12 +217,8 @@ class XPItem(models.Model):
         if self.date_available == now_local.date() and self.time_available > now_local.time():
             return False
 
-        # a Quest object is inactive if it's a part of an inactive campaign
-        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
-            return False
-
-        # an XPitem object is active if all of the previous criteria are met and it's both visible to students and not expired
-        return self.visible_to_students and not self.expired()
+        # If survived all the conditions, then it's active
+        return True
 
     def is_available(self, user):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
@@ -346,7 +353,7 @@ class QuestQuerySet(models.QuerySet):
             return self.filter(editor=user.id)
 
     def get_pk_met_list(self, user):
-        model_name = '{}.{}'.format(Quest._meta.app_label, Quest._meta.model_name)
+        model_name = f'{Quest._meta.app_label}.{Quest._meta.model_name}'
         pk_met_list = PrereqAllConditionsMet.objects.filter(user=user, model_name=model_name).first()
         if not pk_met_list:
             from prerequisites.tasks import update_quest_conditions_for_user
@@ -464,7 +471,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
 
     @classmethod
     def get_model_name(cls):
-        return '{}.{}'.format(cls._meta.app_label, cls._meta.model_name)
+        return f'{cls._meta.app_label}.{cls._meta.model_name}'
 
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
@@ -779,25 +786,21 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
-        # this logic should probably be removed from this location?
-        # When would I want to return None that isn't already handled?
-        if self.not_submitted_or_inprogress(user, quest):
-            last_submission = self.last_submission(user, quest)
-            if last_submission:
-                ordinal = last_submission.ordinal + 1
-            else:
-                ordinal = 1
+        last_submission = self.last_submission(user, quest)
 
-            new_submission = QuestSubmission(
-                quest=quest,
-                user=user,
-                ordinal=ordinal,
-                semester_id=SiteConfig.get().active_semester.pk,
-            )
-            new_submission.save()
-            return new_submission
+        if last_submission:
+            ordinal = last_submission.ordinal + 1
         else:
-            return None
+            ordinal = 1
+
+        new_submission = QuestSubmission(
+            quest=quest,
+            user=user,
+            ordinal=ordinal,
+            semester_id=SiteConfig.get().active_semester.pk,
+        )
+        new_submission.save()
+        return new_submission
 
     def calculate_xp(self, user):
         """
@@ -962,12 +965,33 @@ class QuestSubmission(models.Model):
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)
 
+    def _fix_ordinal(self):
+        # NOTE: There is a rare bug that we are unable to reproduce as of the moment where a QuestSubmission has the same ordinal.
+        # This is just a temporary hack where it will automatically fix the incorrect ordinal
+        # See issue for context: https://github.com/bytedeck/bytedeck/issues/1260
+        broken_ordinal_start = self.ordinal - 1
+        submissions = QuestSubmission.objects.filter(quest=self.quest, user=self.user, ordinal__gte=self.ordinal - 1).order_by('time_completed')
+
+        for submission in submissions:
+            submission.ordinal = broken_ordinal_start
+            submission.save()
+
+            broken_ordinal_start += 1
+
     def get_previous(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
-        if self.ordinal > 1:
-            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
-        else:
+
+        if self.ordinal is None or self.ordinal <= 1:
             return None
+
+        try:
+            return QuestSubmission.objects.get(quest=self.quest, user=self.user, ordinal=self.ordinal - 1)
+        except QuestSubmission.MultipleObjectsReturned:
+            self._fix_ordinal()
+
+        # Attempt to fetch to previoius after the ordinals are fixed
+        self.refresh_from_db()
+        return self.get_previous()
 
     def get_minutes_to_complete(self):
         """Returns the difference in minutes between first_time_complete and the (creation) timestamp.
