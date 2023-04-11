@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from bootstrap_datepicker_plus.widgets import DateTimePickerInput
 
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
 from .models import Announcement
 
@@ -27,7 +27,7 @@ class AnnouncementForm(forms.ModelForm):
         # > If you don't like <iframe>, then use inplace widget
         # > Or if you're using django-crispy-forms, please use this.
         widgets = {
-            'content': ByteDeckSummernoteSafeWidget(),
+            'content': ByteDeckSummernoteSafeInplaceWidget(),
             'sticky_until': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
             'datetime_released': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
             'datetime_expires': DateTimePickerInput(format='%Y-%m-%d %H:%M'),

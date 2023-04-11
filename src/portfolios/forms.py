@@ -2,7 +2,7 @@ from django import forms
 
 from bootstrap_datepicker_plus.widgets import DatePickerInput
 
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
 from .models import Portfolio, Artwork
 
@@ -12,7 +12,7 @@ class PortfolioForm(forms.ModelForm):
         model = Portfolio
         fields = ['description', 'listed_locally', 'listed_publicly', ]
         widgets = {
-            'description': ByteDeckSummernoteSafeWidget(),
+            'description': ByteDeckSummernoteSafeInplaceWidget(),
         }
 
 
