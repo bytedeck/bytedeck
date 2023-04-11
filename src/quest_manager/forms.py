@@ -10,7 +10,7 @@ from crispy_forms.layout import HTML, Div, Layout
 from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 
 from badges.models import Badge
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget, ByteDeckSummernoteAdvancedWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
 from utilities.fields import RestrictedFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
@@ -81,9 +81,9 @@ class QuestForm(forms.ModelForm):
         }
 
         widgets = {
-            'instructions': ByteDeckSummernoteAdvancedWidget(),
-            'submission_details': ByteDeckSummernoteAdvancedWidget(),
-            'instructor_notes': ByteDeckSummernoteAdvancedWidget(),
+            'instructions': ByteDeckSummernoteAdvancedInplaceWidget(),
+            'submission_details': ByteDeckSummernoteAdvancedInplaceWidget(),
+            'instructor_notes': ByteDeckSummernoteAdvancedInplaceWidget(),
 
             'date_available': DatePickerInput(format='%Y-%m-%d'),
 
@@ -211,7 +211,7 @@ class TAQuestForm(QuestForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeWidget())
+    comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
     attachments = RestrictedFileFormField(required=False,
                                           max_upload_size=16777216,
@@ -278,5 +278,5 @@ class CommonDataForm(forms.ModelForm):
         model = CommonData
         fields = "__all__"
         widgets = {
-            "instructions": ByteDeckSummernoteSafeWidget()
+            "instructions": ByteDeckSummernoteSafeInplaceWidget()
         }

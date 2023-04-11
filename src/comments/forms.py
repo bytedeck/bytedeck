@@ -1,6 +1,6 @@
 from django import forms
 
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
 
 # class CommentForm(forms.ModelForm):
@@ -17,7 +17,7 @@ class CommentForm(forms.Form):
         super(CommentForm, self).__init__(*args, **kwargs)
         # do some more stuff after the object has been created
         if self.wysiwyg:
-            self.fields['comment_text'].widget = ByteDeckSummernoteSafeWidget()
+            self.fields['comment_text'].widget = ByteDeckSummernoteSafeInplaceWidget()
         else:
             self.fields['comment_text'].widget = forms.Textarea(attrs={'rows': 2})
 
