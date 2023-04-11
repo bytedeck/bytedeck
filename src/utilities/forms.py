@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.flatpages.forms import FlatpageForm
 
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 
 from .models import VideoResource, MenuItem
 
@@ -141,7 +141,7 @@ class CustomFlatpageForm(FlatpageForm):
         exclude = ('enable_comments', 'template_name',)
 
         widgets = {
-            'content': ByteDeckSummernoteSafeWidget(),
+            'content': ByteDeckSummernoteAdvancedWidget(),
 
             # https://code.djangoproject.com/ticket/24453
             'sites': forms.MultipleHiddenInput(),

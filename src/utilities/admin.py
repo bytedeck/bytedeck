@@ -3,12 +3,12 @@ from django.contrib.flatpages.models import FlatPage
 from django.contrib.flatpages.admin import FlatPageAdmin
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
-from bytedeck_summernote.admin import ByteDeckSummernoteModelAdmin
+from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
 
 from .models import ImageResource, MenuItem, VideoResource
 
 
-class FlatPageAdmin2(FlatPageAdmin, ByteDeckSummernoteModelAdmin):
+class FlatPageAdmin2(FlatPageAdmin, ByteDeckSummernoteAdvancedModelAdmin):
     list_display = ('url', 'title', 'registration_required',)
     summernote_fields = ('content',)
 

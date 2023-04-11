@@ -10,7 +10,7 @@ from crispy_forms.layout import HTML, Div, Layout
 from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 
 from badges.models import Badge
-from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget, ByteDeckSummernoteAdvancedWidget
 from utilities.fields import RestrictedFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
@@ -81,9 +81,9 @@ class QuestForm(forms.ModelForm):
         }
 
         widgets = {
-            'instructions': ByteDeckSummernoteSafeWidget(),
-            'submission_details': ByteDeckSummernoteSafeWidget(),
-            'instructor_notes': ByteDeckSummernoteSafeWidget(),
+            'instructions': ByteDeckSummernoteAdvancedWidget(),
+            'submission_details': ByteDeckSummernoteAdvancedWidget(),
+            'instructor_notes': ByteDeckSummernoteAdvancedWidget(),
 
             'date_available': DatePickerInput(format='%Y-%m-%d'),
 

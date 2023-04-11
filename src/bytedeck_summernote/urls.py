@@ -1,4 +1,4 @@
-"""Override `SummernoteEditor` class to use customized template file and name"""
+"""Override `SummernoteEditor` class to use customized template file (mandatory for ByteDeck project)"""
 
 from django.urls import path
 

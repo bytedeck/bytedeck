@@ -12,7 +12,7 @@ from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
 from badges.models import Badge
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
-from bytedeck_summernote.admin import ByteDeckSummernoteModelAdmin
+from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin, ByteDeckSummernoteAdvancedModelAdmin
 
 from .signals import tidy_html
 from .models import Quest, Category, QuestSubmission, CommonData
@@ -58,7 +58,7 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
-class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteModelAdmin):
+class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteSafeModelAdmin):
     pass
 
 
@@ -166,7 +166,7 @@ class QuestResource(resources.ModelResource):
                 self.generate_campaign(parent_quest, data_dict)
 
 
-class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
+class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
