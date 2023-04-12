@@ -1,6 +1,6 @@
 from django.apps import apps
 from django.contrib.admin.sites import AdminSite
-from django.db import models
+from django.contrib.flatpages.models import FlatPage
 
 from django_tenants.test.cases import TenantTestCase
 
@@ -20,41 +20,17 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
     def test_admin_model(self):
         """Safe widget (iframe variant) injected into customized admin class"""
         from bytedeck_summernote.admin import (
-            ByteDeckSummernoteSafeInlineModelAdmin,
             ByteDeckSummernoteSafeModelAdmin,
         )
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
-        class SimpleModel(models.Model):
-            foobar = models.TextField()
-
-        class SimpleModelAdmin(ByteDeckSummernoteSafeModelAdmin):
+        class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
             pass
 
-        ma = SimpleModelAdmin(SimpleModel, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["foobar"].widget,
-            ByteDeckSummernoteSafeWidget,
-        )
-
-        class SimpleParentModel(models.Model):
-            foobar = models.TextField()
-
-        class SimpleModel2(models.Model):
-            foobar = models.TextField()
-            parent = models.ForeignKey(SimpleParentModel, on_delete=models.CASCADE)
-
-        class SimpleModelInline(ByteDeckSummernoteSafeInlineModelAdmin):
-            model = SimpleModel2
-
-        class SimpleParentModelAdmin(ByteDeckSummernoteSafeModelAdmin):
-            inlines = [SimpleModelInline]
-
-        ma = SimpleParentModelAdmin(SimpleParentModel, self.site)
-
-        assert isinstance(
-            ma.get_form(None).base_fields["foobar"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteSafeWidget,
         )
 
@@ -63,17 +39,14 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
-        class SimpleModel3(models.Model):
-            foobar = models.TextField()
-
         self.summernote_config["iframe"] = False
 
-        class SimpleModelAdmin(ByteDeckSummernoteSafeModelAdmin):
+        class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
             pass
 
-        ma = SimpleModelAdmin(SimpleModel3, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
-        assert isinstance(ma.get_form(None).base_fields["foobar"].widget, ByteDeckSummernoteSafeInplaceWidget)
+        assert isinstance(ma.get_form(None).base_fields["content"].widget, ByteDeckSummernoteSafeInplaceWidget)
 
         self.summernote_config["iframe"] = True
 
@@ -81,21 +54,23 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
-        class SimpleModel4(models.Model):
-            foo = models.TextField()
-            bar = models.TextField()
+        class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
+            summernote_fields = ("content",)
 
-        class SimpleModelAdmin(ByteDeckSummernoteSafeModelAdmin):
-            summernote_fields = ("foo",)
-
-        ma = SimpleModelAdmin(SimpleModel4, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["foo"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteSafeWidget,
         )
+
+        class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
+            summernote_fields = []
+
+        ma = FlatPageModelAdmin(FlatPage, self.site)
+
         assert not isinstance(
-            ma.get_form(None).base_fields["bar"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteSafeWidget,
         )
 
@@ -115,41 +90,17 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
     def test_admin_model(self):
         """Advanced widget (iframe variant) injected into customized admin class"""
         from bytedeck_summernote.admin import (
-            ByteDeckSummernoteAdvancedInlineModelAdmin,
             ByteDeckSummernoteAdvancedModelAdmin,
         )
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 
-        class SimpleModel(models.Model):
-            foobar = models.TextField()
-
-        class SimpleModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
+        class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
             pass
 
-        ma = SimpleModelAdmin(SimpleModel, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["foobar"].widget,
-            ByteDeckSummernoteAdvancedWidget,
-        )
-
-        class SimpleParentModel(models.Model):
-            foobar = models.TextField()
-
-        class SimpleModel2(models.Model):
-            foobar = models.TextField()
-            parent = models.ForeignKey(SimpleParentModel, on_delete=models.CASCADE)
-
-        class SimpleModelInline(ByteDeckSummernoteAdvancedInlineModelAdmin):
-            model = SimpleModel2
-
-        class SimpleParentModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
-            inlines = [SimpleModelInline]
-
-        ma = SimpleParentModelAdmin(SimpleParentModel, self.site)
-
-        assert isinstance(
-            ma.get_form(None).base_fields["foobar"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteAdvancedWidget,
         )
 
@@ -158,17 +109,14 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
 
-        class SimpleModel3(models.Model):
-            foobar = models.TextField()
-
         self.summernote_config["iframe"] = False
 
-        class SimpleModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
+        class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
             pass
 
-        ma = SimpleModelAdmin(SimpleModel3, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
-        assert isinstance(ma.get_form(None).base_fields["foobar"].widget, ByteDeckSummernoteAdvancedInplaceWidget)
+        assert isinstance(ma.get_form(None).base_fields["content"].widget, ByteDeckSummernoteAdvancedInplaceWidget)
 
         self.summernote_config["iframe"] = True
 
@@ -176,20 +124,22 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 
-        class SimpleModel4(models.Model):
-            foo = models.TextField()
-            bar = models.TextField()
+        class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
+            summernote_fields = ("content",)
 
-        class SimpleModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
-            summernote_fields = ("foo",)
-
-        ma = SimpleModelAdmin(SimpleModel4, self.site)
+        ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["foo"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteAdvancedWidget,
         )
+
+        class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
+            summernote_fields = []
+
+        ma = FlatPageModelAdmin(FlatPage, self.site)
+
         assert not isinstance(
-            ma.get_form(None).base_fields["bar"].widget,
+            ma.get_form(None).base_fields["content"].widget,
             ByteDeckSummernoteAdvancedWidget,
         )
