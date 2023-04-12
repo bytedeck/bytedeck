@@ -19,7 +19,7 @@ jobs:
       - name: Check for missing migrations
         run: docker-compose run web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
-        run: docker-compose run web coverage run src/manage.py test src
+        run: docker-compose run web coverage run src/manage.py test src --parallel 4
       - name: Upload coverage data to coveralls.io
         # https://github.com/coverallsapp/github-action/issues/30#issuecomment-829475358
         run: docker-compose exec --env-file <(env | grep GITHUB_) -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} web coveralls --service=github
