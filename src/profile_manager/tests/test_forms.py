@@ -32,6 +32,7 @@ class ProfileFormTest(TenantTestCase):
             grad_year=Profile.get_grad_year_choices()[0][0]
         )
         form = ProfileForm(instance=self.user.profile, data=form_data)
+        form.is_valid()
         form.save()
 
     def tearDown(self) -> None:

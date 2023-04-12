@@ -3,6 +3,8 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from allauth.utils import email_address_exists
+
 from .models import Profile
 
 
@@ -48,6 +50,14 @@ class ProfileForm(forms.ModelForm):
     # UNIQUE if NOT NULL
     def clean_alias(self):
         return self.cleaned_data['alias'] or None
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+
+        if email and email_address_exists(email, exclude_user=self.instance.user):
+            raise forms.ValidationError("A user is already registered with this email address")
+
+        return email
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
