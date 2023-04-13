@@ -2,9 +2,10 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.flatpages.forms import FlatpageForm
-from django_summernote.widgets import SummernoteInplaceWidget
 
-from utilities.models import VideoResource, MenuItem
+from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
+
+from .models import VideoResource, MenuItem
 
 
 class FutureModelForm(forms.ModelForm):
@@ -140,7 +141,7 @@ class CustomFlatpageForm(FlatpageForm):
         exclude = ('enable_comments', 'template_name',)
 
         widgets = {
-            'content': SummernoteInplaceWidget(),
+            'content': ByteDeckSummernoteAdvancedInplaceWidget(),
 
             # https://code.djangoproject.com/ticket/24453
             'sites': forms.MultipleHiddenInput(),
