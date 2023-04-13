@@ -21,7 +21,8 @@
 {% comment %}
 Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_iframe_editor.html
 
-Changes because: using "bytedeck_summernote" namespace
+Changes because: replace "django_summernote/widget_common.html" template with "bytedeck" version
+to avoid clashing with `django_summernote` stock template.
 {% endcomment %}
     {% include "bytedeck_summernote/widget_common.html" with iframe=True %}
 {% comment %} End changes {% endcomment %}
