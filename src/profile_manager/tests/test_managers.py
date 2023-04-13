@@ -29,8 +29,8 @@ class ProfileManagerTest(TenantTestCase):
 
         for user in self.inactive_semester_students:
             baker.make(
-                CourseStudent, 
-                user=user, 
+                CourseStudent,
+                user=user,
                 course=self.course
             )
 
@@ -41,8 +41,8 @@ class ProfileManagerTest(TenantTestCase):
 
         for user in self.active_semester_students:
             baker.make(
-                CourseStudent, 
-                user=user, 
+                CourseStudent,
+                user=user,
                 course=self.course,
                 semester=self.active_semester
             )
@@ -53,7 +53,7 @@ class ProfileManagerTest(TenantTestCase):
         expected_qs = [user.username for user in expected_qs]
 
         self.assertEqual(set(qs), set(expected_qs))
-    
+
     def test_get_active_qs(self):
         qs = Profile.objects.all_active().values_list('user__username', flat=True)
         expected_qs = self.active_inactive_semester_students + self.active_active_semester_students + self.staff_set

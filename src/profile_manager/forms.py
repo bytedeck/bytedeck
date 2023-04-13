@@ -28,6 +28,7 @@ class ProfileForm(forms.ModelForm):
         self.fields['grad_year'] = forms.ChoiceField(
             choices=Profile.get_grad_year_choices()
         )
+
         self.fields['email'].initial = self.instance.user.email
 
         user = self.instance.user

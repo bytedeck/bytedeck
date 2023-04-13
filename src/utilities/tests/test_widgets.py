@@ -55,7 +55,7 @@ class TestGFKSelect2Widget(TenantTestCase):
         )
 
     def _ct_pk(self, obj):
-        return '{}-{}'.format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+        return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
     def test_initial_data(self):
         group = self.groups[0]
@@ -143,7 +143,11 @@ class TestGFKSelect2Widget(TenantTestCase):
         widget.render('name', '1-1')
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
-        response = self.client.get(url, data=dict(field_id=signing.dumps(id(widget)), term=group.name))
+        data = {
+            'field_id': signing.dumps(id(widget)),
+            'term': group.name
+        }
+        response = self.client.get(url, data=data)
         assert response.status_code == 200, response.content
         data = json.loads(response.content.decode('utf-8'))
         assert data['results']

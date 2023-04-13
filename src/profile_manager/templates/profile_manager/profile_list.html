@@ -28,7 +28,7 @@
 {% endblock %}
 
 {% block content %}
-    
+
 <table data-toggle='table'
 data-sort-name='first'
 data-sort-order='asc'
@@ -146,7 +146,7 @@ data-classes="table table-no-bordered table-hover"
                 <td>{{ object.user.last_name|default:"-" }}</td>
 
                 <td>{{ object.alias_clipped|default:"-" }}</td>
-                
+
 
                 {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
 
@@ -168,14 +168,14 @@ data-classes="table table-no-bordered table-hover"
                     {% if config.display_marks_calculation %}
                     <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
                     {% endif %}
-                
+
                 {% endif %}
 
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
                         <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
-                
+
                 {% if request.user.is_staff %}
 
                     {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
@@ -207,7 +207,7 @@ data-classes="table table-no-bordered table-hover"
                     </td>
                     <!-- end `last_login_datetime` -->
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
-                    
+
                     {#      Admin buttons #}
                     {% if view_type != VIEW_TYPES.STAFF %}
                         <td>

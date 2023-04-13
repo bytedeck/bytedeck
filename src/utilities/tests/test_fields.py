@@ -20,7 +20,7 @@ class GFKChoiceFieldTest(TenantTestCase):
         self.group1 = Group.objects.create(name="Editors")
 
     def _ct_pk(self, obj):
-        return "{}-{}".format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+        return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
     def test_basics(self):
         f = GFKChoiceField(

@@ -69,11 +69,11 @@ class PeriodicTaskSignalsTest(TenantTestCase):
     def test_save_SolarSchedule_signal(self):
         """ Saving a SolarSchedule model should also save it in the public schema """
 
-        params = dict(
-            event='sunrise',
-            latitude=37.281248,
-            longitude=-122.000218
-        )
+        params = {
+            'event': 'sunrise',
+            'latitude': 37.281248,
+            'longitude': -122.000218
+        }
         solar_schedule = SolarSchedule(**params)
         solar_schedule.save()
 

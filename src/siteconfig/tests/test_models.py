@@ -120,9 +120,9 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertEqual(user_owner.pk, self.config.deck_owner.pk)
 
     def test_get_default_deck_owner__returns_correct_value(self):
-        """ 
+        """
             Test if get_deck_owner either gets an already created owner user or creates one
-        """ 
+        """
         # owner already exists since tenantSetup runs initialization.py
         owner_user = User.objects.get(username=settings.TENANT_DEFAULT_OWNER_USERNAME, is_staff=True)
         old_owner_pk = owner_user.pk
@@ -135,5 +135,5 @@ class SiteConfigModelTest(TenantTestCase):
         SiteConfig.get().delete()
         owner_user.delete()
 
-        self.assertNotEqual(get_default_deck_owner(), old_owner_pk) 
+        self.assertNotEqual(get_default_deck_owner(), old_owner_pk)
         self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk

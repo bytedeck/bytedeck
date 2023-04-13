@@ -197,15 +197,15 @@ class XPItem(models.Model):
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
         now_local = timezone.now().astimezone(timezone.get_default_timezone())
-        
+
         # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
         if not self.visible_to_students or self.archived:
             return False
-        
+
         # XPItem/Quest object is inactive if it's a part of an inactive campaign
         if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
             return False
-        
+
         if self.expired():
             return False
 

@@ -19,7 +19,7 @@ from .models import Category, Quest, CommonData
 
 class BadgeLabel:
     def label_from_instance(self, obj):
-        return "{} ({} XP)".format(str(obj), obj.xp)
+        return f"{str(obj)} ({obj.xp} XP)"
 
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
@@ -101,7 +101,7 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        super(QuestForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
 
@@ -116,7 +116,7 @@ class QuestForm(forms.ModelForm):
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
             '{% endif %}'
-    
+
         self.helper = FormHelper()
         self.helper.layout = Layout(
             HTML(cancel_btn),
@@ -222,8 +222,8 @@ class SubmissionForm(forms.Form):
 
 class SubmissionFormCustomXP(SubmissionForm):
     xp_requested = forms.IntegerField(
-        label="Requested XP", 
-        required=True, 
+        label="Requested XP",
+        required=True,
         help_text="You need to request an XP value for this submission."
     )
 
@@ -238,7 +238,7 @@ class SubmissionFormStaff(SubmissionForm):
     awards = forms.ModelMultipleChoiceField(queryset=None, label='Grant Awards', required=False)
 
     def __init__(self, *args, **kwds):
-        super(SubmissionFormStaff, self).__init__(*args, **kwds)
+        super().__init__(*args, **kwds)
 
         self.fields['awards'].queryset = Badge.objects.all_manually_granted()
         self.fields['awards'].widget = BadgeSelect2MultipleWidget(
@@ -264,7 +264,7 @@ class SubmissionQuickReplyForm(forms.Form):
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
     def __init__(self, *args, **kwds):
-        super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
+        super().__init__(*args, **kwds)
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 

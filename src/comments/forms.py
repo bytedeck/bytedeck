@@ -14,7 +14,7 @@ class CommentForm(forms.Form):
         self.label = kwargs.pop('label', 'Comment')
         # self.accept_files = kwargs.get('accept_files', False)
 
-        super(CommentForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # do some more stuff after the object has been created
         if self.wysiwyg:
             self.fields['comment_text'].widget = ByteDeckSummernoteSafeInplaceWidget()
