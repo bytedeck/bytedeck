@@ -6,7 +6,7 @@ from django.db.models import ProtectedError
 
 from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
-from mock import patch
+from unittest.mock import patch
 from model_bakery import baker
 
 from courses.models import Block, Course, CourseStudent, ExcludedDate, MarkRange, Rank, Semester
@@ -64,8 +64,8 @@ class MarkRangeTestManager(TenantTestCase):
 class BlockModelManagerTest(TenantTestCase):
 
     def test_grouped_teachers_blocks_equals_one(self):
-        """ 
-            Should only return 1 group of teachers if regardless of the number of Blocks 
+        """
+            Should only return 1 group of teachers if regardless of the number of Blocks
         """
 
         teacher_owner = User.objects.get(username='owner')
@@ -120,7 +120,6 @@ class SemesterModelManagerTest(TenantTestCase):
     def test_complete_active_semester(self):
         """ set current semester to closed and do lots of stuff..  """
         # TODO
-        pass
 
 
 class SemesterModelTest(TenantTestCase):
@@ -280,11 +279,11 @@ class CourseModelTest(TenantTestCase):
         self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
     def test_model_protection(self):
-        """ 
+        """
             Quick test to see if Course model deletion is prevented when trying to delete Course model programmatically
 
             Course deletion is only prevented when there are CourseStudent models linked via foreign key to the Course model
-        """ 
+        """
         # make sure initial variables are inplace
         student = baker.make(User)
         course_student = baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
@@ -355,10 +354,10 @@ class BlockModelTest(TenantTestCase):
         self.block = baker.make(Block)
 
     def test_model_protection(self):
-        """ 
+        """
             Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
             Block deletion is only prevented when there are CourseStudent models linked via foreign key to the Block model
-        """ 
+        """
         # Setup
 
         course_student = baker.make(CourseStudent, user=self.student, block=self.block)
@@ -382,7 +381,7 @@ class BlockModelTest(TenantTestCase):
         # Register student in a course in self.block, but not the active semester, condition still not met for self.block
         baker.make(CourseStudent, user=self.student, block=self.block, semester=baker.make(Semester))
         self.assertFalse(self.block.condition_met_as_prerequisite(self.student))
-        
+
         # Finally, register student in a course in self.block, and active semester, NOW condition is met for self.block
         baker.make(CourseStudent, user=self.student, block=self.block, semester=SiteConfig.get().active_semester)
         self.assertTrue(self.block.condition_met_as_prerequisite(self.student))
@@ -404,7 +403,7 @@ class RankManagerTest(TenantTestCase):
         self.assertEqual(rank_2000, Rank.objects.get_rank(2001))
         self.assertEqual(rank_3000, Rank.objects.get_rank(3000))
         self.assertEqual(rank_3000, Rank.objects.get_rank(3001))
-     
+
     def test_get_rank__0XP_and_deleted(self):
         """ There is a default rank at 0 XP, and the site doesn't break if that rank is missing """
         rank_0 = Rank.objects.get_rank(0)

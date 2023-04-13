@@ -38,7 +38,7 @@ def prettify_code_selected_quests(modeladmin, request, queryset):
         quest.instructions = tidy_html(quest.instructions)
 
     Quest.objects.bulk_update(queryset, ['instructions'])
-    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    msg_str = f"Quest instructions html prettified for the {len(queryset)} selected quest(s)."
     messages.success(request, msg_str)
 
 
@@ -47,7 +47,7 @@ def fix_whitespace_bug(modeladmin, request, queryset):
         quest.instructions = tidy_html(quest.instructions, fix_runaway_newlines=True)
 
     Quest.objects.bulk_update(queryset, ['instructions'])
-    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    msg_str = f"Quest instructions html prettified for the {len(queryset)} selected quest(s)."
     messages.success(request, msg_str)
 
 
@@ -170,7 +170,7 @@ class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvanced
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor',
                    'specific_teacher_to_notify', 'common_data', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description', 'campaign__title']
     inlines = [

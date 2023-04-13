@@ -25,7 +25,7 @@ class ArtworkForm(forms.ModelForm):
         }
 
     def clean(self):
-        cleaned_data = super(ArtworkForm, self).clean()
+        cleaned_data = super().clean()
         image_file = cleaned_data.get("image_file")
         video_file = cleaned_data.get("video_file")
         video_url = cleaned_data.get("video_url")

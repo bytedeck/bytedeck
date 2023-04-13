@@ -22,7 +22,7 @@ def get_tags_from_user(user):
     # get models through here to prevent circular imports
     QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
     BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
-    
+
     # tags related to user's quests
     quest_ids = QuestSubmission.objects.filter(user=user).distinct().values_list('quest', flat=True)
     quest_tags = Tag.objects.filter(quest__id__in=quest_ids)
@@ -52,7 +52,7 @@ def get_quest_submission_by_tag(user, tags):
 
     return QuestSubmission.objects.all_approved(user, active_semester_only=True).filter(
         quest__tags__name__in=list(tags),
-        is_completed=True, 
+        is_completed=True,
         do_not_grant_xp=False
     ).distinct()
 
@@ -74,13 +74,13 @@ def get_badge_assertion_by_tags(user, tags):
 
     return BadgeAssertion.objects.all_for_user(user).filter(
         badge__tags__name__in=list(tags),
-        semester=SiteConfig.get().active_semester, 
+        semester=SiteConfig.get().active_semester,
         do_not_grant_xp=False
     ).distinct()
-    
+
 
 def get_quest_submission_total_xp(user, tags):
-    """ 
+    """
     returns total quest xp related to user and tags
 
     Args:
@@ -118,13 +118,13 @@ def get_quest_submission_total_xp(user, tags):
         else:
             # Prevent xp going over the maximum gainable xp
             # quest__max_xp is None if quest is deleted, so `or 0`
-            total_xp += min(xp, sub['quest__max_xp'] or 0)  
+            total_xp += min(xp, sub['quest__max_xp'] or 0)
 
     return total_xp
 
 
 def get_badge_assertion_total_xp(user, tags):
-    """ 
+    """
     returns total quest xp related to user and tags
 
     Args:
@@ -174,7 +174,7 @@ def get_user_tags_and_xp(user):
     for tag in user_related_tags:
         total_xp = total_xp_by_tags(user, [tag])
         tag_info_tuple.append((tag, total_xp))
-    
+
     # sort by total xp (descending order) then return
     return sorted(tag_info_tuple, key=lambda tag_tuple: tag_tuple[1])[::-1]
 

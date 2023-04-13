@@ -1,4 +1,3 @@
-from __future__ import absolute_import, unicode_literals
 import json
 
 from django.urls import reverse
@@ -45,7 +44,7 @@ def get_notification_emails(root_url):
 def generate_notification_email(user, root_url):
     """Generate an email notification from user"""
     html_template = get_template('notifications/email_notifications.html')
-    subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
+    subject = f'{SiteConfig.get().site_name_short} Notifications'
     to_email_address = user.email
     unread_notifications = Notification.objects.all_unread(user)
     if user.is_staff:
@@ -69,7 +68,7 @@ def generate_notification_email(user, root_url):
         return email_msg
     else:
         return None
-    
+
 
 def create_email_notification_tasks():
     """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
@@ -81,7 +80,7 @@ def create_email_notification_tasks():
     # https://docs.djangoproject.com/en/3.2/ref/applications/#django.apps.AppConfig.ready
     # Can't import models at the module level, so need to import in the method.
     from django_celery_beat.models import CrontabSchedule, PeriodicTask
-    
+
     minute = 0
 
     for tenant in get_tenant_model().objects.exclude(schema_name='public'):

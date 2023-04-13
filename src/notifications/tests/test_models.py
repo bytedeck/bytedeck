@@ -66,58 +66,58 @@ class NotificationModelTest(TenantTestCase):
 
 
 class NotificationModel_html_strip_Test(TenantTestCase):
-    """  
+    """
         This test class is specialized on testing the html_strip() method of Notification model
-    """ 
+    """
 
     def setUp(self):
         pass
-    
+
     def test_notification_html_strip__check_with_no_html(self):
-        """ 
+        """
             Base case test to see if html_strip() wont strip normal text
         """
         test_case = "TEST CASE 1 NO STRIPPED TAGS"
         expected_case = "TEST CASE 1 NO STRIPPED TAGS"
 
         self.assertEqual(
-            Notification.html_strip(test_case), 
+            Notification.html_strip(test_case),
             expected_case
         )
-        
+
     def test_notification_html_strip__check_with_html(self):
-        """ 
-            Test that html_strip() strips out any html tags (excluding img). 
+        """
+            Test that html_strip() strips out any html tags (excluding img).
             <img> tags are not tested here.
         """
         test_case = "<p>TEST CASE 2</p> WITH <h1>HTML</h1> TAGS"
         expected_case = "TEST CASE 2 WITH HTML TAGS"
 
         self.assertEqual(
-            Notification.html_strip(test_case), 
+            Notification.html_strip(test_case),
             expected_case
         )
 
     def test_notification_html_strip__check_with_img_tag(self):
-        """ 
+        """
             Test that html_strip() wont strip out any img tags.
-        """ 
+        """
         test_case = 'TEST CASE 3 WITH IMG <img src="SOURCE" style="should be empty"></img> TAG'
         expected_case = 'TEST CASE 3 WITH IMG <img height="20px" src="SOURCE" style="" width="auto"/> TAG'
 
         self.assertEqual(
-            Notification.html_strip(test_case), 
+            Notification.html_strip(test_case),
             expected_case
         )
 
     def test_notification_html_strip__check_with_html_and_img_tag(self):
         """
-            Test that html_strip() strips out any html tags and excludes img tags. 
-        """ 
+            Test that html_strip() strips out any html tags and excludes img tags.
+        """
         test_case = '<h1>TEST CASE 4</h1> <p>HTML</p> AND IMG <img src="SOURCE" style="should be empty"></img> TAGS'
         expected_case = 'TEST CASE 4 HTML AND IMG <img height="20px" src="SOURCE" style="" width="auto"/> TAGS'
 
         self.assertEqual(
-            Notification.html_strip(test_case), 
+            Notification.html_strip(test_case),
             expected_case
         )

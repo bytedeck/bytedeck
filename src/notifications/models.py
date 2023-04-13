@@ -126,7 +126,7 @@ class Notification(models.Model):
     objects = NotificationManager()
 
     def html_strip(string, char_limit=50, tag_size=1, resize_image=True, image_height=20, **kwargs) -> str:
-        """  
+        """
             Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
 
             tag_size: how many letters an image should count as
@@ -151,8 +151,8 @@ class Notification(models.Model):
             # check for open img
             if char == "<" and string[index:].startswith("<img"):
                 cache_open_index = index
-            
-            # check for closed if open already found 
+
+            # check for closed if open already found
             elif cache_open_index is not None and char == ">":
                 # position img tag would be without html tags
                 offset = cache_open_index - len(strip_tags(string[:cache_open_index]))
@@ -178,7 +178,7 @@ class Notification(models.Model):
         stripped = strip_tags(string)
         text = stripped[:char_limit]
         limit_imposed = len(stripped) > char_limit
-        
+
         # reinsert tags with new stripped text
         for tag, index in html_index.items():
             if index < char_limit:
@@ -193,7 +193,7 @@ class Notification(models.Model):
                 img['width'] = "auto"
 
             text = str(soup)
-            
+
         return text + ("..." if limit_imposed else "")
 
     def __str__(self):
@@ -202,7 +202,7 @@ class Notification(models.Model):
 
             # Is this the right place to do this?
             if 'commented on' in self.verb:
-                target_url += '#comment-{}'.format(self.action_object_id)
+                target_url += f'#comment-{self.action_object_id}'
         except AttributeError:
             target_url = None
 
@@ -241,7 +241,7 @@ class Notification(models.Model):
         # print("***** NOTIFICATION.get_url **********")
         try:
             target_url = self.target_object.get_absolute_url()
-        except:  # noqa 
+        except:  # noqa
             # TODO make this except explicit, don't remember what it's doing
             target_url = reverse('notifications:list')
 
@@ -343,7 +343,7 @@ def new_notification(sender, **kwargs):
                     if obj is not None:
                         setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
                         setattr(new_note, "%s_object_id" % option, obj.id)
-                except:  # noqa 
+                except:  # noqa
                     # TODO make this except explicit, don't remember what it's doing
                     pass
             new_note.save()

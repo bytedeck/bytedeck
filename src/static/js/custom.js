@@ -35,5 +35,5 @@ $(document).ready(function() {
      $('.note-unread').find('.accordian-trigger').click(function() {
        window.location.href = $(this).attr("href");
      });
-    
+
 });

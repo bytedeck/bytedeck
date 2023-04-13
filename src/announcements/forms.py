@@ -14,7 +14,7 @@ class AnnouncementForm(forms.ModelForm):
     # formfield_callback = make_custom_datetimefield
 
     def __init__(self, *args, **kwargs):
-        super(AnnouncementForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.fields['datetime_released'].initial = (
             datetime.now().strftime('%Y-%m-%d %H:%M')
         )

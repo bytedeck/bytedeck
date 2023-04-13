@@ -18,13 +18,13 @@ def generate_students(num=100, quiet=False):
     Enter Tenant Schema ('?' to list schemas): tenant_name
 
     In [1]: from hackerspace_online.shell_utils import generate_students
-    
-    In [2]: generate_students(100)   
+
+    In [2]: generate_students(100)
     """
 
-    if not quiet: 
-        print(f"Generating {num} students:") 
-    for i in range(num):
+    if not quiet:
+        print(f"Generating {num} students:")
+    for _i in range(num):
         # firstname.lastname
         first = names.get_first_name()
         last = names.get_last_name()
@@ -36,28 +36,28 @@ def generate_students(num=100, quiet=False):
         if not quiet:
             print(user)
 
-    if not quiet: 
+    if not quiet:
         print(f"\n{num} students generated.")
 
 
 def generate_quests(num_quest_per_campaign=10, num_campaigns=5, quiet=False):
-    """ Generates 100 quests and 10 badges with prerequisites... just for fun 
+    """ Generates 100 quests and 10 badges with prerequisites... just for fun
     """
 
     start_badge = Badge.objects.get(import_id="fa3b0518-cf9c-443c-8fe4-f4a887b495a7")
 
-    if not quiet: 
-        print("Generating content...") 
-    
-    for i in range(num_campaigns):
+    if not quiet:
+        print("Generating content...")
+
+    for _i in range(num_campaigns):
         initial_quest = Quest.objects.create(
             name=namegenerator.gen(),
             xp=random.randint(0, 20)
         )
         initial_quest.add_simple_prereqs([start_badge])
         last_quest = initial_quest
-        
-        for j in range(num_quest_per_campaign - 1):
+
+        for _j in range(num_quest_per_campaign - 1):
             quest = Quest.objects.create(
                 name=namegenerator.gen(),
                 xp=random.randint(0, 20)
@@ -65,10 +65,10 @@ def generate_quests(num_quest_per_campaign=10, num_campaigns=5, quiet=False):
             quest.add_simple_prereqs([last_quest])
             last_quest = quest
 
-            if not quiet: 
+            if not quiet:
                 print(quest)
 
-    if not quiet: 
+    if not quiet:
         print(f"{num_quest_per_campaign*num_campaigns} Quests generated in {num_campaigns} campaigns.")
 
 
@@ -80,8 +80,8 @@ def generate_content(num_quest_per_campaign=10, num_campaigns=5, num_students=10
     Enter Tenant Schema ('?' to list schemas): tenant_name
 
     In [1]: from hackerspace_online.shell_utils import generate_content
-    
-    In [2]: generate_content(10, 5, 100)   
+
+    In [2]: generate_content(10, 5, 100)
     """
     generate_quests(num_quest_per_campaign=num_quest_per_campaign, num_campaigns=num_campaigns, quiet=quiet)
     generate_students(num=num_students, quiet=quiet)

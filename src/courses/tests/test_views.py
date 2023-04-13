@@ -43,7 +43,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_all_rank_page_status_codes_for_students(self):
         ''' If logged in as student then all views except ranks list view should redirect to login page '''
         self.client.force_login(self.test_student1)
-        self.assert200('courses:ranks') 
+        self.assert200('courses:ranks')
 
         # staff access only
         self.assert403('courses:rank_create')
@@ -54,7 +54,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
         self.client.force_login(self.test_teacher)
 
-        self.assert200('courses:ranks') 
+        self.assert200('courses:ranks')
         self.assert200('courses:rank_create')
         self.assert200('courses:rank_update', args=[1])
         self.assert200('courses:rank_delete', args=[1])
@@ -77,7 +77,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Should contain 13 default ranks e.g. Digital Novice, Digital Ameteur II, etc
         self.assertEqual(response.context['object_list'].count(), 13)
-        
+
     def test_RankCreate_view(self):
         """ Admin should be able to create a rank """
         self.client.force_login(self.test_teacher)
@@ -267,10 +267,10 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Staff can update a student's course """
 
         course_student = baker.make(
-            CourseStudent, 
-            user=self.test_student1, 
-            course=self.course, 
-            block=self.block, 
+            CourseStudent,
+            user=self.test_student1,
+            course=self.course,
+            block=self.block,
             semester=SiteConfig.get().active_semester
         )
         new_course = baker.make(Course)
@@ -297,7 +297,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         add_course_url = reverse('courses:join', args=[self.test_student1.id])
 
         response = self.client.get(add_course_url)
-        self.assertContains(response, 'Adding a course for {student}'.format(student=self.test_student1))
+        self.assertContains(response, f'Adding a course for {self.test_student1}')
 
         response = self.client.post(add_course_url, data=self.valid_form_data)
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
@@ -392,17 +392,17 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
     def test_CourseDelete_view__with_students(self):
-        """ 
+        """
             Admin should not be able to delete course with a student registered
             Also checks if course can be deleted with a forced post method
-        """ 
+        """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
         # register student to course
         course_student = baker.make(CourseStudent, user=self.test_student1, semester=self.sem, block=self.block, course=self.course,)
-        self.assertEquals(CourseStudent.objects.count(), 1)
-        self.assertEquals(CourseStudent.objects.first().pk, course_student.pk)
+        self.assertEqual(CourseStudent.objects.count(), 1)
+        self.assertEqual(CourseStudent.objects.first().pk, course_student.pk)
 
         # confirm course existence
         self.assertTrue(Course.objects.exists())
@@ -486,11 +486,14 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
-    def generate_dates(quantity, dates=[]): 
+    def generate_dates(quantity, dates=None):
         """
             Small recursive function that gets n unique dates
         """
-        if max(quantity, 0) == 0: 
+        if dates is None:
+            dates = []
+
+        if max(quantity, 0) == 0:
             return dates
 
         dates += [datetime.date(
@@ -530,7 +533,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(Semester.objects.count(), 2)
 
     def test_SemesterCreate__with_ExcludedDates__view(self):
-        """ 
+        """
             Test for SemesterCreate with correct/valid post data.
             valid post data includes default values for SemesterForm, randomly generated values for ExcludedDateFormset
         """
@@ -555,7 +558,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertTrue(ed.date in exclude_dates)
 
     def test_SemesterCreate__add_without_required_fields__view(self):
-        """ 
+        """
             Test for SemesterCreate with leaving required fields blank
         """
         self.client.force_login(self.test_teacher)
@@ -580,17 +583,17 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('courses:semester_update', args=[1]), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
-    
+
     def test_SemesterUpdate__add_data__view(self):
-        """ 
+        """
              Test for SemesterUpdate with correct/valid post data.
              Only add data for ExcludeDateFormset related fields
-        """ 
+        """
         self.client.force_login(self.test_teacher)
 
         # need to generate dates here sinces its unique only (generate_formset_data cant handle validators)
         exclude_dates = SemesterViewTests.generate_dates(5)
-        
+
         semester = SiteConfig.get().active_semester
 
         post_data = {
@@ -605,10 +608,10 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertTrue(ed.date in exclude_dates)
 
     def test_SemesterUpdate__update_data__view(self):
-        """ 
+        """
              Test for SemesterUpdate with correct/valid post data.
              Only update/add data for ExcludeDateFormset related fields
-        """ 
+        """
         self.client.force_login(self.test_teacher)
         semester = SiteConfig.get().active_semester
         dates = SemesterViewTests.generate_dates(13)
@@ -618,7 +621,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # load data to semester before updating it
         excludeddates_set = baker.make(ExcludedDate, semester=semester, date=itertools.cycle(old_exclude_dates), _quantity=len(old_exclude_dates))
-        
+
         form_data = model_to_form_data(semester, SemesterForm)
         formset_data = generate_formset_data(ExcludedDateFormset, quantity=len(updated_exclude_dates), date=itertools.cycle(updated_exclude_dates))
 
@@ -638,13 +641,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertTrue(ed.date in updated_exclude_dates)
 
     def test_SemesterUpdate__delete_data__view(self):
-        """ 
+        """
              Test for SemesterUpdate with correct/valid post data.
              Only delete data for ExcludeDateFormset related fields
-        """ 
+        """
         self.client.force_login(self.test_teacher)
         semester = SiteConfig.get().active_semester
-        
+
         dates = SemesterViewTests.generate_dates(10)
         excludeddates_set = baker.make(ExcludedDate, semester=semester, date=itertools.cycle(dates), _quantity=len(dates))
 
@@ -745,10 +748,10 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
     def test_BlockDelete_view__with_students(self):
-        """ 
+        """
             Admin should not be able to delete block with a student registered
             Also checks if block can be deleted with a forced post method
-        """ 
+        """
         student = baker.make(User)
         block = baker.make(Block)
 
@@ -757,8 +760,8 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # register student to block
         course_student = baker.make(CourseStudent, user=student, block=block)
-        self.assertEquals(CourseStudent.objects.count(), 1)
-        self.assertEquals(CourseStudent.objects.first().pk, course_student.pk)
+        self.assertEqual(CourseStudent.objects.count(), 1)
+        self.assertEqual(CourseStudent.objects.first().pk, course_student.pk)
 
         # confirm block existence
         self.assertTrue(Block.objects.filter(id=block.pk).first() is not None)
@@ -774,9 +777,9 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, dt_well_ptag)
 
     def test_BlockForm_initial_values(self):
-        """ 
+        """
             Test if the form passed through context has correct initial values
-        """ 
+        """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:block_create'))
         form = response.context['form']
@@ -833,7 +836,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_no_users_outside_active_semester_in_histogram_values(self):
-        """ histogram values should only belong to users who belong in the active semester""" 
+        """ histogram values should only belong to users who belong in the active semester"""
         # create inactive semester students
         inactive_sem_students = [self.create_student_course(100) for i in range(5)]
         for cs in inactive_sem_students:
@@ -845,7 +848,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.teacher)
         response = self.client.get(
-            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         self.assertEqual(response.status_code, 200)
@@ -870,7 +873,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.teacher)
         response = self.client.get(
-            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), 
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         self.assertEqual(response.status_code, 200)

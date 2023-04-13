@@ -9,7 +9,7 @@ dist: bionic
 services:
  - docker
 
-before_script: 
+before_script:
    - pip install docker-compose
    - cp .env.example .env
 
