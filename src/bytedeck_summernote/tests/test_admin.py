@@ -5,6 +5,41 @@ from django.contrib.flatpages.models import FlatPage
 from django_tenants.test.cases import TenantTestCase
 
 
+from django.test import TestCase
+
+from bytedeck_summernote.admin import ByteDeckSummernoteModelAdminMixin
+
+
+class ByteDeckSummernoteModelAdminMixinTestCase(TestCase):
+
+    def test_get_summernote_widget_class(self):
+        """
+        Test two things:
+        1. that the get_summernote_widget_class method raises a NotImplementedError when called directly,
+        as it should be overridden in subclasses.
+        2. that a subclass of ByteDeckSummernoteModelAdminMixin that implements the get_summernote_widget_class
+        method returns the expected widget class.
+        """
+        mixin = ByteDeckSummernoteModelAdminMixin()
+
+        # Test that the method raises a NotImplementedError when called directly
+        with self.assertRaises(NotImplementedError):
+            mixin.get_summernote_widget_class()
+
+        # Define a test widget class
+        class TestSummernoteWidget:
+            pass
+
+        # Define a subclass of the mixin that implements the get_summernote_widget_class method
+        class SubByteDeckSummernoteModelAdminMixin(ByteDeckSummernoteModelAdminMixin):
+            def get_summernote_widget_class(self):
+                return TestSummernoteWidget
+
+        # Test that the subclass returns the TestSummernoteWidget class
+        subclass_mixin = SubByteDeckSummernoteModelAdminMixin()
+        self.assertEqual(subclass_mixin.get_summernote_widget_class(), TestSummernoteWidget)
+
+
 class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
