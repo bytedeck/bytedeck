@@ -30,3 +30,16 @@ body {
     min-height: 0;
     max-width: 850px; /* so that it appears similar to the regular editor and how ti will be displayed */
 }
+
+/* bytedeck_summernote custom widgets */
+
+body.bytedecksummernoteadvancedwidget .note-view .btn-codeview {
+    color: #fff;
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+body.bytedecksummernoteadvancedwidget .note-view .btn-codeview:hover {
+   color: #fff;
+   background-color: #c82333;
+   border-color: #bd2130;
+}
