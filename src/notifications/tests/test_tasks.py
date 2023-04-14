@@ -3,7 +3,7 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django_celery_beat.models import PeriodicTask
-from mock import patch
+from unittest.mock import patch
 
 from model_bakery import baker
 from django_tenants.test.cases import TenantTestCase
@@ -84,12 +84,12 @@ class NotificationTasksTests(TenantTestCase):
 
         root_url = 'https://test.com'
         email = generate_notification_email(self.test_student1, root_url)
-        
+
         self.assertEqual(type(email), EmailMultiAlternatives)
         self.assertEqual(email.to, [self.test_student1.email])
         # Default deck short name is "Deck"
         print(email.subject)
-        self.assertEquals(email.subject, "Deck Notifications")
+        self.assertEqual(email.subject, "Deck Notifications")
 
         # https://stackoverflow.com/questions/62958111/how-to-display-html-content-of-an-emailmultialternatives-mail-object
         html_content = email.alternatives[0][0]
@@ -99,18 +99,18 @@ class NotificationTasksTests(TenantTestCase):
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notifications[0]), html_content)  # Links to notifications
         self.assertIn(str(notifications[1]), html_content)  # Links to notifications
-        
+
     def test_generate_notification_email__staff(self):
         """ Test that staff notification emails include quests awaiting approval """
         notification = baker.make(Notification, recipient=self.test_teacher)
         root_url = 'https://test.com'
         sub = baker.make('quest_manager.questsubmission')
 
-        # fake the call to `QuestSubmission.objects.all_awaiting_approval` made within 
+        # fake the call to `QuestSubmission.objects.all_awaiting_approval` made within
         # `generate_notification_email` so that it return a submission
         with patch('notifications.tasks.QuestSubmission.objects.all_awaiting_approval', return_value=[sub]):
             email = generate_notification_email(self.test_teacher, root_url)
-        
+
         self.assertEqual(type(email), EmailMultiAlternatives)
         self.assertEqual(email.to, [self.test_teacher.email])
 
@@ -121,7 +121,7 @@ class NotificationTasksTests(TenantTestCase):
 
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notification), html_content)  # Links to notifications
-    
+
 
 class CreateEmailNotificationTasksTest(TenantTestCase):
     """ Tests of the create_email_notification_tasks() method"""

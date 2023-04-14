@@ -15,20 +15,20 @@ User = get_user_model()
 
 
 def get_default_deck_owner():
-    """ 
+    """
         This is run once during site initialization
 
         Also need to initialize owner if none exists yet.
         (Since initialization.py loads after everything else)
-    """ 
-    
+    """
+
     # handle existing decks by getting an existing staff user that is NOT bytedeck_admin:
     admin_username = settings.TENANT_DEFAULT_ADMIN_USERNAME
     non_admin_staff_qs = User.objects.filter(is_staff=True).exclude(username=admin_username)
 
     if non_admin_staff_qs.exists():  # i.e. there are more staff than just the admin user
         return non_admin_staff_qs.first().pk  # return the first one (assumes sorted by pk, so should be the oldest one?)
-        
+
     else:  # no other staff users available yet, so we'll have to create them
         deck_owner = User.objects.create(
             username=settings.TENANT_DEFAULT_OWNER_USERNAME,
@@ -183,7 +183,7 @@ class SiteConfig(models.Model):
         default="Tag", max_length=20,
         help_text="A custom name specific to your deck to replace \"Tag\".   For example, \"Competency\", \"Learning Outcome\", \
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
-    )        
+    )
 
     deck_owner = models.ForeignKey(
         User, on_delete=models.PROTECT, default=get_default_deck_owner, limit_choices_to={'is_staff': True}, related_name="deck_owner",

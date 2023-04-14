@@ -6,7 +6,7 @@ from django.templatetags.static import static
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
-from mock import patch
+from unittest.mock import patch
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
@@ -52,7 +52,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         """
         self.assertRedirects(
             response=self.client.get(reverse('home')),
-            status_code=301,  
+            status_code=301,
             target_status_code=404,  # the flatpage doesn't actually exist at this point in the test, but its creation is tested elsewhere
             expected_url='/pages/home'
         )
@@ -90,7 +90,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_password_reset_view(self):
         self.assert200('account_reset_password')
-    
+
     def test_achievements_redirect_to_badges_views(self):
         # log in a teacher
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)

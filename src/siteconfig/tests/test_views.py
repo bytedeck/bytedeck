@@ -82,9 +82,9 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotEqual(old_cache.site_name, cache.get(SiteConfig.cache_key()).site_name)
 
     def test_SiteConfigForm_basic_tests(self):
-        """ 
+        """
             Basic test for SiteConfigForm
-        """ 
+        """
         owner_user = self.config.deck_owner
         admin_user = User.objects.get(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
         staff_user = baker.make(User, is_staff=True,)
@@ -114,7 +114,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertNotEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # should not be equal since form prevents non owner from changing owner
 
-        # check if owner can change who deck_owner is 
+        # check if owner can change who deck_owner is
         self.client.force_login(owner_user)
 
         test_case = "TEST CASE #2"

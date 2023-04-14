@@ -128,7 +128,7 @@ class IsAPrereqMixinTest(TenantTestCase):
 
     def test_get_reliant_qs(self):
         reliant = self.quest_prereq.get_reliant_qs()
-        
+
         self.assertListEqual(list(reliant), list(Prereq.objects.all_reliant_on(self.quest_prereq)))
 
     def test_get_reliant_objects(self):
@@ -165,7 +165,7 @@ class IsAPrereqMixinTest(TenantTestCase):
     def test_get_reliant_objects__sort(self):
         """ Test that get_reliant_objects(sort=True) returns a list where the objects are sorted alphabetically by str() """
 
-        # Setup creates self.quest_prereq relying on self.quest_parent.  
+        # Setup creates self.quest_prereq relying on self.quest_parent.
         # Add some more reliant quests to be sorted.
         quest_A = baker.make('quest_manager.Quest', name="A")
         quest_z = baker.make('quest_manager.Quest', name="z")

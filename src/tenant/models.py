@@ -168,9 +168,9 @@ class Tenant(TenantMixin):
 
         domain_url = self.get_primary_domain().domain
         if 'localhost' in domain_url:  # Development
-            return "http://{}:8000".format(domain_url)
+            return f"http://{domain_url}:8000"
         else:  # Production
-            return "https://{}".format(domain_url)
+            return f"https://{domain_url}"
 
     @classmethod
     def get(cls):

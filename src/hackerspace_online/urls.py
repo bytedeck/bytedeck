@@ -51,11 +51,11 @@ urlpatterns += [
     url(r'^utilities/', include('utilities.urls', namespace='utilities')),
     url(r'^config/', include('siteconfig.urls', namespace='config')),
     url(r'^decks/', include('tenant.urls', namespace='decks')),
+    # bytedeck summernote
+    url(r'^summernote/', include('bytedeck_summernote.urls')),
 
     url(r'^tags/', include('tags.urls', namespace='tags')),
 
-    # summer_note
-    url(r'^summernote/', include('django_summernote.urls')),
     # allauth
     url(r'^accounts/password/reset/$',
         views.CustomPasswordResetView.as_view(),

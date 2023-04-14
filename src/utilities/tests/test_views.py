@@ -62,7 +62,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         )
 
     def _ct_pk(self, obj):
-        return "{}-{}".format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+        return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
     def test_get(self):
         group = self.groups[0]

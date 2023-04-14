@@ -114,7 +114,7 @@ class TagDetailStudent(TagDetail):
             ordinal_check = submission.ordinal > 1
             multiple = submissions.filter(quest__id=submission.quest.id).count() > 1
 
-            setattr(submission, 'is_multiple', ordinal_check or multiple)
+            submission.is_multiple = ordinal_check or multiple
 
         return submissions
 
@@ -127,7 +127,7 @@ class TagDetailStudent(TagDetail):
             ordinal_check = assertion.ordinal > 1
             multiple = assertions.filter(badge__id=assertion.badge.id).count() > 1
 
-            setattr(assertion, 'is_multiple', ordinal_check or multiple)
+            assertion.is_multiple = ordinal_check or multiple
 
         return assertions
 

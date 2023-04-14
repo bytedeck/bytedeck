@@ -3,7 +3,7 @@ from django.test import RequestFactory
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name
-from mock import patch
+from unittest.mock import patch
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from tenant.views import non_public_only_view, public_only_view

@@ -18,12 +18,12 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
     model = None  # Needs to be set by the inheriting form class
     template_name = 'prerequisites/advanced_prereqs_form.html'
     ObjectPrereqFormset = generic_inlineformset_factory(
-        model=Prereq, 
-        form=PrereqFormInline, 
+        model=Prereq,
+        form=PrereqFormInline,
         ct_field='parent_content_type',
         fk_field='parent_object_id',
         extra=1,
-    )  
+    )
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object(queryset=self.model.objects.all())

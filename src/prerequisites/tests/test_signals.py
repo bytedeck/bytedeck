@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
-from mock import patch
+from unittest.mock import patch
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
