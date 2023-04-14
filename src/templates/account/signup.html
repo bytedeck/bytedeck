@@ -11,16 +11,15 @@
 {% block content %}
 
 <p>{% blocktrans %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktrans %}</p>
-
-<p>or</p>
-
+{% comment %}
+  Conditions are setup this way because checking socialaccount_providers returns a list of strings based on the INSTALLED_APPS
+  If you look at the get_providers tag, it returns all social account providers whether it is configured or not
+{% endcomment %}
 {% get_providers as socialaccount_providers %}
-
-{% if socialaccount_providers %}
+{% if socialaccount_providers and config.enable_google_signin %}
+  <p>or</p>
   <p>{% blocktrans %} Sign up via: {% endblocktrans %}</p>
-  {% if config.enable_google_signin %}
-    <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
-  {% endif %}
+  <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
 {% endif %}
 
 <form class="signup" id="signup_form" method="post" action="{% url 'account_signup' %}">

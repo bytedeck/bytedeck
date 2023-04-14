@@ -8,16 +8,22 @@
 {% block heading %}{% trans "Sign In" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 
 {% block content %}
-  <p>{% blocktrans %} Sign in via: {% endblocktrans %}</p>
-    <div class="socialaccount_ballot">
-      {% include "socialaccount/snippets/login_extra.html" %}
+  {% comment %}
+    Conditions are setup this way because checking socialaccount_providers returns a list of strings based on the INSTALLED_APPS
+    If you look at the get_providers tag, it returns all social account providers whether it is configured or not
+  {% endcomment %}
+  {% get_providers as socialaccount_providers %}
 
-      {% if config.enable_google_signin %}
+  {% if socialaccount_providers|length > 0 and config.enable_google_signin %}
+    <p>{% blocktrans %} Sign in via: {% endblocktrans %}</p>
+      <div class="socialaccount_ballot">
+        {% include "socialaccount/snippets/login_extra.html" %}
+
         <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
-      {% endif %}
-    </div>
+      </div>
 
-    <div class="login-or">{% trans 'or' %}</div>
+      <p class="login-or">{% trans 'or' %}</p>
+  {% endif %}
 
   <p>{% blocktrans %}Sign in with your username and password. If you have not created an account yet, then please
     <a href="{{ signup_url }}">sign up</a> first.{% endblocktrans %}</p>

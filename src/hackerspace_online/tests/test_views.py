@@ -115,7 +115,9 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
 
         response = self.client.get(reverse('account_login'))
+        self.assertNotIn("fa fa-google", response.content.decode('utf-8'))
 
+        response = self.client.get(reverse('account_signup'))
         self.assertNotIn("fa fa-google", response.content.decode('utf-8'))
 
     def test_enable_google_signin_is_True(self):
@@ -127,4 +129,7 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
         config.save()
 
         response = self.client.get(reverse('account_login'))
+        self.assertIn("fa fa-google", response.content.decode('utf-8'))
+
+        response = self.client.get(reverse('account_signup'))
         self.assertIn("fa fa-google", response.content.decode('utf-8'))
