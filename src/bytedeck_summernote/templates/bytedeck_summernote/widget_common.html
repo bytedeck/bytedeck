@@ -21,7 +21,7 @@
 Changes because: fix django-summernote/issues/465 issue, make it possible to use XSS protection for non-iframe widgets
 {% endcomment %}
 {% if iframe %}
-         $sn.html(origin.value);
+         {# $sn.html(origin.value); #}{# commented out to fix bytedeck/bytedeck/issues/1336 #}
          $(origin).hide();
 {% endif %}
 {% comment %} End changes {% endcomment %}
@@ -132,6 +132,14 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
                      {% endif %}
                  }
              }));
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: fix bytedeck/issues/1336 issue, avoid "script" run tiwce when you load a form in django admin
+{% endcomment %}
+{% if iframe %}
+             $sn.summernote("code", origin.value);
+{% endif %}
+{% comment %} End changes {% endcomment %}
          };
 
          // include summernote language pack, synchronously
