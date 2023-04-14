@@ -1,8 +1,8 @@
 [flake8]
-exclude = 
-	*/migrations/*, 
+exclude =
+	*/migrations/*,
 	*/__pycache__/*,
-    
+
 #max-complexity = 12
 max-line-length = 150
 

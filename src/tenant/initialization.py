@@ -1,6 +1,6 @@
 """This module contains the methods to install initial data into a new fixture.
 I found fixtures too difficult to update, and django-tenant-schemas doesn't load fixtures properly anyway
-I found data migrations to cause too many problems, and they  got in the way squashing migrations and keeping them simple, 
+I found data migrations to cause too many problems, and they  got in the way squashing migrations and keeping them simple,
 among other issues
 """
 
@@ -35,14 +35,14 @@ def load_initial_tenant_data():
     create_initial_badge_types()
     create_initial_badge_rarities()
     create_initial_badges()
-    create_orientation_campaign() 
+    create_orientation_campaign()
 
     from notifications.tasks import create_email_notification_tasks
-    create_email_notification_tasks()  
+    create_email_notification_tasks()
 
 
 def set_initial_icons(object_list):
-    """ 
+    """
     Sets the icons for a list of objects.  Each object's model must have `name` and `icon` fields.
 
     Assumes an icon exists at: `static/{app_name}/img/{object.name}.png` and saves it as the object's icon.
@@ -57,7 +57,7 @@ def set_initial_icons(object_list):
         icon_file = f"{object._meta.app_label}/img/{object.name.strip(forbidden_characters).replace(' ', '_')}.png"
 
         filepath = str(finders.find(icon_file))
-        # `filepath` here is an absolute filepath, but if we try to open this Django will throw a 
+        # `filepath` here is an absolute filepath, but if we try to open this Django will throw a
         # SuspiciousFileOperation exception because we are traversing outside of the project.
         # So, remove the cwd from the path and we will be left with a relative path to the file
         # E.g. if filepath = '/app/src/badges/static/badges/img/Dime.png' and pwd() = '/app'
@@ -71,7 +71,7 @@ def set_initial_icons(object_list):
             with open(filepath, 'rb') as f:
                 object.icon.save(filepath, File(f), save=True)
                 object.save()
-        except IOError:
+        except OSError:
             # filepath will be None if the finder couldn't find it, so provide more useful feedback
             print(f"Couldn't open icon at {icon_file}")
 
@@ -79,8 +79,8 @@ def set_initial_icons(object_list):
 def create_users():
     # BYTEDECK ADMIN
     User.objects.create_superuser(
-        username=settings.TENANT_DEFAULT_ADMIN_USERNAME, 
-        email='admin@example.com', 
+        username=settings.TENANT_DEFAULT_ADMIN_USERNAME,
+        email='admin@example.com',
         password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
     # OWNER OF THE DECK
@@ -88,7 +88,7 @@ def create_users():
     # although siteconfig.models.get_default_deck_owner() will not run before this every time based on manual testing
 
     owner, _ = User.objects.update_or_create(
-        username=settings.TENANT_DEFAULT_OWNER_USERNAME, 
+        username=settings.TENANT_DEFAULT_OWNER_USERNAME,
         defaults={
             "email": settings.TENANT_DEFAULT_OWNER_EMAIL,
             "is_superuser": False,
@@ -189,37 +189,37 @@ def create_initial_badge_types():
 
 def create_initial_badge_rarities():
     BadgeRarity.objects.create(
-        name="Common", 
+        name="Common",
         percentile=100.0,
         color="gray",
         fa_icon="fa-certificate"
     )
     BadgeRarity.objects.create(
-        name="Uncommon", 
+        name="Uncommon",
         percentile=30.0,
         color="green",
         fa_icon="fa-certificate"
     )
     BadgeRarity.objects.create(
-        name="Rare", 
+        name="Rare",
         percentile=16.0,
         color="royalblue",
         fa_icon="fa-certificate"
     )
     BadgeRarity.objects.create(
-        name="Epic", 
+        name="Epic",
         percentile=4.0,
         color="purple",
         fa_icon="fa-certificate"
     )
     BadgeRarity.objects.create(
-        name="Legendary", 
+        name="Legendary",
         percentile=1.0,
         color="orangered",
         fa_icon="fa-certificate"
     )
     BadgeRarity.objects.create(
-        name="Mythic", 
+        name="Mythic",
         percentile=0.25,
         color="gold",
         fa_icon="fa-certificate"
@@ -277,7 +277,7 @@ def create_initial_badges():
         Badge(
             name="Red Team",
             xp=0,
-            short_description="<p>You are a member of the Red team!</p>",  
+            short_description="<p>You are a member of the Red team!</p>",
             badge_type=badge_type,
             sort_order=10,
             active=True,
@@ -286,7 +286,7 @@ def create_initial_badges():
         Badge(
             name="Green Team",
             xp=0,
-            short_description="<p>You are a member of the Green team!</p>",  
+            short_description="<p>You are a member of the Green team!</p>",
             badge_type=badge_type,
             sort_order=20,
             active=True,
@@ -295,7 +295,7 @@ def create_initial_badges():
         Badge(
             name="Blue Team",
             xp=0,
-            short_description="<p>You are a member of the Blue team!</p>",  
+            short_description="<p>You are a member of the Blue team!</p>",
             badge_type=badge_type,
             sort_order=30,
             active=True,
@@ -333,9 +333,9 @@ def create_orientation_campaign():
         import_id="bee53060-c332-4f75-85e1-6a8f9503ebe1",
         hideable=False,
         verification_required=False,
-        
+
     )
-        
+
     orientation_campaign = Category.objects.create(
         title="Orientation",
     )
@@ -403,7 +403,7 @@ def create_orientation_campaign():
     if not settings.TESTING:
         set_initial_icons([message_quest, cc_quest, avatar_quest, contract_quest, screenshots_quest])
 
-    # now link them to the welcome quest with pre-requisites:      
+    # now link them to the welcome quest with pre-requisites:
     Prereq.add_simple_prereq(avatar_quest, welcome_quest)
     Prereq.add_simple_prereq(screenshots_quest, welcome_quest)
     Prereq.add_simple_prereq(contract_quest, welcome_quest)

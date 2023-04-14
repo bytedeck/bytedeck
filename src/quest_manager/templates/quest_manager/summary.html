@@ -23,7 +23,7 @@
 
 <p>These stats and the histogram only use data between the range of Min and Max as provided in this form
     <i class="fa fa-question-circle" data-toggle="tooltip"
-        title="The meaning of the data should be interpreted individually for each quest. Use the max and min 
+        title="The meaning of the data should be interpreted individually for each quest. Use the max and min
         values to remove outliers from the stats and histogram."
     ></i>
 </p>
@@ -68,14 +68,14 @@
                 <td>Mean completion time:</td>
                 <td><span id="completion-mean">N/A</span> min</td>
             </tr>
- 
+
         </table>
     </div>
     <div class="col-sm-6">
         <table class="table">
             <tr>
                 <td>25th Percentile:</td>
-                <td><span id="completion-25">N/A</span> min</td>   
+                <td><span id="completion-25">N/A</span> min</td>
             </tr>
             <tr>
                 <td>50th Percentile:</td>
@@ -84,7 +84,7 @@
             <tr>
                 <td>75th Percentile:</td>
                 <td><span id="completion-75">N/A</span> min</td>
-            </tr> 
+            </tr>
         </table>
     </div>
 </div>
@@ -94,8 +94,8 @@
     <canvas id="histo-chart" class="img-rounded" style="width: 100%; background-color: white; padding: 10px; "></canvas>
 </div>
 
-<p>This histogram shows the distribution of completion times, which is the difference in minutes 
-    between the time the student hit the Start and Submit buttons. The chart only includes 
+<p>This histogram shows the distribution of completion times, which is the difference in minutes
+    between the time the student hit the Start and Submit buttons. The chart only includes
     submissions that were approved the first time (if the submission was returned, it is not included here).</p>
 {% endblock %}
 
@@ -183,7 +183,7 @@ function updateChart() {
                     yAxes: [{
                         ticks: {
                             fontColor: '#111',
-                        }, 
+                        },
                     }]
                 }
             }
@@ -193,7 +193,7 @@ function updateChart() {
         if(typeof window.myHist !== 'undefined') {
             window.myHist.destroy();
         }
-        
+
         window.myHist = new Chart(ctx, config);
 
     });

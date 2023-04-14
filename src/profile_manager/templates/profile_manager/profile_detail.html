@@ -170,7 +170,7 @@
                  {% if s.is_returned %}list-group-item-danger
                  {% endif %}">
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} 
+               {{s|truncatechars:40}}
                <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
              </a>
            {% endfor %}
@@ -294,7 +294,7 @@
   <!-- TAGS -->
   <div class="col-sm-6">
     <div class="panel panel-primary">
-      
+
       <div class="panel-heading">
         <i class="pull-right fa fa-fw fa-tags"></i>
         <h3 class="panel-title">

@@ -13,7 +13,7 @@ class CourseStudentForm(forms.ModelForm):
     # filtering the available options in a foreign key choice field
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
-        super(CourseStudentForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.fields['semester'].queryset = Semester.objects.get_current(as_queryset=True)
         self.fields['semester'].empty_label = None
 
@@ -23,16 +23,16 @@ class CourseStudentForm(forms.ModelForm):
         block_qs = Block.objects.filter(active=True)
         self.fields['block'].queryset = block_qs
         self.fields['block'].label = SiteConfig.get().custom_name_for_group
-        
+
         # if there is only one option for the fields, then make them default by removing the blank option:
         if block_qs.count() == 1:
             self.fields['block'].empty_label = None
         if courses_qs.count() == 1:
             self.fields['course'].empty_label = None
-            
+
     # http://stackoverflow.com/questions/32260785/django-validating-unique-together-constraints-in-a-modelform-with-excluded-fiel/32261039#32261039
     def full_clean(self):
-        super(CourseStudentForm, self).full_clean()
+        super().full_clean()
         try:
             self.instance.validate_unique()
         except forms.ValidationError as e:
@@ -53,7 +53,7 @@ class CourseStudentStaffForm(CourseStudentForm):
 
     class Meta:
         model = CourseStudent
-        exclude = ['user', 'active'] 
+        exclude = ['user', 'active']
 
 
 class SemesterForm(forms.ModelForm):
@@ -91,7 +91,7 @@ class ExcludedDateForm(forms.ModelForm):
         help_texts = {
             'label': None
         }
-    
+
     def __init__(self, *args, **kwargs):
         self.semester_instance = kwargs.pop('semester')
         super().__init__(*args, **kwargs)
@@ -101,7 +101,7 @@ class ExcludedDateForm(forms.ModelForm):
 
         self.fields['date'].label = ''
         self.fields['date'].required = True
-    
+
     def save(self, **kwargs):
         excluded_date = self.instance
         excluded_date.semester = self.semester_instance
@@ -130,7 +130,7 @@ class BaseFormSet(forms.BaseModelFormSet):
     def add_fields(self, form, index):
         super().add_fields(form, index)
         form.fields['DELETE'].widget = forms.HiddenInput()
-        
+
 
 ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=ExcludedDateForm, formset=BaseFormSet, can_delete=True, extra=1)
 

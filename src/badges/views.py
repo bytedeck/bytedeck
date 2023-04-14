@@ -55,7 +55,7 @@ class BadgeDelete(NonPublicOnlyViewMixin, DeleteView):
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(BadgeDelete, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
@@ -66,14 +66,14 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(BadgeUpdate, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         context['heading'] = "Update Badge"
         context['submit_btn_value'] = "Update"
         return context
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(BadgeUpdate, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 @non_public_only_view
@@ -168,7 +168,7 @@ class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
 class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
@@ -177,7 +177,7 @@ class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
         return context
 
     def post(self, request, *args, **kwargs):
-        # make sure no data can be passed in POST if populated 
+        # make sure no data can be passed in POST if populated
         # makes sure to prevent 404/delete (because deletion still goes off)
         has_badges = Badge.objects.filter(badge_type=self.get_object()).exists()
         if has_badges:

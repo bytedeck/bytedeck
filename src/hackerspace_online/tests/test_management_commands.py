@@ -75,7 +75,7 @@ class InitDbTest(TestCase):
         print("*** INITDB Management Command: ", output)
 
         Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
-        
+
         user = User.objects.get(username='admin')
         self.assertTrue(user.is_superuser)
         self.assertTrue(Site.objects.exists())

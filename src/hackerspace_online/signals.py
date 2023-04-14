@@ -20,7 +20,7 @@ def change_domain_urls(sender, *args, **kwargs):
             all_tenants = Tenant.objects.exclude(schema_name='public')
             for tenant in all_tenants:
                 domain = tenant.domain_url.split(public_tenant.domain_url)[0]
-                tenant.domain_url = '%s%s' % (domain, kwargs['instance'].domain)
+                tenant.domain_url = '{}{}'.format(domain, kwargs['instance'].domain)
                 tenant.save()
             public_tenant.domain_url = kwargs['instance'].domain
             public_tenant.save()

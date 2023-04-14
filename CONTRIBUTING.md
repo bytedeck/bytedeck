@@ -12,7 +12,7 @@ You can run tests either locally, or through the web container.:
    * using venv: `./src/manage.py test src && flake8 src`
    * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
 2. Tests take too long, but you can speed them up a number of ways:
-   * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:     
+   * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
      `./src/manage.py test src --parallel --failfast`
    * Only run tests from a single app, for example: `./src/manage.py test src/announcements`
    * Only run tests from a single test class: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`

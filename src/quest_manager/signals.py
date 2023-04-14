@@ -11,7 +11,7 @@ class UglySoup(BeautifulSoup):
     # continuous spaces starting from a new line, ending before (look ahead) to a non-whitespace character
     r = re.compile(r'^( +(?=\S))', re.MULTILINE)
     # match \r\n or \n newlines (preceded by any amount of horizontal whitespace), 20 or more in a row
-    r2 = re.compile(r'([ \t]*(\r\n|\r|\n)){20,}') 
+    r2 = re.compile(r'([ \t]*(\r\n|\r|\n)){20,}')
 
     def insert_before(self, successor):
         pass
@@ -21,7 +21,7 @@ class UglySoup(BeautifulSoup):
 
     def improved_prettify(self, fix_runaway_newlines=False, encoding=None, formatter="minimal", indent_width=4):
         """ Prettify that also indents """
-        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline. 
+        # \1 is first capturing group, i.e. all continuous whitespace starting from a newline.
         # replace whitespace from standard prettify with proper indents
         bs_prettified = self.prettify(encoding, formatter)
         result = self.r.sub(r'\1' * indent_width, bs_prettified)
@@ -57,7 +57,7 @@ def tidy_html(markup, fix_runaway_newlines=False):
     unformatted_tag_list = []
     for i, tag in enumerate(stripped_markup_soup.find_all(inline_tags)):
         unformatted_tag_list.append(str(tag))
-        tag.replace_with('{' + 'unformatted_tag_list[{0}]'.format(i) + '}')
+        tag.replace_with('{' + f'unformatted_tag_list[{i}]' + '}')
 
     # need to regenerate the soup so it forgets the location of the tags we just swapped out
     # otherwise it will still enter line breaks and indent at those locations

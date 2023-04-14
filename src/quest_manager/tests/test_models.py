@@ -168,7 +168,7 @@ class QuestTestModel(TenantTestCase):
         # create and test a quest that's invisible to students
         baker.make(Quest, name="invisible-quest", visible_to_students=False)
         self.assertEqual(Quest.objects.get(name="invisible-quest").active, False)
-        
+
         # create and test a quest that's archived
         archived_quest = baker.make(Quest, archived=True)
         self.assertEqual(archived_quest.active, False)

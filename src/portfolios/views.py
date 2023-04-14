@@ -30,11 +30,11 @@ class PortfolioCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         data = form.save(commit=False)
         data.user = self.request.user
         data.save()
-        return super(PortfolioCreate, self).form_valid(form)
+        return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(PortfolioCreate, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         context['heading'] = "Create " + self.request.user.get_username() + "'s Portfolio"
         context['submit_btn_value'] = "Create"
         return context
@@ -47,7 +47,7 @@ class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # only allow admins or the users to see their own portfolios, unless they are shared
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         if portfolio.listed_locally or portfolio.user == self.request.user or self.request.user.is_staff:
-            return super(PortfolioDetail, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
         else:
             raise Http404("Sorry, this portfolio isn't shared!")
 
@@ -125,10 +125,10 @@ class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
         data = form.save(commit=False)
         data.portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         data.save()
-        return super(ArtworkCreate, self).form_valid(form)
+        return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
-        context = super(ArtworkCreate, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         context['heading'] = "Add Art to " + portfolio.user.get_username() + "'s Portfolio"
         context['submit_btn_value'] = "Create"
@@ -139,7 +139,7 @@ class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
         # only allow the user or staff to edit
         if portfolio.user == self.request.user or self.request.user.is_staff:
-            return super(ArtworkCreate, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
         else:
             raise Http404("Sorry, this isn't your portfolio!")
 
@@ -155,7 +155,7 @@ class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(ArtworkUpdate, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         context['heading'] = "Edit " + self.object.portfolio.user.get_username() + "'s Portfolio Art"
         context['submit_btn_value'] = "Update"
         context['portfolio'] = self.object.portfolio
@@ -165,7 +165,7 @@ class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
         art = get_object_or_404(Artwork, pk=self.kwargs.get('pk'))
         # only allow the user or staff to edit
         if art.portfolio.user == self.request.user or self.request.user.is_staff:
-            return super(ArtworkUpdate, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
         else:
             raise Http404("Sorry, this isn't your art!")
 
