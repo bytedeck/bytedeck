@@ -449,8 +449,22 @@ def email_confirmed_handler(email_address, **kwargs):
 
     with transaction.atomic():
         email_address.set_as_primary()
-        EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
-        # EmailAddress.objects.filter(user=email_address.user, primary=False, verified=False).delete()
+
+        # Delete all email addresses that are not primary and exclude emails used for social login
+        user = email_address.user
+        emails_qs = user.emailaddress_set.filter(primary=False)
+
+        # Exclude email addresses used for logging in with social providers like google
+        social_emails = []
+        for data in user.socialaccount_set.values_list("extra_data", flat=True):
+            email = data.get("email")
+            if email:
+                social_emails.append(email)
+
+        if social_emails:
+            emails_qs = emails_qs.exclude(email__in=social_emails)
+
+        emails_qs.delete()
 
 
 @receiver(email_confirmation_sent, sender=EmailConfirmationHMAC)

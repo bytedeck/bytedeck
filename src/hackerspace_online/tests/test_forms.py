@@ -1,3 +1,4 @@
+from allauth.account.adapter import get_adapter
 from django.conf import settings
 from django.core import mail
 from django.test.utils import override_settings
@@ -9,6 +10,10 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.shortcuts import reverse
+from django.utils import timezone
+from hackerspace_online.tests.utils import generate_form_data
+from profile_manager.forms import ProfileForm
+from profile_manager.models import email_confirmed_handler
 
 from siteconfig.models import SiteConfig
 
@@ -131,9 +136,12 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         pass
 
     def get_social_login(self):
+        extra_data = {
+            "email": "user@example.com",
+        }
         return SocialLogin(
             user=User(email="user@example.com", first_name="firsttest", last_name="lasttest"),
-            account=SocialAccount(provider="google"),
+            account=SocialAccount(provider="google", extra_data=extra_data),
             email_addresses=[
                 EmailAddress(
                     email="user@example.com",
@@ -346,6 +354,119 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.assertRedirects(response, reverse('socialaccount_signup'))
         mock_get_access_token.assert_called_once()
         mock_complete_login.assert_called_once()
+
+    @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
+    @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
+    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    def test_signup_via_post_google_signin_change_email_and_revert_back_to_google_email(
+        self,
+        mock_verify_and_unstash_state,
+        mock_complete_login,
+        mock_get_access_token
+    ):
+        """
+        When a student performs a signup via google, completes the signup process, and then changes their email and verifies
+
+        When a student performs a signup via google and does the following:
+            - Completes the signup process
+            - Changes their email address
+            - Verifies the new email address
+            - Reverts back to the email they used via google login
+
+        They should not be required to verify their email address and a confirmation email should not be sent
+        """
+
+        self.setup_social_app()
+        self.client = TenantClient(self.tenant)
+
+        social_email = "user@example.com"
+        social_login = self.get_social_login()
+        social_login.user.email = social_email
+        social_login.email_addresses[0].email = social_email
+
+        mock_get_access_token.return_value = {
+            'access_token': 'test_access_token',
+            'expires_in': 3599,
+            'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'token_type': 'Bearer',
+            'id_token': 'test_id_token'
+        }
+        mock_complete_login.return_value = social_login
+        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+
+        # Simulate a student clicking the Google Sign in button
+        url = reverse('google_login')
+        response = self.client.post(url)
+
+        # Simulate a student entering the correct details or choosing a google account to sign in with
+        response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
+
+        # Student should now be redirected to the social sign up page
+        self.assertRedirects(response, reverse('socialaccount_signup'))
+        mock_get_access_token.assert_called_once()
+        mock_complete_login.assert_called_once()
+
+        response_form = response.context['form'].initial
+
+        # Student completes the signup process
+        form_data = {
+            **response_form,
+            'username': 'newusername',
+            'access_code': '314159',
+        }
+        response = self.client.post(reverse('socialaccount_signup'), data=form_data, follow=True)
+
+        # User should now be registered
+        user = User.objects.get(username=form_data["username"])
+        self.assertIsNotNone(user)
+
+        self.assertTrue(user.socialaccount_set.exists())
+
+        # Change email and then verify
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        old_email = user.email
+        new_email = "my_new_email@example.com"
+        form_data.update({
+            "email": new_email,
+        })
+        self.assertEqual(len(mail.outbox), 0)
+        self.client.post(reverse("profiles:profile_update", args=[user.profile.pk]), data=form_data)
+        self.assertEqual(len(mail.outbox), 1)  # email should be sent
+
+        user.refresh_from_db()
+
+        self.assertEqual(user.email, new_email)
+        email_address_obj = user.emailaddress_set.get(email=new_email)
+
+        # Manually verify email
+        get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
+        email_confirmed_handler(email_address=email_address_obj)
+
+        email_address_obj.refresh_from_db()
+
+        self.assertTrue(email_address_obj.verified)
+        self.assertTrue(email_address_obj.primary)
+        self.assertEqual(user.emailaddress_set.filter(primary=True).count(), 1)
+        self.assertEqual(user.emailaddress_set.filter(verified=True).count(), 2)
+
+        mail.outbox.clear()
+
+        # Revert back to old email
+        form_data.update({
+            "email": old_email
+        })
+        self.client.post(reverse("profiles:profile_update", args=[user.profile.pk]), data=form_data)
+
+        # There should be no emails sent at this point since emails are only sent if the email address is not verified
+        self.assertEqual(len(mail.outbox), 0)
+
+        user.refresh_from_db()
+        self.assertEqual(user.email, old_email)
+
+        # Email should still be verified
+        primary_email_obj = EmailAddress.objects.get_primary(user)
+        self.assertTrue(primary_email_obj.verified)
+        self.assertTrue(primary_email_obj.primary)
 
 
 class CustomLoginFormTest(TenantTestCase):
