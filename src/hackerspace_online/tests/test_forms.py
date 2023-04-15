@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core import mail
 from django.test.utils import override_settings
 from datetime import timedelta
 from unittest.mock import patch
@@ -92,6 +93,36 @@ class CustomSignUpFormTest(TenantTestCase):
         user = User.objects.get(username=form_data['username'].lower())
 
         self.assertIsNotNone(user)
+
+    def test_sign_up_via_post_with_email(self):
+
+        self.client = TenantClient(self.tenant)
+        form_data = {
+            'email': 'email@example.com',
+            'username': "username",
+            'first_name': "firsttest",
+            'last_name': "Lasttest",
+            'access_code': "314159",
+            'password1': "password",
+            'password2': "password"
+        }
+
+        with patch("django.contrib.messages.add_message") as mock_add_message:
+            response = self.client.post(reverse('account_signup'), form_data, follow=True,)
+            self.assertEqual(mock_add_message.call_count, 2)
+            confirmation_email_sent_msg = mock_add_message.call_args_list[0][0][2]
+            successfully_signed_in_msg = mock_add_message.call_args_list[1][0][2]
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(confirmation_email_sent_msg, f'Confirmation e-mail sent to {form_data["email"]}.')
+        self.assertEqual(successfully_signed_in_msg, f'Successfully signed in as {form_data["username"]}.')
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        user = User.objects.get(username="username")
+        self.assertEqual(user.first_name, "firsttest")
+
+        # Signals don't seem to populate the request attribute during tests.. but it actually gets called
+        # self.assertTrue(getattr(response.wsgi_request, 'recently_signed_up_with_email', None))
 
 
 class CustomSocialAccountSignUpFormTest(TenantTestCase):

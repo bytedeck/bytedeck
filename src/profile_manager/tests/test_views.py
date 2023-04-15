@@ -430,6 +430,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         with patch("profile_manager.models.messages.info") as mock_messages_info:
             self.client.post(reverse('account_login'), form_data, follow=True)
+            mock_messages_info.assert_called()
             message = mock_messages_info.call_args[0][1]
 
         self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")

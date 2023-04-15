@@ -23,7 +23,7 @@ from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
 
-from allauth.account.signals import email_confirmed, user_logged_in
+from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
 from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 
 
@@ -450,6 +450,22 @@ def email_confirmed_handler(email_address, **kwargs):
     with transaction.atomic():
         email_address.set_as_primary()
         EmailAddress.objects.filter(user=email_address.user, primary=False).delete()
+        # EmailAddress.objects.filter(user=email_address.user, primary=False, verified=False).delete()
+
+
+@receiver(email_confirmation_sent, sender=EmailConfirmationHMAC)
+def email_confirmation_sent_recently_signed_up_with_email(request, signup, **kwargs):
+    if not signup:
+        return
+
+    # Add an attribute to request that an email confirmation as been already sent
+    request.recently_signed_up_with_email = True
+
+
+@receiver(user_logged_out, sender=User)
+def user_logged_out_handler(request, user, **kwargs):
+    if hasattr(request, 'recently_signed_up_with_email'):
+        del request.recently_signed_up_with_email
 
 
 @receiver(user_logged_in, sender=User)
@@ -460,8 +476,12 @@ def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
 
     email_address = EmailAddress.objects.filter(email=user.email).first()
 
-    if email_address and email_address.verified is False:
-        messages.info(request, f"Please verify your email address: {user.email}.")
+    recently_signed_up_with_email = getattr(request, 'recently_signed_up_with_email', False)
+
+    # Only send the email when they login again
+    if not recently_signed_up_with_email:
+        if email_address and email_address.verified is False:
+            messages.info(request, f"Please verify your email address: {user.email}.")
 
 
 def smart_list(value, delimiter=",", func=None):
