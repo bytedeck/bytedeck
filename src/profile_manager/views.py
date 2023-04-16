@@ -1,10 +1,11 @@
+from allauth.socialaccount.models import SocialLogin
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
@@ -25,6 +26,9 @@ from django.contrib.auth.forms import SetPasswordForm
 
 from allauth.account.utils import send_email_confirmation
 from allauth.account.models import EmailAddress
+from allauth.socialaccount.helpers import _complete_social_login
+
+User = get_user_model()
 
 
 class ViewTypes:
@@ -327,6 +331,57 @@ class TagChart(NonPublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["user"] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
         return context
+
+
+@non_public_only_view
+def oauth_merge_account(request):
+
+    merge_with_user_id = request.session.get('merge_with_user_id')
+    user = get_object_or_404(User, id=merge_with_user_id)
+
+    if request.method == "POST":
+
+        merge_account = request.POST.get('submit') == 'yes'
+
+        # The socialaccount_sociallogin must've been removed from the session
+        # or there is no user to merge with so we don't have anything else to do...
+        if not merge_with_user_id:
+            return redirect('account_login')
+
+        if merge_account:
+            # Remove the merge_with_user_id and socialaccount_sociallogin from the session object
+            # since we don't want to pollute it
+
+            request.session.pop('merge_with_user_id')
+            socialaccount_data = request.session.pop('socialaccount_sociallogin', None)
+            sociallogin = SocialLogin.deserialize(socialaccount_data)
+            sociallogin.connect(request, user)
+
+            # Automatically verify email during account merge
+            try:
+                email_address = EmailAddress.objects.get(email=user.email)
+            except EmailAddress.DoesNotExist:
+                email_address = EmailAddress(email=user.email)
+
+            email_address.user = user
+            email_address.verified = True
+            email_address.primary = True
+            email_address.save()
+
+            return _complete_social_login(request, sociallogin)
+        else:
+            # Remove the email from that user
+            user.emailaddress_set.filter(email=user.email).delete()
+            user.email = ''
+            user.save()
+
+            return redirect('socialaccount_signup')
+
+    context = {
+        'other_account_username': user.username,
+        'email_address': user.email,
+    }
+    return render(request, 'socialaccount/merge.html', context)
 
 
 @non_public_only_view

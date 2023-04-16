@@ -244,15 +244,83 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
-    def test_signin_via_post_connect_existing_account(
+    def test_signin_via_post_connect_existing_account_automatically(
         self,
         mock_verify_and_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
         """
-        When a student tries to login via OAuth and the email they used in OAuth matches an email in the current DB,
-        automatically login that student
+        When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
+        but that email is verified, automatically merge their social account with their local account
+        """
+
+        test_student = User.objects.create_user(
+            username='test_student',
+            password="password",
+            email='test_student@example.com',
+        )
+        # Add a verified email to the student
+        test_student.emailaddress_set.create(
+            email=test_student.email,
+            verified=True,
+        )
+
+        self.setup_social_app()
+        self.client = TenantClient(self.tenant)
+
+        social_login = self.get_social_login()
+        social_login.user.email = test_student.email
+        social_login.email_addresses[0].email = test_student.email
+
+        mock_get_access_token.return_value = {
+            'access_token': 'test_access_token',
+            'expires_in': 3599,
+            'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'token_type': 'Bearer',
+            'id_token': 'test_id_token'
+        }
+        mock_complete_login.return_value = social_login
+        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+
+        # Simulate a student clicking the Google Sign in button
+        url = reverse('google_login')
+        response = self.client.post(url)
+
+        # Check that they get redirected to the google accounts sign in page
+        authorize_url = response.headers['Location']
+        self.assertIn('accounts.google.com', authorize_url)
+        self.assertIn('response_type=code', authorize_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('client_id=test_client_id', authorize_url)
+
+        # There should be no SocialAccount associated to a student at this point
+        self.assertFalse(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+        # Simulate a student entering the correct details or choosing a google account to sign in with
+        response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        mock_get_access_token.assert_called_once()
+        mock_complete_login.assert_called_once()
+
+        # Since there is a match with Google email used during login, that account should now be
+        # associated to that student who logged in
+        self.assertTrue(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+    @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
+    @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
+    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    def test_signin_via_post_connect_existing_account_manually__merge_yes(
+        self,
+        mock_verify_and_unstash_state,
+        mock_complete_login,
+        mock_get_access_token
+    ):
+        """
+        When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
+        but that email is not verified, the user gets redirected to the Oauth merge page, clicks yes and then it will
+        merge their social account with their local account
         """
 
         test_student = User.objects.create_user(
@@ -295,14 +363,121 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         # Simulate a student entering the correct details or choosing a google account to sign in with
         response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
 
-        # Student should now be redirected to the quests page after a successful login
-        self.assertRedirects(response, reverse('quests:quests'))
+        # Since there is no verified email but User.email is the same with the Social Login email they used
+        # then they should be redirected to the oauth account merge page
+        self.assertRedirects(response, reverse('profiles:oauth_merge_account'))
+        self.assertIn('merge_with_user_id', response.wsgi_request.session)
+
+        # Clicking No should redirect them to the socialaccount sign up page
+        # response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'no'}, follow=True)
+        # test_student.refresh_from_db()
+        # self.assertEqual(test_student.email, '')
+
+        # Clicking Yes should merge the accounts and redirect them to the login page
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'yes'}, follow=True)
+
         mock_get_access_token.assert_called_once()
         mock_complete_login.assert_called_once()
 
-        # Since there is a match with Google email used during login, that account should now be automatically
+        # Since there is a match with Google email used during login, that account should now be
         # associated to that student who logged in
         self.assertTrue(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+        # test_student should now have a verified email
+        test_student.refresh_from_db()
+        self.assertTrue(test_student.emailaddress_set.filter(email=test_student.email, verified=True).exists())
+
+    @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
+    @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
+    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    def test_signin_via_post_connect_existing_account_manually__merge_no(
+        self,
+        mock_verify_and_unstash_state,
+        mock_complete_login,
+        mock_get_access_token
+    ):
+        """
+        When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
+        but that email is not verified, the user gets redirected to the Oauth merge page, clicks No;
+
+        They should be redirected to the signup page and the email associated with that user should be removed
+        """
+
+        test_student = User.objects.create_user(
+            username='test_student',
+            password="password",
+            email='test_student@example.com',
+        )
+
+        self.setup_social_app()
+        self.client = TenantClient(self.tenant)
+
+        social_login = self.get_social_login()
+        social_login.user.email = test_student.email
+        social_login.email_addresses[0].email = test_student.email
+
+        mock_get_access_token.return_value = {
+            'access_token': 'test_access_token',
+            'expires_in': 3599,
+            'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'token_type': 'Bearer',
+            'id_token': 'test_id_token'
+        }
+        mock_complete_login.return_value = social_login
+        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+
+        # Simulate a student clicking the Google Sign in button
+        url = reverse('google_login')
+        response = self.client.post(url)
+
+        # Check that they get redirected to the google accounts sign in page
+        authorize_url = response.headers['Location']
+        self.assertIn('accounts.google.com', authorize_url)
+        self.assertIn('response_type=code', authorize_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('client_id=test_client_id', authorize_url)
+
+        # There should be no SocialAccount associated to a student at this point
+        self.assertFalse(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+        # Simulate a student entering the correct details or choosing a google account to sign in with
+        response = self.client.get(reverse('google_callback'), data={'code': 'testcode', 'state': 'randomstate'}, follow=True)
+
+        # Since there is no verified email but User.email is the same with the Social Login email they used
+        # then they should be redirected to the oauth account merge page
+        self.assertRedirects(response, reverse('profiles:oauth_merge_account'))
+        self.assertIn('merge_with_user_id', response.wsgi_request.session)
+
+        # Clicking No should redirect them to the socialaccount sign up page
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'no'}, follow=True)
+
+        # The email should not be assosicated with that user anymore
+        test_student.refresh_from_db()
+        self.assertEqual(test_student.email, '')
+
+        mock_get_access_token.assert_called_once()
+        mock_complete_login.assert_called_once()
+
+        response_form = response.context['form'].initial
+
+        # Perform the signup process as a different user
+        form_data = {
+            **response_form,
+            'username': 'new_student',
+            'access_code': '314159',
+        }
+        response = self.client.post(reverse('socialaccount_signup'), data=form_data, follow=True)
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        registered_student = User.objects.get(username='new_student')
+
+        self.assertNotEqual(registered_student, test_student)
+
+        # No account should be created for the test_student because we just registered for a new account
+        self.assertFalse(SocialAccount.objects.filter(user=test_student, provider='google').exists())
+
+        # There should now be a social account under the newly registered user
+        self.assertTrue(SocialAccount.objects.filter(user=registered_student, provider='google').exists())
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
@@ -446,6 +621,8 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
         self.assertTrue(email_address_obj.verified)
         self.assertTrue(email_address_obj.primary)
+
+        # There should be now 1 primary and 2 verified
         self.assertEqual(user.emailaddress_set.filter(primary=True).count(), 1)
         self.assertEqual(user.emailaddress_set.filter(verified=True).count(), 2)
 
