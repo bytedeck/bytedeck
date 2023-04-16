@@ -455,6 +455,9 @@ def email_confirmed_handler(email_address, **kwargs):
         emails_qs = user.emailaddress_set.filter(primary=False)
 
         # Exclude email addresses used for logging in with social providers like google
+        # We can't query it like user.socialaccount_set.values_list(extra_data__email, flat=True)
+        # because django-allauth uses a different implementation of JSONField.
+        # See: https://github.com/pennersr/django-allauth/issues/2599
         social_emails = []
         for data in user.socialaccount_set.values_list("extra_data", flat=True):
             email = data.get("email")
