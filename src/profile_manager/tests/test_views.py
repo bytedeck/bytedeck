@@ -1,6 +1,11 @@
+import re
+from unittest.mock import patch
+from allauth.account.models import EmailConfirmationHMAC
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -376,3 +381,170 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         qs = response.context['object_list']
         self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+
+    def test_profile_update_email(self):
+        """
+        Test that updating your email sends a confirmation link and logging in will
+        have a reminder to verify email address if not yet verified.
+        """
+
+        self.client.force_login(self.test_student1)
+
+        # current student does not have an email
+        self.assertFalse(self.test_student1.email)
+
+        # begin test of method: profile_manager.views.profile_resend_email_verification
+        # Accessing the resend email verification should just display an error message that they don't have an email
+        with patch("profile_manager.views.messages.error") as mock_messages_error:
+            response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
+            message = mock_messages_error.call_args[0][1]
+
+        self.assertEqual(message, "User does not have an email")
+
+        # end test of method: profile_manager.views.profile_resend_email_verification
+
+        # Prepare new data for student
+        email = f"{self.test_student1.username}@example.com"
+
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data.update({
+            "email": email,
+        })
+
+        with patch("profile_manager.views.messages.add_message") as mock_add_message:
+            self.client.post(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]), data=form_data)
+            message = mock_add_message.call_args[0][2]
+
+        self.test_student1.refresh_from_db()
+        self.assertEqual(self.test_student1.email, email)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(message, f"Confirmation e-mail sent to {email}.")
+
+        # begin test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
+        self.client.logout()
+        # Verify that logging in will have a reminder to verify your email
+        form_data = {
+            "login": self.test_student1.username,
+            "password": self.test_password,
+        }
+
+        with patch("profile_manager.models.messages.info") as mock_messages_info:
+            self.client.post(reverse('account_login'), form_data, follow=True)
+            mock_messages_info.assert_called()
+            message = mock_messages_info.call_args[0][1]
+
+        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+        self.client.logout()
+        # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
+
+        self.client.force_login(self.test_student1)
+
+        # Label should still be Not yet verified
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
+        form = response.context['form']
+        self.assertIn("Not yet verified", form.fields['email'].help_text)
+
+        # Resend email verification
+        response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
+
+        # We should now have 2 received emails
+        self.assertEqual(len(mail.outbox), 2)
+
+        # Extract the HMAC from the email
+        email_msg = mail.outbox[1].message().as_string()
+        match = re.search(r'https?://\S+/[^/]+/(\S+)/', email_msg)
+        assert match
+        hmac_key = match.group(1)
+
+        # Manually verify the email
+        email_address = EmailConfirmationHMAC.from_key(hmac_key).confirm(response.wsgi_request)
+        assert email_address
+
+        self.assertTrue(email_address.verified)
+
+        response = self.client.get(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]))
+        form = response.context['form']
+
+        self.assertIn("Verified", form.fields['email'].help_text)
+
+        # Accessing the resend verification should display that email is already verified
+        with patch("profile_manager.views.messages.info") as mock_messages_info:
+            response = self.client.get(reverse("profiles:profile_resend_email_verification", args=[self.test_student1.profile.pk]))
+            message = mock_messages_info.call_args[0][1]
+
+        self.assertEqual(message, "Your email address has already been verified.")
+
+        # Here, we just check that the messages was never called
+        self.client.logout()
+        with patch("profile_manager.models.messages.info") as mock_messages_info:
+            self.client.post(reverse('account_login'), form_data, follow=True)
+            mock_messages_info.assert_not_called()
+
+    def test_update_profile__email_already_exists(self):
+        """
+        Test changing an email to a user with an existing email address fails
+        """
+
+        self.test_student1.email = "existing@example.com"
+        self.test_student1.save()
+
+        self.test_student2.email = "current@example.com"
+        self.test_student2.save()
+        self.client.force_login(self.test_student2)
+
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data.update({
+            "email": self.test_student1.email,  # Use test_student1 email
+        })
+
+        response = self.client.post(reverse("profiles:profile_update", args=[self.test_student2.profile.pk]), data=form_data)
+
+        form = response.context['form']
+
+        self.test_student2.refresh_from_db()
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['email'][0], 'A user is already registered with this email address')
+        self.assertEqual(self.test_student2.email, "current@example.com")   # Should be the same email
+
+    def test_update_profile__revert_email_to_original(self):
+        """
+        Test that changing an email address and then reverting it to the original succeeds
+        """
+
+        orig_email = "original@example.com"
+        self.test_student1.email = orig_email
+        self.test_student1.save()
+
+        self.test_student1.emailaddress_set.create(email=self.test_student1.email, verified=True, primary=True)
+
+        self.client.force_login(self.test_student1)
+
+        new_email = "new@example.com"
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data.update({
+            "email": new_email,
+        })
+
+        with patch("profile_manager.views.messages.add_message") as mock_add_message:
+            self.client.post(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]), data=form_data)
+            message = mock_add_message.call_args[0][2]
+
+        self.test_student1.refresh_from_db()
+
+        # Should now use the new email
+        self.assertEqual(self.test_student1.email, new_email)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(message, f"Confirmation e-mail sent to {new_email}.")
+
+        # Revert back to the original email, ignore the confirmation email
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data.update({
+            "email": orig_email,
+        })
+
+        self.client.post(reverse("profiles:profile_update", args=[self.test_student1.profile.pk]), data=form_data)
+        message = mock_add_message.call_args[0][2]
+
+        self.test_student1.refresh_from_db()
+        self.assertEqual(self.test_student1.email, orig_email)

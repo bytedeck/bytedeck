@@ -1,9 +1,11 @@
+from allauth.socialaccount.admin import SocialAccountAdmin, SocialAppAdmin
+
 from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.contrib.auth.admin import GroupAdmin
 from django.contrib.sites.models import Site
 
-from allauth.socialaccount.models import SocialAccount, SocialToken, SocialApp
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
 from allauth.account.models import EmailAddress
 
 from django_summernote.models import Attachment
@@ -34,9 +36,23 @@ admin.site.unregister(Group)
 admin.site.register(Group, GroupCustomAdmin)
 
 
+class SocialAppCustomAdmin(PublicSchemaOnlyAdminAccessMixin, SocialAppAdmin):
+    pass
+
+
+admin.site.unregister(SocialApp)
+admin.site.register(SocialApp, SocialAppCustomAdmin)
+
+
+class SocialAccountCustomAdmin(PublicSchemaOnlyAdminAccessMixin, SocialAccountAdmin):
+    pass
+
+
+admin.site.unregister(SocialAccount)
+admin.site.register(SocialAccount, SocialAccountCustomAdmin)
+
+
 # Remove a few more models from admin for now to simplify
 admin.site.unregister(Attachment)
-admin.site.unregister(SocialAccount)
 admin.site.unregister(SocialToken)
-admin.site.unregister(SocialApp)
 admin.site.unregister(EmailAddress)

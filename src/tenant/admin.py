@@ -1,12 +1,15 @@
+from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.contrib.sites.models import Site
+from django.db import connection, transaction
+from django.urls import reverse
 
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-# from quest_manager.models import Quest
+from django.utils.translation import ngettext
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
@@ -88,6 +91,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
 
+    actions = ['enable_google_signin', 'disable_google_signin']
+
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
             and the schema deleted from the db via psql: `DROP SCHEMA schema_name CASCADE;`. \
@@ -108,6 +113,61 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
         return qs
+
+    @admin.action(description="Enable google signin for tenant(s)")
+    def enable_google_signin(self, request, queryset):
+        from siteconfig.models import SiteConfig
+
+        try:
+            SocialApp.objects.get(provider='google')
+        except SocialApp.DoesNotExist:
+            self.message_user(request, "You must create a SocialApp record with 'google' as the provider", messages.ERROR)
+            return
+
+        queryset = queryset.exclude(schema_name=get_public_schema_name())
+        enabled_tenant_domains = []
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+                with transaction.atomic():
+                    config._propagate_google_provider()
+                    config.enable_google_signin = True
+                    config.save()
+
+                tenant_domain = tenant.get_primary_domain()
+                uri = request.build_absolute_uri().replace(Site.objects.get_current().domain, tenant_domain.domain)
+
+                # Create a URL {tenant}.{domain}/accounts/google/login/callback/
+                uri = uri.replace(request.path, reverse("google_callback"))
+
+                enabled_tenant_domains.append(uri)
+
+        enabled_count = queryset.count()
+
+        tenant_domains = ", ".join(enabled_tenant_domains)
+        self.message_user(request, ngettext(
+            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain %s is added in the Authorized Redirect URIs",
+            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains %s are added in the Authorized Redirect URIs",
+            enabled_count,
+        ) % (enabled_count, tenant_domains), messages.SUCCESS)
+
+    @admin.action(description="Disable google signin for tenant(s)")
+    def disable_google_signin(self, request, queryset):
+        from siteconfig.models import SiteConfig
+
+        queryset = queryset.exclude(schema_name=get_public_schema_name())
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+                config.enable_google_signin = False
+                config.save()
+
+        disabled_count = queryset.count()
+        self.message_user(request, ngettext(
+            "%d tenant google signin was disabled successfully",
+            "%d tenant google signins were disabled successfully",
+            disabled_count,
+        ) % disabled_count, messages.SUCCESS)
 
 
 admin.site.register(Tenant, TenantAdmin)
