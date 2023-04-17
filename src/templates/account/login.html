@@ -1,4 +1,5 @@
 {% extends "base_no_sidebar.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 {% load i18n %}
 {% load account socialaccount %}
@@ -19,7 +20,9 @@
       <div class="socialaccount_ballot">
         {% include "socialaccount/snippets/login_extra.html" %}
 
-        <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
+        <a href="{% provider_login_url 'google' process='login' %}" class="">
+          <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+        </a>
       </div>
 
       <p class="login-or">{% trans 'or' %}</p>

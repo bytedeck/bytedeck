@@ -1,4 +1,5 @@
 {% extends "base_no_sidebar.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 {% load i18n %}
 {% load account socialaccount %}
@@ -19,7 +20,11 @@
 {% if socialaccount_providers and config.enable_google_signin %}
   <p>or</p>
   <p>{% blocktrans %} Sign up via: {% endblocktrans %}</p>
-  <a href="{% provider_login_url 'google' process='login' %}" class="btn btn-success"><i class="fa fa-google"></i>oogle</a>
+  <a href="{% provider_login_url 'google' process='login' %}">
+    <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+  </a>
+
+
 {% endif %}
 
 <form class="signup" id="signup_form" method="post" action="{% url 'account_signup' %}">
