@@ -11,7 +11,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.core.files import File
+from django.db import connection
 from django.urls import reverse
+from django_tenants.utils import get_public_schema_name
 
 from courses.models import Grade, Rank, Course, Block, MarkRange
 from quest_manager.models import Quest, Category
@@ -24,6 +26,10 @@ User = get_user_model()
 
 
 def load_initial_tenant_data():
+
+    if connection.schema_name == get_public_schema_name():
+        return
+
     create_users()
     create_site_config_object()
     create_initial_course()

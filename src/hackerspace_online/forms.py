@@ -11,9 +11,19 @@ from captcha.fields import ReCaptchaField
 from captcha.widgets import ReCaptchaV2Invisible
 
 from siteconfig.models import SiteConfig
+from allauth.socialaccount import forms as socialaccount_forms
 
 
-class CustomSignupForm(SignupForm):
+class SignupFormAccessCodeValidatorMixin:
+
+    def clean(self):
+        super().clean()
+        access_code = self.cleaned_data['access_code']
+        if access_code != SiteConfig.get().access_code:
+            raise forms.ValidationError("Access code unrecognized.")
+
+
+class CustomSignupForm(SignupFormAccessCodeValidatorMixin, SignupForm):
 
     first_name = forms.CharField(
         max_length=30,
@@ -35,13 +45,21 @@ class CustomSignupForm(SignupForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['username'].help_text = 'Ask your teacher what you should be using for your username. Username is not case sensitive'
+        self.fields['username'].help_text = 'Username is not case sensitive'
 
-    def clean(self):
-        super().clean()
-        access_code = self.cleaned_data['access_code']
-        if access_code != SiteConfig.get().access_code:
-            raise forms.ValidationError("Access code unrecognized.")
+
+class CustomSocialAccountSignupForm(SignupFormAccessCodeValidatorMixin, socialaccount_forms.SignupForm):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Add fields from the default custom signup form
+        signup_form = CustomSignupForm()
+        self.fields['first_name'] = signup_form.fields['first_name']
+        self.fields['last_name'] = signup_form.fields['last_name']
+        self.fields['access_code'] = signup_form.fields['access_code']
+        self.fields['username'].help_text = signup_form.fields['username'].help_text
+        self.fields['email'].widget = forms.TextInput(attrs={'readonly': 'readonly'})
 
 
 class CustomLoginForm(LoginForm):

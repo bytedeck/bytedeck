@@ -33,12 +33,14 @@ def send_notifications(user_id, announcement_id):
 def get_users_to_email():
     students_to_email = list(
         CourseStudent.objects.all_users_for_active_semester()
+                             .filter(emailaddress__verified=True, emailaddress__primary=True)
                              .filter(profile__get_announcements_by_email=True)
                              .exclude(email='')
                              .values_list('email', flat=True))
 
     teachers_to_email = list(
         User.objects.filter(is_staff=True)
+                    .filter(emailaddress__verified=True, emailaddress__primary=True)
                     .filter(profile__get_announcements_by_email=True)
                     .exclude(email='')
                     .values_list('email', flat=True))

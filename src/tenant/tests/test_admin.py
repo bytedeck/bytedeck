@@ -1,15 +1,25 @@
 # With help from https://stackoverflow.com/questions/6498488/testing-admin-modeladmin-in-django
 
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth import get_user_model
+from django.test import RequestFactory
 # from django.core.exceptions import ValidationError
 
 from django_tenants.test.cases import TenantTestCase
 # from django_tenants.test.client import TenantClient
 from django_tenants.utils import tenant_context
 from django.utils import timezone
+from django.contrib.sites.models import Site
+from unittest.mock import patch
+from siteconfig.models import SiteConfig
 
 from tenant.admin import TenantAdmin, TenantAdminForm
 from tenant.models import Tenant
+from django_tenants.test.client import TenantClient
+
+from allauth.socialaccount.models import SocialApp
+
+User = get_user_model()
 
 
 class NonPublicTenantAdminTest(TenantTestCase):
@@ -57,7 +67,102 @@ class PublicTenantTestAdminPublic(TenantTestCase):
             schema_name='public',
             name='public'
         )
+
+        with tenant_context(self.public_tenant):
+            # Hack to create the public tenant without trigerring the signals
+            Tenant.objects.bulk_create([self.public_tenant])
+            self.public_tenant.refresh_from_db()
+            self.public_tenant.domains.create(domain='test.com', is_primary=True)
+
+        super().setUp()
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
+
+    @patch("tenant.admin.messages.add_message")
+    def test_enable_google_signin_admin_without_config(self, mock_add_message):
+        """
+        Test where we attempt to enable google sign in but the public tenant has not yet configured
+        the Google Provider Social App
+        """
+
+        request = RequestFactory().get('/')
+        queryset = Tenant.objects.exclude(pk=self.public_tenant.pk)
+
+        admin = User.objects.create_superuser(username="test_admin", email="admin@gmail.com", password="password")
+        public_client = TenantClient(self.public_tenant)
+        public_client.force_login(admin)
+
+        self.tenant_model_admin.enable_google_signin(request=request, queryset=queryset)
+        mock_add_message.assert_called
+
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+
+                self.assertIsNotNone(config)
+                self.assertFalse(config.enable_google_signin)
+
+    # Need to patch add_message since the messages framework thinks that it isn't in the INSTALLED_APPS
+    # during tests..
+    # Getting this error django.contrib.messages.api.MessageFailure:
+    #           You cannot add messages without installing django.contrib.messages.middleware.MessageMiddleware
+    @patch("tenant.admin.messages.add_message")
+    def test_enable_and_disable_google_signin_admin(self, mock_add_message):
+        """
+        Test where we enable/disable google signin for clients via admin
+        """
+
+        request = RequestFactory().get('/')
+        queryset = Tenant.objects.exclude(pk=self.public_tenant.pk)
+
+        admin = User.objects.create_superuser(username="test_admin", email="admin@gmail.com", password="password")
+        public_client = TenantClient(self.public_tenant)
+        public_client.force_login(admin)
+
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+
+                self.assertIsNotNone(config)
+                self.assertFalse(config.enable_google_signin)
+
+                with self.assertRaises(SocialApp.DoesNotExist):
+                    SocialApp.objects.get(provider='google')
+
+        with tenant_context(self.public_tenant):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret',
+            )
+            app.sites.add(Site.objects.get_current())
+            self.tenant_model_admin.enable_google_signin(request=request, queryset=queryset)
+
+        # Google sign in should now be enabled
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+
+                self.assertIsNotNone(config)
+                self.assertTrue(config.enable_google_signin)
+
+                sc = SocialApp.objects.get(provider='google')
+                self.assertIsNotNone(sc)
+
+        # Disable google sign in
+        queryset = Tenant.objects.exclude(pk=self.public_tenant.pk)
+        with tenant_context(self.public_tenant):
+            self.tenant_model_admin.disable_google_signin(request=request, queryset=queryset)
+
+        # Everything should now be disabled
+        for tenant in queryset:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+
+                self.assertIsNotNone(config)
+                self.assertFalse(config.enable_google_signin)
+
+        mock_add_message.assert_called()
 
     def test_public_tenant_admin_save_model(self):
 

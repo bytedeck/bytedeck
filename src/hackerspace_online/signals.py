@@ -1,5 +1,7 @@
+from django.contrib.sites.models import Site
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django_tenants.utils import get_public_schema_name, tenant_context
 
 from tenant.models import Tenant
 
@@ -24,3 +26,30 @@ def change_domain_urls(sender, *args, **kwargs):
                 tenant.save()
             public_tenant.domain_url = kwargs['instance'].domain
             public_tenant.save()
+
+
+def handle_tenant_site_domain_update(tenant, **kwargs):
+    """
+    This is called whenever a new tenant is created.
+    Each tenant must has their own `Site` under their own schema.
+
+    By default, it will have the value of settings.ROOT_DOMAIN or `example.com`
+
+    django-allauth makes use of the `Site.domain` in order to generate the correct URLs for emails
+    and also for callback URLs when using SocialProviders.
+
+    So, when a tenant is created, this updates the domain to be the same domain they use for accessing their deck
+
+    `post_schema_sync` will get called after a schema gets created from the save method on the tenant class.
+    https://django-tenants.readthedocs.io/en/latest/use.html#signals
+    """
+
+    if tenant.schema_name == get_public_schema_name():
+        return
+
+    # Update the first Site.domain since it will be used for OAuth
+    # Doing it this way so that we don't trigger any `post_save` signals
+
+    with tenant_context(tenant):
+        domain = tenant.get_primary_domain().domain
+        Site.objects.update(name=domain, domain=domain)

@@ -1,0 +1,24 @@
+{% extends "base_no_sidebar.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign In" %} | {% endblock %}
+
+{% block content %}
+
+  <p>
+    {% blocktrans %}
+      We noticed another account with username <strong>{{ other_account_username }}</strong> is also using
+      <strong>{{ email_address }}</strong> in their profile, but they have not verified the email address to that account.
+      Would you like to merge the existing <strong>{{ other_account_username }}</strong> account with this one?
+      If you choose No, then <strong>{{ email_address }}</strong> will be removed from <strong>{{ other_account_username }}</strong> user profile.
+    {% endblocktrans %}
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button class="btn btn-primary" type="submit" name="submit" value="yes">{% trans "Yes" %}</button>
+    <button class="btn btn-default" type="submit" name="submit" value="no">{% trans "No" %}</button>
+  </form>
+{% endblock %}
+
+
