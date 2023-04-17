@@ -5,11 +5,12 @@ import json
 from django.conf import settings as django_settings
 from django.forms.utils import flatatt
 from django.template.loader import render_to_string
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from bleach.css_sanitizer import CSSSanitizer
-from django_summernote.utils import get_config
+from django_summernote.utils import get_config, get_proper_language
 from django_summernote.widgets import SummernoteInplaceWidget, SummernoteWidget
 
 
@@ -101,6 +102,7 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
     def summernote_settings(self):
         """Override default `summernote_settings` method to inject mandatory settings"""
         summernote_settings = super().summernote_settings()
+        lang = get_proper_language()
 
         # disable XSS protection for CodeView (mandatory for ByteDeck project)
         summernote_settings.update(
@@ -108,6 +110,11 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
                 "codeviewFilter": False,  # set this to false to skip filtering entities (tags, attributes or styles).
             }
         )
+        # replace original language js file (mandatory for ByteDeck project)
+        summernote_settings["url"].update({
+            'language': static('bytedeck_summernote/lang/bytedeck_summernote-advanced-' + lang + '.min.js'),
+        })
+
         return summernote_settings
 
 
