@@ -4,6 +4,31 @@
 
 If you're interested in contributing to this repo, please work through these steps carefully.  Bad pull requests waste a lot of time, and these steps will ensure your PR is a good one!  This guide is written with beginngers in mind, but we would appreciate if experienced developers work through this at least once so we're all on the same page!
 
+Save us all some time and frustration by working through these steps carefully, at least once, and understand them all!
+
+### Running Tests and Checking Code Style
+You can run tests either locally, or through the web container.:
+1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):
+   * using venv: `./src/manage.py test src && flake8 src`
+   * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+2. Tests take too long, but you can speed them up a number of ways:
+   * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
+     `./src/manage.py test src --parallel --failfast`
+   * Only run tests from a single app, for example: `./src/manage.py test src/announcements`
+   * Only run tests from a single test class: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
+   * Only run a single test: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+
+### Further Development
+After you've got everything set up, you can just run the whole project with:
+`docker-compose up`
+
+And stop it with:
+`docker-compose down`
+
+or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:
+`docker-compose up -d db redis celery celery-beat -d`
+`./src/manage.py runserver`
+
 ### First time only:
 
 1. Move into your cloned directory. For example: `cd ~/Developer/bytedeck`
@@ -14,18 +39,21 @@ If you're interested in contributing to this repo, please work through these ste
 
 4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
 5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
-6. Write code!
-7. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
+6. Write tests! See Test Requirements below for important details (if you are not comfortable with test-driven development, you can also write tests after writing code instead of before).  Also see "Running Tests and Checking Code Style" section.
+7. Write code!
+8. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
    * venv: `./src/manage.py test src --failfast --parallel && flake8 src`
    * docker: `docker-compose exec web bash -c "./src/manage.py test src --failfast --parallel && flake8 src"`
-8. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:
+9. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:
 `git commit -am "Useful description of your changes; Closes #123"`
-8. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
-9. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
-10. You may need to resolve merge conflicts, if there are any. Hopefully not!  ([how to resolve a merge conflict](https://www.youtube.com/watch?v=QmKdodJU-js))
-11. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
-12. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
-13. Select your recently pushed branch and create a pull request (you should see a button for this)
+9. Repeat steps 4-9 above until the feature/issue is completed.
+10. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
+11. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
+14. You may need to resolve merge conflicts, if there are any. Hopefully not!  ([how to resolve a merge conflict](https://www.youtube.com/watch?v=QmKdodJU-js))
+15. Run entire test suite and check coverage (see "Detailed Expectations for all Pull Requests" section below)
+16. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
+17. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
+18. Select your recently pushed branch and create a pull request (you should see a button for this)
 ![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)
 
 13. Complete pull request.
@@ -37,14 +65,16 @@ If you're interested in contributing to this repo, please work through these ste
 ## Detailed Expectations for all Pull Requests:
 
 ### Test Requirements
-* All issues labelled "bug" require a test for the bug that fails as a result of the bug.
-* All new server-side code must be 100% tested (all logical branches) unless there is a specific reason it is not feasible.
+* New tests should use the naming convention: `def test_method_or_class_name__specific_case_being_tested()`, for example: `test_end_active_semester__staff()` or `test_CourseDelete_view__with_students()`
+* All tests must include a useful docstring.  Please use this guide: [How to write docstrings for tests](https://jml.io/test-docstrings/).  If you're curious why our tests need docstrings, see (this article)[https://hynek.me/articles/document-your-tests/].
+* All issues labelled "bug" require a test for the bug that **fails** as a result of the bug.  Bug fixing should be test-driven.
+* All new server-side code must be 100% tested (all logical branches) unless there is a specific reason it is not feasible. See "Verifying Coverage section below for details.
 * When modifying an existing method or class that is not fully tested, at least ensure your additional code is fully tested (this may, incidentally, require you to write additional tests for the existing method/class)
-* Front end tests must only be included 1. to confirm the present or absence of key content on a page: For example, a view/template that renders a button that should only be visible by staff users; or 2. to confirm the correction of a bug in the template content.
+* Front end tests only need to be included in some cases: 1. to confirm the present or absence of key content on a page: For example, a view/template that renders a button that should only be visible by staff users; or 2. to confirm the correction of a bug in the template.
 
 ### Verifying Coverage
 
-To verify the test coverage of your addtions, you can run coverage during testing; for example, if I made a modification in the Notifications app:
+To verify the test coverage of your additions, you can run coverage during testing; for example, if I made a modification in the Notifications app:
 1. Run the notifications tests with coverage:
 `docker-compose exec web bash -c "coverage run --source=src ./src/manage.py test src/notifications"`
 1. Generate html for the test coverage:
@@ -61,11 +91,12 @@ To verify the test coverage of your addtions, you can run coverage during testin
 
 ### Documentation
 Please ensure your code is well documented. Do not assume that your code is obvious to reviewers, other developers, or even your future self:
-1. All methods and classes must include a docstring that fully explains what the purpose of the function is, why it's needed, and what it's being used for.
-1. All non-trivial code should have a comment describing why it's doing what it's doing.
-1. If what the code is doing is not immediately obvious, describe what it is doing  (for example, fancy list comprehensions, advanced queryset filters, use of non-standard library methods, etc)
-1. If you found code on stack overflow, a blog, or elsewhere, link to in within a code comment. This often provides addition context that is helpful to reviewers or future developers.
-1. Be prepared for requests to add more documentation/comments during review.
+* All methods and classes must include a docstring that fully explains what the purpose of the function is, why it's needed, and what it's being used for.
+* All tests require a docstring (see Test Requirements section for more details).
+* All non-trivial code should have a comment describing why it's doing what it's doing.
+* If what the code is doing is not immediately obvious, describe what it is doing  (for example, fancy list comprehensions, advanced queryset filters, use of non-standard library methods, etc)
+* If you found code on stack overflow, a blog, or elsewhere, link to in within a code comment. This often provides addition context that is helpful to reviewers or future developers.
+* Be prepared for requests to add more documentation/comments during review.
 
 ## Other considerations when contributing
 
@@ -79,6 +110,26 @@ When contributing to this repo, you need to keep in mind its multi-tenant archit
 
 ### Use a Consistent Coding Style
 We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/hackerspace/blob/develop/src/.flake8).  These will be enforced by the pre-commit hook.
+
+### Advanced / Optional: Inspecting the database with pgadmin4
+Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
+1. Run the pg-admin container:
+`docker-compose up pg-admin`
+2. Log in:
+   - url: [localhost:8080](http://localhost:8080)
+   - email: admin@admin.com
+   - password: password  (or whatever you changed this to in you `.env` file)
+3. Click "Add New Server"
+4. Give it any Name you want
+5. In the Connection tab set:
+   - Host name/address: db
+   - Port: 5432
+   - Maintenance database: postgres
+   - Username: postgres
+   - Password: Change.Me!  (or whatever you change the db password to in you `.env` file)
+6. Hit Save
+7. At the top left expand the Servers tree to find the database, and explore!
+8. You'll probably want to look at Schemas > (pick a schema) > Tables
 
 ## License
 By contributing, you agree that your contributions will be licensed under its [GNU GPL3 License](https://github.com/timberline-secondary/hackerspace/blob/develop/license.txt).

@@ -249,9 +249,9 @@ a.list-group-item-muted {
   color: #c8c8c8;
 }
 
-.form-control, 
+.form-control,
 .select2-container--bootstrap .select2-selection {
-  background-color: var(--slate-primary-ui-color) !important; 
+  background-color: var(--slate-primary-ui-color) !important;
 }
 
 .select2-container--bootstrap .select2-search--dropdown .select2-search__field {

@@ -6,7 +6,7 @@
 /***************************************
  * STYLE OPTIONS
  * https://js.cytoscape.org/#cy.style
- * 
+ *
 /**************************************/
 
 cy.style()
@@ -63,7 +63,7 @@ cy.style()
       })
     .selector('edge.repeat-edge')
       .style({
-        'loop-direction': '100deg', 
+        'loop-direction': '100deg',
         'loop-sweep': '-20deg',
         'target-endpoint': '90deg',
         'source-endpoint': '103deg',
@@ -114,7 +114,7 @@ cy.style()
 /***************************************
  * LAYOUT OPTIONS
  * https://js.cytoscape.org/#core/layout
- * 
+ *
 /**************************************/
 
 var layout = cy.layout({
@@ -135,9 +135,9 @@ var layout = cy.layout({
 layout.run()
 
 /***************************************
- * 
+ *
  * BEHAVIOUR/INTERACTIVE OPTIONS
- * 
+ *
 /**************************************/
 
 // redirect to link
@@ -163,12 +163,12 @@ cy.on('mouseout', '[^href]', function(){
 });
 
 
-$(document).ready(function() { 
+$(document).ready(function() {
 
     cy.ready( function () {
       updateBounds();
     });
-    
+
     //if they resize the window, resize the diagram
     $(window).resize(function () {
         console.log("resize")
@@ -189,7 +189,7 @@ var updateBounds = function () {
 };
 
 var updateZooming = function () {
-    // enable zooming if mobile device or smallscreen (otherwise zooming is annoying and 
+    // enable zooming if mobile device or smallscreen (otherwise zooming is annoying and
     // messes up page scrolling when using mouse wheel)
     var small_screen = window.matchMedia("(max-width: 767px)")
     cy.userZoomingEnabled(small_screen.matches);

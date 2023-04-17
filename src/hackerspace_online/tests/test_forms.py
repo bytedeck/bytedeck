@@ -1,3 +1,6 @@
+from django.conf import settings
+from django.test.utils import override_settings
+from datetime import timedelta
 from django import forms
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
@@ -87,7 +90,7 @@ class CustomSignUpFormTest(TenantTestCase):
 class CustomLoginFormTest(TenantTestCase):
 
     def setUp(self):
-        User.objects.create_user(username='testuser', password='testuser')
+        self.user = User.objects.create_user(username='testuser', password='testuser')
 
     def test_init(self):
         CustomLoginForm()
@@ -112,6 +115,64 @@ class CustomLoginFormTest(TenantTestCase):
         }
         response = self.client.post(reverse('account_login'), form_data, follow=True)
         self.assertRedirects(response, reverse('quests:quests'))
+
+    @override_settings(SESSION_COOKIE_AGE=60 * 60 * 24)
+    def test_session_expires_based_on_SESSION_COOKIE_AGE(self):
+        """
+        Test that whatever the value of SESSION_COOKIE_AGE expires correctly
+        """
+
+        self.client = TenantClient(self.tenant)
+        form_data = {
+            'login': 'TestUser',
+            'password': 'testuser'
+        }
+
+        response = self.client.post(reverse('account_login'), form_data, follow=True)
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        session = response.wsgi_request.session
+        self.user.refresh_from_db()
+
+        # NOTE: We are only testing the date here since there are some discrepancies on when the a the session object is created
+        # probably after a couple of seconds after the `last_login` is set
+        self.assertEqual((self.user.last_login + timedelta(seconds=settings.SESSION_COOKIE_AGE)).date(), session.get_expiry_date().date())
+
+    def test_remember_me_session_expires_on_browser_close(self):
+        """
+        Test to see that disabling `Remember me` expires on browser close
+        """
+
+        self.client = TenantClient(self.tenant)
+        form_data = {
+            'login': 'TestUser',
+            'password': 'testuser'
+        }
+
+        response = self.client.post(reverse('account_login'), form_data, follow=True)
+        self.assertRedirects(response, reverse('quests:quests'))
+        session = response.wsgi_request.session
+        self.assertTrue(session.get_expire_at_browser_close())
+
+    def test_remember_me_session_does_not_expire_on_browser_close(self):
+        """
+        Test to see that enabling `Remember me` does not expire immediately even when the browser is closed
+        """
+
+        self.client = TenantClient(self.tenant)
+        form_data = {
+            'login': 'TestUser',
+            'password': 'testuser',
+            'remember': True
+        }
+
+        response = self.client.post(reverse('account_login'), form_data, follow=True)
+        self.assertRedirects(response, reverse('quests:quests'))
+        session = response.wsgi_request.session
+        self.assertFalse(session.get_expire_at_browser_close())
+
+    def tearDown(self) -> None:
+        self.user.delete()
 
 
 class PublicContactFormTest(TenantTestCase):

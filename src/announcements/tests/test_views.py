@@ -278,7 +278,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         # create enough announcements to create a second page, oldest should be on second page
         for _ in range(21):
-            baker.make(Announcement, archived=True, draft=False) 
+            baker.make(Announcement, archived=True, draft=False)
 
         # Make sure 2nd page exists
         self.client.force_login(self.test_teacher)
@@ -300,7 +300,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # create enough announcements to create a second page, oldest should be on second page
         for _ in range(20):
-            baker.make(Announcement, archived=True, draft=False) 
+            baker.make(Announcement, archived=True, draft=False)
 
         # Make sure the oldest announcement is accessible there
         response = self.client.get("/announcements/archived/?page=2")
@@ -317,7 +317,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.test_teacher)
         self.client.get(reverse('courses:end_active_semester'))
-        
+
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
 

@@ -128,49 +128,9 @@ New tenants will come with some basic initial data already installed, but if you
 2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
 3. use Ctrl + D or `exit()` to close the Python shell.
 
-### Running Tests and Checking Code Style
-You can run tests either locally, or through the web container:
-1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):
-   * using venv: `./src/manage.py test src && flake8 src`
-   * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
-2. Tests take too long, but you can speed them up by bailing after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
-`./src/manage.py test src --parallel --failfast && flake8 src`
-
-### Further Development
-After you've got everything set up, you can just run the whole project with:
-`docker-compose up`
-
-And stop it with:
-`docker-compose down`
-
-or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:
-`docker-compose up -d db redis celery celery-beat -d`
-`./src/manage.py runserver`
-
-
-### Advanced / Optional: Inspecting the database with pgadmin4
-Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
-1. Run the pg-admin container:
-`docker-compose up pg-admin`
-2. Log in:
-   - url: [localhost:8080](http://localhost:8080)
-   - email: admin@admin.com
-   - password: password  (or whatever you changed this to in you `.env` file)
-3. Click "Add New Server"
-4. Give it any Name you want
-5. In the Connection tab set:
-   - Host name/address: db
-   - Port: 5432
-   - Maintenance database: postgres
-   - Username: postgres
-   - Password: Change.Me!  (or whatever you change the db password to in you `.env` file)
-6. Hit Save
-7. At the top left expand the Servers tree to find the database, and explore!
-8. You'll probably want to look at Schemas > (pick a schema) > Tables
-
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md) if you plan to contribute code!
+See [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md) if you plan to contribute code to this project.  It contains critical information for your pull request to be accepted and will save you a lot of time!
 
 

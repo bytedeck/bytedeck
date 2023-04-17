@@ -100,7 +100,10 @@ TENANT_APPS = (
     'django_celery_beat',
 
     'hackerspace_online',
+
+    # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     'taggit',
 
@@ -123,7 +126,7 @@ TENANT_APPS = (
 INSTALLED_APPS = (
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
-    
+
     'django_tenants',
     'tenant.apps.TenantConfig',
 
@@ -152,6 +155,7 @@ INSTALLED_APPS = (
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
     'captcha',
@@ -497,6 +501,7 @@ SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
+SESSION_COOKIE_AGE = env("SESSION_COOKIE_AGE", default=int(60 * 60 * 24 * 7 * 8))  # 8 Weeks
 
 AUTHENTICATION_BACKENDS = (
 
@@ -617,7 +622,6 @@ SUMMERNOTE_CONFIG = {
             # You have to include theme file in 'css' or 'css_for_inplace' before using it.
             'theme': 'monokai',
         },
-
     },
 
     # Need authentication while uploading attachments.

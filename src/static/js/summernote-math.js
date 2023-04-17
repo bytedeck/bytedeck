@@ -55,22 +55,22 @@
                     <p><input id="note-latex" class="form-control"></p>
                     <p>Preview: </p>
                     <div style="min-height:20px;"><span class="note-math-dialog"></span></div>
-    
+
                     <script>
                     let $mathElement = $('.note-math-dialog');
                     let mathSpan = $mathElement[0];
                     let latexSpan = document.getElementById('note-latex');
 
-                    
+
                     latexSpan.addEventListener('keyup', renderMath);
 
                     function renderMath(){
                         let oldMath = mathSpan.innerHTML;
-                        
+
                         try {
                             katex.render(this.value, mathSpan);
                         }
-                        catch(e) { 
+                        catch(e) {
                             // KaTeX parse error while typing, to prevent rendered math from dissappearing while typing
                             // partially complete markup
                             mathSpan.innerHTML = oldMath;

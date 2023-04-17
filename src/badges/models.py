@@ -80,7 +80,7 @@ class BadgeRarity(models.Model):
             self.name,
             self.color,
         )
-        aria_span = "<span class='sr-only'>{}</span>".format(self.name)
+        aria_span = f"<span class='sr-only'>{self.name}</span>"
         return icon + aria_span
 
 
@@ -162,7 +162,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     )
 
     map_transition = models.BooleanField(
-        default=False, 
+        default=False,
         help_text='Break maps at this badge.  This badge will link to a new map.'
     )
     # hours_between_repeats = models.PositiveIntegerField(default = 0)

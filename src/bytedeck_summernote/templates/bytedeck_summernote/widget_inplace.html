@@ -1,0 +1,23 @@
+{% comment %}
+Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_inplace.html
+
+Changes because: replace "django_summernote/widget_common.html" template with "bytedeck" version
+to avoid clashing with `django_summernote` stock template.
+{% endcomment %}
+{% include "bytedeck_summernote/widget_common.html" with iframe=False %}
+{% comment %} End changes {% endcomment %}
+<script>
+{% if config.lazy %}
+    if( __summernotes__ === undefined ) {
+        var __summernotes__ = new Array();
+        function initSummernote() {
+            for (i = 0, l = __summernotes__.length; i < l; ++i) {
+                __summernotes__[i]();
+            }
+        }
+    }
+    __summernotes__.push(initSummernote_{{ id_safe }});
+{% else %}
+    initSummernote_{{ id_safe }}();
+{% endif %}
+</script>

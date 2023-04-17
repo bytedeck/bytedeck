@@ -6,13 +6,14 @@ from django.contrib.contenttypes.models import ContentType
 
 from import_export import resources
 from import_export.fields import Field
-from django_summernote.admin import SummernoteModelAdmin
 from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
 
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
 from badges.models import Badge
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
+from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin, ByteDeckSummernoteAdvancedModelAdmin
+
 from .signals import tidy_html
 from .models import Quest, Category, QuestSubmission, CommonData
 
@@ -37,7 +38,7 @@ def prettify_code_selected_quests(modeladmin, request, queryset):
         quest.instructions = tidy_html(quest.instructions)
 
     Quest.objects.bulk_update(queryset, ['instructions'])
-    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    msg_str = f"Quest instructions html prettified for the {len(queryset)} selected quest(s)."
     messages.success(request, msg_str)
 
 
@@ -46,7 +47,7 @@ def fix_whitespace_bug(modeladmin, request, queryset):
         quest.instructions = tidy_html(quest.instructions, fix_runaway_newlines=True)
 
     Quest.objects.bulk_update(queryset, ['instructions'])
-    msg_str = "Quest instructions html prettified for the {} selected quest(s).".format(len(queryset))
+    msg_str = f"Quest instructions html prettified for the {len(queryset)} selected quest(s)."
     messages.success(request, msg_str)
 
 
@@ -57,7 +58,7 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
-class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin):
+class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteSafeModelAdmin):
     pass
 
 
@@ -165,11 +166,11 @@ class QuestResource(resources.ModelResource):
                 self.generate_campaign(parent_quest, data_dict)
 
 
-class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, SummernoteModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
+class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
     list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor', 
+    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor',
                    'specific_teacher_to_notify', 'common_data', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description', 'campaign__title']
     inlines = [

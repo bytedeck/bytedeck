@@ -4,13 +4,11 @@ from crispy_forms import layout
 from django.core.exceptions import FieldDoesNotExist
 from django.contrib.contenttypes.fields import GenericForeignKey
 
-from queryset_sequence import QuerySetSequence
 
 from utilities.forms import FutureModelForm
-from utilities.fields import ContentObjectChoiceField
+from utilities.fields import AllowedGFKChoiceField
 
 from .models import Prereq
-from .widgets import CustomContentObjectSelect2Widget
 
 
 def popover_labels(model, field_strings):
@@ -20,7 +18,7 @@ def popover_labels(model, field_strings):
             field = model._meta.get_field(field_string)
         except FieldDoesNotExist:
             continue  # if custom field we skip it
-        
+
         if type(field) == GenericForeignKey:
             continue  # if generic foreign key we skip it, it doesn't have these attributes
 
@@ -31,33 +29,23 @@ def popover_labels(model, field_strings):
     return fields_html
 
 
-def hardcoded_prereq_model_choice():
-    """ Can't always dynamically load this list due to accessing contenttypes too early
+class PrereqGFKChoiceField(AllowedGFKChoiceField):
+    """
+    Can't always dynamically load this list due to accessing contenttypes too early
     So instead provide a hard coded list which is checked during testing to ensure it matches
-    what the dynamically loaded list would have produced """
-    from courses.models import Block, Course, Grade, Rank
-    from quest_manager.models import Category, Quest
-    from badges.models import Badge
-
-    return [
-        Category, Quest, Block, Course, Grade, Rank, Prereq, Badge,
-    ]
+    what the dynamically loaded list would have produced
+    """
+    def get_allowed_model_classes(self):
+        return Prereq.all_registered_model_classes()
 
 
 class PrereqFormInline(FutureModelForm):
     """This form class is intended to be used in an inline formset"""
 
-    prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        widget=CustomContentObjectSelect2Widget(),
-    )
+    prereq_object = PrereqGFKChoiceField()
 
-    or_prereq_object = ContentObjectChoiceField(
-        queryset=QuerySetSequence(*[klass.objects.all() for klass in hardcoded_prereq_model_choice()]),
-        required=False,
-        widget=CustomContentObjectSelect2Widget(),
-    )
-        
+    or_prereq_object = PrereqGFKChoiceField(required=False)
+
     class Meta:
         model = Prereq
         # fields = ['prereq_content_type', 'prereq_object_id', 'prereq_count', 'prereq_invert']
@@ -71,8 +59,6 @@ class PrereqFormInline(FutureModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
-        self.fields['or_prereq_object'].widget.attrs['data-placeholder'] = 'Type to search'
         self.fields['prereq_object'].label = "Required Element"
         self.fields['or_prereq_object'].label = "Alternate Element"
 

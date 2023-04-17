@@ -15,7 +15,7 @@ class CytoScapeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
     autocomplete_lookup_fields = {
         'generic': [
-            ['initial_content_type', 'initial_object_id'], 
+            ['initial_content_type', 'initial_object_id'],
         ],
     }
 
