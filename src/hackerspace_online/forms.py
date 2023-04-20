@@ -38,7 +38,7 @@ class CustomSignupForm(SignupForm):
         self.fields['username'].help_text = 'Ask your teacher what you should be using for your username. Username is not case sensitive'
 
     def clean(self):
-        super(CustomSignupForm, self).clean()
+        super().clean()
         access_code = self.cleaned_data['access_code']
         if access_code != SiteConfig.get().access_code:
             raise forms.ValidationError("Access code unrecognized.")

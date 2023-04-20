@@ -34,14 +34,14 @@
             {% else %}
             <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
             {% endif %}
-            <li>Prerequisites: 
+            <li>Prerequisites:
                   {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
-                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}     
+                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
             </li>
           </ul>
         </div>
       </div> <!-- /.row -->
-     
+
 
 
       {% if assertions_of_this_badge %} {# If a student is looking at this, it will show which badges they have earned #}

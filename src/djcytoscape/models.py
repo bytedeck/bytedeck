@@ -135,7 +135,7 @@ class CytoElement(models.Model):
 
     def __str__(self):
         if self.group == self.NODES:
-            return str(self.id) + ": " + str(self.label) 
+            return str(self.id) + ": " + str(self.label)
         else:
             return str(self.id) + ": " + str(self.data_source.id) + "->" + str(self.data_target.id)
 
@@ -152,12 +152,12 @@ class CytoElement(models.Model):
 
     def is_parent(self):
         """This node represents a campaign, and is the parent of a compound node"""
-        return CytoElement.objects.filter(data_parent=self).exists() 
+        return CytoElement.objects.filter(data_parent=self).exists()
 
     def json_dict(self):
         """ Returns a json serializable python dictionary representing this element as a djcytoscape node or edge
         resulting in something like:
-        {   
+        {
             "data": {
                 "id": 2107,
                 "label": "Badge: ByteDeck Proficiency* (2)",
@@ -174,7 +174,7 @@ class CytoElement(models.Model):
 
         if self.has_parent():
             data["parent"] = self.data_parent.id
-            
+
         elif self.is_edge():
             data["source"] = self.data_source.id
             data["target"] = self.data_target.id
@@ -185,10 +185,10 @@ class CytoElement(models.Model):
             data["href"] = self.href
         if self.selector_id:
             # selector_id will be something like "Quest: 342"
-            key = self.selector_id.split(":")[0].strip() 
+            key = self.selector_id.split(":")[0].strip()
             value = self.selector_id.split(":")[1].strip()  # this is the pk/id of the quest or badge
             data[key] = int(value)
- 
+
         json_dict = {"data": data}
 
         if self.classes:
@@ -213,7 +213,7 @@ class CytoElement(models.Model):
         """
         unique id in the form of 'model: #' where the model = Quest (etc) and # = object id.
         Examples: Quest: 21 or Badge: 5
-        # Todo, this seems uneccessary, because we just have to parse it when building the json dict.  
+        # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
         return str(type(obj).__name__) + ": " + str(obj.id)
@@ -230,7 +230,7 @@ class CytoElement(models.Model):
             return None
 
 
-class TempCampaignNode(object):
+class TempCampaignNode:
     def __init__(self, id_, prereq_node_id=None):
         self.id = id_
         self.prereq_node_ids = []
@@ -242,7 +242,7 @@ class TempCampaignNode(object):
         return str(self.id)
 
 
-class TempCampaign(object):
+class TempCampaign:
     """
     Temporary structure used to help build the cytoscape, generates lists for each campaign to make it easier to
     properly generate edges to give the desired layout.
@@ -276,11 +276,11 @@ class TempCampaign(object):
 
         Args:
             node_id (int): the source node that is in this campaign
-            reliant_node_id (int): the target node that has the source as a prerequisite.  This node also be in the campaign, or may not. 
+            reliant_node_id (int): the target node that has the source as a prerequisite.  This node also be in the campaign, or may not.
         """
         node = self.get_node(node_id)
         node.reliant_node_ids.append(reliant_node_id)
-    
+
     def add_campaign_reliant(self, reliant_node_id):
         """ Add nodes that are directly reliant on the Campaign, i.e. this campaign is a prereq"""
         self.campaign_reliant_node_ids.append(reliant_node_id)
@@ -393,7 +393,7 @@ class CytoScapeManager(models.Manager):
             if current_node is source_node:
                 children = 10
             if split < 90:  # create the target nodes, connect them to source, add them to list
-                for i in range(0, children):
+                for _i in range(0, children):
                     new_node = CytoElement(scape=scape, group=CytoElement.NODES, )
                     new_node.save()
                     node_list.append(new_node)
@@ -417,7 +417,7 @@ class CytoScapeManager(models.Manager):
         new_scape.save()
 
         # generate nodes
-        for i in range(0, size):
+        for _i in range(0, size):
             new_node = CytoElement(
                 scape=new_scape,
                 group=CytoElement.NODES,
@@ -425,7 +425,7 @@ class CytoScapeManager(models.Manager):
             new_node.save()
 
         # generate edges
-        for i in range(0, size * 3):
+        for _i in range(0, size * 3):
             new_edge = CytoElement(
                 scape=new_scape,
                 group=CytoElement.EDGES,
@@ -473,12 +473,12 @@ class CytoScape(models.Model):
                                     help_text="Stop the map when reaching a quest with a ~ or a badge with a *."
                                               "If this is unchecked, the map is gonna be CRAZY!")
     elements_json = models.TextField(
-        blank=True, 
-        null=True, 
+        blank=True,
+        null=True,
         help_text="A cache of the json representing all elements in this scape.  Updated when the map is recalculated.",
     )
     class_styles_json = models.TextField(
-        blank=True, 
+        blank=True,
         null=True,
         help_text="A cache of the json representing element-specific styles in this scape.  Updated when the map is recalculated.",
     )
@@ -503,7 +503,7 @@ class CytoScape(models.Model):
                     current_primary_scape.save()
             except CytoScape.DoesNotExist:
                 pass
-        super(CytoScape, self).save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse('djcytoscape:quest_map', kwargs={'scape_id': self.id})
@@ -512,7 +512,6 @@ class CytoScape(models.Model):
 
     class InitialObjectDoesNotExist(Exception):
         """The initial object for this does not exist, it may have been deleted"""
-        pass
 
     def elements(self):
         elements = self.cytoelement_set.all()
@@ -561,7 +560,7 @@ class CytoScape(models.Model):
             pre = "Badge: "
         elif type(obj) is Rank:
             pre = "Rank: "
-            
+
         title = pre + str(obj)
         # shorten the end
         if len(title) > max_len:
@@ -623,7 +622,7 @@ class CytoScape(models.Model):
                 data_source=parent_node,
                 data_target=first_node,
             )
-        
+
         return first_node
 
     def create_child_map_node(self, obj, data_source):
@@ -655,7 +654,7 @@ class CytoScape(models.Model):
         )
 
         return child_map_node
-        
+
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
@@ -844,7 +843,7 @@ class CytoScape(models.Model):
                             defaults={'classes': 'hidden', }
                             # defaults={'attribute': value},
                         )
-            
+
             # 8. add invisible edge (for structure) from last node to campaign reliants
             # TODO actually add nodes to the campaign_reliant_nodes_ids list!!!!
             for reliant_node_id in campaign.campaign_reliant_node_ids:
@@ -855,8 +854,8 @@ class CytoScape(models.Model):
                     data_target_id=reliant_node_id,
                     defaults={'classes': 'hidden', }
                     # defaults={'attribute': value},
-                )    
-                        
+                )
+
     def find_reliant_objects_and_add_target_nodes(self, source_obj, source_node: CytoElement):
         """ Recursivly connect nodes together with edges.  Starts at the top and works down through all objects
         that rely on the source_obj as a prerequisite.
@@ -866,7 +865,7 @@ class CytoScape(models.Model):
 
         Other names:
         parent node is confusing, but refers to the compound nodes that group other nodes together (i.e. campaigns)
-        variables with names such as data_parent, parent_node, etc, are Campaigns that a quest might be in. 
+        variables with names such as data_parent, parent_node, etc, are Campaigns that a quest might be in.
         In graph terms these are called parent nodes or compound nodes
 
         target_nodes are nodes created from reliant objects (objects that rely on the source_obj as a prerequisite)
@@ -886,9 +885,9 @@ class CytoScape(models.Model):
             if source_node.data_parent:
                 temp_campaign: TempCampaign = self.get_temp_campaign(source_node.data_parent.id)
                 temp_campaign.add_reliant(source_node.id, target_node.id)
-            
+
             # if the source node is ITSELF a campaign (parent of a compound node)
-            if source_node.is_parent(): 
+            if source_node.is_parent():
                 temp_campaign: TempCampaign = self.get_temp_campaign(source_node.id)
                 temp_campaign.add_campaign_reliant(target_node.id)
 
@@ -985,7 +984,7 @@ class CytoScape(models.Model):
 
     def regenerate(self):
         if self.initial_content_object is None:
-            self.delete()            
+            self.delete()
             raise (self.InitialObjectDoesNotExist)
 
         # Delete existing nodes

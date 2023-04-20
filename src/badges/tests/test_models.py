@@ -39,7 +39,7 @@ class BadgeTypeTestModel(TenantTestCase):
     def test_badge_type_creation(self):
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
-    
+
     def test_model_protection(self):
         """ Badge types shouldn't be deleted if they have any assigned badges """
 

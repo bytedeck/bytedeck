@@ -94,7 +94,7 @@ def clean_html(text, convert_newlines=True):
         if convert_newlines:
             escaped_text = '<br>'.join(escaped_text.splitlines())
 
-        if textNode.parent and getattr(textNode.parent, 'name') == 'a':
+        if textNode.parent and textNode.parent.name == 'a':
             continue  # skip already formatted links
         urlized_text = urlize(escaped_text, trim_url_limit=50)
         textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
@@ -164,7 +164,7 @@ class Comment(models.Model):
     def get_absolute_url(self):
         """ Find the aboslute url of the target object, then add the comment"""
         # find absolute url of the target
-        self.target_object.get_absolute_url()        
+        self.target_object.get_absolute_url()
         return reverse('comments:threads', kwargs={'id': self.id})
 
     def get_origin(self):
@@ -209,7 +209,7 @@ class Comment(models.Model):
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
-    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)  
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!

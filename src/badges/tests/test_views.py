@@ -67,7 +67,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:badge_detail', args=[b_pk])
 
         # students shouldn't have access to these and should get permission denied 403
-        
+
         self.assert403('badges:badge_create'),
         self.assert403('badges:badge_update', args=[b_pk])
         self.assert403('badges:badge_copy', args=[b_pk])
@@ -128,7 +128,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ initial values in form GET is the same as the self.test_badge (badge that is being copied)  """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_copy', args=[self.test_badge.id]))
-        
+
         form_data = response.context['form'].initial
 
         # Badge name should have changed
@@ -199,7 +199,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # No XP granted for this badge
         form_data = {
             'badge': self.test_badge.id,
-            'user': self.test_student1.id, 
+            'user': self.test_student1.id,
             'do_not_grant_xp': True,
         }
 
@@ -208,7 +208,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
             data=form_data
         )
         self.assertRedirects(response, reverse("badges:list"))
-        
+
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.do_not_grant_xp, True)
 
@@ -248,16 +248,16 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-    
+
         self.badge_type = baker.make(BadgeType)
-    
+
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
         self.assertRedirectsLogin('badges:badge_types')
         self.assertRedirectsLogin('badges:badge_type_create')
         self.assertRedirectsLogin('badges:badge_type_update', args=[1])
         self.assertRedirectsLogin('badges:badge_type_delete', args=[1])
-    
+
     def test_all_page_status_codes_for_students(self):
         ''' If not logged in then all views should redirect to 403 '''
         self.client.force_login(self.test_student1)
@@ -267,13 +267,13 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('badges:badge_type_create')
         self.assert403('badges:badge_type_update', args=[1])
         self.assert403('badges:badge_type_delete', args=[1])
-    
+
     def test_BadgeTypeList_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_types'))
         self.assertEqual(response.status_code, 200)
-    
+
     def test_BadgeTypeCreate_view(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
@@ -300,7 +300,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         test_badgetype = BadgeType.objects.get(id=1)
         self.assertEqual(test_badgetype.name, data['name'])
         self.assertEqual(test_badgetype.fa_icon, data['fa_icon'])
-    
+
     def test_BadgeTypeDelete_view__no_badges(self):
         """ Admin should be able to delete a badge type with no assigned badges """
         self.client.force_login(self.test_teacher)

@@ -73,7 +73,7 @@ class ProfileManager(models.Manager):
 
 def user_directory_path(instance, filename):
     # file will be uploaded to MEDIA_ROOT/<use_id>/<filename>
-    return '{0}/customstyles/{1}'.format(instance.user.username, filename)
+    return f'{instance.user.username}/customstyles/{filename}'
 
 
 class Profile(models.Model):
@@ -448,7 +448,7 @@ def smart_list(value, delimiter=",", func=None):
     model signal to ensure that you always get a list back from the field.
 
     """
-    if value in ["", u"", "[]", u"[]", u"[ ]", None]:
+    if value in ["", "", "[]", "[]", "[ ]", None]:
         return []
 
     if isinstance(value, list):
@@ -471,4 +471,4 @@ def smart_list(value, delimiter=",", func=None):
         func = func or (lambda x: x)
         return [func(e) for e in ls]
     except Exception as ex:
-        raise ValueError("Unable to parse value '%s': %s" % (value, ex))
+        raise ValueError(f"Unable to parse value '{value}': {ex}")

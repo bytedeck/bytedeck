@@ -38,7 +38,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     # this will determine which button will be active in self.template_name
     # also if view_type=ViewTypes.STAFF will render a different partial template
-    view_type = ViewTypes.LIST  
+    view_type = ViewTypes.LIST
 
     def test_func(self):
         return self.request.user.is_staff
@@ -65,7 +65,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        return super(ProfileList, self).dispatch(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
 
 class ProfileListCurrent(ProfileList):
@@ -125,14 +125,14 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         # only allow the users to see their own profiles, or admins
         profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
         if profile_user == self.request.user or self.request.user.is_staff:
-            return super(ProfileDetail, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
 
         return redirect('quests:quests')
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
-        context = super(ProfileDetail, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
 
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
@@ -184,7 +184,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     def dispatch(self, *args, **kwargs):
         profile_user = self.get_object().user
         if profile_user == self.request.user or self.request.user.is_staff:
-            return super(ProfileUpdate, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
         else:
             raise Http404("Sorry, this profile isn't yours!")
 
@@ -229,7 +229,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
             form.save()
 
         return HttpResponseRedirect(self.get_success_url())
-    
+
     def get_success_url(self):
         return reverse("profiles:profile_detail", args=[self.get_object().pk])
 
@@ -244,7 +244,7 @@ class ProfileUpdateOwn(ProfileUpdate):
 class PasswordReset(FormView):
     form_class = SetPasswordForm
     template_name = 'profile_manager/password_change_form.html'
-    
+
     def get_instance(self):
         model_pk = self.kwargs['pk']
         return get_user_model().objects.get(pk=model_pk)
@@ -255,14 +255,14 @@ class PasswordReset(FormView):
         if user.is_staff:
             return HttpResponseForbidden("Staff users are forbidden")
         return super().dispatch(*args, **kwargs)
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.get_instance().profile
 
         context['heading'] = "Changing " + profile.user.get_username() + "'s Password"
         context['submit_btn_value'] = "Update"
-        
+
         return context
 
     def get_form(self):

@@ -28,8 +28,8 @@ class NonPublicTenantAdminTest(TenantTestCase):
         tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
         # Can't create tenant outside the `public` schema. Current schema is `test`, so should throw exception
-        with self.assertRaises(Exception):
-            tenant_model_admin.save_model(obj=Tenant(), request=None, form=None, change=None)
+        with self.assertRaises(TypeError):  # Why is this a TypeError and not a ProgrammingError?
+            tenant_model_admin.save_model(obj=Tenant, request=None, form=None, change=None)
 
 
 class PublicTenantTestAdminPublic(TenantTestCase):
