@@ -6,3 +6,8 @@ omit =
    tests.py
    */test*.py
    wsgi.py
+
+[paths]
+source =
+   src
+   /app/src
