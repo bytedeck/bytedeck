@@ -1,15 +1,67 @@
-ALLOWED_TAGS = [
-    'a', 'div', 'p', 'span', 'img', 'em', 'i', 'li', 'ol', 'ul', 'strong', 'br',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'table', 'tbody', 'thead', 'tr', 'td',
-    'abbr', 'acronym', 'b', 'blockquote', 'code', 'strike', 'u', 'sup', 'sub',
+from django_summernote.settings import ALLOWED_TAGS, STYLES
+
+# Extend a list of allowed tags (mandatory for ByteDeck project),
+ALLOWED_TAGS += [
+    # allow extra tags, fix #1340
+    "pre",
+    "kbd",
+    "var",
+    "mark",
+    "small",
+    "ins",
+    "del",
+    "font",
+    "iframe",
+    "hr",
+    # MathML (mandatory for ByteDeck project)
+    "math",
+    "maction",
+    "menclose",
+    "merror",
+    "mfenced",
+    "mfrac",
+    "mglyph",
+    "mi",
+    "mlabeledtr",
+    "mmultiscripts",
+    "mn",
+    "mo",
+    "mover",
+    "mpadded",
+    "mphantom",
+    "mroot",
+    "mrow",
+    "ms",
+    "mspace",
+    "msqrt",
+    "mstyle",
+    "msub",
+    "msup",
+    "msubsup",
+    "mtable",
+    "mtd",
+    "mtext",
+    "mtr",
+    "munder",
+    "munderover",
+    "none",
+    "mprescripts",
+    "semantics",
+    "annotation",
+    "annotation-xml",
 ]
 
-STYLES = [
-    'background-color', 'font-size', 'line-height', 'color', 'font-family'
+# Extend a list of allowed CSS properties (mandatory for ByteDeck project),
+STYLES += [
+    # allow extra styles, fix #1340
+    "float",
+    "height",
+    "list-style",
+    "list-style-type",
+    "margin-left",
+    "margin-right",
+    "text-align",
+    "text-decoration",
+    "text-indent",
+    "width",
 ]
-
-ATTRIBUTES = {
-    '*': ['style', 'align', 'title', ],
-    'a': ['href', ],
-}

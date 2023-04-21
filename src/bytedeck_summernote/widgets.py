@@ -1,5 +1,4 @@
 import bleach
-import html as htmllib
 import json
 
 from django.conf import settings as django_settings
@@ -9,9 +8,10 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 
-from bleach.css_sanitizer import CSSSanitizer
 from django_summernote.utils import get_config, get_proper_language
 from django_summernote.widgets import SummernoteInplaceWidget, SummernoteWidget
+
+from .css_sanitizer import CSSSanitizer
 
 
 class ByteDeckSummernoteWidget(SummernoteWidget):
@@ -78,20 +78,33 @@ class ByteDeckSummernoteSafeWidgetMixin:
         summernote_settings.update(
             {
                 "codeviewFilter": True,  # set this to true to filter entities (tags, attributes or styles).
+                # adding extra settings, fix #1340
+                "codeviewIframeFilter": False,
             }
         )
         return summernote_settings
 
     def value_from_datadict(self, data, files, name):
         """Override default `value_from_datadict` method to fix injection vulnerability"""
-        from bytedeck_summernote.settings import ALLOWED_TAGS, ATTRIBUTES, STYLES
+        from bytedeck_summernote.settings import ALLOWED_TAGS, STYLES
+
+        def allow_any_attributes(tag, name, value):
+            """
+            Sanitizing text (attributes) fragments.
+
+            For reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
+
+            """
+            return True  # Allowed attribute?
 
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
         return bleach.clean(
-            htmllib.unescape(value) if value else "",
+            value,
             tags=ALLOWED_TAGS,
-            attributes=ATTRIBUTES,
+            # skip attributes sanitization (always allowed), fix #1340
+            attributes=allow_any_attributes,
+            # improved CSS sanitization, fix #1340
             css_sanitizer=CSSSanitizer(allowed_css_properties=STYLES),
         )
 
@@ -108,6 +121,8 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
         summernote_settings.update(
             {
                 "codeviewFilter": False,  # set this to false to skip filtering entities (tags, attributes or styles).
+                # adding extra settings, fix #1340
+                "codeviewIframeFilter": False,
             }
         )
         # replace original language js file (mandatory for ByteDeck project)
