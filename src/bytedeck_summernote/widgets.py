@@ -84,7 +84,7 @@ class ByteDeckSummernoteSafeWidgetMixin:
 
     def value_from_datadict(self, data, files, name):
         """Override default `value_from_datadict` method to fix injection vulnerability"""
-        from django_summernote.settings import ALLOWED_TAGS, ATTRIBUTES, STYLES
+        from bytedeck_summernote.settings import ALLOWED_TAGS, ATTRIBUTES, STYLES
 
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
