@@ -100,7 +100,7 @@ class ByteDeckSummernoteSafeWidgetMixin:
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
         return bleach.clean(
-            value,
+            value or "",
             tags=ALLOWED_TAGS,
             # skip attributes sanitization (always allowed), fix #1340
             attributes=allow_any_attributes,
