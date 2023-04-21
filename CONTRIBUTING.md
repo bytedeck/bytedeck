@@ -32,8 +32,7 @@ or to run in a local venv (assuming you have activated it), start all the docker
 ### First time only:
 
 1. Move into your cloned directory. For example: `cd ~/Developer/bytedeck`
-2. Initialize pre-commit hooks: `git init --template=.git-template && chmod +x .git/hooks/pre-commit`
-3. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
+2. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
 
 ### Recurring steps with each PR:
 
