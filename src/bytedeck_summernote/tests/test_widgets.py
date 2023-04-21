@@ -19,7 +19,7 @@ class TestByteDeckSummernoteSafeWidget(TenantTestCase):
         illegal_tags = '<script>alert("Hello")</script>'
         value = widget.value_from_datadict({"foobar": illegal_tags}, {}, "foobar")
 
-        self.assertEqual(value, '&lt;script&gt;alert("Hello")&lt;/script&gt;')
+        self.assertEqual(value, r'<\script>alert("Hello")<\/script>')
 
     def test_widget_inplace(self):
         """Safe widget (non-iframe aka inplace variant) input is "cleaned" to prevent XSS scripts from executing"""
@@ -34,7 +34,7 @@ class TestByteDeckSummernoteSafeWidget(TenantTestCase):
         illegal_tags = '<script>alert("Hello")</script>'
         value = widget.value_from_datadict({"foobar": illegal_tags}, {}, "foobar")
 
-        self.assertEqual(value, '&lt;script&gt;alert("Hello")&lt;/script&gt;')
+        self.assertEqual(value, r'<\script>alert("Hello")<\/script>')
 
 
 class TestByteDeckSummernoteAdvancedWidget(TenantTestCase):
