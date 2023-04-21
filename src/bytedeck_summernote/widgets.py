@@ -88,22 +88,14 @@ class ByteDeckSummernoteSafeWidgetMixin:
         """Override default `value_from_datadict` method to fix injection vulnerability"""
         from bytedeck_summernote.settings import ALLOWED_TAGS, STYLES
 
-        def allow_any_attributes(tag, name, value):
-            """
-            Sanitizing text (attributes) fragments.
-
-            For reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
-
-            """
-            return True  # Allowed attribute?
-
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
         return bleach.clean(
             value or "",
             tags=ALLOWED_TAGS,
             # skip attributes sanitization (always allowed), fix #1340
-            attributes=allow_any_attributes,
+            # for reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
+            attributes=lambda tag, name, value: True,
             # improved CSS sanitization, fix #1340
             css_sanitizer=CSSSanitizer(allowed_css_properties=STYLES),
         )
