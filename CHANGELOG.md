@@ -5,7 +5,9 @@ This file chronologically records all notable changes to this website, including
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
 ### [1.20.0] 2023-04-16
+* New feature: Users can now sign in or sing up using their Google/Gmail account via OAuth2.  This feature must be specifically requested for a deck as it requires manually registering the deck's url with Google.
 * New feature: Summernote Advanced WYSIWYG widget allows scripts to run.  Currently implemented on the Quest Description, Submission Details, and Instructor Notes fields.  Indicated with a red CodeView button when hovered.
+* Email authentication.  Users will now be reminded on login to verify their email addresses by clicking the verification link sent to the email address they enter in their profile.  Users can resend the verification link from their profile.  Unverified emails will be ignored when sending notifications or announcements.  This only affects user who do not register with Google Sign In unless they change the email address in their profile.
 * Set login session expiry to 8 weeks (when you tick "Remember Me")
 * Bugfixes:
   - Summernote "Safe" widget properly escapes HTML and strips script tags.

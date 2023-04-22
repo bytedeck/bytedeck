@@ -102,3 +102,34 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(self.client.get('/achievements/1'), reverse('badges:badge_detail', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/edit/'), reverse('badges:badge_update', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
+
+
+class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+    def test_enable_google_signin_is_False(self):
+        """
+        Test to verify that Google sign in button is not showing in the page when it is disabled
+        """
+
+        response = self.client.get(reverse('account_login'))
+        self.assertNotIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
+
+        response = self.client.get(reverse('account_signup'))
+        self.assertNotIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
+
+    def test_enable_google_signin_is_True(self):
+        """
+        Test to verify that Google sign in button is showing in the page when it is enabled
+        """
+        config = SiteConfig.get()
+        config.enable_google_signin = True
+        config.save()
+
+        response = self.client.get(reverse('account_login'))
+        self.assertIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
+
+        response = self.client.get(reverse('account_signup'))
+        self.assertIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))

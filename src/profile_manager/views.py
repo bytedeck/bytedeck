@@ -1,10 +1,11 @@
+from allauth.socialaccount.models import SocialLogin
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
@@ -22,6 +23,12 @@ from tags.models import get_user_tags_and_xp
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from django.contrib.auth.forms import SetPasswordForm
+
+from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.helpers import _complete_social_login
+
+User = get_user_model()
 
 
 class ViewTypes:
@@ -163,7 +170,17 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         return context
 
 
-class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
+class ProfileOwnerOrIsStaffMixin:
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        profile_user = self.get_object().user
+        if profile_user == self.request.user or self.request.user.is_staff:
+            return super().dispatch(*args, **kwargs)
+        raise Http404("Sorry, this profile isn't yours!")
+
+
+class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateView):
     model = Profile
     profile_form_class = ProfileForm
     user_form_class = UserForm
@@ -179,14 +196,6 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
             forms.append(self.get_user_form())
 
         return forms
-
-    @method_decorator(login_required)
-    def dispatch(self, *args, **kwargs):
-        profile_user = self.get_object().user
-        if profile_user == self.request.user or self.request.user.is_staff:
-            return super().dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this profile isn't yours!")
 
     def post(self, request, *args, **kwargs):
         forms = self.get_forms()
@@ -213,6 +222,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     def get_profile_form(self):
         form_kwargs = super().get_form_kwargs()
         form_kwargs['instance'] = self.get_object()
+        form_kwargs['request'] = self.request
 
         return self.profile_form_class(**form_kwargs)
 
@@ -276,6 +286,44 @@ class PasswordReset(FormView):
         return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
+class ProfileResendEmailVerification(
+    NonPublicOnlyViewMixin,
+    ProfileOwnerOrIsStaffMixin,
+    DetailView
+):
+
+    model = Profile
+
+    def get(self, request, *args, **kwargs):
+
+        profile = self.get_object()
+        user = profile.user
+
+        email_address = EmailAddress.objects.filter(email=user.email).first()
+
+        # This is for handling a user that has previously added an email address but has no EmailAddress
+        user_has_email = bool(user.email or email_address)
+
+        # This condition exists in case a user with an empty User.email tries to access this URL
+        if not user_has_email:
+            messages.error(request, "User does not have an email")
+            return redirect_to_previous_page(request)
+
+        # This condition exists in case an already verified user tries to access this URL
+        if email_address and email_address.verified:
+            messages.info(request, "Your email address has already been verified.")
+            return redirect_to_previous_page(request)
+
+        send_email_confirmation(
+            request=request,
+            user=user,
+            signup=False,
+            email=user.email,
+        )
+
+        return redirect_to_previous_page(request)
+
+
 class TagChart(NonPublicOnlyViewMixin, TemplateView):
     template_name = 'profile_manager/tag_chart.html'
 
@@ -283,6 +331,57 @@ class TagChart(NonPublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["user"] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
         return context
+
+
+@non_public_only_view
+def oauth_merge_account(request):
+
+    merge_with_user_id = request.session.get('merge_with_user_id')
+    user = get_object_or_404(User, id=merge_with_user_id)
+
+    if request.method == "POST":
+
+        merge_account = request.POST.get('submit') == 'yes'
+
+        # The socialaccount_sociallogin must've been removed from the session
+        # or there is no user to merge with so we don't have anything else to do...
+        if not merge_with_user_id:
+            return redirect('account_login')
+
+        if merge_account:
+            # Remove the merge_with_user_id and socialaccount_sociallogin from the session object
+            # since we don't want to pollute it
+
+            request.session.pop('merge_with_user_id')
+            socialaccount_data = request.session.pop('socialaccount_sociallogin', None)
+            sociallogin = SocialLogin.deserialize(socialaccount_data)
+            sociallogin.connect(request, user)
+
+            # Automatically verify email during account merge
+            try:
+                email_address = EmailAddress.objects.get(email=user.email)
+            except EmailAddress.DoesNotExist:
+                email_address = EmailAddress(email=user.email)
+
+            email_address.user = user
+            email_address.verified = True
+            email_address.primary = True
+            email_address.save()
+
+            return _complete_social_login(request, sociallogin)
+        else:
+            # Remove the email from that user
+            user.emailaddress_set.filter(email=user.email).delete()
+            user.email = ''
+            user.save()
+
+            return redirect('socialaccount_signup')
+
+    context = {
+        'other_account_username': user.username,
+        'email_address': user.email,
+    }
+    return render(request, 'socialaccount/merge.html', context)
 
 
 @non_public_only_view

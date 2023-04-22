@@ -2,7 +2,7 @@ LMS originating from Timberline Secondary School's Digital Hackerspace
 
 [![Build and Tests Status](https://github.com/bytedeck/bytedeck/workflows/Build%20and%20Tests/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
 [![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/workflows/Flake8/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
-[![Coverage Status](https://coveralls.io/repos/github/bytedeck/bytedeck/badge.svg?branch=develop)](https://coveralls.io/github/bytedeck/bytedeck?branch=develop)
+[![codecov](https://codecov.io/gh/bytedeck/bytedeck/branch/develop/graph/badge.svg)](https://codecov.io/gh/bytedeck/bytedeck)
 
 # Hackerspace development environment installation
 
@@ -32,7 +32,7 @@ Add yourself to the docker group:
 
 #### Make sure you have Python3.8
 
-Using a different version of Python will probably give you errors when installing the dependancies due to slight changes between versions:
+Using a different version of Python will probably give you errors when installing the dependencies due to slight changes between versions:
 `sudo apt install python3.8`
 
 ### Getting the Code
@@ -92,7 +92,7 @@ This will create your docker containers and initialize the database by running m
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 
-10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you wont see any errors if they come up).  the db container should already be running:
+10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you won't see any errors if they come up).  the db container should already be running:
 `docker-compose up -d redis celery celery-beat`
 11. To view errors in the containers when they are running in the background, you can use:
 `docker-compose logs -f`
@@ -129,8 +129,49 @@ New tenants will come with some basic initial data already installed, but if you
 3. use Ctrl + D or `exit()` to close the Python shell.
 
 
+### Enabling Google Sign In (Optional)
+
+
+Here are the steps, assuming that you now have a functional tenant:
+
+1. Obtain Google credentials: https://developers.google.com/workspace/guides/create-credentials#oauth-client-id
+2. Make sure that in the Authorized URIs, add `http://hackerspace.localhost.net:8000/accounts/google/login/callback/`. We will explain why we are using `localhost.net` later but for now, just add this.
+3. Go to Social Applications: http://localhost:8000/admin/socialaccount/socialapp/
+4. Click Add Social Application
+5. Fill in `Client Id` and `Secret Key`. And then add the `Available Sites` to `Chosen Sites`
+6. Click Save
+7. Go to the Admin tenants page: http://localhost:8000/admin/tenant/tenant/
+8. There should be a checkbox beside the tenant's schema name. Check the checkbox and choose `Enable google signin for tenant(s)` and click `Go`.
+9. Done
+
+When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping
+our localhost to `localhost.net` so we can access our tenant via `http://hackerspace.localhost.net:8000`.
+
+We need to modify our hosts file aka `/etc/hosts`. You can also take a look at this [tutorial](https://www.howtogeek.com/27350/beginner-geek-how-to-edit-your-hosts-file/).
+
+1. Add the following, preferably at the bottom of the file:
+
+```conf
+127.0.0.1 localhost.net hackerspace.localhost.net
+```
+
+2. We need to update the`ALLOWED_HOSTS` in our .env file:
+
+```bash
+ALLOWED_HOSTS=.localhost,.localhost.net
+```
+
+3. For the final step, we need to let `django-tenants` know that `hackerspace.localhost.net` is also a valid domain.
+Run `$ ./src/manage.py shell` and type in the following commands
+
+```python
+from tenant.models import Tenant
+tenant = Tenant.objects.get(schema_name='hackerspace')
+tenant.domains.create(domain='hackerspace.localhost.net', is_primary=False)
+```
+
+4. Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.
+
 ## Contributing
 
 See [CONTRIBUTING.md](https://github.com/bytedeck/bytedeck/blob/develop/CONTRIBUTING.md) if you plan to contribute code to this project.  It contains critical information for your pull request to be accepted and will save you a lot of time!
-
-
