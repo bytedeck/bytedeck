@@ -131,38 +131,33 @@ New tenants will come with some basic initial data already installed, but if you
 
 ### Enabling Google Sign In (Optional)
 
-
 Here are the steps, assuming that you now have a functional tenant:
 
 1. Obtain Google credentials: https://developers.google.com/workspace/guides/create-credentials#oauth-client-id
-2. Make sure that in the Authorized URIs, add `http://hackerspace.localhost.net:8000/accounts/google/login/callback/`. We will explain why we are using `localhost.net` later but for now, just add this.
-3. Go to Social Applications: http://localhost:8000/admin/socialaccount/socialapp/
+2. In the OAuth Client ID's Authorized Redirect URIs, add `http://hackerspace.localhost.net:8000/accounts/google/login/callback/`. We will explain why we are using `localhost.net` later.
+3. Go to Social Applications in the public tenant admin: http://localhost:8000/admin/socialaccount/socialapp/
 4. Click Add Social Application
-5. Fill in `Client Id` and `Secret Key`. And then add the `Available Sites` to `Chosen Sites`
+5. Fill in `Client Id` and `Secret Key` from the Google OAuth Client ID, then add the `Available Sites` to `Chosen Sites`
 6. Click Save
-7. Go to the Admin tenants page: http://localhost:8000/admin/tenant/tenant/
-8. There should be a checkbox beside the tenant's schema name. Check the checkbox and choose `Enable google signin for tenant(s)` and click `Go`.
+7. Go to Tenants on the public tenant admin: http://localhost:8000/admin/tenant/tenant/
+8. There should be a checkbox beside the tenant's schema name. Check the checkbox and choose `Enable google signin for tenant(s)` from the admin actions at the bottom, and click `Go`.
 9. Done
 
-When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping
-our localhost to `localhost.net` so we can access our tenant via `http://hackerspace.localhost.net:8000`.
+When you are developing locally, Google won't allow you to add `http://hackerspace.localhost:8000/accounts/google/login/callback/` in the Authorized URIs. So we need a way to bypass this in our local machine by mapping our localhost to `localhost.net` so we can access our tenant via `http://hackerspace.localhost.net:8000`.
 
-We need to modify our hosts file aka `/etc/hosts`. You can also take a look at this [tutorial](https://www.howtogeek.com/27350/beginner-geek-how-to-edit-your-hosts-file/).
+1. You need to [modify your hosts file](https://www.howtogeek.com/27350/beginner-geek-how-to-edit-your-hosts-file/) by adding this to the bottom of `/etc/hosts`:
 
-1. Add the following, preferably at the bottom of the file:
+   ```conf
+   127.0.0.1 localhost.net hackerspace.localhost.net
+   ```
 
-```conf
-127.0.0.1 localhost.net hackerspace.localhost.net
-```
+2. Update the `ALLOWED_HOSTS` in the project's `.env` file:
 
-2. We need to update the`ALLOWED_HOSTS` in our .env file:
+   ```bash
+   ALLOWED_HOSTS=.localhost,.localhost.net
+   ```
 
-```bash
-ALLOWED_HOSTS=.localhost,.localhost.net
-```
-
-3. For the final step, we need to let `django-tenants` know that `hackerspace.localhost.net` is also a valid domain.
-Run `$ ./src/manage.py shell` and type in the following commands
+3. Let `django-tenants` know that `hackerspace.localhost.net` is also a valid domain.  Run `$ ./src/manage.py shell` and type in the following commands
 
 ```python
 from tenant.models import Tenant
@@ -170,7 +165,7 @@ tenant = Tenant.objects.get(schema_name='hackerspace')
 tenant.domains.create(domain='hackerspace.localhost.net', is_primary=False)
 ```
 
-4. Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.
+4. Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.  Note that Google Sign In will only work using the `.net` url.
 
 ## Contributing
 
