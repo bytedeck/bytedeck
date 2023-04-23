@@ -18,12 +18,13 @@
 {% endcomment %}
 {% get_providers as socialaccount_providers %}
 {% if socialaccount_providers and config.enable_google_signin %}
-  <p>or</p>
   <p>{% blocktrans %} Sign up via: {% endblocktrans %}</p>
-  <a href="{% provider_login_url 'google' process='login' %}">
-    <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
-  </a>
-
+  <p>
+    <a href="{% provider_login_url 'google' process='login' %}">
+      <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+    </a>
+  </p>
+  <p class="login-or">{% trans 'or' %}</p>
 
 {% endif %}
 
