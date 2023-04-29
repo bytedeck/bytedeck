@@ -1,10 +1,12 @@
 import re
 
-from bs4 import BeautifulSoup
-from django.db.models.signals import pre_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
+from bs4 import BeautifulSoup
+
 from quest_manager.models import Quest
+from quest_manager.tasks import remove_quest_submissions_for_hidden_quest
 
 
 class UglySoup(BeautifulSoup):
@@ -35,6 +37,14 @@ class UglySoup(BeautifulSoup):
 @receiver(pre_save, sender=Quest)
 def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
+
+
+@receiver(post_save, sender=Quest)
+def quest_post_save_callback(sender, instance, **kwargs):
+
+    # If a quest has been hidden to students, that's the time we check for any pending submissions and delete them
+    if instance.visible_to_students is False:
+        remove_quest_submissions_for_hidden_quest.apply_async(args=[instance.id], queue='default')
 
 
 def tidy_html(markup, fix_runaway_newlines=False):
