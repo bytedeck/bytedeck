@@ -146,8 +146,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         tenant_domains = ", ".join(enabled_tenant_domains)
         self.message_user(request, ngettext(
-            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain %s is added in the Authorized Redirect URIs",
-            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains %s are added in the Authorized Redirect URIs",
+            "%d tenant google signin was enabled successfully. Please ensure that the tenant domain %s is added in the Authorized Redirect URIs for this OAuth 2.0 Client ID on Google Cloud",  # noqa
+            "%d tenant google signins were enabled successfully. Please ensure that the tenant domains %s are added in the Authorized Redirect URIs for this OAuth 2.0 Client ID on Google Cloud",  # noqa
             enabled_count,
         ) % (enabled_count, tenant_domains), messages.SUCCESS)
 

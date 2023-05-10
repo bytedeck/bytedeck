@@ -19,10 +19,11 @@
     <p>{% blocktrans %} Sign in via: {% endblocktrans %}</p>
       <div class="socialaccount_ballot">
         {% include "socialaccount/snippets/login_extra.html" %}
-
-        <a href="{% provider_login_url 'google' process='login' %}" class="">
-          <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
-        </a>
+        <p>
+          <a href="{% provider_login_url 'google' process='login' %}" class="">
+            <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+          </a>
+        </p>
       </div>
 
       <p class="login-or">{% trans 'or' %}</p>

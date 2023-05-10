@@ -557,7 +557,7 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"
 # e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
-# ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv("ACCOUNT_DEFAULT_HTTP_PROTOCOL", "http" if DEBUG else "https")
 # The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only –
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
