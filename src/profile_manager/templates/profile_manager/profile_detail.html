@@ -1,7 +1,8 @@
 {% extends "profile_manager/base.html" %}
 {% load utility_tags %}
+{% load filters %}
 
-{% block heading_inner %}{{ object.get_preferred_name }}'s Profile
+{% block heading_inner %}{{ object.get_preferred_name|default:"<<no name>>"|add_possessive }} Profile
     <div class="btn-group" role="group">
       <a class="btn btn-info" title="Edit your Profile"
         href="{% url 'profiles:profile_update' object.id %}"

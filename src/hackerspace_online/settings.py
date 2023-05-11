@@ -57,6 +57,7 @@ SHARED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
@@ -98,6 +99,8 @@ TENANT_APPS = (
     # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
+
+    'django.contrib.sites',  # required inside TENANT_APPS for allauth to work
 
     'hackerspace_online',
 
@@ -147,7 +150,7 @@ INSTALLED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    # 'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.google',
     # 'allauth.socialaccount.providers.facebook',
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
@@ -514,15 +517,20 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # AllAuth Configuration
-# SOCIALACCOUNT_PROVIDERS = \
-#     {'facebook':
-#          {'SCOPE': ['email', 'public_profile'],
-#           'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
-#           'METHOD': 'oauth2',
-#           # 'LOCALE_FUNC': 'path.to.callable',
-#           'VERIFIED_EMAIL': False,
-#           'VERSION': 'v2.3'}
-#      }
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'offline',
+            # https://developers.google.com/identity/openid-connect/openid-connect#prompt
+            'prompt': 'select_account',
+        },
+        'OAUTH_PKCE_ENABLED': True,
+    }
+}
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
@@ -543,13 +551,13 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # Determines the expiration date of email confirmation mails (# of days).
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
-ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
+ACCOUNT_EMAIL_VERIFICATION = "optional"
 # Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
 # the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified
 # e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
-# ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv("ACCOUNT_DEFAULT_HTTP_PROTOCOL", "http" if DEBUG else "https")
 # The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only –
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
@@ -565,6 +573,24 @@ ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 #  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 ACCOUNT_PRESERVE_USERNAME_CASING = False
+ACCOUNT_UNIQUE_EMAIL = True
+
+# The maximum amount of email addresses a user can associate to his account.
+# It is safe to change this setting for an already running project –
+# it will not negatively affect users that already exceed the allowed amount.
+# Note that if you set the maximum to 1, users will not be able to change their
+# email address as they are unable to add the new address,
+# followed by removing the old address.
+# Uses the `allauth.account.models.EmailAddress`
+ACCOUNT_MAX_EMAIL_ADDRESSES = 2
+
+
+SOCIALACCOUNT_AUTO_SIGNUP = False
+SOCIALACCOUNT_FORMS = {
+    'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
+}
+SOCIALACCOUNT_EMAIL_REQUIRED = True
+SOCIALACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomSocialAccountAdapter"
 
 
 #################################

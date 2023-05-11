@@ -1,9 +1,11 @@
 # import re
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.templatetags.static import static
@@ -20,6 +22,9 @@ from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
+
+from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 
 
 class ProfileQuerySet(models.query.QuerySet):
@@ -423,6 +428,79 @@ def post_delete_user(sender, instance, *args, **kwargs):
         instance.user.delete()
 
 
+@receiver(email_confirmed, sender=EmailConfirmationHMAC)
+def email_confirmed_handler(email_address, **kwargs):
+    """
+    django-allauth has their own model for tracking email address under `allauth.account.models.EmailAddress`
+
+    Every time a user updates their email address under the Profile page, we send a confirmation email in the
+    `profile_manager.ProfileForm.save()` method via `allauth.account.utils.send_email_confirmation`.
+
+    and everytime that function is called, it creates a new EmailAddress record which with verified=False and primary=False
+    as the attributes.
+
+    Whenever they confirm an email address via the link sent to their email, this receiver gets called when that email
+    is confirmed and we make that email the primary email address.
+
+    The old EmailAddress record becomes primary=False and will be deleted so that we always only have one record
+    under EmailAddress for a user.
+
+    """
+
+    with transaction.atomic():
+        email_address.set_as_primary()
+
+        # Delete all email addresses that are not primary and exclude emails used for social login
+        user = email_address.user
+        emails_qs = user.emailaddress_set.filter(primary=False)
+
+        # Exclude email addresses used for logging in with social providers like google
+        # We can't query it like user.socialaccount_set.values_list(extra_data__email, flat=True)
+        # because django-allauth uses a different implementation of JSONField.
+        # See: https://github.com/pennersr/django-allauth/issues/2599
+        social_emails = []
+        for data in user.socialaccount_set.values_list("extra_data", flat=True):
+            email = data.get("email")
+            if email:
+                social_emails.append(email)
+
+        if social_emails:
+            emails_qs = emails_qs.exclude(email__in=social_emails)
+
+        emails_qs.delete()
+
+
+@receiver(email_confirmation_sent, sender=EmailConfirmationHMAC)
+def email_confirmation_sent_recently_signed_up_with_email(request, signup, **kwargs):
+    if not signup:
+        return
+
+    # Add an attribute to request that an email confirmation as been already sent
+    request.recently_signed_up_with_email = True
+
+
+@receiver(user_logged_out, sender=User)
+def user_logged_out_handler(request, user, **kwargs):
+    if hasattr(request, 'recently_signed_up_with_email'):
+        del request.recently_signed_up_with_email
+
+
+@receiver(user_logged_in, sender=User)
+def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
+    """
+    Adds a django message to remind user to verify their email upon login
+    """
+
+    email_address = EmailAddress.objects.filter(email=user.email).first()
+
+    recently_signed_up_with_email = getattr(request, 'recently_signed_up_with_email', False)
+
+    # Only send the email when they login again
+    if not recently_signed_up_with_email:
+        if email_address and email_address.verified is False:
+            messages.info(request, f"Please verify your email address: {user.email}.")
+
+
 def smart_list(value, delimiter=",", func=None):
     """Convert a value to a list, if possible.
     http://tech.yunojuno.com/working-with-django-s-commaseparatedintegerfield
@@ -448,7 +526,8 @@ def smart_list(value, delimiter=",", func=None):
     model signal to ensure that you always get a list back from the field.
 
     """
-    if value in ["", "", "[]", "[]", "[ ]", None]:
+
+    if value in ["", "[]", "[ ]", None]:
         return []
 
     if isinstance(value, list):
