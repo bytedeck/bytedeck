@@ -1,4 +1,3 @@
-import bleach
 import json
 
 from django.conf import settings as django_settings
@@ -8,10 +7,9 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 
+from back_cleaner import cleaner
 from django_summernote.utils import get_config, get_proper_language
 from django_summernote.widgets import SummernoteInplaceWidget, SummernoteWidget
-
-from .css_sanitizer import CSSSanitizer
 
 
 class ByteDeckSummernoteWidget(SummernoteWidget):
@@ -86,19 +84,9 @@ class ByteDeckSummernoteSafeWidgetMixin:
 
     def value_from_datadict(self, data, files, name):
         """Override default `value_from_datadict` method to fix injection vulnerability"""
-        from bytedeck_summernote.settings import ALLOWED_TAGS, STYLES
-
         value = super().value_from_datadict(data, files, name)
-        # HTML escaping done with "bleach" library
-        return bleach.clean(
-            value or "",
-            tags=ALLOWED_TAGS,
-            # skip attributes sanitization (always allowed), fix #1340
-            # for reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
-            attributes=lambda tag, name, value: True,
-            # improved CSS sanitization, fix #1340
-            css_sanitizer=CSSSanitizer(allowed_css_properties=STYLES),
-        )
+        # escaping only "script" tags, done with "cleaner" library
+        return cleaner.escape_script_tags(value)
 
 
 class ByteDeckSummernoteAdvancedWidgetMixin:
