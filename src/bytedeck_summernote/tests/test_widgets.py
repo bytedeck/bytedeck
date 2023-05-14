@@ -36,6 +36,15 @@ class TestByteDeckSummernoteSafeWidget(TenantTestCase):
 
         self.assertEqual(value, '&lt;script&gt;alert("Hello")&lt;/script&gt;')
 
+    def test_config_codeview_filter(self):
+        """Safe widget (iframe variant) configured to prevent XSS scripts from executing"""
+        from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+
+        widget = ByteDeckSummernoteSafeWidget()
+        html = widget.render("foobar", "lorem ipsum", attrs={"id": "id_foobar"})
+
+        assert '"codeviewFilter": true' in html
+
 
 class TestByteDeckSummernoteAdvancedWidget(TenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
@@ -70,3 +79,12 @@ class TestByteDeckSummernoteAdvancedWidget(TenantTestCase):
         value = widget.value_from_datadict({"foobar": illegal_tags}, {}, "foobar")
 
         self.assertEqual(value, '<script>alert("Hello")</script>')
+
+    def test_config_codeview_filter(self):
+        """Advanced widget (iframe variant) configured to disable XSS protection"""
+        from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
+
+        widget = ByteDeckSummernoteAdvancedWidget()
+        html = widget.render("foobar", "lorem ipsum", attrs={"id": "id_foobar"})
+
+        assert '"codeviewFilter": false' in html
