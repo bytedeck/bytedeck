@@ -89,6 +89,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:80"
+    networks:
+      - backend-network
 
 volumes:
   postgres_data:
