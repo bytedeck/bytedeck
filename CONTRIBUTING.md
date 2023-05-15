@@ -117,7 +117,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
 2. Log in:
    - url: [localhost:8080](http://localhost:8080)
    - email: admin@admin.com
-   - password: password  (or whatever you changed this to in you `.env` file)
+   - password: password  (or whatever you changed this to in your `.env` file)
 3. Click "Add New Server"
 4. Give it any Name you want
 5. In the Connection tab set:
@@ -125,7 +125,7 @@ Using pgadmin4 we can inspect the postgres database's schemas and tables (helpfu
    - Port: 5432
    - Maintenance database: postgres
    - Username: postgres
-   - Password: Change.Me!  (or whatever you change the db password to in you `.env` file)
+   - Password: Change.Me!  (or whatever you change the db password to in your `.env` file)
 6. Hit Save
 7. At the top left expand the Servers tree to find the database, and explore!
 8. You'll probably want to look at Schemas > (pick a schema) > Tables
