@@ -180,6 +180,20 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert404('courses:my_marks')
 
+    def test_student_view_marks_200_if_enabled(self):
+        """
+        Student marks page should be accessible if site admin has enabled it.
+        """
+        # Login a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        config = SiteConfig.get()
+        config.display_marks_calculation = True
+        config.save()
+
+        self.assert200('courses:my_marks')
+
     def test_assert_correct_forms__not_staff(self):
         """
             test if non staff users have access to ProfileForm and not UserForm in ProfileView
