@@ -62,45 +62,46 @@ Using a different version of Python will probably give you errors when installin
 This will create your docker containers and initialize the database by running migrations and creating some initial data that is required:
 
 1. Open a terminal
-2. Move into the project directory:
+1. Move into the project directory:
 `cd ~/Developer/bytedeck`
-3. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize.  If you are not running the app locally (e.g. production), then be sure to set DOMAIN_ROOT to the FQDN.
+1. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize.  If you are not running the app locally (e.g. production), then be sure to set DOMAIN_ROOT to the FQDN.
 `cp .env.example .env`
-4. Build the containers (db, redis, celery, and celery-beat):
+1. Build the containers (db, redis, celery, and celery-beat):
 `docker-compose build`
-5. Start the postgres database container (db) in the background/daemonized (-d)
+1. Start the postgres database container (db) in the background/daemonized (-d)
 `docker-compose up -d db`
-6. OPTIONAL: For development, we can run the django app in a local virtual environment (venv) instead of using the web container, however if this gives you any issues, just run everything in a container with docker-compose (explained below)
+1. OPTIONAL: For development, we can run the django app in a local virtual environment (venv) instead of using the web container, however if this gives you any issues, just run everything in a container with docker-compose (explained below)
    1. Create a python virtual environment (we'll put ours in a venv directory):
-   `python3.8 -m venv venv --prompt bytedeck`
+   `python -m venv venv --prompt bytedeck`
    1. Enter the virtual environment:
    `source venv/bin/activate`
    1. Install wheel to prevent errors (why isn't this included in the new venv module?)
    `python -m pip install wheel`
    1. Install our requirements:
    `python -m pip install -r requirements.txt`
-   1. Initialize pre-commit
-   `pre-commit install`
-8. Run a management command to run initial migrations, create the public tenant, superuser, and some other stuff:
-   * using venv: `./src/manage.py initdb`
-   * using docker: `docker-compose run web bash -c "./src/manage.py initdb"`
-9. Now run the django development server:
-   * using venv: `./src/manage.py runserver`
+1. Initialize pre-commit:
+   * Using venv: `pre-commit install`
+   * Using docker: `docker-compose run web bash -c "pre-commit install"`
+1. Run a management command to run initial migrations, create the public tenant, superuser, and some other stuff:
+   * using venv: `python src/manage.py initdb`
+   * using docker: `docker-compose run web bash -c "python src/manage.py initdb"`
+1. Now run the django development server:
+   * using venv: `python src/manage.py runserver`
    * using docker: `docker-compose up web`
-9. You should now get the page at http://localhost:8000.  Note that the ip/url output by the django server, `0.0.0.0` will not work in this project, because our multitenant architecture requires a domain name, so you need to use `localhost` instead.
-10. And you should be able to log in to the admin site at http://localhost:8000/admin/
+1. You should now get the page at http://localhost:8000.  Note that the ip/url output by the django server, `0.0.0.0` will not work in this project, because our multitenant architecture requires a domain name, so you need to use `localhost` instead.
+1. And you should be able to log in to the admin site at http://localhost:8000/admin/
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 
-10. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you won't see any errors if they come up).  the db container should already be running:
+1. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you won't see any errors if they come up).  the db container should already be running:
 `docker-compose up -d redis celery celery-beat`
-11. To view errors in the containers when they are running in the background, you can use:
+1. To view errors in the containers when they are running in the background, you can use:
 `docker-compose logs -f`
 
 ### Creating a Tenant
 If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
 
-0. If the server isn't already running, run it with: `./src/manage.py runserver` or `docker-compose up web` (and ignore the link it tells you to access the page)
+0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker-compose up web` (and ignore the link it tells you to access the page)
 1. Go to django admin at http://localhost:8000/admin/ (this is known as the Public tenant, it's where we can control all the other sites or tenants)
 2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
@@ -114,7 +115,7 @@ New tenants will come with some basic initial data already installed, but if you
 
 1. Open a Python shell specific to your tenant (make sure your virtual environment is activated), enter your tenant's name (for example, `hackerspace`) and paste these commands:
     ```
-    $ ./src/manage.py tenant_command shell
+    $ python src/manage.py tenant_command shell
     Enter Tenant Schema ('?' to list schemas): hackerspace
 
     In [1]: from hackerspace_online.shell_utils import generate_content
@@ -123,7 +124,7 @@ New tenants will come with some basic initial data already installed, but if you
     ```
 
     You can also do this from docker with:
-    `docker-compose exec web bash -c "./src/manage.py tenant_command shell"`
+    `docker-compose exec web bash -c "python src/manage.py tenant_command shell"`
 
 2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
 3. use Ctrl + D or `exit()` to close the Python shell.
