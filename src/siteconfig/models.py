@@ -193,6 +193,15 @@ class SiteConfig(models.Model):
             might be a more suitable name than Groups, depending on your context."
     )
 
+    # Field to select custom name to change all instances of "student" to site-wide
+    # Currently used in: profile_manager.forms, sidebar.html, and form.html + profile_list.html in profile_manager.templates
+    custom_name_for_student = models.CharField(
+        default="Student", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Student\". Students are non-staff site users, so this \
+            setting should be changed to reflect the desired name for your deck's userbase. For example, \"User\", \"Member\" \
+            or \"Learner\" might be a more suitable name than Student, depending on your context."
+    )
+
     custom_name_for_tag = models.CharField(
         default="Tag", max_length=20,
         help_text="A custom name specific to your deck to replace \"Tag\".   For example, \"Competency\", \"Learning Outcome\", \

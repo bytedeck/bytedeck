@@ -562,3 +562,21 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.test_student1.refresh_from_db()
         self.assertEqual(self.test_student1.email, orig_email)
+
+    def test_update_profile__custom_label_displayed(self):
+        """student profile update view should change instances of "student" to match custom label set in siteconfig"""
+        # Login a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_student to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_student = "CustomStudent"
+        config.save()
+
+        # Get a student's profile settings request and assert it contains the custom label in both areas where it should be
+        # ("How your names will be used" section and visible_to_other_students field)
+        # both of these labels are lowercase as a part of the forms/templates they're a part of, so test for lowercase instances
+        request = self.client.get(reverse('profiles:profile_update', args=[self.test_student1.profile.pk]))
+        self.assertContains(request, "to other customstudents:")
+        self.assertContains(request, "Your marks will be visible to other customstudents through the customstudent list.")
