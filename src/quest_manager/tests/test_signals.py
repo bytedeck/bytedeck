@@ -46,6 +46,7 @@ class TestTidyHtml(unittest.TestCase):
             ("<ol><li>test</li></ol>", "<ol>\n  <li>\n    test\n  </li>\n</ol>"),
             (" <p>", "<p>\n</p>"),  # fix unclosed paragraphs
             ('<img src="\n example.png">', '<img src="\n example.png"/>\n'),  # don't indent within properties
+            ('<img src="example.png\n">', '<img src="example.png\n"/>\n'),  # don't indent within properties
             ('<ol><li>text', "<ol>\n  <li>\n    text\n  </li>\n</ol>"),  # fix unclosed lists
             ('<script>alert("Hello")</script>', '<script>\n  alert("Hello")\n</script>'),  # don't strip scripts here
             # standard Youtube embed
