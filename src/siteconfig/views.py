@@ -20,6 +20,10 @@ class SiteConfigUpdate(SuccessMessageMixin, UpdateView):
 
         return fkwargs
 
+    def get_context_data(self, **kwargs):
+        kwargs['submit_btn_value'] = 'Update'
+        return super().get_context_data(**kwargs)
+
 
 class SiteConfigUpdateOwn(SiteConfigUpdate):
 
