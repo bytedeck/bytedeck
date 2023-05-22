@@ -15,6 +15,7 @@ from django.conf import settings
 from django_tenants.utils import get_public_schema_name, schema_context
 from redis import exceptions as redis_exceptions
 
+from utilities.models import RestrictedFileField
 
 User = get_user_model()
 
@@ -225,6 +226,19 @@ class SiteConfig(models.Model):
         default="Tag", max_length=20,
         help_text="A custom name specific to your deck to replace \"Tag\".   For example, \"Competency\", \"Learning Outcome\", \
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
+    )
+
+    # Custom stylesheet and javascript
+    #
+    custom_stylesheet = RestrictedFileField(
+        null=True, blank=True, content_types=['text/css', 'text/plain'], max_upload_size=512000,
+        help_text="WARNING: This CSS stylesheet can be used to completely override the look and layout of your deck. \
+            This feature also has the potential of making your deck unusable. Use at your own risk.",
+    )
+    custom_javascript = RestrictedFileField(
+        null=True, blank=True, content_types=['application/x-javascript'], max_upload_size=512000,
+        help_text="WARNING: This custom JavaScript file can be used to completely override how the front end of your deck functions. \
+            This feature also has the potential of making your deck unusable. Use at your own risk.",
     )
 
     deck_owner = models.ForeignKey(

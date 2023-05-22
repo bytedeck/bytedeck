@@ -60,6 +60,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         del data['site_logo']
         del data['default_icon']
         del data['favicon']
+        del data['custom_stylesheet']
+        del data['custom_javascript']
 
         new_site_name = 'My New Site Name'
         data['site_name'] = new_site_name
