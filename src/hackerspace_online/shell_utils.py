@@ -14,7 +14,7 @@ def generate_students(num=100, quiet=False):
     """ Generates 100 students for the current deck (is_staff=False)
     Run with:
 
-    ./src/manage.py tenant_command shell
+    python src/manage.py tenant_command shell
     Enter Tenant Schema ('?' to list schemas): tenant_name
 
     In [1]: from hackerspace_online.shell_utils import generate_students
@@ -76,7 +76,7 @@ def generate_content(num_quest_per_campaign=10, num_campaigns=5, num_students=10
     """ Generates quests and students for the current deck
     Run with:
 
-    ./src/manage.py tenant_command shell
+    python src/manage.py tenant_command shell
     Enter Tenant Schema ('?' to list schemas): tenant_name
 
     In [1]: from hackerspace_online.shell_utils import generate_content

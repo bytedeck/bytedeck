@@ -9,7 +9,7 @@ version: '2.2'
 services:
   db:
     ports:
-    - 5432:5432  # Expose port so app can connect to db when developing locally with `./src/manage.py [runserver|test src]
+    - 5432:5432  # Expose port so app can connect to db when developing locally with `python src/manage.py [runserver|test src]
   redis:
     ports:
-    - 6379:6379  # Expose port so app can connect to redis when developing locally with `./src/manage.py [runserver|test src]
+    - 6379:6379  # Expose port so app can connect to redis when developing locally with `python src/manage.py [runserver|test src]

@@ -2,22 +2,27 @@
 
 ## Quick Reference Guide to Making Code Contributions
 
-If you're interested in contributing to this repo, please work through these steps carefully.  Bad pull requests waste a lot of time, and these steps will ensure your PR is a good one!  This guide is written with beginngers in mind, but we would appreciate if experienced developers work through this at least once so we're all on the same page!
+If you're interested in contributing to this repo, please work through these steps carefully.  Bad pull requests waste a lot of time, and these steps will ensure your PR is a good one!  This guide is written with beginners in mind, but we would appreciate if experienced developers work through this at least once so we're all on the same page!
 
 Save us all some time and frustration by working through these steps carefully, at least once, and understand them all!
 
 ### Running Tests and Checking Code Style
-You can run tests either locally, or through the web container.:
-1. This will run all the project's tests and if successful, will also check the code style using flake 8 (make sure you're in your virtual environment):
-   * using venv: `./src/manage.py test src && flake8 src`
-   * using docker: `docker-compose exec web bash -c "./src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
-2. Tests take too long, but you can speed them up a number of ways:
+You can run tests either locally, or through the web container:
+1. This will run all the project's tests and if successful, will also check the code style using flake8 (make sure you're in your virtual environment):
+   * using venv: `python src/manage.py test src && flake8 src`
+   * using docker: `docker-compose exec web bash -c "python src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+1. Tests take too long, but you can speed them up a number of ways:
    * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
-     `./src/manage.py test src --parallel --failfast`
-   * Only run tests from a single app, for example: `./src/manage.py test src/announcements`
-   * Only run tests from a single test class: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
-   * Only run a single test: `./src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+     `python src/manage.py test src --parallel --failfast`
+   * Only run tests from a single app, for example: `python src/manage.py test src/announcements`
+   * Only run tests from a single test class: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
+   * Only run a single test: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+1. This project uses git pre-commit hooks, set up with the Python "[pre-commit](https://pre-commit.com/)" module. These hooks trigger a series of checks every time a new commit is made. They ensure that the code is formatted correctly, and some even auto-correct certain simple issues. However, we don't have pre-commit hooks for running our Django tests, so the full test suite must still be ran separately. All pre-commit hooks are defined in the [.pre-commit-config.yaml](.pre-commit-config.yaml) file. Note that if auto-corrections are made, the commit won't complete, and you'll need to run the commit command again. It can also be helpful to run these hooks manually to ensure you have everything setup correctly:
 
+   * using venv: `pre-commit run`
+   * using docker: `docker-compose exec web bash -c "pre-commit run"`
+
+   Note: Running pre-commit hooks manually is generally used for troubleshooting or setup verification, and is not a required step in the normal development workflow.
 ### Further Development
 After you've got everything set up, you can just run the whole project with:
 `docker-compose up`
@@ -26,40 +31,41 @@ And stop it with:
 `docker-compose down`
 
 or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:
-`docker-compose up -d db redis celery celery-beat -d`
-`./src/manage.py runserver`
+1. `docker-compose up -d db redis celery celery-beat -d`
+1. `python src/manage.py runserver`
 
 ### First time only:
 
 1. Move into your cloned directory. For example: `cd ~/Developer/bytedeck`
-2. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
+1. Add the upstream remote (if it doesn't already exist): `git remote add upstream git@github.com:bytedeck/bytedeck.git`
 
 ### Recurring steps with each PR:
 
-4. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
-5. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
-6. Write tests! See Test Requirements below for important details (if you are not comfortable with test-driven development, you can also write tests after writing code instead of before).  Also see "Running Tests and Checking Code Style" section.
-7. Write code!
-8. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
-   * venv: `./src/manage.py test src --failfast --parallel && flake8 src`
-   * docker: `docker-compose exec web bash -c "./src/manage.py test src --failfast --parallel && flake8 src"`
-9. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number:
-`git commit -am "Useful description of your changes; Closes #123"`
-9. Repeat steps 4-9 above until the feature/issue is completed.
-10. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
-11. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
-14. You may need to resolve merge conflicts, if there are any. Hopefully not!  ([how to resolve a merge conflict](https://www.youtube.com/watch?v=QmKdodJU-js))
-15. Run entire test suite and check coverage (see "Detailed Expectations for all Pull Requests" section below)
-16. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
-17. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
-18. Select your recently pushed branch and create a pull request (you should see a button for this)
+1. Pull in changes from the upstream master: `git pull upstream develop` (in case anything has changed since you cloned it)
+1. Create a new branch with a name specific to the issue or feature or bug you will be working on: `git checkout -b yourbranchname`
+1. Write tests! See Test Requirements below for important details (if you are not comfortable with test-driven development, you can also write tests after writing code instead of before).  Also see "Running Tests and Checking Code Style" section.
+1. Write code!
+1. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
+   * venv: `python src/manage.py test src --failfast --parallel && flake8 src`
+   * docker: `docker-compose exec web bash -c "python src/manage.py test src --failfast --parallel && flake8 src"`
+1. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number. Note that if your development environment is running inside of docker and not a Python virtual environment, the pre-commit hooks won't run properly. For this reason, you will be required to run your commit command inside of docker:
+   - venv: `git commit -am "Useful description of your changes; Closes #123"`
+   - docker: `docker-compose exec web bash -c "git commit -m 'Useful description of your changes; Closes #123'"` (ensure the commit message is enclosed in single and not double quotes)
+1. Repeat steps 4-9 above until the feature/issue is completed.
+1. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
+1. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
+1. You may need to resolve merge conflicts, if there are any. Hopefully not!  ([how to resolve a merge conflict](https://www.youtube.com/watch?v=QmKdodJU-js))
+1. Run entire test suite and check coverage (see "Detailed Expectations for all Pull Requests" section below)
+1. Push your branch to your fork of the project on github (the first time you do this, it will create the branch on github for you): `git push origin yourbranchname`
+1. Go to your fork of the repository on GitHub (you should see a dropdown allowing you to select your branch)
+1. Select your recently pushed branch and create a pull request (you should see a button for this)
 ![image](https://user-images.githubusercontent.com/10604391/125674000-d02eb7a0-b85d-4c8f-b8dd-2b144e274f7d.png)
 
-13. Complete pull request.
-14. Once automated tests have finished running on your PR, make sure they passed (they should have, since you already ran the tests locally at step 8... right? RIGHT?!)
-15. Engage in the review of your pull request on github (there will likely be some back and forth discussion between you and the maintainer before the PR is accepted)
-16. Start work on another feature by checking out the develop branch again: `git checkout develop`
-17. Go to Step 4 and repeat!
+1. Complete pull request.
+1. Once automated tests have finished running on your PR, make sure they passed (they should have, since you already ran the tests locally at step 8... right? RIGHT?!)
+1. Engage in the review of your pull request on github (there will likely be some back and forth discussion between you and the maintainer before the PR is accepted)
+1. Start work on another feature by checking out the develop branch again: `git checkout develop`
+1. Go to Step 4 and repeat!
 
 ## Detailed Expectations for all Pull Requests:
 
