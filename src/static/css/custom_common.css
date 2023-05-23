@@ -664,13 +664,20 @@ to overlap borders ****/
     border-radius: 0px;
 }
 
+/*
+The .list-group-item-buttons rule sets a minimum height for the list element that
+contains the submission buttons.
+This is necessary to eliminate a small gap that appears between an expanded
+bootstrap-table accordion row and the subsequent row. This gap is caused by a
+margin-bottom on the .pull-right child element of .list-group-item-buttons.
+*/
 .list-group-item-buttons {
-    min-height: 55px;
+    min-height: 60px;
 }
 
 .list-group-item-buttons > .pull-right {
     margin-left: 15px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
 }
 
 .list-group-item-packed {

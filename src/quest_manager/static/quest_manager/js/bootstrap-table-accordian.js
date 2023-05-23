@@ -22,15 +22,23 @@ $(document).ready(function () {
     $table.bootstrapTable();
 
     $table.on('expand-row.bs.table', function (e, index, row, $detail) {
+      // Get the row's html id, then extract the last digit (quest id) from it
       var row_html_id = row._id;
       var quest_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
 
+      // Get the hidden span element
+      var $hiddenSpan = $("#collapse-quest-" + quest_id);
+
       $detail.html('<div class="detail-container" style="display:none;"></div>');
-      var $detailContainer = $detail.find('div');
+      // Add all classes from the hidden span to the tr.detail-view element
+      $detail.addClass($hiddenSpan.attr('class'));
+
+      // Get the detail container div
+      var $detailContainer = $detail.find('div.detail-container');
 
       // Create a function to update the row's content
       var updateContent = function () {
-        var detailContent = $("#collapse-quest-" + quest_id).html();
+        var detailContent = $hiddenSpan.html();
         $detailContainer.html(detailContent);
       };
 
@@ -38,8 +46,9 @@ $(document).ready(function () {
       updateContent();
 
       // Create an observer that updates the row's content when the span's content changes
+      // This is activated when the ajax script updates the quest content
       var observer = new MutationObserver(updateContent);
-      observer.observe($("#collapse-quest-" + quest_id)[0], { childList: true, subtree: true });
+      observer.observe($hiddenSpan[0], { childList: true, subtree: true });
 
       // When the row is expanded, slide down the detail container
       $detailContainer.slideDown();

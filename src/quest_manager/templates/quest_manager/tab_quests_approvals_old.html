@@ -1,0 +1,97 @@
+<!--
+  Quest Approvals (quest_approval.html)
+    > SUBMITTED (tab_quests_approvals_old.html)
+    > RETURNED (tab_quests_approvals_old.html)
+    > APPROVED (tab_quests_approvals_old.html)
+    > FLAGGED (tab_quests_approvals_old.html)
+-->
+
+{% load crispy_forms_tags %}
+{% load utility_tags %}
+
+{% if tab.submissions %}
+  <div class="row panel-heading">
+    <div class="col-sm-1 col-xs-2 col-icon"></div>
+    <div class="col-sm-4 col-xs-5">Quest</div>
+    <div class="col-sm-1 col-xs-2">XP</div>
+    <div class="col-sm-1 hidden-xs">{% group_name %}</div>
+    <div class="col-sm-2 col-xs-3">User</div>
+    <div class="col-sm-2 hidden-xs">Status</div>
+  </div>
+  <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
+  {% for s in tab.submissions %}
+    <div class="panel accordian
+      {% if s.id == active_id %} active{% endif %}
+      {% if object.sticky %}panel-info
+      {% elif s.do_not_grant_xp %}panel-muted
+      {% else %}panel-default{% endif %}">
+      <div class="panel-heading accordian accordian-trigger panel-heading-tall
+        {% if s.id == active_id %} active {% endif %}"
+        role="tab"
+        id="heading{{s.id}}"
+        aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
+        aria-controls="collapse{{s.id}}"
+        data-parent="#accordion" data-toggle="collapse" data-target="#collapse{{s.id}}">
+
+        <div class="row">
+          <h4 class="panel-title">
+            <div class="col-sm-1 col-xs-2 col-icon">
+              <img class="img-responsive panel-title-img img-rounded" src="{{ s.quest.get_icon_url }}" alt="icon"/>
+            </div>
+            <div class="col-sm-4 col-xs-5">{{s.quest_name}}</div>
+            <div class="col-sm-1 col-xs-2">
+              {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            </div>
+            <div class="col-sm-1 hidden-xs">
+              {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </div>
+            <div class="col-sm-2 col-xs-3">{{s.user.username|truncatechars:14}} <br />
+              <small>{{ s.user.profile.preferred_full_name }}</small>
+             </div>
+            <div class="col-sm-3 hidden-xs">
+              {% include "quest_manager/submitted_time.html" %}
+            </div>
+          </h4>
+        </div>
+      </div>
+
+      <div id="collapse{{s.id}}"
+        class="panel-collapse collapse {% if s.id == active_id %} in {% endif %}"
+        role="tabpanel" aria-labelledby="heading{{s.id}}">
+        <ul id="preview-content-{{s.id}}" class="list-group">
+          <li class="list-group-item list-group-item-buttons">
+              <p>
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Loading content...
+                <!-- preview_content_approvals.html via AJAX -->
+               </p>
+          </li>
+        </ul>
+
+        <li class="list-group-item">
+          <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
+                action="{% url 'quests:approve' s.id %}">{% csrf_token %}
+            {{ quick_reply_form | crispy }}
+            <div>
+              {% include "quest_manager/submission_buttons_form.html" %}
+              {% include "quest_manager/submission_buttons_other.html" %}
+            </div>
+          </form>
+        </li>
+
+      </div>
+
+    </div>
+  {% endfor %}
+  </div>
+
+  {% with items=tab.submissions %}
+    {% include "quest_manager/pagination_controls.html" %}
+  {% endwith %}
+
+{% elif user.block_set.count == 0 %}
+  <p>You are not assigned as the teacher for any blocks yet.</p>
+  <a class="btn btn-info" href="{% url 'courses:block_list' %}">Join a block</a>
+{% else %}
+  <p>None.</p>
+{% endif %}

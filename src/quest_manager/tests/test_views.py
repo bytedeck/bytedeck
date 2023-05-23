@@ -83,23 +83,37 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         q2_pk = self.quest2.pk
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_all')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_all_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:inprogress_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:completed_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:past_old')).status_code, 200)
         # anyone can view drafts if they figure out the url, but it will be blank for them
         self.assertEqual(self.client.get(reverse('quests:drafts')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:drafts_old')).status_code, 200)
 
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
+        self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approvals_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:submitted_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:returned_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approved_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:flagged_old')).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
@@ -446,6 +460,21 @@ class SubmissionViewTests(TenantTestCase):
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
+
+    def test_all_old_submission_page_status_codes_for_teachers(self):
+        """After refactoring the submission pages to use bootstrap-tables, all of the old pages were made accessible
+        through the /old/ url prefix. This test makes sure that all of the old pages are still accessible to teachers"""
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Test the old flagged submissions page
+        self.assertEqual(self.client.get(reverse('quests:approvals_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submitted_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:returned_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:approved_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:flagged_old')).status_code, 200)
 
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
