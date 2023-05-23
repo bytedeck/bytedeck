@@ -9,6 +9,7 @@
 
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
+{% load static %}
 
 {% block heading_inner %} {{ heading }}
   {% if request.user.is_staff or request.user.profile.is_TA %}
@@ -119,5 +120,12 @@
   {% with quests_available_page=True %}
     {% include "quest_manager/ajax_content_loading.html" %}
   {% endwith %}
+
+  {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
+          integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
+          crossorigin="anonymous"></script>
+
+  <script src="{% static 'quest_manager/js/bootstrap-table-accordian.js' %}"></script>
 
 {% endblock %}
