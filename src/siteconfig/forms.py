@@ -83,8 +83,9 @@ class SiteConfigForm(forms.ModelForm):
 
     def clean_custom_stylesheet(self):
         """Check and/or validate uploaded stylesheet content"""
-        if self.cleaned_data.get("custom_stylesheet") or self.files.get("custom_stylesheet"):
-            css = self.cleaned_data["custom_stylesheet"] or self.files["custom_stylesheet"]
+        value = self.cleaned_data.get("custom_stylesheet", False)
+        if value or self.files.get("custom_stylesheet"):
+            css = value or self.files["custom_stylesheet"]
             # using "cssutils" library to check / validate stylesheet content
             parser = CSSParser(
                 validate=True, raiseExceptions=True, loglevel=logging.ERROR
@@ -99,11 +100,13 @@ class SiteConfigForm(forms.ModelForm):
 
             return css
 
-        return None
+        return value
 
     def clean_custom_javascript(self):
         """Check and/or validate uploaded javascript content"""
-        if self.cleaned_data.get("custom_javascript") or self.files.get("custom_javascript"):
+        value = self.cleaned_data.get("custom_javascript", False)
+        if value or self.files.get("custom_javascript"):
             # TODO: implement javascript validation here
-            return self.cleaned_data["custom_javascript"] or self.files["custom_javascript"]
-        return None
+            return value or self.files["custom_javascript"]
+
+        return value
