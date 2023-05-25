@@ -64,6 +64,11 @@ class SiteConfigForm(forms.ModelForm):
                 Accordion(
                     AccordionGroup(
                         "Advanced",
+                        HTML(
+                            "<div class='help-block'><p class='text-danger'>"
+                            "<b>Warning: </b> These features are only editable by the deck owner."
+                            "</p></div>"
+                        ),
                         "custom_stylesheet",
                         "custom_javascript",
                         "deck_owner",

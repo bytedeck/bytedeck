@@ -212,13 +212,14 @@ class SiteConfig(models.Model):
     # Custom stylesheet and javascript
     #
     custom_stylesheet = RestrictedFileField(
-        verbose_name="CSS", null=True, blank=True,
-        content_types=['text/css', 'text/plain'], max_upload_size=512000,
-        help_text="Upload a custom CSS file to customize the look of your site.",
+        null=True, blank=True, content_types=['text/css', 'text/plain'], max_upload_size=512000,
+        help_text="WARNING: This CSS stylesheet can be used to completely override the look and layout of your deck. \
+            This feature also has the potential of making your deck unusable. Use at your own risk.",
     )
     custom_javascript = RestrictedFileField(
-        verbose_name="JavaScript", null=True, blank=True,
-        content_types=['application/x-javascript'], max_upload_size=512000,
+        null=True, blank=True, content_types=['application/x-javascript'], max_upload_size=512000,
+        help_text="WARNING: This custom JavaScript file can be used to completely override how the front end of your deck functions. \
+            This feature also has the potential of making your deck unusable. Use at your own risk.",
     )
 
     deck_owner = models.ForeignKey(
