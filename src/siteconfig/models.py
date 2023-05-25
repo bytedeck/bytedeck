@@ -185,6 +185,15 @@ class SiteConfig(models.Model):
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
     )
 
+    # Field to select custom name to change all instances of "announcement" to site-wide
+    # Currently used in: announcements.forms, announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
+    custom_name_for_announcement = models.CharField(
+        default="Announcement", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Announcement\". Annoucements are site-wide messages created \
+            by staff members and displayed to all users through a tab in the sidebar. Alternatives might include \"Memo\", \
+            \"Bulletin\", or \"Notice\", depending on your context."
+    )
+
     # Group is actually the Block model, but has been genericized and is now called Group
     custom_name_for_group = models.CharField(
         default="Group", max_length=20,
