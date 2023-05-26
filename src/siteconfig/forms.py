@@ -82,31 +82,55 @@ class SiteConfigForm(forms.ModelForm):
         )
 
     def clean_custom_stylesheet(self):
-        """Check and/or validate uploaded stylesheet content"""
+        """
+        Check if stylesheet file is uploaded, if not raise validation error.
+
+        This method overrides default `clean_<fieldname>` method and parse <fieldname> upload
+        using `cssutils` library to determine whether it is "valid" stylesheet or not.
+        """
+        # get data from form upload or do nothing if there is no uploads
         value = self.cleaned_data.get("custom_stylesheet", False)
         if value or self.files.get("custom_stylesheet"):
             css = value or self.files["custom_stylesheet"]
-            # using "cssutils" library to check / validate stylesheet content
+
+            # using CSS parser (from cssutils) to validate form upload,
+            # for reference: https://pythonhosted.org/cssutils/docs/parse.html#cssparser
             parser = CSSParser(
                 validate=True, raiseExceptions=True, loglevel=logging.ERROR
             )
             try:
+                # call `parseString` method and parse uploaded file as string,
+                # errors may be raised
                 stylesheet = parser.parseString(css.read(), validate=True)
             except DOMException as e:
+                # something wrong, render exception as validation error
                 raise forms.ValidationError(e)
 
+            # check if parsed stylesheet is a "valid" CSS file (according to `cssutils`),
+            # if not raise validation error
             if not stylesheet.valid:
                 raise forms.ValidationError(_("This stylesheet is not valid CSS."))
 
+            # returns form upload as is
             return css
 
+        # do nothing and return everything as is
         return value
 
     def clean_custom_javascript(self):
-        """Check and/or validate uploaded javascript content"""
+        """
+        Check if javascript file is uploaded, if not raise validation error.
+
+        This is placeholder for overriden `clean_<fieldname>` method that does nothing.
+        """
+        # get data from form upload or do nothing if there is no uploads
         value = self.cleaned_data.get("custom_javascript", False)
         if value or self.files.get("custom_javascript"):
+            js = value or self.files["custom_javascript"]
             # TODO: implement javascript validation here
-            return value or self.files["custom_javascript"]
 
+            # returns form upload as is
+            return js
+
+        # do nothing and return everything as is
         return value

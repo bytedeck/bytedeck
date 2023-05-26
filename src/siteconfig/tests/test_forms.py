@@ -22,7 +22,9 @@ class SiteConfigFormTest(TenantTestCase):
         self.config = SiteConfig.get()
 
     def test_clean_custom_stylesheet_method(self):
-        """Custom stylesheet file should be valid or None"""
+        """
+        Tests CSS validation for form uploads done by `clean_custom_stylesheet` method.
+        """
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_stylesheet"]
 
@@ -71,11 +73,17 @@ class SiteConfigFormTest(TenantTestCase):
         self.assertTrue(form.is_valid())
 
     def test_clean_custom_javascript_method(self):
-        """Custom javascript file should be valid or None"""
+        """
+        Tests JS validation for form uploads done by `clean_custom_javascript` method.
+        """
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_javascript"]
 
+        # TODO: trying to upload "wrong" content
+        # add tests once `clean_custom_javascript` method is implemented
+
         # TODO: trying to upload "invalid" javascript
+        # add tests once `clean_custom_javascript` method is implemented
 
         # trying to upload "correct" javascript
         valid_content = b"""alert("Hello, World!");"""
