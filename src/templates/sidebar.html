@@ -90,7 +90,7 @@
 
     <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
        href="{% url 'profiles:profile_list_current' %}">
-      <i class="fa fa-users fa-fw"></i>&nbsp; Students
+      <i class="fa fa-users fa-fw"></i>&nbsp; {{config.custom_name_for_student}}s
     </a>
 
   </div>
