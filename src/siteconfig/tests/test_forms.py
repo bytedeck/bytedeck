@@ -28,7 +28,8 @@ class SiteConfigFormTest(TenantTestCase):
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_stylesheet"]
 
-        # trying to upload "wrong" content
+        # trying to upload "wrong" content,
+        # here "wrong" content means any textual, but non-stylesheet content
         wrong_content = b"""Lorem ipsum dolor sit amet..."""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(wrong_content),
@@ -45,7 +46,8 @@ class SiteConfigFormTest(TenantTestCase):
             form.errors["custom_stylesheet"],
         )
 
-        # trying to upload "invalid" stylesheet
+        # trying to upload "invalid" stylesheet,
+        # here "invalid" stylesheet means any stylesheet content, but with syntax errors
         invalid_css = b"""body { colour: bleck; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(invalid_css),
@@ -79,10 +81,12 @@ class SiteConfigFormTest(TenantTestCase):
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_javascript"]
 
-        # TODO: trying to upload "wrong" content
+        # TODO: trying to upload "wrong" content,
+        # here "wrong" content means any textual, but non-javascript content
         # add tests once `clean_custom_javascript` method is implemented
 
-        # TODO: trying to upload "invalid" javascript
+        # TODO: trying to upload "invalid" javascript,
+        # here "invalid" javascript means any javascript content, but with syntax errors
         # add tests once `clean_custom_javascript` method is implemented
 
         # trying to upload "correct" javascript
