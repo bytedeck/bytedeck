@@ -1,3 +1,4 @@
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.forms.models import model_to_dict
@@ -126,3 +127,77 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         ))
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
+
+    def test_custom_stylesheet_file_submission_removal(self):
+        """
+        Custom CSS file can be uploaded (submitted) and attached to `SiteConfig` model,
+        and existing file can be cleared.
+        """
+        owner_user = self.config.deck_owner
+
+        URL = reverse("config:site_config_update_own")
+
+        self.client.force_login(owner_user)
+
+        valid_css = b"""body { color: black; }"""
+        custom_stylesheet = SimpleUploadedFile("custom.css", valid_css, "text/plain")
+
+        data = model_to_dict(SiteConfig.get())
+        del data['banner_image']
+        del data['banner_image_dark']
+        del data['site_logo']
+        del data['default_icon']
+        del data['favicon']
+        del data['custom_javascript']
+
+        # First case, custom stylesheet can be uploaded and attached to `SiteConfig` object
+        data['custom_stylesheet'] = custom_stylesheet
+
+        self.assertEqual(bool(SiteConfig.get().custom_stylesheet), False)  # assert there is no saved files
+        self.client.post(URL, data=data)
+        self.assertEqual(SiteConfig.get().custom_stylesheet.read(), valid_css)  # form success should have updated model
+
+        # Second case, existing file input can be cleared / removed
+        del data['custom_stylesheet']
+        data['custom_stylesheet-clear'] = True  # select "clear" checkbox
+
+        self.assertEqual(bool(SiteConfig.get().custom_stylesheet), True)  # assert file was saved and attached
+        self.client.post(URL, data=data)
+        self.assertEqual(bool(SiteConfig.get().custom_stylesheet), False)  # assert there is no more saved files
+
+    def test_custom_javascript_file_submission_removal(self):
+        """
+        Custom JavaScript file can be uploaded (submitted) and attached to `SiteConfig` model,
+        and existing file can be cleared.
+        """
+        owner_user = self.config.deck_owner
+
+        URL = reverse("config:site_config_update_own")
+
+        self.client.force_login(owner_user)
+
+        valid_js = b"""alert("Hello, World!");"""
+        custom_javascript = SimpleUploadedFile("custom.js", valid_js, "application/x-javascript")
+
+        data = model_to_dict(SiteConfig.get())
+        del data['banner_image']
+        del data['banner_image_dark']
+        del data['site_logo']
+        del data['default_icon']
+        del data['favicon']
+        del data['custom_stylesheet']
+
+        data['custom_javascript'] = custom_javascript
+
+        # First case, custom javascript can be uploaded and attached to `SiteConfig` object
+        self.assertEqual(bool(SiteConfig.get().custom_javascript), False)  # assert there is no saved files
+        self.client.post(URL, data=data)
+        self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
+
+        # Second case, existing file input can be cleared / removed
+        del data['custom_javascript']
+        data['custom_javascript-clear'] = True  # select "clear" checkbox
+
+        self.assertEqual(bool(SiteConfig.get().custom_javascript), True)  # assert file was saved and attached
+        self.client.post(URL, data=data)
+        self.assertEqual(bool(SiteConfig.get().custom_javascript), False)  # assert there is no more saved files
