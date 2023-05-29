@@ -117,21 +117,3 @@ class SiteConfigForm(forms.ModelForm):
 
         # do nothing and return everything as is
         return value
-
-    def clean_custom_javascript(self):
-        """
-        Check if javascript file is uploaded, if not raise validation error.
-
-        This is placeholder for overriden `clean_<fieldname>` method that does nothing.
-        """
-        # get data from form upload or do nothing if there is no uploads
-        value = self.cleaned_data.get("custom_javascript", False)
-        if value or self.files.get("custom_javascript"):
-            js = value or self.files["custom_javascript"]
-            # TODO: implement javascript validation here
-
-            # returns form upload as is
-            return js
-
-        # do nothing and return everything as is
-        return value

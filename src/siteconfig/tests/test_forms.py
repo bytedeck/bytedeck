@@ -73,31 +73,3 @@ class SiteConfigFormTest(TenantTestCase):
         )
         form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
         self.assertTrue(form.is_valid())
-
-    def test_clean_custom_javascript_method(self):
-        """
-        Tests JS validation for form uploads done by `clean_custom_javascript` method.
-        """
-        form_data = model_to_form_data(self.config, SiteConfigForm)
-        del form_data["custom_javascript"]
-
-        # TODO: trying to upload "wrong" content,
-        # here "wrong" content means any textual, but non-javascript content
-        # add tests once `clean_custom_javascript` method is implemented
-
-        # TODO: trying to upload "invalid" javascript,
-        # here "invalid" javascript means any javascript content, but with syntax errors
-        # add tests once `clean_custom_javascript` method is implemented
-
-        # trying to upload "correct" javascript
-        valid_content = b"""alert("Hello, World!");"""
-        custom_javascript = InMemoryUploadedFile(
-            BytesIO(valid_content),
-            field_name="tempfile",
-            name="custom.js",
-            content_type='application/x-javascript',
-            size=len(valid_content),
-            charset="utf-8",
-        )
-        form = SiteConfigForm(form_data, files={"custom_javascript": custom_javascript}, instance=self.config)
-        self.assertTrue(form.is_valid())
