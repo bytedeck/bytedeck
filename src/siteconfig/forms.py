@@ -91,8 +91,9 @@ class SiteConfigForm(forms.ModelForm):
         using `cssutils` library to determine whether it is "valid" stylesheet or not.
         """
         # get data from form upload or do nothing if there is no uploads
-        if self.cleaned_data.get("custom_stylesheet") or self.files.get("custom_stylesheet"):
-            css = self.cleaned_data["custom_stylesheet"] or self.files["custom_stylesheet"]
+        value = self.cleaned_data.get("custom_stylesheet", False)
+        if value or self.files.get("custom_stylesheet"):
+            css = value or self.files["custom_stylesheet"]
 
             # using CSS parser (from cssutils) to validate form upload,
             # for reference: https://pythonhosted.org/cssutils/docs/parse.html#cssparser
@@ -115,4 +116,5 @@ class SiteConfigForm(forms.ModelForm):
             # returns form upload as is
             return css
 
-        return None
+        # do nothing and return everything as is
+        return value
