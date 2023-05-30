@@ -7,7 +7,7 @@ from django_tenants.test.cases import TenantTestCase
 from siteconfig.models import SiteConfig
 from siteconfig.forms import SiteConfigForm
 
-from hackerspace_online.tests.utils import model_to_form_data
+from hackerspace_online.tests.utils import generate_form_data, model_to_form_data
 
 
 class SiteConfigFormTest(TenantTestCase):
@@ -73,3 +73,44 @@ class SiteConfigFormTest(TenantTestCase):
         )
         form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
         self.assertTrue(form.is_valid())
+
+    def test_custom_stylesheet_file_submission_removal(self):
+        """
+        Custom CSS file can be uploaded (submitted) and attached to `SiteConfig` model,
+        and existing file can be cleared.
+        """
+        valid_css = b"""body { color: black; }"""
+        custom_stylesheet = InMemoryUploadedFile(
+            BytesIO(valid_css),
+            field_name="tempfile",
+            name="custom.css",
+            content_type='text/css',
+            size=len(valid_css),
+            charset="utf-8",
+        )
+
+        form_data = generate_form_data(model_form=SiteConfigForm)
+
+        # First case, custom stylesheet can be uploaded and attached to `SiteConfig` object
+
+        # assert there is no saved files, ie. "reading" non-existing file should raise an exception
+        with self.assertRaises(ValueError):
+            SiteConfig.get().custom_stylesheet.read()
+        form = SiteConfigForm(
+            form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config,
+            is_deck_owner=True,
+        )
+        form.save()
+        self.assertTrue(form.is_valid())
+        self.assertEqual(SiteConfig.get().custom_stylesheet.read(), valid_css)  # form success should have updated model
+
+        # Second case, existing file input can be cleared / removed
+        form_data['custom_stylesheet-clear'] = True  # select "clear" checkbox
+
+        self.assertEqual(SiteConfig.get().custom_stylesheet.read(), valid_css)  # assert file was saved and attached
+        form = SiteConfigForm(form_data, files={}, instance=self.config, is_deck_owner=True)
+        self.assertTrue(form.is_valid())
+        form.save()
+        # assert there is no saved files, ie. "reading" non-existing file should raise an exception
+        with self.assertRaises(ValueError):
+            SiteConfig.get().custom_stylesheet.read()
