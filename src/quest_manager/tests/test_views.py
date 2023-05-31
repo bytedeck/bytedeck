@@ -83,7 +83,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:available2')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)

@@ -359,8 +359,8 @@ def get_minutes_to_complete_list(quest):
 
 @non_public_only_view
 @login_required
-def quest_list2(request, quest_id=None):
-    return quest_list(request, quest_id, template="quest_manager/quests2.html")
+def quest_list_old(request, quest_id=None):
+    return quest_list(request, quest_id, template="quest_manager/quests_old.html")
 
 
 @non_public_only_view
