@@ -2,7 +2,7 @@
 {% load crispy_forms_tags %}
 {% load utility_tags %}
 
-{% block heading_inner %} Badge: {{ heading }}{% endblock %}
+{% block heading_inner %} {{ config.custom_name_for_badge }}: {{ heading }}{% endblock %}
 
 {% block content %}
 
@@ -17,14 +17,14 @@
   <p></p>
   <div class="panel panel-primary">
     <!-- Default panel contents -->
-    <div class="panel-heading"><h3 class="panel-title">Badge Details</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">{{ config.custom_name_for_badge }} Details</h3></div>
     <div class="panel-body">
       <div class="row">
         <div class="col-sm-6">
           <ul class="list-unstyled">
             <li><h4>XP: {{badge.xp}}</h4></li>
             <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p></li>
-            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</p></li>
+            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this {{ config.custom_name_for_badge|lower }}</p></li>
           </ul>
         </div>
         <div class="col-sm-6">

@@ -15,6 +15,7 @@ from hackerspace_online.decorators import staff_member_required
 
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
+from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
@@ -36,7 +37,7 @@ def badge_list(request):
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
 
     context = {
-        "heading": "Badges",
+        "heading": f"{SiteConfig.get().custom_name_for_badge}s",
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
         "earned_badges": earned_badges,
@@ -67,7 +68,7 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
-        context['heading'] = "Update Badge"
+        context['heading'] = f"Update {SiteConfig.get().custom_name_for_badge}"
         context['submit_btn_value'] = "Update"
         return context
 
@@ -85,7 +86,7 @@ def badge_create(request):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": "Create New Badge",
+        "heading": f"Create New {SiteConfig.get().custom_name_for_badge}",
         "form": form,
         "submit_btn_value": "Create",
     }
@@ -106,7 +107,7 @@ def badge_copy(request, badge_id):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": "Copy a Badge",
+        "heading": f"Copy another {SiteConfig.get().custom_name_for_badge}",
         "form": form,
         "submit_btn_value": "Create",
     }
@@ -144,7 +145,7 @@ class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = 'Create New Badge Type'
+        kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -158,7 +159,7 @@ class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = 'Update Badge Type'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
@@ -203,7 +204,7 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = "Badge " + str(badge) + " granted to "
+        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
             result_message += profile.preferred_full_name() + "; "
@@ -212,7 +213,7 @@ def bulk_assertion_create(request, badge_id=None):
         return redirect('badges:list')
 
     context = {
-        "heading": "Grant Badges in Bulk",
+        "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
         "form": form,
         "submit_btn_value": "Grant",
     }
@@ -236,7 +237,7 @@ def assertion_create(request, user_id, badge_id):
     if form.is_valid():
         new_ass = form.save(commit=False)
         BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
-        messages.success(request, ("Badge " + str(new_ass) + " granted to " + str(new_ass.user)))
+        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
         return redirect('badges:list')
 
     context = {
