@@ -1,0 +1,32 @@
+/* The first column is blank, so we hide it to make the table look better */
+.accordian-table thead>tr>th.detail,
+.accordian-table tbody>tr:not(.detail-view)>td:first-of-type {
+    display: none;
+}
+
+/* Remove the border from inner cells of the table */
+.accordian-table.table-bordered > tbody > tr > td,
+.accordian-table.table-bordered > thead > tr > th
+{
+  border: none;
+}
+
+/* After a row is clicked, it should be highlighted in blue */
+.accordian-table > tbody > tr.active > td {
+  color: #FFF;
+  text-shadow: 0px -1px 0px #286090;
+  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%) !important;
+  background-repeat: repeat-x !important;
+  border-color: #2B669A !important;
+}
+
+.detail-view .list-group-item:last-child {
+  border-bottom-right-radius: 0px;
+  border-bottom-left-radius: 0px;
+  border-bottom-color: #337ab7;
+}
+
+/* White if light mode, dark if dark mode */
+tr.detail-view {
+  background-color: transparent !important;
+}
