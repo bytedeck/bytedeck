@@ -59,6 +59,7 @@ class SiteConfigForm(forms.ModelForm):
                 "approve_oldest_first",
                 "display_marks_calculation",
                 "cap_marks_at_100_percent",
+                "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",
                 "custom_name_for_student",

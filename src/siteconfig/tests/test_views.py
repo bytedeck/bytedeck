@@ -166,6 +166,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
             "site_name_short": "site_name_short",
             "access_code": "123456",
             "deck_ai": owner_user.pk,
+            "custom_name_for_badge": "badge",
             "custom_name_for_announcement": "announcement",
             "custom_name_for_group": "group",
             "custom_name_for_student": "student",
