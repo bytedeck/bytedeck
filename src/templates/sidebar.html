@@ -51,7 +51,7 @@
         <div class="clearfix dropdown">
             <a id="badges-menu"
               class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
-              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s</a>
 
             <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
               <a id="badges-menu-dropdown"
@@ -59,7 +59,7 @@
                 data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
                 <i class="fa fa-ellipsis-v fa-fw"></i></a>
               <ul class="dropdown-menu dropdown-menu-right">
-                <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badge Types</a></li>
+                <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }} Types</a></li>
                 <!-- don't forget to add dividers when adding more menu items
                 <li role="separator" class="divider"></li> -->
               </ul>

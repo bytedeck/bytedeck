@@ -194,6 +194,16 @@ class SiteConfig(models.Model):
             \"Bulletin\", or \"Notice\", depending on your context."
     )
 
+    # Field to select custom name to change all instances of "badge" to site-wide
+    # Currently used in: sidebar.html, badges.forms, badges.views, badges.templates.list.html
+    custom_name_for_badge = models.CharField(
+        default="Badge", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Badge\". Badges are markers given to students either \
+            automatically as a result of meeting a prerequisite, or manually by a staff user. Badges can grant students \
+            XP, or act as prerequisites to other content. For example, \"Achievement\", \"Medal\", or \
+            \"Certificate\" might be a more suitable name than Badge, depending on your context."
+    )
+
     # Group is actually the Block model, but has been genericized and is now called Group
     custom_name_for_group = models.CharField(
         default="Group", max_length=20,

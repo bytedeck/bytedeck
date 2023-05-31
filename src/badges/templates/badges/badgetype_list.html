@@ -4,12 +4,12 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading_inner %}Badge Types
+{% block heading_inner %}{{ config.custom_name_for_badge }} Types
   <a class="btn btn-primary" href="{% url 'badges:badge_type_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
 {% endblock %}
 
 {% block content %}
-<p>This page if visible to staff only.</p>
+<p>This page is visible to staff only.</p>
 <table class="table table-striped">
   <thead>
     <tr>
@@ -26,10 +26,10 @@
       <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
       <td>{{ object.sort_order }}</td>
       <td>
-        <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this badge_type">
+        <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this type">
           <i class="fa fa-edit"></i>
         </a>
-        <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this badge type">
+        <a class="btn btn-danger" href="{% url 'badges:badge_type_delete' object.id %}" role="button" title="Delete this type">
           <i class="fa fa-trash-o"></i>
         </a>
       </td>

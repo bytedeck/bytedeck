@@ -236,6 +236,65 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
 
+    # Custom label tests
+    def test_badge_views__header_custom_label_displayed(self):
+        """
+        Badge Create, Copy, Delete, Detail and Edit view headers should change 'Badge' to label set at custom_name_for_badge model
+        field in Siteconfig
+
+        Badge list view should have two buttons in header for badge creation and badge type creation, both should use custom label
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_badge = "CustomBadge"
+        config.save()
+
+        # Get Create view and assert header is correct
+        request = self.client.get(reverse('badges:badge_create'))
+        self.assertContains(request, "Create New CustomBadge")
+        # Get Copy view and assert header is correct
+        request = self.client.get(reverse('badges:badge_copy', args=[self.test_badge.id]))
+        self.assertContains(request, "Copy another CustomBadge")
+        # Get Edit view and assert header is correct
+        request = self.client.get(reverse('badges:badge_update', args=[self.test_badge.id]))
+        self.assertContains(request, 'Update CustomBadge')
+        # Get Delete view and assert header is correct
+        request = self.client.get(reverse('badges:badge_delete', args=[self.test_badge.id]))
+        self.assertContains(request, 'Delete CustomBadge')
+        # Get Detail view and assert header is correct
+        request = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.id]))
+        self.assertContains(request, "CustomBadge Details")
+        # Get List view and assert header buttons have correct label
+        request = self.client.get(reverse('badges:list'))
+        self.assertContains(request, "Create CustomBadge")
+        self.assertContains(request, "Create CustomBadge Type")
+
+    def test_badge_views__field_text_custom_label_displayed(self):
+        """
+        Badge Create, Copy and Edit view field text (labels, help text) should change 'Badge' to label set at custom_name_for_badge model
+        field in Siteconfig
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_badge = "CustomBadge"
+        config.save()
+
+        # Get Create view and assert every instance of custom label is present
+        # (badge_type field label, map_transition field help text, import_id help text)
+        # Copy and Update views use these fields too, but through the same logic.
+        request = self.client.get(reverse('badges:badge_create'))
+        self.assertContains(request, "CustomBadge Type")
+        self.assertContains(request, "Break maps at this custombadge.")
+        self.assertContains(request, "Only edit this if you want to link to a custombadge")
+
 
 class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
@@ -332,3 +391,28 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # confirm deletion prevention text shows up
         dt_ptag = f"Unable to delete badge type '{self.badge_type.name}'"
         self.assertContains(response, dt_ptag)
+
+    # Custom label tests
+    def test_badgetype_views__header_custom_label_displayed(self):
+        """
+        Badge Type Create, Copy, and Edit view headers should change 'Badge' to label set at custom_name_for_badge model
+        field in Siteconfig
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_badge = "CustomBadge"
+        config.save()
+
+        # Get Create view and assert header is correct
+        request = self.client.get(reverse('badges:badge_type_create'))
+        self.assertContains(request, "Create New CustomBadge Type")
+        # Get Edit view and assert header is correct
+        request = self.client.get(reverse('badges:badge_type_update', args=[self.badge_type.id]))
+        self.assertContains(request, 'Update CustomBadge Type')
+        # Get Delete view and assert header is correct
+        request = self.client.get(reverse('badges:badge_type_delete', args=[self.badge_type.id]))
+        self.assertContains(request, 'Delete CustomBadge Type')
