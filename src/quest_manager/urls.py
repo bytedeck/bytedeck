@@ -41,12 +41,17 @@ urlpatterns = [
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^available/$', views.quest_list, name='quests'),
     url(r'^available/$', views.quest_list, name='available'),
-    url(r'^available2/$', views.quest_list2, name='available2'),
+    url(r'^available/old/$', views.quest_list_old, name='available_old'),
     url(r'^available/all/$', views.quest_list, name='available_all'),
+    url(r'^available/all/old/$', views.quest_list, name='available_all_old'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
+    url(r'^inprogress/old/$', views.quest_list_old, name='inprogress_old'),
     url(r'^completed/$', views.quest_list, name='completed'),
+    url(r'^completed/old/$', views.quest_list_old, name='completed_old'),
     url(r'^past/$', views.quest_list, name='past'),
+    url(r'^past/old/$', views.quest_list_old, name='past_old'),
     url(r'^drafts/$', views.quest_list, name='drafts'),
+    url(r'^drafts/old/$', views.quest_list_old, name='drafts_old'),
 
     # Approvals
     url(r'^approvals/$', views.approvals, name='approvals'),
