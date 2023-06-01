@@ -17,7 +17,7 @@
       <li>Repeatable: {% if q.max_repeats == 0 %}no
              {% else %}
                {% if q.max_repeats == -1 %} Unlimited
-               {% else %} {{q.max_repeats}} time{{q.max_repeats|pluralize} max
+               {% else %} {{q.max_repeats}} time{{q.max_repeats|pluralize}} max
                {% endif %}
                {% if q.hours_between_repeats > 0 %}
                - every {{ q.hours_between_repeats}} hrs

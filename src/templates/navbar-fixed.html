@@ -54,10 +54,11 @@
             <div class="visible-xs-inline navbar-mobile-xp-container">
                 <ul class="nav navbar-nav navbar-mobile-xp">
                     <li>
-                        {% comment %} # DISABLE MARKS {% endcomment %}
-                        {% comment %} <a href="{% url 'courses:marks' request.user.id %}" {% endcomment %}
-                        <a href="#" title="The Mark Calculations page is currently disabled, sorry!"
-                        class="navbar-text-large-container">XP:
+                        {% url 'courses:marks' request.user.id as marks_url %}
+                        <a
+                          href="{% if config.display_marks_calculation %} {{ marks_url }} {% else %}#{% endif %}"
+                          title="View your marks calculation"
+                           class="navbar-text-large-container">XP:
                             <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
                         </a>
                     </li>

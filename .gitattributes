@@ -1,0 +1,4 @@
+# Set default behavior to automatically normalize line endings for all files to LF (Linux style) in the repo
+# The following article explains why this is important: https://dev.to/deadlybyte/please-add-gitattributes-to-your-git-repository-1jld
+# The following stackoverflow post has some good discussion on this specific instruction: https://stackoverflow.com/questions/29435156/what-will-text-auto-eol-lf-in-gitattributes-do
+* text=auto eol=lf

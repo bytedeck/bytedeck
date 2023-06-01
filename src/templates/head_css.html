@@ -49,6 +49,10 @@
       <link rel="shortcut icon" href="{{ STATIC_PREFIX }}icon/favicon.ico?v=OmKpW3L7mY">
 {% endif %}
 
+{% if config.custom_stylesheet %}<!-- Custom deck-specific stylesheet -->
+      <link href="{{ config.custom_stylesheet.url }}" rel="stylesheet">
+{% endif %}
+
 <!-- Mobile device icons -->
 <link rel="apple-touch-icon" test="" sizes="180x180" href="{{ STATIC_PREFIX }}icon/apple-touch-icon.png?v=OmKpW3L7mY">
 <link rel="manifest" href="{{ STATIC_PREFIX }}icon/site.webmanifest?v=OmKpW3L7mY">

@@ -17,7 +17,7 @@ On this application, Semi Isolated Approach has been followed.
 
 ### How does it work?
 Tenants are identified via their host name (i.e tenant.domain.com). This information is stored on a table on the public schema. Whenever a request is made, the host name is used to match a tenant in the database. If there’s a match, the search path is updated to use this tenant’s schema. So from now on all queries will take place at the tenant’s schema.
-*Tenant* model is used who store tenant information.
+*Tenant* model is used for storing tenant information.
 
 #### How to create tenants?
 1. Login to superadmin area http://url.com/admin.
@@ -66,7 +66,7 @@ _Note: scheman_name_to_dump_in is same as tenant's name._
 
 ### Accessing the django shell
 
-`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "./src/manage.py tenant_command shell"`
+`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "python src/manage.py tenant_command shell"`
 
 
 ### Deleting a Tenant

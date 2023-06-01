@@ -51,7 +51,7 @@
         <div class="clearfix dropdown">
             <a id="badges-menu"
               class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
-              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
+              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s</a>
 
             <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
               <a id="badges-menu-dropdown"
@@ -59,7 +59,7 @@
                 data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
                 <i class="fa fa-ellipsis-v fa-fw"></i></a>
               <ul class="dropdown-menu dropdown-menu-right">
-                <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; Badge Types</a></li>
+                <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }} Types</a></li>
                 <!-- don't forget to add dividers when adding more menu items
                 <li role="separator" class="divider"></li> -->
               </ul>
@@ -84,13 +84,13 @@
        href="{% url 'announcements:list' %}">
       <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
       <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
-      <span class="hidden-sm hidden-xs hidden-md">Announcements</span>
+      <span class="hidden-sm hidden-xs hidden-md">{{ config.custom_name_for_announcement }}s</span>
       <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
     </a>
 
     <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
        href="{% url 'profiles:profile_list_current' %}">
-      <i class="fa fa-users fa-fw"></i>&nbsp; Students
+      <i class="fa fa-users fa-fw"></i>&nbsp; {{config.custom_name_for_student}}s
     </a>
 
   </div>

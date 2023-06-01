@@ -8,6 +8,7 @@ from bootstrap_datepicker_plus.widgets import DateTimePickerInput
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
 from .models import Announcement
+from siteconfig.models import SiteConfig
 
 
 class AnnouncementForm(forms.ModelForm):
@@ -18,6 +19,19 @@ class AnnouncementForm(forms.ModelForm):
         self.fields['datetime_released'].initial = (
             datetime.now().strftime('%Y-%m-%d %H:%M')
         )
+
+        # Announcement creation/update settings that require name changes
+        # Rename all instances of "Announcement" in announcement model field help text to value set in siteconfig custom_name_for_announcement field
+        # These are all set almost verbatim in models, but we set them again here to use the correct custom name for announcements
+        self.fields['datetime_released'].help_text = f"The time the {SiteConfig.get().custom_name_for_announcement.lower()} was published. \
+            If auto_publish is True, then the {SiteConfig.get().custom_name_for_announcement.lower()} will automatically be published at this time."
+
+        self.fields['auto_publish'].help_text = f"When set to true, the {SiteConfig.get().custom_name_for_announcement.lower()} will publish itself \
+            on the date and time indicated."
+
+        self.fields['draft'].help_text = f"A new {SiteConfig.get().custom_name_for_announcement.lower()} saved as a non-draft will be published and \
+            notifications sent. Editing a previously saved draft will not send out notifications; use the Publish button on the \
+            {SiteConfig.get().custom_name_for_announcement}s main page."
 
     class Meta:
         model = Announcement
@@ -41,6 +55,6 @@ class AnnouncementForm(forms.ModelForm):
 
         if auto_publish and datetime_released < timezone.now():
             raise forms.ValidationError(
-                'An announcement that is auto published cannot have a past release date.'
+                f'An {SiteConfig.get().custom_name_for_announcement.lower()} that is auto published cannot have a past release date.'
             )
         return data

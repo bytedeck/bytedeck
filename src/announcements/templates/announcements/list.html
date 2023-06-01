@@ -2,7 +2,7 @@
 {% load crispy_forms_tags %}
 {% load notification_tags %}
 
-{% block heading_inner %}Announcements
+{% block heading_inner %}{{ config.custom_name_for_announcement }}s
 {% if request.user.is_authenticated and request.user.is_staff %}
   <div class="btn-group">
     <a class="btn {% if not archived %}btn-primary{% else %}btn-default{% endif %}" href="{% url 'announcements:list' %}" role="button">Current</a>

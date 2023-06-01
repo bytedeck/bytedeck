@@ -215,3 +215,7 @@
 	  });
 
 </script>
+
+{% if config.custom_javascript %}<!-- Custom deck-specific javascript -->
+  <script src="{{ config.custom_javascript.url }}"></script>
+{% endif %}

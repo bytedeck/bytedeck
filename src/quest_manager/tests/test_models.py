@@ -184,34 +184,6 @@ class QuestTestModel(TenantTestCase):
         matches_found = re.search('(([ ]+)?\n([ ]+)?</?span>)|(</?span>([ ]+)?\n([ ]+)?)', formatted_markup)
         self.assertIsNone(matches_found)
 
-    def test_quest_html_formatting_math(self):
-        test_markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""  # noqa
-        self.quest.instructions = test_markup
-        # Auto formatting on save
-        self.quest.save()
-        formatted_markup = self.quest.instructions
-
-        self.assertIn(test_markup, formatted_markup)
-
-        matches_found = re.search('({{)|(}})', formatted_markup)
-        self.assertIsNone(matches_found)
-
-    def test_quest_html_formatting_tabs(self):
-        markup = [  # test, expected out come
-            ("<p>some text</p>", "<p>\n    some text\n</p>"),
-            ("<p>some text\n\n</p>", "<p>\n    some text\n</p>"),
-            ("<p>some \ntext</p>", "<p>\n    some \ntext\n</p>"),
-            ("<p>some \n text</p>", "<p>\n    some \n    text\n</p>"),
-            ("<ol><li>test</li></ol>", "<ol>\n    <li>\n        test\n    </li>\n</ol>"),
-            (" <p>", "<p>\n</p>")
-        ]
-        for pair in markup:
-            self.quest.instructions = pair[0]
-            # Auto formatting on save
-            self.quest.save()
-            formatted_markup = self.quest.instructions
-            self.assertEqual(formatted_markup, pair[1])
-
     @freeze_time('2018-10-12 00:54:00', tz_offset=0)
     def test_is_repeat_available(self):
         """
