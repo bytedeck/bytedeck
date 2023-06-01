@@ -185,12 +185,40 @@ class SiteConfig(models.Model):
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
     )
 
+    # Field to select custom name to change all instances of "announcement" to site-wide
+    # Currently used in: announcements.forms, announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
+    custom_name_for_announcement = models.CharField(
+        default="Announcement", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Announcement\". Annoucements are site-wide messages created \
+            by staff members and displayed to all users through a tab in the sidebar. Alternatives might include \"Memo\", \
+            \"Bulletin\", or \"Notice\", depending on your context."
+    )
+
+    # Field to select custom name to change all instances of "badge" to site-wide
+    # Currently used in: sidebar.html, badges.forms, badges.views, badges.templates.list.html
+    custom_name_for_badge = models.CharField(
+        default="Badge", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Badge\". Badges are markers given to students either \
+            automatically as a result of meeting a prerequisite, or manually by a staff user. Badges can grant students \
+            XP, or act as prerequisites to other content. For example, \"Achievement\", \"Medal\", or \
+            \"Certificate\" might be a more suitable name than Badge, depending on your context."
+    )
+
     # Group is actually the Block model, but has been genericized and is now called Group
     custom_name_for_group = models.CharField(
         default="Group", max_length=20,
         help_text="A custom name specific to your deck to replace \"Group\".  Groups can be used to assign a group of students \
             to a specific teacher, and/or used as a prerequisite. For example, \"Block\", \"Cohort\", or \"Section\" \
             might be a more suitable name than Groups, depending on your context."
+    )
+
+    # Field to select custom name to change all instances of "student" to site-wide
+    # Currently used in: profile_manager.forms, sidebar.html, and form.html + profile_list.html in profile_manager.templates
+    custom_name_for_student = models.CharField(
+        default="Student", max_length=20,
+        help_text="A custom name specific to your deck to replace \"Student\". Students are non-staff site users, so this \
+            setting should be changed to reflect the desired name for your deck's userbase. For example, \"User\", \"Member\" \
+            or \"Learner\" might be a more suitable name than Student, depending on your context."
     )
 
     custom_name_for_tag = models.CharField(

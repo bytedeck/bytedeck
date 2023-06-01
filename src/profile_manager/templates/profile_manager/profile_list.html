@@ -8,7 +8,7 @@
 
 {% block head_title %}{% if title %}{{ title }}{% endif %}{% endblock %}
 
-{% block heading %}Students
+{% block heading %}{{ config.custom_name_for_student }}s
     {% if request.user.is_staff %}
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"

@@ -6,6 +6,7 @@ from django.urls import reverse
 from allauth.utils import email_address_exists
 
 from .models import Profile
+from siteconfig.models import SiteConfig
 
 
 class ProfileForm(forms.ModelForm):
@@ -30,6 +31,15 @@ class ProfileForm(forms.ModelForm):
         )
 
         self.fields['email'].initial = self.instance.user.email
+
+        # gets value from deck's custom_name_for_student field in siteconfig.models
+        custom_student_name = SiteConfig.objects.get().custom_name_for_student
+        # sets visible_to_other_students field name and help text on student profile settings page
+        self.fields['visible_to_other_students'].label = f"Visible to other {custom_student_name.lower()}s"
+        # setting help text with a variable in two steps isn't ideal but linebreaking with a backslash breaks tests that parse for exact help text.
+        # maybe another solution exists to cut down on line size?
+        helptext = f"Your marks will be visible to other {custom_student_name.lower()}s through the {custom_student_name.lower()} list."
+        self.fields['visible_to_other_students'].help_text = helptext
 
         user = self.instance.user
 

@@ -12,6 +12,7 @@ from model_bakery import baker
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -235,6 +236,188 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             response,
             new_ann.get_absolute_url()
         )
+
+    # Custom label tests
+    def test_announcement_views__header_custom_label_displayed(self):
+        """
+        Annnouncement Create, Copy, and Edit view headers should change 'announcement' to label set at custom_name_for_announcement model
+        field in Siteconfig
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.save()
+
+        # Get Create view and assert header is correct
+        request = self.client.get(reverse('announcements:create'))
+        self.assertContains(request, "Create New CustomAnnouncement")
+        # Get Copy view and assert header is correct
+        request = self.client.get(reverse('announcements:copy', args=[self.test_announcement.id]))
+        self.assertContains(request, "Copy another CustomAnnouncement")
+        # Get Edit view and assert header is correct
+        request = self.client.get(reverse('announcements:update', args=[self.test_announcement.id]))
+        self.assertContains(request, 'Edit CustomAnnouncement')
+        # Get Delete view and assert header is correct
+        request = self.client.get(reverse('announcements:delete', args=[self.test_announcement.id]))
+        self.assertContains(request, 'Delete CustomAnnouncement')
+
+    def test_announcement_views__help_text_custom_label_displayed(self):
+        """
+        Announcement create/update view help text should change 'announcement' to label set at custom_name_for_announcement model field in SiteConfig
+        """
+
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.save()
+
+        # Get annoucement create view and assert it contains the custom label in all areas it should be
+        # (datetime_released, auto_publish, draft settings)
+        # help text tested here is also accessed in update view but through the same logic
+        request = self.client.get(reverse('announcements:create'))
+        # since linebreaks in help text assignation break test parses for full help text, parsing for snippets of help text that are unique to each
+        # of the custom label usages they're testing is fine
+        # refer to announcements.forms to see where the full help texts are set and annoucements.models to see original, non-custom assignations.
+        self.assertContains(request, "The time the customannouncement was published.")
+        self.assertContains(request, "When set to true, the customannouncement will publish itself")
+        self.assertContains(request, "A new customannouncement saved as a non-draft will be published and")
+
+    def test_create_announcement__success_message_custom_label_displayed(self):
+        """
+        Creating an announcement or draft should display a success message upon redirect that contains the labels set at
+        custom_name_for_announcement and at custom_name_for_student model fields in SiteConfig
+
+        i.e if custom_name_for_announcement = "CustomAnnouncement" and custom_name_for_student = "CustomStudent" success message will display as:
+        "New CustomAnnouncement published and broadcast to customstudents!"
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement and custom_name_for_student to non-default options
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.custom_name_for_student = "CustomStudent"
+        config.save()
+
+        # NON-DRAFT CREATE
+        # Create form data to make and immediately publish a non-draft announcement to trigger redirect and success message
+        form_data = {
+            'title': "test announcement",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
+            'draft': False
+        }
+        # Create the new announcement and follow redirect to list view, where success message is asserted correct
+        response = self.client.post(
+            reverse('announcements:create'),
+            data=form_data, follow=True
+        )
+        self.assertContains(response, "New CustomAnnouncement published and broadcast to CustomStudents!")
+
+        # DRAFT CREATE
+        # Create form data to make a draft announcement to trigger redirect and success message
+        form_data = {
+            'title': "draft test announcement",
+            'content': "draft test content",
+            'datetime_released': "2006-10-25 14:30:59",
+            'draft': True
+        }
+        # Create the new draft announcement and follow redirect to list view, where success message is assserted correct
+        response = self.client.post(
+            reverse('announcements:create'),
+            data=form_data, follow=True
+        )
+        self.assertContains(response, "Draft CustomAnnouncement created.")
+
+    def test_update_announcement__success_message_custom_label_displayed(self):
+        """
+        Updating an announcement or draft should display a success message upon redirect that contains the labels set at
+        custom_name_for_announcement and at custom_name_for_student model fields in SiteConfig
+
+        i.e if custom_name_for_announcement = "CustomAnnouncement" and custom_name_for_student = "CustomStudent" success message will display as:
+        "CustomAnnouncement updated but NOT (re-)broadcasted to CustomStudents."
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement and custom_name_for_student to non-default options
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.custom_name_for_student = "CustomStudent"
+        config.save()
+
+        # Create an announcement to update (we can make these through baker since we only want the update view)
+        test_announcement = baker.make(Announcement, draft=False)
+
+        # NON-DRAFT UPDATE
+        # Create form data for a non-draft announcement
+        form_data = {
+            'title': "test announcement",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
+            'draft': False
+        }
+        # Update non-draft quest, follow redirect to list view and assert success message is displayed correctly
+        response = self.client.post(
+            reverse('announcements:update', args=[test_announcement.id]), data=form_data, follow=True
+        )
+        self.assertContains(response, "CustomAnnouncement updated but NOT (re-)broadcasted to CustomStudents.")
+
+        # DRAFT UPDATE
+        # Create form data for a non-draft announcement
+        form_data = {
+            'title': "test announcement",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
+            'draft': True
+        }
+        # Update draft quest, follow redirect to list view and assert success message is displayed correctly
+        response = self.client.post(
+            reverse('announcements:update', args=[test_announcement.id]), data=form_data, follow=True
+        )
+        self.assertContains(response, "Draft CustomAnnouncement updated.")
+
+    def test_comment_on_announcement__success_message_custom_label_displayed(self):
+        """
+        Commenting on an announcement should display a success message upon redirect that contains the label set at custom_name_for_announcement
+        model field in SiteConfig
+
+        i.e if custom_name_for_announcement = "CustomAnnouncement" success message will display as:
+        "CustomAnnouncement commented on"
+        """
+        # Login a teacher (could be a student, won't affect results but we need a logged-in user)
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.save()
+
+        # set form data for test comment (comment itself isn't being tested, we just need to make one successfully to redirect with success message)
+        form_data = {
+            'comment_text': "test comment",
+            'comment_button': True,
+        }
+
+        # make the comment and follow redirect to list view, with success message displayed (follow=True)
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data=form_data, follow=True
+        )
+
+        # assert the custom label (and the success message) are displayed
+        self.assertContains(response, "CustomAnnouncement commented on")
 
 
 class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):

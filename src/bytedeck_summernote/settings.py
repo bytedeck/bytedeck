@@ -13,6 +13,8 @@ ALLOWED_TAGS += [
     "font",
     "iframe",
     "hr",
+    "figure",
+    "figcaption",
     # MathML (mandatory for ByteDeck project)
     "math",
     "maction",

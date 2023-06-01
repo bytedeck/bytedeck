@@ -77,9 +77,21 @@ class ByteDeckSummernoteSafeWidgetMixin:
         # enable XSS protection for CodeView (mandatory for ByteDeck project)
         summernote_settings.update(
             {
-                "codeviewFilter": True,  # set this to true to filter entities (tags, attributes or styles).
-                # adding extra settings, fix #1340
-                "codeviewIframeFilter": False,
+                # Summernote provides a XSS protection for CodeView.
+                # It consists of filtering tags and whitelist for iframe.
+                #
+                # Whitelist filter is turned on by default, but filtering tags is not.
+                # You can turn them on and off by options like below.
+                #
+                "codeviewFilter": True,  # set this to true (safe option) to filter entities (tags, attributes or styles).
+                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                # And, you can also add your own whitelist domains and use custom tag filters.
+                #
+                # "codeviewFilterRegex": 'custom-regex',
+                # "codeviewIframeWhitelistSrc: ['my-own-domainname']",
+                #
+                # But you have to remember that this protection only affects on front-end side –
+                # to prevent attacks thoroughly, you have to check it on back-end side again.
             }
         )
         return summernote_settings
@@ -112,9 +124,21 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
         # disable XSS protection for CodeView (mandatory for ByteDeck project)
         summernote_settings.update(
             {
-                "codeviewFilter": False,  # set this to false to skip filtering entities (tags, attributes or styles).
-                # adding extra settings, fix #1340
-                "codeviewIframeFilter": False,
+                # Summernote provides a XSS protection for CodeView.
+                # It consists of filtering tags and whitelist for iframe.
+                #
+                # Whitelist filter is turned on by default, but filtering tags is not.
+                # You can turn them on and off by options like below.
+                #
+                "codeviewFilter": False,  # set this to false (advanced option) to skip filterng entities (tags, attributes or styles).
+                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                # And, you can also add your own whitelist domains and use custom tag filters.
+                #
+                # "codeviewFilterRegex": 'custom-regex',
+                # "codeviewIframeWhitelistSrc: ['my-own-domainname']",
+                #
+                # But you have to remember that this protection only affects on front-end side –
+                # to prevent attacks thoroughly, you have to check it on back-end side again.
             }
         )
         # replace original language js file (mandatory for ByteDeck project)

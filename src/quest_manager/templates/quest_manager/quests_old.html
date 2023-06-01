@@ -1,22 +1,21 @@
 <!--
   QUESTS
-    > available (tab_quests_available.html)
+    > available (tab_quests_available_old.html)
     > in progress (tab_quests_submission.html)
     > completed (tab_quests_submission.html)
     > past courses (tab_quests_submission.html)
-    > drafts (tab_quests_available.html)
+    > drafts (tab_quests_available_old.html)
 -->
 
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
-{% load static %}
 
 {% block heading_inner %} {{ heading }}
   {% if request.user.is_staff or request.user.profile.is_TA %}
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
   {% endif %}
   {% if available_tab_active and remove_hidden and request.user.profile.num_hidden_quests and request.user.profile.has_current_course %}
-    <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">
+    <a class="btn btn-default" href="{% url 'quests:available_all_old' %}" role="button">
       Show Hidden Quests <span class="badge badge-muted">{{ request.user.profile.num_hidden_quests }}</span>
     </a>
   {% endif %}
@@ -26,7 +25,7 @@
 
   <ul id='quest-tabs' class="nav nav-tabs nav-justified" role="tablist">
     <li role="presentation" {% if available_tab_active %}class="active"{% endif %}>
-      <a href="{% url 'quests:available' %}">
+      <a href="{% url 'quests:available_old' %}">
         Available
         <span class="badge">{{ num_available | default:"" }}</span>
       </a>
@@ -34,20 +33,20 @@
     </li>
     {% if not request.user.is_staff %}
       <li role="presentation" {% if inprogress_tab_active %}class="active"{% endif %}>
-        <a href="{% url 'quests:inprogress' %}">
+        <a href="{% url 'quests:inprogress_old' %}">
           In Progress
           <span class="badge">{{ num_inprogress | default:"" }}</span>
         </a>
       </li>
       <li role="presentation" {% if completed_tab_active %}class="active"{% endif %}>
-        <a href="{% url 'quests:completed' %}">
+        <a href="{% url 'quests:completed_old' %}">
           Completed
           <span class="badge">{{ num_completed | default:"" }}</span>
         </a>
       </li>
       {% if request.user.profile.has_past_courses %}
         <li role="presentation" {% if past_tab_active %}class="active"{% endif %}>
-          <a href="{% url 'quests:past' %}">
+          <a href="{% url 'quests:past_old' %}">
             Past Courses
             <span class="badge">{{ num_past | default:"" }}</span>
           </a>
@@ -57,7 +56,7 @@
 
     {% if request.user.profile.is_TA or request.user.is_staff %}
       <li role="presentation" {% if drafts_tab_active %}class="active"{% endif %}>
-        <a href="{% url 'quests:drafts' %}">
+        <a href="{% url 'quests:drafts_old' %}">
           Drafts
           <span class="badge">{{ num_drafts | default:"" }}</span>
         </a>
@@ -83,7 +82,7 @@
           <p>There are currently no new quest available to you!</p>
         {% endif %}
       {% endif %}
-      {% include 'quest_manager/tab_quests_available.html' %}
+      {% include 'quest_manager/tab_quests_available_old.html' %}
     </div>
     <div role="tabpanel"
          class="tab-pane fade {% if inprogress_tab_active %}in active{% endif %}" id="inprogress">
@@ -109,7 +108,7 @@
       <div role="tabpanel"
          class="tab-pane fade {% if drafts_tab_active %}in active{% endif %}" id="drafts">
       {% with available_quests=draft_quests %}
-        {% include 'quest_manager/tab_quests_available.html' %}
+        {% include 'quest_manager/tab_quests_available_old.html' %}
       {% endwith %}
       </div>
     {% endif %}
@@ -120,12 +119,4 @@
   {% with quests_available_page=True %}
     {% include "quest_manager/ajax_content_loading.html" %}
   {% endwith %}
-
-  {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-          integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-          crossorigin="anonymous"></script>
-
-  <script src="{% static 'quest_manager/js/bootstrap-table-accordian.js' %}"></script>
-
 {% endblock %}
