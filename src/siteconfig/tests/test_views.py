@@ -60,6 +60,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         del data['site_logo']
         del data['default_icon']
         del data['favicon']
+        del data['custom_stylesheet']
+        del data['custom_javascript']
 
         new_site_name = 'My New Site Name'
         data['site_name'] = new_site_name
@@ -124,3 +126,52 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         ))
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
+
+    def test_form_helper_required_fields(self):
+        """
+        Tests whether `form.helper.layout` includes all required fields or not.
+
+        There is an issue with `FormHelper` that breaks form submission, if required fields are not listed explicitly.
+        """
+        owner_user = self.config.deck_owner
+
+        URL = reverse("config:site_config_update_own")
+
+        # check if owner can change who deck_owner is
+        self.client.force_login(owner_user)
+
+        # First case, trying to submit the form with missing fields
+
+        # incomplete payload
+        form_data = {
+            "site_name": "site_name",
+        }
+        self.client.post(URL, data=form_data)
+        self.assertNotEqual(SiteConfig.get().site_name, "site_name")  # should not be equal and prove the case
+
+        # Second case, trying to find out missing fields
+
+        # get complete list of fields from `generateh_form_data` helper function
+        response = self.client.get(URL, data={})
+        for f in generate_form_data(model_form=SiteConfigForm).keys():
+            # should succeed if `form.helper.layout` is up-to-date
+            if f not in str(response.content):
+                raise AssertionError(f"'{f}' not found in 'form.helper.layout' list.")
+
+        # Third case, and finally trying to submit with all required (non-blank) fields
+
+        # all required (non-blank) fields
+        form_data = {
+            "site_name": "site_name",
+            "site_name_short": "site_name_short",
+            "access_code": "123456",
+            "deck_ai": owner_user.pk,
+            "custom_name_for_badge": "badge",
+            "custom_name_for_announcement": "announcement",
+            "custom_name_for_group": "group",
+            "custom_name_for_student": "student",
+            "custom_name_for_tag": "tag",
+            "deck_owner": owner_user.pk,
+        }
+        self.client.post(URL, data=form_data)
+        self.assertEqual(SiteConfig.get().site_name, "site_name")  # should be equal and prove the case
