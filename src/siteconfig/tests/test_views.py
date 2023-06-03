@@ -1,3 +1,6 @@
+from io import BytesIO
+
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.forms.models import model_to_dict
@@ -175,3 +178,66 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         }
         self.client.post(URL, data=form_data)
         self.assertEqual(SiteConfig.get().site_name, "site_name")  # should be equal and prove the case
+
+    def test_custom_javascript_mimetypes(self):
+        """
+        Tests all permitted mimetypes for `custom_javascript` file uploads.
+        """
+        owner_user = self.config.deck_owner
+
+        URL = reverse("config:site_config_update_own")
+
+        self.client.force_login(owner_user)
+
+        data = model_to_dict(SiteConfig.get())
+        del data['banner_image']
+        del data['banner_image_dark']
+        del data['site_logo']
+        del data['default_icon']
+        del data['favicon']
+        del data['custom_stylesheet']
+
+        # First case, trying uploading file of "application/x-javascript"
+        valid_js = b"""alert('Hello, application/x-javascript!');"""
+        custom_javascript = InMemoryUploadedFile(
+            BytesIO(valid_js),
+            field_name="tempfile",
+            name="custom.js",
+            content_type='application/x-javascript',
+            size=len(valid_js),
+            charset="utf-8",
+        )
+        data["custom_javascript"] = custom_javascript
+
+        self.client.post(URL, data=data)
+        self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
+
+        # Second case, trying uploading file of "application/javascript"
+        valid_js = b"""alert('Hello, application/javascript!');"""
+        custom_javascript = InMemoryUploadedFile(
+            BytesIO(valid_js),
+            field_name="tempfile",
+            name="custom.js",
+            content_type='application/javascript',
+            size=len(valid_js),
+            charset="utf-8",
+        )
+        data["custom_javascript"] = custom_javascript
+
+        self.client.post(URL, data=data)
+        self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
+
+        # Third case, trying uploading file of "text/javascript"
+        valid_js = b"""alert('Hello, text/javascript!');"""
+        custom_javascript = InMemoryUploadedFile(
+            BytesIO(valid_js),
+            field_name="tempfile",
+            name="custom.js",
+            content_type='text/javascript',
+            size=len(valid_js),
+            charset="utf-8",
+        )
+        data["custom_javascript"] = custom_javascript
+
+        self.client.post(URL, data=data)
+        self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model

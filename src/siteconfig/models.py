@@ -236,7 +236,8 @@ class SiteConfig(models.Model):
             This feature also has the potential of making your deck unusable. Use at your own risk.",
     )
     custom_javascript = RestrictedFileField(
-        null=True, blank=True, content_types=['application/x-javascript'], max_upload_size=512000,
+        null=True, blank=True, content_types=[
+            'application/x-javascript', 'application/javascript', 'text/javascript'], max_upload_size=512000,
         help_text="WARNING: This custom JavaScript file can be used to completely override how the front end of your deck functions. \
             This feature also has the potential of making your deck unusable. Use at your own risk.",
     )
