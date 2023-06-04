@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from django.utils import timezone
 from django.db.models import ProtectedError
 
@@ -22,7 +23,6 @@ class MarkRangeModelTest(TenantTestCase):
 
     def test_mark_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
-        # self.assertEqual(str(self.mr_50), self.user.username)
 
     def test_mark_range__str__(self):
         expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
@@ -458,3 +458,28 @@ class RankManagerTest(TenantTestCase):
         Rank.objects.all().delete()
         rank_1000 = Rank.objects.get_next_rank(1000)
         self.assertIsNone(rank_1000)
+
+
+class RankModelTest(TenantTestCase):
+
+    def setUp(self):
+        Rank.objects.all().delete()
+        self.rank = baker.make(Rank, name="TestRank", xp=0)
+
+    def test_rank_creation(self):
+        print(Rank.objects.all())
+        self.assertIsInstance(self.rank, Rank)
+        self.assertEqual(str(self.rank), self.rank.name)
+
+    def test_get_absolute_url(self):
+        """Absolute url for all ranks is the ranks list page"""
+        self.assertEqual(self.rank.get_absolute_url(), reverse('courses:ranks'))
+
+    def test_get_icon_url(self):
+        """Returns the icon url for the rank, if no url then returns the default icon from SiteConfig"""
+        self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
+        self.rank.icon = 'test.png'
+        self.rank.save()
+        print(self.rank.icon, self.rank.icon.url)
+
+        self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
