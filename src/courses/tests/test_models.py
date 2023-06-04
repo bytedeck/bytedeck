@@ -20,9 +20,13 @@ class MarkRangeModelTest(TenantTestCase):
     def setUp(self):
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
-    def test_marke_range_creation(self):
+    def test_mark_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
         # self.assertEqual(str(self.mr_50), self.user.username)
+
+    def test_mark_range__str__(self):
+        expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
+        self.assertEqual(str(self.mr_50), expected_str)
 
 
 class MarkRangeManagerTest(TenantTestCase):
