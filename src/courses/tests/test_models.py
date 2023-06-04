@@ -413,6 +413,11 @@ class RankManagerTest(TenantTestCase):
         rank_0 = Rank.objects.get_rank(0)
         self.assertIsNotNone(rank_0)
 
+    def test_get_rank__negative_XP(self):
+        """ If a user has negative XP, they should still be assigned the lowest rank """
+        rank_0 = Rank.objects.get_rank(-100)
+        self.assertIsNotNone(rank_0)
+
     def test_get_next_rank(self):
         """ Test that the correct rank is returned for a given XP value"""
 
