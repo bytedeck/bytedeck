@@ -15,7 +15,7 @@ from siteconfig.models import SiteConfig
 User = get_user_model()
 
 
-class MarkRangeTestModel(TenantTestCase):
+class MarkRangeModelTest(TenantTestCase):
 
     def setUp(self):
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
@@ -25,40 +25,60 @@ class MarkRangeTestModel(TenantTestCase):
         # self.assertEqual(str(self.mr_50), self.user.username)
 
 
-class MarkRangeTestManager(TenantTestCase):
+class MarkRangeManagerTest(TenantTestCase):
     def setUp(self):
         # clear default mark range variables
         MarkRange.objects.all().delete()
 
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
 
     def test_get_range(self):
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
-        self.mr_100 = baker.make(MarkRange, minimum_mark=100.0)
+        mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
-        self.assertEqual(MarkRange.objects.get_range(101.0), self.mr_100)
+        self.assertEqual(MarkRange.objects.get_range(101.0), mr_100)
 
     def test_get_range_with_course(self):
         c1 = baker.make(Course)
         c2 = baker.make(Course)
-        self.mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
-        self.mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
-        self.mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
+        mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
+        mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
+        mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
-        self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), self.mr_50_c1)
-        self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), self.mr_50_c2)
+        self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), mr_50_c1)
+        self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), mr_50_c2)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0, [c1]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
-        self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
+        self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
+
+    @patch('profile_manager.models.Profile.mark')
+    def test_get_range_for_user(self, mock_mark):
+        """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
+        """
+        user = baker.make(User)
+
+        # A user with no courses should return None
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
+        # Put the student in a course and test with various marks
+        baker.make(CourseStudent, user=user, semester=SiteConfig.get().active_semester)
+
+        mock_mark.return_value = 60.0
+        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_50)
+
+        mock_mark.return_value = 80.0
+        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_75)
+
+        mock_mark.return_value = 40.0
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
 
 class BlockModelManagerTest(TenantTestCase):
