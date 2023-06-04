@@ -322,6 +322,76 @@ class CourseModelTest(TenantTestCase):
         self.assertRaises(ProtectedError, self.course.delete)
 
 
+class CourseStudentManagerTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User)
+        self.course = baker.make(Course)
+        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+
+    def test_current_course(self):
+        """ Currently returns the first course in the active semester, if there are more than one"""
+        # Add a second course to the student during active semester (+ SetUp)
+        sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+        # order doesn't matter here, as long as it's one fo the courses the student is currently registered in
+        self.assertIn(CourseStudent.objects.current_course(self.student), [sc2, self.course_student])
+
+    def test_all_for_user_semester(self):
+        """ Test that method returns all CourseStudent objects for a given user and semester """
+        semester_to_check = baker.make(Semester)
+
+        # This should show up
+        sc1 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester_to_check)
+        # So should this
+        sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester_to_check)
+
+        # This shouldn't show up, different user
+        student2 = baker.make(User)
+        baker.make(CourseStudent, user=student2, course=self.course, semester=semester_to_check)
+
+        # This shouldn't show up, different semester
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+
+        course_students = CourseStudent.objects.all_for_user_semester(self.student, semester_to_check)
+        self.assertEqual(course_students.count(), 2)
+        self.assertQuerysetEqual(course_students, [sc1, sc2], ordered=False)
+
+    @patch('profile_manager.models.Profile.xp_per_course')
+    def test_calc_semester_grades(self, xp_per_course):
+        """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
+
+        # second student in same course as setup
+        student2 = baker.make(User)
+        course_student2 = baker.make(CourseStudent, user=student2, course=self.course, semester=SiteConfig.get().active_semester)
+
+        # 3rd student in different course
+        student3 = baker.make(User)
+        course2 = baker.make(Course)
+        course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
+
+        xp_per_course.return_value = 500
+        CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
+
+        self.course_student.refresh_from_db()
+        course_student2.refresh_from_db()
+        course_student3.refresh_from_db()
+
+        self.assertFalse(self.course_student.active)
+        self.assertFalse(course_student2.active)
+        self.assertFalse(course_student3.active)
+
+        self.assertEqual(self.course_student.final_xp, 500)
+        self.assertEqual(course_student2.final_xp, 500)
+        self.assertEqual(course_student3.final_xp, 500)
+
+    @patch('profile_manager.models.Profile.xp_per_course')
+    def test_calc_semester_grades__student_with_negative_xp(self, xp_per_course):
+        """Test that an assertion error is raised when there is a student with negative xp"""
+        xp_per_course.return_value = -10
+        self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
+                          Semester.objects.get_current())
+
+
 class CourseStudentModelTest(TenantTestCase):
 
     def setUp(self):
@@ -366,13 +436,6 @@ class CourseStudentModelTest(TenantTestCase):
         days_so_far.return_value = 0
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
-
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_student_with_negative_xp(self, xp_per_course):
-        """Test if an assertion error is raised when there is a student with negative xp"""
-        xp_per_course.return_value = -10
-        self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
-                          Semester.objects.get_current())
 
 
 class BlockModelTest(TenantTestCase):
