@@ -293,6 +293,10 @@ class CourseModelTest(TenantTestCase):
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
+    def test_get_absolute_url(self):
+        """All courses return the course list"""
+        self.assertEqual(self.course.get_absolute_url(), reverse('courses:course_list'))
+
     def test_condition_met_as_prerequisite(self):
         """ If the user is CURRENTLY registered in this course, then condition is met """
         student = baker.make(User)
