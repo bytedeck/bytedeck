@@ -19,9 +19,12 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include
 
+from decorator_include import decorator_include
+
 from badges.views import AchievementRedirectView
 from hackerspace_online import views
 from siteconfig.models import SiteConfig
+from tenant.views import non_public_only_view
 
 admin.site.site_header = lambda: SiteConfig.get().site_name
 admin.site.site_title = lambda: SiteConfig.get().site_name_short
@@ -63,7 +66,8 @@ urlpatterns += [
     url(r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',
         views.CustomPasswordResetFromKeyView.as_view(),
         name='account_reset_password_from_key'),
-    url(r'^accounts/', include('allauth.urls')),
+    # apply `non_public_only_view` decorator on all `allauth` views, fix #1214
+    url(r'^accounts/', decorator_include(non_public_only_view, "allauth.urls")),
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
