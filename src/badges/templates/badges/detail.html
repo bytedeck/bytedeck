@@ -92,7 +92,16 @@
 
 
   {% if request.user.is_staff %}
-  <h3>Assertions of this Badge</h3>
+  <h3>Assertions of this {{ config.custom_name_for_badge }}
+    <div class="btn-group">
+      <a href="{% url 'badges:badge_detail' badge.id %}"
+      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+
+      <a href="{% url 'badges:badge_detail_all' badge.id %}"
+      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+
+    </div>
+  </h3>
   <table
         data-toggle='table'
         data-search='true'
@@ -104,7 +113,7 @@
         <thead>
             <tr>
                 <th data-sortable='true' data-field='tag' class="col-sm-4">User</th>
-                <th data-sortable='true' data-field='earned' class="col-sm-2">Badges Earned</th>
+                <th data-sortable='true' data-field='earned' class="col-sm-2">{{ config.custom_name_for_badge }}s Earned</th>
             </tr>
         </thead>
 

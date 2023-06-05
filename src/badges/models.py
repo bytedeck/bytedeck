@@ -246,10 +246,10 @@ class BadgeAssertionManager(models.Manager):
 
     def all_for_user_badge(self, user, badge, active_semester_only):
         return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
-    
+
     def user_badge_assertion_count(self, badge, active_semester_only=False):
-        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.  
-        If active_semester_only is True, only users with active profiles in the active semester will be returned.  
+        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.
+        If active_semester_only is True, only users with active profiles in the active semester will be returned.
         Otherwise, all users with active profiles will be returned.
         """
         from profile_manager.models import Profile
@@ -257,8 +257,9 @@ class BadgeAssertionManager(models.Manager):
             users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
         else:
             users = User.objects.filter(profile__in=Profile.objects.all_students())
-              
-        return users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
+
+        users = users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
+        return users.exclude(assertion_count=0).order_by('-assertion_count')
 
     def all_for_user(self, user):
         return self.get_queryset(True).get_user(user)
