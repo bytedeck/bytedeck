@@ -120,12 +120,12 @@ def detail(request, badge_id):
     # if there is an active submission, get it and display accordingly
 
     badge = get_object_or_404(Badge, pk=badge_id)
-    # active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
 
     context = {
         "heading": badge.name,
         "badge": badge,
-        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False)
+        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
+        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(request.user, badge)
     }
     return render(request, 'badges/detail.html', context)
 
