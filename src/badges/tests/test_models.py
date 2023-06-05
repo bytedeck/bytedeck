@@ -90,6 +90,24 @@ class BadgeAssertionTestManager(TenantTestCase):
         # self.badge = Recipe(Badge, xp=20).make()
 
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
+        
+    def test_user_badge_assertion_count(self):
+        """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
+        the correct number of assertions for each user as an "assertion_count" annotation on the queryset"""
+
+        badge = baker.make(Badge, name="badge1")
+        user2 = baker.make(User)
+        user3 = baker.make(User)
+        
+        baker.make(BadgeAssertion, user=self.student, badge=badge, _quantity=3)
+        baker.make(BadgeAssertion, user=user2, badge=badge, _quantity=1)
+        
+        qs = BadgeAssertion.objects.count_of_assertions_for_badge_by_user(badge)
+        
+        self.assertEqual(qs.count(), 3)
+        self.assertEqual(qs.get(id=self.student.id).assertion_count, 3)
+        self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
+        self.assertEqual(qs.get(id=user3.id).assertion_count, 0)     
 
     def test_all_for_user_distinct(self):
         badge = baker.make(Badge)

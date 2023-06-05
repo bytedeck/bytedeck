@@ -4,7 +4,7 @@ from collections import defaultdict
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
-from django.db.models import Max, Sum
+from django.db.models import Max, Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
@@ -246,6 +246,19 @@ class BadgeAssertionManager(models.Manager):
 
     def all_for_user_badge(self, user, badge, active_semester_only):
         return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
+    
+    def user_badge_assertion_count(self, badge, active_semester_only=False):
+        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.  
+        If active_semester_only is True, only users with active profiles in the active semester will be returned.  
+        Otherwise, all users with active profiles will be returned.
+        """
+        from profile_manager.models import Profile
+        if active_semester_only:
+            users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
+        else:
+            users = User.objects.filter(profile__in=Profile.objects.all_students())
+              
+        return users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
 
     def all_for_user(self, user):
         return self.get_queryset(True).get_user(user)
