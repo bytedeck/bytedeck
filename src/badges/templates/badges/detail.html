@@ -90,8 +90,10 @@
     </div>
   </div>
 
+
   {% if request.user.is_staff %}
-  <table 
+  <h3>Assertions of this Badge</h3>
+  <table
         data-toggle='table'
         data-search='true'
         data-classes="table table-striped"
@@ -111,24 +113,10 @@
                 <tr>
                     <td><a href="{{ user.profile.get_absolute_url }}">{{ user.username }}</a></td>
                     <td>{{ user.assertion_count }}</td>
-                    {% comment %} <td>
-                        <a class="btn btn-info" href="{% url 'badge:detail' badge.id %}" role="button" title="View page">
-                            <i class="fa fa-eye"></i>
-                        </a>
-        
-                        {% if request.user.is_staff %}
-                            <a class="btn btn-warning" href="" role="button" title="Edit this tag">
-                                <i class="fa fa-edit"></i>
-                            </a>
-                            <a class="btn btn-danger" href="" role="button" title="Delete this tag">
-                                <i class="fa fa-trash-o"></i>
-                            </a>
-                        {% endif %}
-                    </td> {% endcomment %}
                 </tr>
             {% endfor %}
         </tbody>
-        
+
     </table>
 
     {% endif %}

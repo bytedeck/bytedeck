@@ -125,7 +125,8 @@ def detail(request, badge_id):
         "heading": badge.name,
         "badge": badge,
         "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
-        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(request.user, badge)
+        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(request.user, badge),
+        "user_assertion_count_all": BadgeAssertion.objects.user_badge_assertion_count(request.user, badge)
     }
     return render(request, 'badges/detail.html', context)
 
