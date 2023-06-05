@@ -88,9 +88,6 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 301)  # permanent redirect
         self.assertEqual(response.url, static('icon/favicon.ico'))
 
-    def test_password_reset_view(self):
-        self.assert200('account_reset_password')
-
     def test_achievements_redirect_to_badges_views(self):
         # log in a teacher
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
@@ -102,6 +99,224 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(self.client.get('/achievements/1'), reverse('badges:badge_detail', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/edit/'), reverse('badges:badge_update', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
+
+
+class AccountOverridenVewsTest(ViewTestUtilsMixin, TenantTestCase):
+    """Misc. tests for overriden (decorated) `allauth` views"""
+
+    def setUp(self):
+        # Every test needs access to the request factory.
+        # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
+        # self.factory = RequestFactory()
+        self.client = TenantClient(self.tenant)
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_sigunp_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_signup` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_signup')  # not found
+
+    def test_signup_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_signup` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_signup')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_login_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_login` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_login')  # not found
+
+    def test_login_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_login` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_login')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_logout_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_logout` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_logout')  # not found
+
+    def test_logout_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_logout` view should be non-public,
+        ie. return 302 (redirect) for non-public tenant.
+        """
+        self.assert302('account_logout')  # redirect
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_change_password_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_change_password` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_change_password')  # not found
+
+    def test_change_password_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_change_password` view should be non-public,
+        ie. return 302 (login required) for non-public tenant.
+        """
+        self.assert302('account_change_password')  # login required
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_set_password_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_set_password` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_set_password')  # not found
+
+    def test_set_password_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_set_password` view should be non-public,
+        ie. return 302 (login required) for non-public tenant.
+        """
+        self.assert302('account_set_password')  # login required
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_inactive_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_inactive` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_inactive')  # not found
+
+    def test_inactive_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_inactive` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_inactive')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_email_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_email` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_email')  # not found
+
+    def test_email_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_email` view should be non-public,
+        ie. return 302 (login required) for non-public tenant.
+        """
+        self.assert302('account_email')  # login required
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_email_verification_sent_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_email_verification_sent` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_email_verification_sent')  # not found
+
+    def test_email_verification_sent_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_email_verification_sent` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_email_verification_sent')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_confirm_email_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_confirm_email` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_confirm_email', kwargs={'key': '123'})  # not found
+
+    def test_confirm_email_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_confirm_email` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_confirm_email', kwargs={'key': '123'})  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_reset_password_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_reset_password` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_reset_password')  # not found
+
+    def test_reset_password_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_reset_password` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_reset_password')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_reset_password_done_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_reset_password_done` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_reset_password_done')  # not found
+
+    def test_reset_password_done_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_reset_password_done` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_reset_password_done')  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_reset_password_from_key_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_reset_password_from_key` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_reset_password_from_key', kwargs={'uidb36': '123', 'key': '123'})  # not found
+
+    def test_reset_password_from_key_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_reset_password_from_key` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_reset_password_from_key', kwargs={'uidb36': '123', 'key': '123'})  # ok
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_reset_password_from_key_done_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `account_reset_password_from_key_done` view should be non-public,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_reset_password_from_key_done')  # not found
+
+    def test_reset_password_from_key_done_non_public_tenant(self):
+        """
+        Overriden (decorated) `account_reset_password_from_key_done` view should be non-public,
+        ie. return 200 (ok) for non-public tenant.
+        """
+        self.assert200('account_reset_password_from_key_done')  # ok
 
 
 class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
