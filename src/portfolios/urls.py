@@ -13,8 +13,10 @@ urlpatterns = [
     # url(r'^(?P<pk>[0-9]+)/update/$', views.PortfolioUpdate.as_view(), name='update'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.edit, name='edit'),
 
+    # adding art via portfolio form
     url(r'^art/(?P<pk>[0-9]+)/create/$', views.ArtworkCreate.as_view(), name='art_create'),
 
+    # adding art from a file in a quest comment
     url(r'^art/create/(?P<doc_id>[0-9]+)$', views.art_add, name='art_add'),
     url(r'^art/(?P<pk>[0-9]+)/delete/$', views.ArtworkDelete.as_view(), name='art_delete'),
     url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
