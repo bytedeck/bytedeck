@@ -2,8 +2,6 @@ import os
 
 from django.urls import reverse
 from django.http import Http404
-from django.contrib import messages
-from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
@@ -45,6 +43,25 @@ class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         return super().dispatch(*args, **kwargs)
 
 
+class PortfolioUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = Portfolio
+    form_class = PortfolioForm
+    template_name = 'portfolios/edit.html'
+    context_object_name = 'p'
+    success_message = "Portfolio updated."
+
+    def get_success_url(self):
+        return reverse('portfolios:detail', kwargs={'pk': self.object.pk})
+
+    def dispatch(self, *args, **kwargs):
+        if self.request.user.is_authenticated:
+            portfolio = self.get_object()
+            # only allow the portfolio owner or staff to edit, unless it's shared
+            if portfolio.user != self.request.user and not self.request.user.is_staff:
+                raise Http404("Sorry, this portfolio isn't yours.")
+        return super().dispatch(*args, **kwargs)
+
+
 def public_list(request):
     public_portfolios = Portfolio.objects.all().filter(listed_publicly=True)
     return render(request, 'portfolios/public_list.html', {"portfolios": public_portfolios})
@@ -53,32 +70,6 @@ def public_list(request):
 def public(request, uuid):
     p = get_object_or_404(Portfolio, uuid=uuid)
     return render(request, 'portfolios/public.html', {"p": p})
-
-
-@non_public_only_view
-@login_required
-def edit(request, pk=None):
-    # portfolio pk is portfolio.user.id
-    if pk is None:
-        pk = request.user.id
-    user = get_object_or_404(User, id=pk)
-    p = get_object_or_404(Portfolio, user=user)
-
-    # if user submitted the Portfolio form to make changes:
-    form = PortfolioForm(request.POST or None, instance=p)
-    if form.is_valid():
-        form.save()
-        messages.success(request, "Portfolio updated.")
-
-    # only allow admins or the users to edit their own portfolios
-    if request.user.is_staff or request.user == p.user:
-        context = {
-            "p": p,
-            "form": form,
-        }
-        return render(request, 'portfolios/edit.html', context)
-    else:
-        raise Http404("Sorry, this portfolio isn't yours!")
 
 
 ######################################
@@ -159,18 +150,6 @@ class ArtworkDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
                 raise Http404("Sorry, this isn't your art!")
         return super().dispatch(*args, **kwargs)
 
-
-# @login_required
-# def art_detail(request, pk):
-#     art = get_object_or_404(Artwork, pk=pk)
-#     # only allow admins or the users to view
-#     if request.user.is_staff or art.portfolio.user == request.user:
-#         context = {
-#             "art": art,
-#         }
-#         return render(request, 'portfolios/art_detail.html', context)
-#     else:
-#         raise Http404("Sorry, this isn't your art!")
 
 def is_acceptable_image_type(filename):
     # Get extension from filename to determine filetype...very hacky...

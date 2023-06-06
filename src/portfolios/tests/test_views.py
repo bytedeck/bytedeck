@@ -1,3 +1,4 @@
+from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from portfolios.models import Portfolio
 
 User = get_user_model()
 
@@ -146,4 +148,64 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.portfolio.save()
 
         # now can access
-        self.assert404('portfolios:detail', args=[self.portfolio.pk])
+        self.assert200('portfolios:detail', args=[self.portfolio.pk])
+
+    def test_DetailView__no_portfolio_created(self):
+        """If a portfolio doesn't already exist, it should be created when accessing the detail view"""
+
+        user = baker.make(User)
+
+        self.assertFalse(Portfolio.objects.filter(user=user).exists())
+
+        self.client.force_login(user)
+        self.assert200('portfolios:current_user')
+
+        # accessing the detail page above should have created the portfolio
+        self.assertTrue(Portfolio.objects.filter(user=user).exists())
+
+    def test_UpdateView__post(self):
+        """Test that the update view can be posted with valid data"""
+        self.client.force_login(self.test_student)
+        form_data = {
+            'user': self.test_student,
+        }
+
+        # post request test
+        response = self.client.post(
+            reverse('portfolios:edit', args=[self.portfolio.pk]),
+            data=form_data
+        )
+        # form = response.context['form']
+        # if not form.is_valid():
+        #     print(form.errors)  # Print the validation errors
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:detail', args=[self.portfolio.pk]))
+
+    def test_ArtworkCreateView__post(self):
+        """Test that the ArtworkCreate view can be posted with valid data"""
+        self.client.force_login(self.test_student)
+
+        form_data = {
+            'title': "Test Title",
+            'portfolio': self.portfolio,
+            'date': timezone.now().date(),
+            # missing image or video file
+        }
+
+        # post form with missing image
+        response = self.client.post(
+            reverse('portfolios:art_create', args=[self.portfolio.pk]),
+            data=form_data
+        )
+        form = response.context['form']
+        self.assertIn('one of these three fields must be provided', form.errors['video_url'][0])
+        self.assertFalse(form.is_valid())
+
+        # Try again with valid form data
+        form_data.update({'video_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'})
+        response = self.client.post(
+            reverse('portfolios:art_create', args=[self.portfolio.pk]),
+            data=form_data
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
