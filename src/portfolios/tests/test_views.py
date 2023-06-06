@@ -12,7 +12,7 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin
 User = get_user_model()
 
 
-def generate_test_png():
+def generate_test_png_file():
     """ Returns an InMemoryUploadedFile object containing a minimally viable PNG image of a single transparent pixel."""
 
     # Define the binary pixel data for a 1x1 black pixel PNG
@@ -54,8 +54,8 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.test_student = baker.make(User)
         self.portfolio = baker.make('portfolios.Portfolio', user=self.test_student)
-        self.art = baker.make('portfolios.Artwork', image_file=generate_test_png(), portfolio=self.portfolio)
-        self.doc = baker.make('comments.Document', docfile=generate_test_png(), comment=baker.make('comments.Comment', user=self.test_student))
+        self.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=self.portfolio)
+        self.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=self.test_student))
 
     def test_all_portfolio_view_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login, EXCEPT the public list and public urls '''
@@ -64,15 +64,13 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('portfolios:public', args=[self.portfolio.uuid])
 
         self.assertRedirectsLogin('portfolios:list')
-        self.assertRedirectsLogin('portfolios:create')
         self.assertRedirectsLogin('portfolios:detail', args=[self.portfolio.pk])
         self.assertRedirectsLogin('portfolios:current_user')
         self.assertRedirectsLogin('portfolios:edit', args=[self.portfolio.pk])
         self.assertRedirectsLogin('portfolios:art_add', args=[self.doc.pk])
         self.assertRedirectsLogin('portfolios:art_delete', args=[self.art.pk])
-
-        self.assert404('portfolios:art_create', args=[self.portfolio.pk])
-        self.assert404('portfolios:art_update', args=[self.art.pk])
+        self.assertRedirectsLogin('portfolios:art_create', args=[self.portfolio.pk])
+        self.assertRedirectsLogin('portfolios:art_update', args=[self.art.pk])
 
     def test_all_portfolio_view_status_codes_for_students__own_portfolio(self):
 
@@ -82,7 +80,6 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('portfolios:public', args=[self.portfolio.uuid])
 
         self.assert200('portfolios:list')
-        # self.assert200('portfolios:create') # Already exists, created in setUp, Test in own method below
         self.assert200('portfolios:detail', args=[self.portfolio.pk])
         self.assert200('portfolios:current_user')
         self.assert200('portfolios:edit', args=[self.portfolio.pk])
@@ -106,12 +103,11 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('portfolios:list')
         self.assert200('portfolios:current_user')
-        # self.assert200('portfolios:create')  # This user doesn't have one yet so should be created (302?)
 
         # Can't access another user's portfolio (not shared)
         self.assert404('portfolios:detail', args=[self.portfolio.pk])
         self.assert404('portfolios:edit', args=[self.portfolio.pk])
-        # self.assert200('portfolios:art_delete', args=[self.art.pk])  # BAD!  Can't delete other user's art!!!
+        self.assert404('portfolios:art_delete', args=[self.art.pk])
         self.assert404('portfolios:art_create', args=[self.portfolio.pk])
         self.assert404('portfolios:art_update', args=[self.art.pk])
         self.assert404('portfolios:art_add', args=[self.doc.pk])
@@ -124,7 +120,6 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('portfolios:public', args=[self.portfolio.uuid])
 
         self.assert200('portfolios:list')
-        # self.assert200('portfolios:create') # Already exists, created in setUp, Test in own method below
         self.assert200('portfolios:detail', args=[self.portfolio.pk])
         self.assert200('portfolios:current_user')
         self.assert200('portfolios:edit', args=[self.portfolio.pk])

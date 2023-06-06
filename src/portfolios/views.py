@@ -21,53 +21,28 @@ class PortfolioList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     template_name = 'portfolios/list.html'
 
 
-class PortfolioCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
-    model = Portfolio
-    form_class = PortfolioForm
-    template_name = 'portfolios/form.html'
-
-    def form_valid(self, form):
-        data = form.save(commit=False)
-        data.user = self.request.user
-        data.save()
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        # Call the base implementation first to get a context
-        context = super().get_context_data(**kwargs)
-        context['heading'] = "Create " + self.request.user.get_username() + "'s Portfolio"
-        context['submit_btn_value'] = "Create"
-        return context
-
-
 class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Portfolio
+    template_name = 'portfolios/detail.html'
+    context_object_name = 'p'
+
+    def get_object(self, queryset=None):
+        """ If a user id (pk) wasn't provided in the url, then use the requesting user's id.
+        If the user doesn't have a portfolio yet , create one."""
+        pk = self.kwargs.get('pk')
+        if pk is None:
+            portfolio, _ = Portfolio.objects.get_or_create(user=self.request.user)
+            # insert the pk into kwargs before calling super().get_object()
+            self.kwargs['pk'] = portfolio.pk
+        return super().get_object(queryset=queryset)
 
     def dispatch(self, *args, **kwargs):
-        # only allow admins or the users to see their own portfolios, unless they are shared
-        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-        if portfolio.listed_locally or portfolio.user == self.request.user or self.request.user.is_staff:
-            return super().dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this portfolio isn't shared!")
-
-
-@non_public_only_view
-@login_required
-def detail(request, pk=None):
-    if pk is None:
-        pk = request.user.id
-    user = get_object_or_404(User, id=pk)
-    p, created = Portfolio.objects.get_or_create(user=user)
-
-    # only allow admins or the users to see their own portfolios, unless they are shared
-    if request.user.is_staff or p.pk == request.user.id or p.listed_locally:
-        context = {
-            "p": p,
-        }
-        return render(request, 'portfolios/detail.html', context)
-    else:
-        raise Http404("Sorry, this portfolio isn't shared!")
+        if self.request.user.is_authenticated:
+            portfolio = self.get_object()
+            # only allow the portfolio owner or staff to view, unless it's shared
+            if not portfolio.listed_locally and portfolio.user != self.request.user and not self.request.user.is_staff:
+                raise Http404("Sorry, this portfolio isn't shared!")
+        return super().dispatch(*args, **kwargs)
 
 
 def public_list(request):
@@ -136,12 +111,12 @@ class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
         return context
 
     def dispatch(self, *args, **kwargs):
-        portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-        # only allow the user or staff to edit
-        if portfolio.user == self.request.user or self.request.user.is_staff:
-            return super().dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this isn't your portfolio!")
+        if self.request.user.is_authenticated:
+            portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
+            # only allow the portfolio owner or staff to modify
+            if portfolio.user != self.request.user and not self.request.user.is_staff:
+                raise Http404("Sorry, this isn't your art!")
+        return super().dispatch(*args, **kwargs)
 
 
 class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMixin, UpdateView):
@@ -162,12 +137,12 @@ class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
         return context
 
     def dispatch(self, *args, **kwargs):
-        art = get_object_or_404(Artwork, pk=self.kwargs.get('pk'))
-        # only allow the user or staff to edit
-        if art.portfolio.user == self.request.user or self.request.user.is_staff:
-            return super().dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this isn't your art!")
+        if self.request.user.is_authenticated:
+            art = self.get_object()
+            # only allow the portfolio owner or staff to modify
+            if art.portfolio.user != self.request.user and not self.request.user.is_staff:
+                raise Http404("Sorry, this isn't your art!")
+        return super().dispatch(*args, **kwargs)
 
 
 class ArtworkDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
@@ -175,6 +150,14 @@ class ArtworkDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})
+
+    def dispatch(self, *args, **kwargs):
+        if self.request.user.is_authenticated:
+            art = self.get_object()
+            # only allow the portfolio owner or staff to modify
+            if art.portfolio.user != self.request.user and not self.request.user.is_staff:
+                raise Http404("Sorry, this isn't your art!")
+        return super().dispatch(*args, **kwargs)
 
 
 # @login_required
