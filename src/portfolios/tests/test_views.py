@@ -132,3 +132,18 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
             response=self.client.get(reverse('portfolios:art_add', args=[self.doc.pk])),
             expected_url=reverse('portfolios:detail', args=[self.portfolio.pk])
         )
+
+    def test_DetailView__listed_locally(self):
+        """When a portfolio is listed locally, other users should be able to access it"""
+
+        # some random user
+        self.client.force_login(baker.make(User))
+
+        # Can't access yet
+        self.assert404('portfolios:detail', args=[self.portfolio.pk])
+
+        self.portfolio.listed_locally = True
+        self.portfolio.save()
+
+        # now can access
+        self.assert404('portfolios:detail', args=[self.portfolio.pk])
