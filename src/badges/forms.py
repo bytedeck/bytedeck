@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
 from profile_manager.models import Profile
-from siteconfig.models import SiteConfig
 from tags.forms import BootstrapTaggitSelect2Widget
 from .models import Badge, BadgeAssertion
 
@@ -20,15 +19,6 @@ class BadgeForm(forms.ModelForm):
         widgets = {
             'tags': BootstrapTaggitSelect2Widget()
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['badge_type'].label = f"{SiteConfig.get().custom_name_for_badge} type"
-        self.fields['map_transition'].help_text = f"Break maps at this {SiteConfig.get().custom_name_for_badge.lower()}. This \
-            {SiteConfig.get().custom_name_for_badge.lower()} will link to a new map."
-        self.fields['import_id'].help_text = f"Only edit this if you want to link to a {SiteConfig.get().custom_name_for_badge.lower()} in another \
-            system so that when importing from that other system, it will update this {SiteConfig.get().custom_name_for_badge.lower()} too. \
-            Otherwise do not edit this or it will break existing links!"
 
 
 class BadgeAssertionForm(forms.ModelForm):

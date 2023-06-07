@@ -187,7 +187,7 @@ class SiteConfig(models.Model):
     )
 
     # Field to select custom name to change all instances of "announcement" to site-wide
-    # Currently used in: announcements.forms, announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
+    # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
     custom_name_for_announcement = models.CharField(
         default="Announcement", max_length=20,
         help_text="A custom name specific to your deck to replace \"Announcement\". Annoucements are site-wide messages created \
