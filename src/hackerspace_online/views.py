@@ -76,11 +76,13 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
         return reverse('home')
 
 
+# apply `NonPublicOnlyViewMixin` mixin, fix #1214
 class CustomPasswordResetView(NonPublicOnlyViewMixin, PasswordResetView):
 
     form_class = CustomResetPasswordForm
 
 
+# apply `NonPublicOnlyViewMixin` mixin, fix #1214
 class CustomPasswordResetFromKeyView(NonPublicOnlyViewMixin, PasswordResetFromKeyView):
     success_url = reverse_lazy('account_login')
 
