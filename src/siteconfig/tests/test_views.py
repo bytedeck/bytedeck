@@ -5,7 +5,6 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.shortcuts import reverse
-from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -91,8 +90,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
             Basic test for SiteConfigForm
         """
         owner_user = self.config.deck_owner
-        admin_user = User.objects.get(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
-        staff_user = baker.make(User, is_staff=True,)
+        staff_user = baker.make(User, is_staff=True)
 
         URL = reverse("config:site_config_update_own")
 
@@ -114,10 +112,10 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         test_case = "TEST CASE #1"
         self.client.post(URL, data=generate_form_data(
             model_form=SiteConfigForm,
-            site_name=test_case, deck_owner=admin_user,
+            site_name=test_case, deck_owner=staff_user,
         ))
         self.assertEqual(SiteConfig.get().site_name, test_case)
-        self.assertNotEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # should not be equal since form prevents non owner from changing owner
+        self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)  # prevents non owner from changing owner
 
         # check if owner can change who deck_owner is
         self.client.force_login(owner_user)
@@ -125,10 +123,20 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         test_case = "TEST CASE #2"
         self.client.post(URL, data=generate_form_data(
             model_form=SiteConfigForm,
-            site_name=test_case, deck_owner=admin_user,
+            site_name=test_case, deck_owner=staff_user,
         ))
         self.assertEqual(SiteConfig.get().site_name, test_case)
-        self.assertEqual(admin_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
+        self.assertEqual(staff_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
+
+        # once updated, the new deck_owner should be made a superuser:
+        staff_user.refresh_from_db()
+        self.assertTrue(staff_user.is_superuser)
+
+        # Set it back to prevent problems in other tests due to staff user not existing in them
+        config = SiteConfig.get()
+        config.deck_owner = owner_user
+        config.save()
+        self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)
 
     def test_form_helper_required_fields(self):
         """

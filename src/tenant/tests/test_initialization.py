@@ -20,6 +20,7 @@ class TenantInitializationTest(TenantTestCase):
 
         user = User.objects.filter(username=username).first()
         self.assertTrue(user is not None)
+        self.assertTrue(user.email, settings.TENANT_DEFAULT_ADMIN_EMAIL)
 
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
