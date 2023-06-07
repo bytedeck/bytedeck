@@ -119,3 +119,14 @@ class SiteConfigForm(forms.ModelForm):
 
         # do nothing and return everything as is
         return value
+
+    def clean_deck_owner(self):
+        """
+        Ensure deck owner is given superuser permissions.
+        """
+        super().clean()
+        deck_owner = self.cleaned_data.get("deck_owner")
+        if not deck_owner.is_superuser:
+            deck_owner.is_superuser = True
+            deck_owner.save()
+        return deck_owner
