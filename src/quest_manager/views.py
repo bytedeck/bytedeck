@@ -859,7 +859,7 @@ def approvals(request, quest_id=None):
 
     show_all_blocks_button = False
 
-    # Display My Blocks / All buttons when Block objects are assigned to atleast two different users / teachers
+    # Display My groups / All buttons when Block objects are assigned to atleast two different users / teachers
     if len(Block.objects.grouped_teachers_blocks().keys()) > 1:
         show_all_blocks_button = True
 

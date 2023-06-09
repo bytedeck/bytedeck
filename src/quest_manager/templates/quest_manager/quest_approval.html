@@ -13,7 +13,7 @@
       {% if show_all_blocks_button %}
         <div class="btn-group">
             <a href="{% url 'quests:submitted' %}"
-               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
+               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My {{ config.custom_name_for_group|lower }}s</a>
             <a href="{% url 'quests:submitted_all' %}"
                class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
         </div>
