@@ -534,7 +534,6 @@ class RankModelTest(TenantTestCase):
         self.rank = baker.make(Rank, name="TestRank", xp=0)
 
     def test_rank_creation(self):
-        print(Rank.objects.all())
         self.assertIsInstance(self.rank, Rank)
         self.assertEqual(str(self.rank), self.rank.name)
 
@@ -547,6 +546,5 @@ class RankModelTest(TenantTestCase):
         self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
         self.rank.icon = 'test.png'
         self.rank.save()
-        print(self.rank.icon, self.rank.icon.url)
 
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
