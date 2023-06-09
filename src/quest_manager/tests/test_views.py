@@ -2297,13 +2297,13 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
     def test_approvals_all_buttons_does_not_exist(self):
-        """ My blocks should not be rendered when there is only one teacher"""
+        """ My groups should not be rendered when there is only one teacher"""
 
         response = self.client.get(reverse('quests:approvals'))
-        self.assertNotContains(response, 'My blocks')
+        self.assertNotContains(response, 'My groups')
 
     def test_approval_all_button_exists(self):
-        """ My blocks button should not be rendered """
+        """ My groups button should not be rendered """
 
         baker.make('courses.Block', name='A', current_teacher=self.current_teacher)
         baker.make('courses.Block', name='B', current_teacher=self.current_teacher)
@@ -2313,7 +2313,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         baker.make('courses.Block', name='D', current_teacher=another_teacher)
 
         response = self.client.get(reverse('quests:approvals'))
-        self.assertContains(response, 'My blocks')
+        self.assertContains(response, 'My groups')
 
 
 class Is_staff_or_TA_test(TenantTestCase):
