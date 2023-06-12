@@ -18,6 +18,7 @@ django-import-export>=2.0,<2.1
 # https://github.com/django-import-export/django-import-export/issues/1064
 bleach[css]>=5,<6
 cssutils==2.6.0
+html2text==2020.1.16
 tablib==0.14.0
 django-redis>=5.2.0,<5.3
 django-select2>=6.3.1,<6.4

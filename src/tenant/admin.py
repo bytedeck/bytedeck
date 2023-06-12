@@ -1,6 +1,7 @@
 from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib import admin, messages
+from django.shortcuts import render
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.db import connection, transaction
@@ -13,6 +14,8 @@ from django.utils.translation import ngettext
 
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
+from tenant.forms import SendEmailForm
+from tenant.tasks import send_email_message
 
 User = get_user_model()
 
@@ -92,7 +95,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
 
-    actions = ['enable_google_signin', 'disable_google_signin']
+    actions = ['send_email_message', 'enable_google_signin', 'disable_google_signin']
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
@@ -114,6 +117,63 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
         return qs
+
+    @admin.action(description="Send an email message to all owners for the selected tenant(s)")
+    def send_email_message(self, request, queryset):
+        """
+        Send an email message to all owners for selected tenant(s).
+
+        This action first displays an intermediate page which shows compose message form and
+        a list of all recipients.
+
+        Next, it send email message to all selected users and redirects back to the change list.
+        """
+        from siteconfig.models import SiteConfig
+
+        # get a list of selected tenant(s), excluding public schema
+        objects = self.model.objects.filter(
+            pk__in=[str(x) for x in request.POST.getlist("_selected_action")]).exclude(
+                schema_name=get_public_schema_name())
+
+        # get a list of all owners (recipients) for selected tenant(s)
+        owners = []
+        for tenant in objects:
+            with tenant_context(tenant):
+                config = SiteConfig.get()
+                if config.deck_owner is not None:
+                    owners.append(config.deck_owner)
+
+        if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
+            form = SendEmailForm(data=request.POST)
+            if form.is_valid():
+                cleaned_data = form.cleaned_data
+
+                # run background task that will send email messages
+                send_email_message.apply_async(
+                    # subject, message and recipient_list (emails)
+                    args=[cleaned_data["subject"], cleaned_data["message"], [o.email for o in owners if o.email]],
+                    queue="default",
+                )
+
+                # show alert that everything is cool
+                self.message_user(request, "%s users emailed successfully!" % len(owners), messages.SUCCESS)
+
+                # return None to display the change list page again.
+                return None
+        else:
+            # create form and pass the data which objects were selected before triggering 'post' action.
+            # '_selected_action' is required for the admin intermediate form to submit
+            form = SendEmailForm(initial={"_selected_action": objects.values_list("id", flat=True)})
+
+        # we need to create a template of intermediate page with form
+        return render(request, "admin/tenant/action_send_email.html", {
+            "title": "Write your message here",
+            "form": form,
+            "owners": owners,
+            # building proper breadcrumb in admin
+            "opts": self.model._meta,
+            "media": self.media,
+        })
 
     @admin.action(description="Enable google signin for tenant(s)")
     def enable_google_signin(self, request, queryset):
