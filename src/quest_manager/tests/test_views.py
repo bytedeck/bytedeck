@@ -20,6 +20,7 @@ from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 
+from courses.models import Block
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -2296,24 +2297,32 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approved_for_quest_all(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
-    def test_approvals_all_buttons_does_not_exist(self):
-        """ My groups should not be rendered when there is only one teacher"""
+    def test_approvals__my_groups_all_button_rendered(self):
+        """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""
 
-        response = self.client.get(reverse('quests:approvals'))
-        self.assertNotContains(response, 'My groups')
+        # Only one user with assigned blocks but that user is not the current user (button should be rendered)
 
-    def test_approval_all_button_exists(self):
-        """ My groups button should not be rendered """
-
-        baker.make('courses.Block', name='A', current_teacher=self.current_teacher)
-        baker.make('courses.Block', name='B', current_teacher=self.current_teacher)
-
-        another_teacher = baker.make(User, is_staff=True)
-        baker.make('courses.Block', name='C', current_teacher=another_teacher)
-        baker.make('courses.Block', name='D', current_teacher=another_teacher)
-
+        # Currently the only user with assigned blocks is "owner", who is assigned block "Default", The user for this test is "current_teacher"
         response = self.client.get(reverse('quests:approvals'))
         self.assertContains(response, 'My groups')
+
+        # Multiple users with assigned blocks (button should be rendered)
+
+        # Make new block that's assigned to the current user
+        baker.make(Block, name='New Test Block', current_teacher=self.current_teacher)
+        # Users with assigned blocks are now "owner" and "current_teacher"
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertContains(response, 'My groups')
+
+        # Only one user with assigned blocks and that user is the current user (button should NOT be rendered)
+
+        # Get default block and re-assign to current user
+        default_block = Block.objects.get(name='Default')
+        default_block.current_teacher = self.current_teacher
+        default_block.save()
+        # "current_teacher" is now the only user with assigned blocks
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertNotContains(response, 'My groups')
 
 
 class Is_staff_or_TA_test(TenantTestCase):

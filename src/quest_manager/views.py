@@ -857,11 +857,14 @@ def approvals(request, quest_id=None):
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
-    show_all_blocks_button = False
+    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
+    show_all_blocks_button = True
 
-    # Display My groups / All buttons when Block objects are assigned to atleast two different users / teachers
-    if len(Block.objects.grouped_teachers_blocks().keys()) > 1:
-        show_all_blocks_button = True
+    grouped_blocks = Block.objects.grouped_teachers_blocks()
+    teachers = grouped_blocks.keys()
+    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
+    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
+        show_all_blocks_button = False
 
     context = {
         "heading": "Quest Approval",
