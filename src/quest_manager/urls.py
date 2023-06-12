@@ -101,7 +101,6 @@ urlpatterns = [
     # Flagged submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
-    # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),

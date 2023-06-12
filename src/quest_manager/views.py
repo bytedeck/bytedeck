@@ -1264,20 +1264,6 @@ def ajax(request):
 #
 ########################
 
-@non_public_only_view
-@staff_member_required
-def flagged_submissions(request):
-    flagged_subs = QuestSubmission.objects.flagged(user=request.user)
-
-    quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
-
-    context = {
-        "submissions": flagged_subs,
-        "quick_reply_form": quick_reply_form,
-        "active_id": None,
-    }
-    return render(request, "quest_manager/flagged.html", context)
-
 
 @non_public_only_view
 @staff_member_required
