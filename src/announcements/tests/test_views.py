@@ -37,7 +37,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertRedirectsLogin('announcements:list')
         self.assertRedirectsLogin('announcements:archived')
-        self.assertRedirectsLogin('announcements:list2')
         self.assertRedirectsLogin('announcements:comment', args=[1])
         self.assertRedirectsLogin('announcements:list', args=[1])
 
@@ -58,7 +57,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # students should have access to these:
         self.assert200('announcements:list')
-        self.assert200('announcements:list2')
         self.assert200('announcements:list', args=[self.ann_pk])
 
         # Announcement from setup() should appear in the list
@@ -86,7 +84,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         self.assert200('announcements:list')
-        self.assert200('announcements:list2')
         self.assert200('announcements:archived')
         self.assert200('announcements:list', args=[self.ann_pk])
 

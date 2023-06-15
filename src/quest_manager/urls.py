@@ -43,7 +43,7 @@ urlpatterns = [
     url(r'^available/$', views.quest_list, name='available'),
     url(r'^available/old/$', views.quest_list_old, name='available_old'),
     url(r'^available/all/$', views.quest_list, name='available_all'),
-    url(r'^available/all/old/$', views.quest_list, name='available_all_old'),
+    url(r'^available/all/old/$', views.quest_list_old, name='available_all_old'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^inprogress/old/$', views.quest_list_old, name='inprogress_old'),
     url(r'^completed/$', views.quest_list, name='completed'),
@@ -55,11 +55,17 @@ urlpatterns = [
 
     # Approvals
     url(r'^approvals/$', views.approvals, name='approvals'),
+    url(r'^approvals/old/$', views.approvals_old, name='approvals_old'),
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
+    url(r'^approvals/submitted/old/$', views.approvals_old, name='submitted_old'),
     url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
+    url(r'^approvals/submitted/all/old/$', views.approvals_old, name='submitted_all_old'),
     url(r'^approvals/returned/$', views.approvals, name='returned'),
+    url(r'^approvals/returned/old/$', views.approvals_old, name='returned_old'),
     url(r'^approvals/approved/$', views.approvals, name='approved'),
+    url(r'^approvals/approved/old/$', views.approvals_old, name='approved_old'),
     url(r'^approvals/flagged/$', views.approvals, name='flagged'),
+    url(r'^approvals/flagged/old/$', views.approvals_old, name='flagged_old'),
     # url(r'^approvals/skipped/$', views.approvals, name='skipped'),
     # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
     # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'),  # Not used
@@ -95,7 +101,6 @@ urlpatterns = [
     # Flagged submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
-    # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
