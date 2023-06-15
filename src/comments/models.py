@@ -18,8 +18,6 @@ from django.db.models.signals import pre_delete
 
 
 class CommentQuerySet(models.query.QuerySet):
-    def get_user(self, recipient):
-        return self.filter(recipient=recipient)
 
     def get_object_target(self, object):
         object_type = ContentType.objects.get_for_model(object)
@@ -28,9 +26,6 @@ class CommentQuerySet(models.query.QuerySet):
 
     def get_no_parents(self):
         return self.filter(parent=None)
-
-    def get_not_flagged(self):
-        return self.filter(flagged=False)
 
 
 class CommentManager(models.Manager):
@@ -48,7 +43,7 @@ class CommentManager(models.Manager):
         if not path:
             raise ValueError("Must include a path when adding a comment")
         if not user:
-            raise ValueError("Must include a user  when adding a comment")
+            raise ValueError("Must include a user when adding a comment")
 
         text = clean_html(text, convert_newlines)
 
