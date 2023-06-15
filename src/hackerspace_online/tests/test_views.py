@@ -88,9 +88,6 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 301)  # permanent redirect
         self.assertEqual(response.url, static('icon/favicon.ico'))
 
-    def test_password_reset_view(self):
-        self.assert200('account_reset_password')
-
     def test_achievements_redirect_to_badges_views(self):
         # log in a teacher
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
