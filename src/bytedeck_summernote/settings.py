@@ -20,6 +20,9 @@ ALLOWED_TAGS += [
     "dl",
     "dt",
     "dd",
+    # Bootstrap Blockquotes
+    "footer",
+    "cite",
     # HTML5 media
     "video",
     "audio",
