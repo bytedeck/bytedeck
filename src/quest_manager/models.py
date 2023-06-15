@@ -170,34 +170,12 @@ class XPItem(models.Model):
         # def get_icon_url(self):
         #     return "/images/s.jpg"
 
-    # TODO: Repeat of queryset code logic, how to combine?
-    def expired(self):
-
-        now_tz = timezone.now()
-        now_local = now_tz.astimezone(timezone.get_default_timezone())
-
-        # quests that have the current date AND past expiry time
-        if self.date_expired and self.date_expired == now_local.date() \
-                and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        # quests with no expiry date AND past expiry time (i.e.daily expiration at set time)
-        if self.date_expired is None and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        if self.date_expired and self.date_expired < now_local.date():
-            return True
-
-        return False
-
-    @property  # required for prerequisite checking
+    @property  # requiredfor prerequisite checking
     def active(self):
         """
         Available as a property to make compatible with Badge.active attribute
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
-        now_local = timezone.now().astimezone(timezone.get_default_timezone())
-
         # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
         if not self.visible_to_students or self.archived:
             return False
@@ -209,12 +187,15 @@ class XPItem(models.Model):
         if self.expired():
             return False
 
+        time_now = timezone.localtime().time()
+        date_now = timezone.localdate()
+
         # an XPItem object is inactive if its availability date is in the future
-        if self.date_available > now_local.date():
+        if self.date_available > date_now:
             return False
 
         # an XPItem object is inactive on the day it's made available if its availability time is in the future
-        if self.date_available == now_local.date() and self.time_available > now_local.time():
+        if self.date_available == date_now and self.time_available > time_now:
             return False
 
         # If survived all the conditions, then it's active
@@ -278,11 +259,7 @@ class QuestQuerySet(models.QuerySet):
             (so would become not expired again at midnight when time = 00:00:00)
         :return:
         """
-        # TODO: Note that these dates and times are not timezone aware!  Maybe check out the widget to fix this
-        # https://docs.djangoproject.com/en/1.9/topics/i18n/timezones/
-
-        now_tz = timezone.now()
-        now_local = now_tz.astimezone(timezone.get_default_timezone())
+        now_local = timezone.localtime()
 
         # Filter for quests that have EITHER no expiry date, OR an expiry date that is after today
         qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=now_local.date()))
@@ -531,6 +508,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
             return True
         else:
             return user == self.editor and not self.visible_to_students
+
+    def expired(self):
+        """Returns True if the quest has expired, False otherwise.
+        See QuestQueryset.expired() for details.
+        """
+        # utilize existing code in QuestQuerySet method not_expired()
+        return not Quest.objects.filter(id=self.id).not_expired().exists()
 
 
 # QuestSubmission ###############################################
