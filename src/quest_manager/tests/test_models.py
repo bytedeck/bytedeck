@@ -15,6 +15,8 @@ from courses.models import Semester
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
+User = get_user_model()
+
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
@@ -248,7 +250,6 @@ class QuestTestModel(TenantTestCase):
 
         def test_is_repeat_available(self, user):"""
 
-        User = get_user_model()
         baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = baker.make(User)
         quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
@@ -365,11 +366,68 @@ class QuestTestModel(TenantTestCase):
         self.assertEqual(submission3.ordinal, 3)
 
 
+class SubmissionManagerTest(TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.active_semester = SiteConfig.get().active_semester
+
+    def test_all_approved(self):
+        """ Tests of QuestSubmissionManager.all_approved()
+        def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+        """
+
+        quest = baker.make(Quest, name="test quest")
+        user = baker.make(User, username="test_user")
+
+        # various submissions
+        baker.make(QuestSubmission, semester=self.active_semester)  # in progress shoulnd't appear
+        baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)  # completed/submitted shouldn't appear
+        sub_approved = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
+        sub_approved_different_quest = baker.make(QuestSubmission, is_completed=True, is_approved=True, semester=self.active_semester)
+        sub_approved_other_semester = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True)
+        sub_approved_no_xp = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True,
+                                        do_not_grant_xp=True, semester=self.active_semester)
+        sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True,
+                                       semester=self.active_semester)
+
+        # Default parameters, all submissions this semester, as would be shown in staff "Approved" tab
+        all_approved = QuestSubmission.objects.all_approved()
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_no_xp, sub_approved_different_quest, sub_approved_user],
+            ordered=False
+        )
+
+        # active_semester_only=False should include sub_approved_other_semester
+        all_approved = QuestSubmission.objects.all_approved(active_semester_only=False)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_different_quest, sub_approved_other_semester, sub_approved_no_xp, sub_approved_user],
+            ordered=False
+        )
+
+        # quest=quest should not include sub_approved_different_quest
+        all_approved = QuestSubmission.objects.all_approved(quest=quest)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_no_xp, sub_approved_user],
+            ordered=False
+        )
+
+        # user=test_user should only include sub_approved_user
+        all_approved = QuestSubmission.objects.all_approved(user=user)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved_user],
+            ordered=False
+        )
+
+
 class SubmissionTestModel(TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        User = get_user_model()
         self.semester = baker.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = baker.make(User)
