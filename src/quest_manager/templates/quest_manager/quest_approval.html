@@ -60,7 +60,8 @@
 {% block js %}
 <script>
 $( document ).ready(function() {
-    $('[id^=btn_quick_text]').on('click', function () {
+    // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'
+    $(document).on('click', '[id^=btn_quick_text]', function () {
         var msg = ' {{ quick_reply_text }} ';
         var textarea = $($(this).data('target')).find('textarea');
         textarea.val(textarea.val() + msg);
