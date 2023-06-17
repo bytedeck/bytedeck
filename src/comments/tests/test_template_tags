@@ -1,0 +1,31 @@
+import os
+from django.test import TestCase
+from django.core.files import File
+from django.template import Context, Template
+from unittest.mock import MagicMock
+
+class FilenameFilterTests(TestCase):
+
+    def test_filename_existing_file(self):
+        # Mock the file object
+        file_mock = MagicMock(spec=File)
+        file_mock.file.name = 'path/to/existing/file.txt'
+
+        # Render the template with the filename filter
+        context = Context({'value': file_mock})
+        template = Template('{% load app_filters %}{{ value|filename }}')
+        rendered = template.render(context)
+
+        # Assert that the rendered output matches the expected filename
+        expected_filename = os.path.basename(file_mock.file.name)
+        self.assertEqual(rendered, expected_filename)
+
+    def test_filename_missing_file(self):
+        # Render the template with a missing file path
+        context = Context({'value': 'path/to/missing/file.txt'})
+        template = Template('{% load app_filters %}{{ value|filename }}')
+        rendered = template.render(context)
+
+        # Assert that the rendered output includes the expected HTML string
+        expected_output = '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]'
+        self.assertIn(expected_output, rendered)
