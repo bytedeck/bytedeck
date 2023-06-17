@@ -215,23 +215,29 @@ class ViewTestUtilsMixin():
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
         Provide any url and path parameters as args or kwargs.
+
+        Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs), follow=follow)
         self.assertRedirects(
             response=response,
             expected_url=reverse('quest_manager:quests'),
         )
+        return response
 
     def assert200(self, url_name, *args, **kwargs):
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) succeeded with a status code of 200.
         Provide any url and path parameters as args or kwargs.
+
+        Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
         self.assertEqual(
             response.status_code,
             200
         )
+        return response
 
     def assert200URL(self, url):
         """ Assert that a GET response succeeded with a status code of 200.
@@ -253,17 +259,21 @@ class ViewTestUtilsMixin():
             response.status_code,
             302
         )
+        return response
 
     def assert404(self, url_name, *args, **kwargs):
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) fails with a status code of 404.
         Provide any url and path parameters as args or kwargs.
+
+        Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
         self.assertEqual(
             response.status_code,
             404
         )
+        return response
 
     def assert404URL(self, url):
         """Assert that a GET response fails with a status code of 404."""
@@ -277,12 +287,15 @@ class ViewTestUtilsMixin():
         """
         Assert that a response to reverse(url_name, *args, **kwargs) is permission denied: 403
         Provide any url and path parameters as args or kwargs.
+
+        Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
         self.assertEqual(
             response.status_code,
             403
         )
+        return response
 
     def get_message_list(self, response):
         """ Django messages missing from context of redirected views, so get another way
