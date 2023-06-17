@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.test import TestCase
 
-from django_tenants.test.cases import TenantTestCase, TestCase
+from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
@@ -98,7 +99,7 @@ class CommentModelTest(TenantTestCase):
     def test_comment_creation(self):
         comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
-        # self.assertEqual(str("Test"), self.submission.quest.name)
+        self.assertEqual(str(comment), comment.text)
 
     def test_orphaned_li_tags(self):
         bad_comment_texts = [
@@ -141,3 +142,38 @@ class CommentModelTest(TenantTestCase):
         )
 
         self.assertHTMLEqual(comment.text, text)
+
+    def test_flag(self):
+        comment = baker.make(Comment)
+        self.assertFalse(comment.flagged)
+        comment.flag()
+        self.assertTrue(comment.flagged)
+
+    def test_unflag(self):
+        comment = baker.make(Comment, flagged=True)
+        self.assertTrue(comment.flagged)
+        comment.unflag()
+        self.assertFalse(comment.flagged)
+
+    def test_get_origin(self):
+        comment = baker.make(Comment)
+        self.assertEqual(comment.get_origin(), comment.path)
+
+    def test_is_child(self):
+        parent = baker.make(Comment)
+        child = baker.make(Comment, parent=parent)
+        self.assertTrue(child.is_child())
+        self.assertFalse(parent.is_child())
+
+    def test_get_children(self):
+        "Test that method returns a queryset including all children"
+        parent = baker.make(Comment)
+
+        self.assertQuerysetEqual(parent.get_children(), [])
+
+        child = baker.make(Comment, parent=parent)
+        self.assertIsNone(child.get_children())
+
+        child2 = baker.make(Comment, parent=parent)
+        children = parent.get_children()
+        self.assertQuerysetEqual(children, [child, child2], ordered=False)
