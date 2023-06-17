@@ -1,20 +1,20 @@
-from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.contrib import admin, messages
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
+from django.contrib.admin import helpers
 from django.contrib.sites.models import Site
 from django.db import connection, transaction
+from django.utils.translation import ngettext
 from django.urls import reverse
 
+from allauth.socialaccount.models import SocialApp
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from django.utils.translation import ngettext
-
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
-from tenant.forms import SendEmailForm
 from tenant.tasks import send_email_message
 
 User = get_user_model()
@@ -80,6 +80,15 @@ class TenantAdminForm(forms.ModelForm):
         return name
 
 
+class SendEmailAdminForm(forms.Form):
+    # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+    _selected_action = forms.CharField(widget=forms.MultipleHiddenInput)
+
+    subject = forms.CharField(
+        widget=forms.TextInput(attrs={"placeholder": "Subject", "class": "vTextField"}))
+    message = forms.CharField(widget=ByteDeckSummernoteSafeWidget)
+
+
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
         'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
@@ -132,7 +141,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         # get a list of selected tenant(s), excluding public schema
         objects = self.model.objects.filter(
-            pk__in=[str(x) for x in request.POST.getlist("_selected_action")]).exclude(
+            pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]).exclude(
                 schema_name=get_public_schema_name())
 
         # get a list of all owners (recipients) for selected tenant(s)
@@ -144,7 +153,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     owners.append(config.deck_owner)
 
         if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
-            form = SendEmailForm(data=request.POST)
+            form = SendEmailAdminForm(data=request.POST)
             if form.is_valid():
                 cleaned_data = form.cleaned_data
 
@@ -162,17 +171,19 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 return None
         else:
             # create form and pass the data which objects were selected before triggering 'post' action.
-            # '_selected_action' is required for the admin intermediate form to submit
-            form = SendEmailForm(initial={"_selected_action": objects.values_list("id", flat=True)})
+            # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+            form = SendEmailAdminForm(initial={helpers.ACTION_CHECKBOX_NAME: objects.values_list("id", flat=True)})
 
         # we need to create a template of intermediate page with form
-        return render(request, "admin/tenant/action_send_email.html", {
+        return render(request, "admin/tenant/send_email_message.html", {
             "title": "Write your message here",
             "form": form,
             "owners": owners,
+            "queryset": objects,
             # building proper breadcrumb in admin
             "opts": self.model._meta,
-            "media": self.media,
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "media": self.media + form.media,
         })
 
     @admin.action(description="Enable google signin for tenant(s)")
