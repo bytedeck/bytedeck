@@ -762,7 +762,13 @@ def paginate(object_list, page, per_page=30):
 
 @non_public_only_view
 @staff_member_required
-def approvals(request, quest_id=None):
+def approvals_old(request, quest_id=None):
+    return approvals(request, quest_id, template="quest_manager/quest_approval_old.html", old_pages=True)
+
+
+@non_public_only_view
+@staff_member_required
+def approvals(request, quest_id=None, template="quest_manager/quest_approval.html", old_pages=False):
     """A view for Teachers' Quest Approvals section.
 
     If a quest_id is provided, then filter the queryset to only include
@@ -830,38 +836,69 @@ def approvals(request, quest_id=None):
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval(teacher=teacher)
         submitted_submissions = paginate(submitted_submissions, page)
 
-    tab_list = [{"name": "Submitted",
-                 "submissions": submitted_submissions,
-                 "active": submitted_tab_active,
-                 "time_heading": "Submitted",
-                 "url": reverse('quests:submitted'),
-                 },
-                {"name": "Returned",
-                 "submissions": returned_submissions,
-                 "active": returned_tab_active,
-                 "time_heading": "Returned",
-                 "url": reverse('quests:returned'),
-                 },
-                {"name": "Approved",
-                 "submissions": approved_submissions,
-                 "active": approved_tab_active,
-                 "time_heading": "Approved",
-                 "url": reverse('quests:approved'),
-                 },
-                {"name": "Flagged",
-                 "submissions": flagged_submissions,
-                 "active": flagged_tab_active,
-                 "time_heading": "Transferred",
-                 "url": reverse('quests:flagged'),
-                 }, ]
+    # For each tab, we provide a /old version of the page
+    if old_pages:
+        tab_list = [{"name": "Submitted",
+                    "submissions": submitted_submissions,
+                     "active": submitted_tab_active,
+                     "time_heading": "Submitted",
+                     "url": reverse('quests:approvals_old'),
+                     },
+                    {"name": "Returned",
+                    "submissions": returned_submissions,
+                     "active": returned_tab_active,
+                     "time_heading": "Returned",
+                     "url": reverse('quests:returned_old'),
+                     },
+                    {"name": "Approved",
+                    "submissions": approved_submissions,
+                     "active": approved_tab_active,
+                     "time_heading": "Approved",
+                     "url": reverse('quests:approved_old'),
+                     },
+                    {"name": "Flagged",
+                    "submissions": flagged_submissions,
+                     "active": flagged_tab_active,
+                     "time_heading": "Transferred",
+                     "url": reverse('quests:flagged_old'),
+                     }, ]
+
+    else:
+        tab_list = [{"name": "Submitted",
+                    "submissions": submitted_submissions,
+                     "active": submitted_tab_active,
+                     "time_heading": "Submitted",
+                     "url": reverse('quests:submitted'),
+                     },
+                    {"name": "Returned",
+                    "submissions": returned_submissions,
+                     "active": returned_tab_active,
+                     "time_heading": "Returned",
+                     "url": reverse('quests:returned'),
+                     },
+                    {"name": "Approved",
+                    "submissions": approved_submissions,
+                     "active": approved_tab_active,
+                     "time_heading": "Approved",
+                     "url": reverse('quests:approved'),
+                     },
+                    {"name": "Flagged",
+                    "submissions": flagged_submissions,
+                     "active": flagged_tab_active,
+                     "time_heading": "Transferred",
+                     "url": reverse('quests:flagged'),
+                     }, ]
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 
-    show_all_blocks_button = False
+    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
+    show_all_blocks_button = True
 
-    # Display My Blocks / All buttons when Block objects are assigned to atleast two different users / teachers
-    if len(Block.objects.grouped_teachers_blocks().keys()) > 1:
-        show_all_blocks_button = True
+    grouped_blocks = Block.objects.grouped_teachers_blocks()
+    teachers = grouped_blocks.keys()
+    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
+    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
+        show_all_blocks_button = False
 
     context = {
         "heading": "Quest Approval",
@@ -874,7 +911,7 @@ def approvals(request, quest_id=None):
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button
     }
-    return render(request, "quest_manager/quest_approval.html", context)
+    return render(request, template, context)
 
 
 #########################################
@@ -1226,20 +1263,6 @@ def ajax(request):
 # FLAGGED SUBMISSIONS
 #
 ########################
-
-@non_public_only_view
-@staff_member_required
-def flagged_submissions(request):
-    flagged_subs = QuestSubmission.objects.flagged(user=request.user)
-
-    quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
-
-    context = {
-        "submissions": flagged_subs,
-        "quick_reply_form": quick_reply_form,
-        "active_id": None,
-    }
-    return render(request, "quest_manager/flagged.html", context)
 
 
 @non_public_only_view

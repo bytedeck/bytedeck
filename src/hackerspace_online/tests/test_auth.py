@@ -1,4 +1,5 @@
 import re
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -6,10 +7,60 @@ from django.shortcuts import reverse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
 User = get_user_model()
+
+
+class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, TenantTestCase):
+    """
+    Custom `non_public_only_view` decorator was applied on every `allauth` views.
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+    @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_public_tenant(self, mock_connection1, mock_connection2):
+        """
+        Overriden (decorated) `allauth` view should not be accessible for public tenant schemas,
+        ie. return 404 (not found) for general public.
+        """
+        self.assert404('account_signup')  # not found
+        self.assert404('account_login')  # not found
+        self.assert404('account_logout')  # not found
+        self.assert404('account_change_password')  # not found
+        self.assert404('account_set_password')  # not found
+        self.assert404('account_inactive')  # not found
+        self.assert404('account_email')  # not found
+        self.assert404('account_email_verification_sent')  # not found
+        self.assert404('account_confirm_email', kwargs={'key': '123'})  # not found
+        self.assert404('account_reset_password')  # not found
+        self.assert404('account_reset_password_done')  # not found
+        self.assert404('account_reset_password_from_key', kwargs={'uidb36': '123', 'key': '123'})  # not found
+        self.assert404('account_reset_password_from_key_done')  # not found
+
+    def test_non_public_tenant(self):
+        """
+        Overriden (decorated) `allauth` view should be accessible for non-public tenant schemas only,
+        ie. return anything except 404 (not found) for non-public tenant.
+        """
+        self.assert200('account_signup')  # ok
+        self.assert200('account_login')  # ok
+        self.assert302('account_logout')  # redirect
+        self.assert302('account_change_password')  # login required
+        self.assert302('account_set_password')  # login required
+        self.assert200('account_inactive')  # ok
+        self.assert302('account_email')  # login required
+        self.assert200('account_email_verification_sent')  # ok
+        self.assert200('account_confirm_email', kwargs={'key': '123'})  # ok
+        self.assert200('account_reset_password')  # ok
+        self.assert200('account_reset_password_done')  # ok
+        self.assert200('account_reset_password_from_key', kwargs={'uidb36': '123', 'key': '123'})  # ok
+        self.assert200('account_reset_password_from_key_done')  # ok
 
 
 class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):

@@ -1,9 +1,9 @@
 <!--
   QUESTS
     > available (tab_quests_available_old.html)
-    > in progress (tab_quests_submission.html)
-    > completed (tab_quests_submission.html)
-    > past courses (tab_quests_submission.html)
+    > in progress (tab_quests_submission_old.html)
+    > completed (tab_quests_submission_old.html)
+    > past courses (tab_quests_submission_old.html)
     > drafts (tab_quests_available_old.html)
 -->
 
@@ -87,20 +87,20 @@
     <div role="tabpanel"
          class="tab-pane fade {% if inprogress_tab_active %}in active{% endif %}" id="inprogress">
       {% with submissions=in_progress_submissions %}
-        {% include 'quest_manager/tab_quests_submission.html' %}
+        {% include 'quest_manager/tab_quests_submission_old.html' %}
       {% endwith %}
     </div>
     <div role="tabpanel"
          class="tab-pane fade {% if completed_tab_active %}in active{% endif %}" id="completed">
       {% with submissions=completed_submissions completed=True %}
-        {% include 'quest_manager/tab_quests_submission.html' %}
+        {% include 'quest_manager/tab_quests_submission_old.html' %}
       {% endwith %}
     </div>
     {% if request.user.profile.has_past_courses %}
       <div role="tabpanel"
            class="tab-pane fade {% if past_tab_active %}in active{% endif %}" id="past_submissions">
         {% with submissions=past_submissions past=True %}
-          {% include 'quest_manager/tab_quests_submission.html' %}
+          {% include 'quest_manager/tab_quests_submission_old.html' %}
         {% endwith %}
       </div>
     {% endif %}

@@ -1,31 +1,29 @@
 <!--
-  Quest Approvals (quest_approval.html)
-    > SUBMITTED (tab_quests_approvals.html)
-    > RETURNED (tab_quests_approvals.html)
-    > APPROVED (tab_quests_approvals.html)
-    > FLAGGED (tab_quests_approvals.html)
+  Quest Approvals (quest_approval_old.html)
+    > SUBMITTED (tab_quests_approvals_old.html)
+    > RETURNED (tab_quests_approvals_old.html)
+    > APPROVED (tab_quests_approvals_old.html)
+    > FLAGGED (tab_quests_approvals_old.html)
 -->
 
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
-{% load static %}
-
 {% block heading_inner %}{{ heading }}
     {% if submitted_tab_active %}
       {% if show_all_blocks_button %}
         <div class="btn-group">
-            <a href="{% url 'quests:submitted' %}"
-               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My {{ config.custom_name_for_group|lower }}s</a>
-            <a href="{% url 'quests:submitted_all' %}"
+            <a href="{% url 'quests:submitted_old' %}"
+               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
+            <a href="{% url 'quests:submitted_all_old' %}"
                class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
         </div>
       {% endif %}
     {% endif %}
     {% if not past_approvals_all == None %}
       <div class="btn-group">
-        <a href="{% url 'quests:approved_for_quest' quest.id %}"
+        <a href="{% url 'quests:approved_for_quest_old' quest.id %}"
            class="btn {% if not past_approvals_all %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
-        <a href="{% url 'quests:approved_for_quest_all' quest.id %}"
+        <a href="{% url 'quests:approved_for_quest_all_old' quest.id %}"
            class="btn {% if past_approvals_all %}btn-primary{% else %}btn-default{% endif %}">All</a>
       </div>
     {%  endif %}
@@ -50,7 +48,7 @@
   <div role="tabpanel"
     class="tab-pane fade {% if tab.active %}in active{% endif %}"
     id="tab-{{tab.name|slugify}}">
-    {% include 'quest_manager/tab_quests_approvals.html' %}
+    {% include 'quest_manager/tab_quests_approvals_old.html' %}
   </div>
   {% endfor %}
 </div>
@@ -60,8 +58,7 @@
 {% block js %}
 <script>
 $( document ).ready(function() {
-    // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'
-    $(document).on('click', '[id^=btn_quick_text]', function () {
+    $('[id^=btn_quick_text]').on('click', function () {
         var msg = ' {{ quick_reply_text }} ';
         var textarea = $($(this).data('target')).find('textarea');
         textarea.val(textarea.val() + msg);
@@ -74,12 +71,5 @@ $( document ).ready(function() {
 {% include "quest_manager/ajax_content_loading.html" %}
 
 {% include "quest_manager/snippets/flag_submissions_scripts.html" %}
-
-{% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-crossorigin="anonymous"></script>
-
-<script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
 
 {% endblock %}

@@ -80,6 +80,7 @@ class TenantAdminForm(forms.ModelForm):
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
         'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
+        'google_signon_enabled',
         'paid_until', 'trial_end_date',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',

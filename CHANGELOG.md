@@ -4,6 +4,20 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.21.1] 2023-06-17
+ * Feature: Refactor all quest/submission lists to be searchable and sortable.
+ * Feature: Add list of badge assertions to the badge detail page
+ * Bugfixes:
+  - Fix display of My Groups button [#1395](https://github.com/bytedeck/bytedeck/issues/1395)
+  - Skipped submissions do no appear in Approved tab [#1400](https://github.com/bytedeck/bytedeck/issues/1400)
+  - fix broken announcement permalinks and comment links [#818](https://github.com/bytedeck/bytedeck/issues/818)
+  - Add missing html elements to SummernoteSafeWidget, including HTML5 media tags
+  - Fix get_banner_image_url error on public domain in some views [#1214](https://github.com/bytedeck/bytedeck/issues/1214)
+  - Refactor Quest.time_expired and date_expired tests and fix buggy test [#1327](https://github.com/bytedeck/bytedeck/issues/1327)
+  - Use whitelabelling for groups in buttons and elsewhere [#393](https://github.com/bytedeck/bytedeck/issues/1393)
+  - Changing deck owner now grants new owner superuser permissions [#1390](https://github.com/bytedeck/bytedeck/issues/1390)
+ * Devops: Improved automated test coverage throughout app
+
 
 ### [1.21.0] 2023-05-30
 * New feature: Deack owners can upload a custom JacaScript file and custom CSS Stylesheet unqiue to their decks (Admin > Site Configuration > Advanced)

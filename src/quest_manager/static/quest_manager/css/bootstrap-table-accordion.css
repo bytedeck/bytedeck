@@ -1,0 +1,152 @@
+/*=============================================================
+=            Bootstrap Table Accordion Styling Fixes          =
+=         https://github.com/wenzhixin/bootstrap-table        =
+
+=  This file contains many styles for the quest
+=  list accordion table, making it easier to read and use.
+==============================================================*/
+
+/* https://github.com/wenzhixin/bootstrap-table */
+
+/* Adjusting bootstrap header border for bootstrap-table */
+.table > thead > tr > th {
+  border-bottom-width: 2px !important;
+}
+
+/* Remove unnecessary transparent border to prevent gaps in row borders */
+.bootstrap-table .table.table-no-bordered > tbody > tr > td,
+.bootstrap-table .table.table-no-bordered > thead > tr > th {
+  border-right: none;
+  border-left: none;
+}
+
+/* Adjusting padding for sorting icons in header */
+.fixed-table-container thead th .sortable {
+  padding-right: 18px;
+}
+
+
+/*=============================================
+=            Accordion Table Styles           =
+=============================================*/
+
+/* Hiding the first column to clean up the table presentation */
+.accordian-table thead>tr>th.detail,
+.accordian-table tbody>tr:not(.detail-view)>td:first-of-type {
+  display: none;
+}
+
+/* Removing border from table header and inner cells for a cleaner appearance */
+.fixed-table-container,
+.bootstrap-table .table > thead > tr > th,
+.table > thead > tr > th,
+.table > tbody > tr > th,
+.accordian-table > thead > tr > th,
+.accordian-table > tbody > tr > th,
+.accordian-table.table-bordered > tbody > tr > td,
+.accordian-table.table-bordered > thead > tr > th {
+  border: none !important;
+}
+
+/* Active state for default rows */
+.accordian-table > tbody > tr.default.active > td {
+  color: #fff;
+  text-shadow: 0px -1px 0px #286090;
+  background-image: linear-gradient(to bottom, #337AB7 0px, #2B669A 100%);
+  background-repeat: repeat-x;
+}
+
+
+/*============================================
+=            Detailed View Styles            =
+============================================*/
+
+/* Styles specifically for detailed view of accordion. This includes modifying:
+  - Padding
+  - Border-radius
+  - Border-color
+  - Margin-bottom
+*/
+
+.bootstrap-table .table > tbody > tr.detail-view > td {
+  padding: 0;
+}
+
+.detail-view .list-group-item:first-child {
+  border-top-left-radius: 0px;
+  border-top-right-radius: 0px;
+  border-top: none;
+}
+
+.detail-view .list-group-item:last-child {
+  border-bottom-right-radius: 0px;
+  border-bottom-left-radius: 0px;
+  border-bottom-color: #337ab7;
+}
+
+.detail-view .list-group-item {
+  border-left-color: #337ab7;
+  border-right-color: #337ab7;
+}
+
+.detail-view .list-group {
+  margin-bottom: 0px;
+}
+
+
+/* ============================================
+=            Additional Table Styles           =
+============================================ */
+
+/* Additional modifications to table appearance */
+
+/* Extra padding for heading rows */
+.bootstrap-table .table > tbody > tr.row-heading > td {
+  padding: 15px;
+}
+
+/* Matching the detail-view row's color with the row before it */
+.accordian-table > tbody > tr.detail-view,
+.accordian-table > tbody > tr.detail-view > td {
+  background-color: transparent !important;
+}
+
+/* Updating border-color based on class */
+/* Specify the colors for each class */
+.accordian-table > tbody > tr {
+  --accordian-table-border-color: transparent;
+}
+
+.accordian-table > tbody > tr > .default {
+  /* make what it would be normally */
+  --accordian-table-border-color: #337ab7;
+}
+
+.accordian-table > tbody > tr > .muted {
+  --accordian-table-border-color: #333;
+}
+
+.accordian-table > tbody > tr > .warning {
+  --accordian-table-border-color: #8a6d3b;
+}
+
+.accordian-table > tbody > tr > .danger {
+  --accordian-table-border-color: #a94442;
+}
+
+.accordian-table > tbody > tr > .info {
+  --accordian-table-border-color: #31708f;
+}
+
+
+/* Updating list-group-item border-color to match the row */
+tr.detail-view > td > div > ul > .list-group-item,
+tr.detail-view > td > div > .list-group-item {
+  border-left-color: var(--accordian-table-border-color);
+  border-right-color: var(--accordian-table-border-color);
+}
+
+tr.detail-view > td > div > ul > .list-group-item:last-child,
+tr.detail-view > td > div > .list-group-item:last-child  {
+  border-bottom-color: var(--accordian-table-border-color);
+}
