@@ -127,7 +127,7 @@ class Tenant(TenantMixin):
         Returns whether Google signon has been enabled for this tenant by accessing the tenant's SiteConfig option
         """
         SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
-        site_config = SiteConfig.objects.get(id=1)
+        site_config = SiteConfig.get()
         return site_config.enable_google_signin
 
     def get_total_user_count(self):
