@@ -51,47 +51,50 @@
         <td class="col-sm-3 hidden-xs">
           {% include "quest_manager/submitted_time.html" %}
         </td>
-
-        {% comment %}
-          ### COLLAPSING CONTENT ###
-          This is the content that is hidden until the row is clicked.
-          ajax_content_loading.html inserts quest content here.
-          If the content hasn't been retrieved yet from the server, a loading icon is displayed.
-        {% endcomment %}
-        {% comment %} Lamma remove class="tab-warning" {% endcomment %}
-        <span style="display: none" id="collapse-quest-{{s.id}}"
-          class="{% if s.is_awaiting_approval %}warning
-                 {% elif s.is_returned %}danger
-                 {% elif s.do_not_grant_xp %}panel-muted
-                 {% else %}default{% endif %}"
-          role="tabpanel" aria-labelledby="heading-quest-{{s.id}}">
-          <ul id="preview-content-{{s.id}}" class="list-group" data-completed="{{completed}}" data-past="{{past}}">
-            <li class="list-group-item list-group-item-buttons">
-                <p>
-                  <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                  &nbsp;Loading content...
-                  <!-- preview_content_submissions.html via AJAX -->
-                </p>
-            </li>
-          </ul>
-          <!-- will load a student quick reply form for submissions that have been returned or handed in -->
-          {% if s.is_returned or completed %}
-            <li class="list-group-item">
-              <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
-                    action="{% url 'quests:complete' s.id %}">{% csrf_token %}
-                {{ quick_reply_form | crispy }}
-                <div>
-                  {% include "quest_manager/submission_buttons_form_student.html" %}
-                </div>
-              </form>
-            </li>
-          {% endif %}
-        </span>
-
       </tr>
-    {% endfor %}
+      {% endfor %}
     </tbody>
   </table>
+
+  {% comment %} The hidden content needs to be in its own for loop.
+     Otherwise, additional formatting is applied to it that breaks the form. {% endcomment %}
+  {% for s in submissions%}
+      {% comment %}
+        ### COLLAPSING CONTENT ###
+        This is the content that is hidden until the row is clicked.
+        ajax_content_loading.html inserts quest content here.
+        If the content hasn't been retrieved yet from the server, a loading icon is displayed.
+      {% endcomment %}
+      {% comment %} Lamma remove class="tab-warning" {% endcomment %}
+      <div style="display: none" id="collapse-quest-{{s.id}}"
+        class="{% if s.is_awaiting_approval %}warning
+               {% elif s.is_returned %}danger
+               {% elif s.do_not_grant_xp %}panel-muted
+               {% else %}default{% endif %}"
+        role="tabpanel" aria-labelledby="heading-quest-{{s.id}}">
+        <ul id="preview-content-{{s.id}}" class="list-group" data-completed="{{completed}}" data-past="{{past}}">
+          <li class="list-group-item list-group-item-buttons">
+              <p>
+                <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+                &nbsp;Loading content...
+                <!-- preview_content_submissions.html via AJAX -->
+              </p>
+          </li>
+        </ul>
+        <!-- will load a student quick reply form for submissions that have been returned or handed in -->
+        {% if s.is_returned or completed %}
+          <li class="list-group-item">
+            <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
+                  action="{% url 'quests:complete' s.id %}">{% csrf_token %}
+              {{ quick_reply_form | crispy }}
+              <div>
+                {% include "quest_manager/submission_buttons_form_student.html" %}
+              </div>
+            </form>
+          </li>
+        {% endif %}
+      </div>
+  {% endfor %}
 
   {% with items=submissions %}
     {% include "quest_manager/pagination_controls.html" %}
