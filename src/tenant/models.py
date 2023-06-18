@@ -73,7 +73,7 @@ class Tenant(TenantMixin):
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys
-    # instead tehy have to be found within the tenant's context / schema
+    # instead they have to be found within the tenant's context / schema
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
         help_text="This is a cached field: the number of staff users, plus the number student users currently \
@@ -93,6 +93,11 @@ class Tenant(TenantMixin):
     last_staff_login = models.DateTimeField(
         blank=True, null=True,
         help_text="This is a cached field: the last time a staff user logged in to the deck."
+    )
+
+    google_signon_enabled = models.BooleanField(
+        default=False,
+        help_text="This is a cached field: Whether Google signon has been enabled for this deck."
     )
     # END CALCULATED / CACHED FIELDS ##################################
 
@@ -114,7 +119,16 @@ class Tenant(TenantMixin):
         self.total_user_count = self.get_total_user_count()
         self.quest_count = self.get_quest_count()
         self.last_staff_login = self.get_last_staff_login()
+        self.google_signon_enabled = self.get_google_signon_enabled()
         self.save()
+
+    def get_google_signon_enabled(self):
+        """
+        Returns whether Google signon has been enabled for this tenant by accessing the tenant's SiteConfig option
+        """
+        SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
+        site_config = SiteConfig.objects.get(id=1)
+        return site_config.enable_google_signin
 
     def get_total_user_count(self):
         """

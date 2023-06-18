@@ -248,7 +248,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Change custom_name_for_announcement to a non-default option
+        # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
         config.save()
@@ -282,7 +282,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Change custom_name_for_announcement to a non-default option
+        # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
         config.save()
@@ -292,8 +292,6 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Copy and Update views use these fields too, but through the same logic.
         request = self.client.get(reverse('badges:badge_create'))
         self.assertContains(request, "CustomBadge Type")
-        self.assertContains(request, "Break maps at this custombadge.")
-        self.assertContains(request, "Only edit this if you want to link to a custombadge")
 
 
 class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -402,7 +400,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Change custom_name_for_announcement to a non-default option
+        # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
         config.save()

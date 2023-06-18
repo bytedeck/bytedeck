@@ -15,6 +15,8 @@ from courses.models import Semester
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
+User = get_user_model()
+
 
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
@@ -137,41 +139,93 @@ class QuestTestModel(TenantTestCase):
         5. The quest is archived
         """
 
-        # TODO: This test case is flaky since this throws an error around 7:18 UTC
-        # create and test a control quest that will return active
-        baker.make(Quest, name="control-quest")
-        self.assertEqual(Quest.objects.get(name="control-quest").active, True)
+        # create and test a control quest that will return active by default
+        q = baker.make(Quest)
+        self.assertTrue(q.active)
 
         # create and test a quest that won't be available until one day later
-        baker.make(Quest, name="future-date-quest", date_available=(timezone.localtime() + timezone.timedelta(days=1)))
-        self.assertEqual(Quest.objects.get(name="future-date-quest").active, False)
+        q = baker.make(Quest, date_available=(timezone.localtime() + timezone.timedelta(days=1)).date())
+        self.assertFalse(q.active)
 
         # create and test a quest that won't be available until one hour later in the same day
-        baker.make(
-            Quest, name="future-time-quest", date_available=timezone.localtime(),
-            time_available=(timezone.localtime() + timezone.timedelta(hours=1)))
-        self.assertEqual(Quest.objects.get(name="future-time-quest").active, False)
+        q = baker.make(
+            Quest,
+            date_available=timezone.localdate(),
+            time_available=(timezone.localtime() + timezone.timedelta(hours=1)).time()
+        )
+        self.assertFalse(q.active)
 
-        # create and test a quest that's expired one day ago
-        baker.make(Quest, name="past-date-quest", date_expired=(timezone.localtime() - timezone.timedelta(days=1)))
-        self.assertEqual(Quest.objects.get(name="past-date-quest").active, False)
+        dt = timezone.get_current_timezone().localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+        with freeze_time(dt):
+            # Quest that expires an hour ago
+            dt_expired = timezone.localtime() - timezone.timedelta(hours=1)
+            q = baker.make(Quest, time_expired=dt_expired.time())
+            self.assertFalse(q.active)
 
-        # create and test a quest that's expired one hour ago
-        baker.make(Quest, name="past-time-quest", time_expired=(timezone.localtime() - timezone.timedelta(hours=1)))
-        self.assertEqual(Quest.objects.get(name="past-time-quest").active, False)
+            # create and test a quest that's expired one day ago
+            dt_expired = timezone.localtime() - timezone.timedelta(days=1)
+            q = baker.make(Quest, date_expired=dt_expired.date())
+            self.assertFalse(q.active)
 
         # create and test a quest that's a part of an inactive campaign
         inactive_campaign = baker.make(Category, title="inactive-campaign", active=False)
-        baker.make(Quest, name="inactive-campaign-quest", campaign=inactive_campaign)
-        self.assertEqual(Quest.objects.get(name="inactive-campaign-quest").active, False)
+        q = baker.make(Quest, campaign=inactive_campaign)
+        self.assertFalse(q.active)
 
         # create and test a quest that's invisible to students
-        baker.make(Quest, name="invisible-quest", visible_to_students=False)
-        self.assertEqual(Quest.objects.get(name="invisible-quest").active, False)
+        q = baker.make(Quest, visible_to_students=False)
+        self.assertFalse(q.active)
 
         # create and test a quest that's archived
-        archived_quest = baker.make(Quest, archived=True)
-        self.assertEqual(archived_quest.active, False)
+        q = baker.make(Quest, archived=True)
+        self.assertFalse(q.active)
+
+    def test_expired__date_blank(self):
+        """If `date_expired` is blank, expire at `time_expired` every day
+
+        Test that a quest with time_expired set to noon, is available before local noon
+        and not available after local noon
+        """
+
+        # Get the current local time zone
+        local_tz = timezone.get_current_timezone()
+        # Create a datetime object for noon on June 13th (arbitrary date)
+        dt = local_tz.localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+
+        # Quest that expires at noon, date_expired=None by default
+        quest = baker.make(Quest, time_expired=dt.time())
+
+        # Test a minute before noon
+        with freeze_time(dt - timezone.timedelta(minutes=1)):
+            self.assertFalse(quest.expired())
+
+        # Test a minute after noon
+        with freeze_time(dt + timezone.timedelta(minutes=1)):
+            self.assertTrue(quest.expired())
+
+    def test_expired__time_blank(self):
+        """If `time_expired` is blank, then assume expiry at midnight on `date_expired`
+        """
+
+        # Get the current local time zone
+        local_tz = timezone.get_current_timezone()
+        # Create a datetime object for noon on June 13th (arbitrary date)
+        dt = local_tz.localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+
+        # Quest that expires on June 13th, time_expired=None by default
+        quest = baker.make(Quest, date_expired=dt.date())
+
+        # Test June 13th, should be available because doesn't expire until midnight
+        with freeze_time(dt):
+            self.assertFalse(quest.expired())
+
+        # Test in 11 hours (11pm), should still be available
+        with freeze_time(dt + timezone.timedelta(hours=11)):
+            self.assertFalse(quest.expired())
+
+        # Test in 12 hours (aka midnight the next day), should be expired now
+        with freeze_time(dt + timezone.timedelta(hours=12)):
+            self.assertTrue(quest.expired())
 
     def test_quest_html_formatting(self):
         test_markup = "<p>this <span>span</span> tag should not break</p>"
@@ -196,7 +250,6 @@ class QuestTestModel(TenantTestCase):
 
         def test_is_repeat_available(self, user):"""
 
-        User = get_user_model()
         baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = baker.make(User)
         quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
@@ -313,11 +366,68 @@ class QuestTestModel(TenantTestCase):
         self.assertEqual(submission3.ordinal, 3)
 
 
+class SubmissionManagerTest(TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.active_semester = SiteConfig.get().active_semester
+
+    def test_all_approved(self):
+        """ Tests of QuestSubmissionManager.all_approved()
+        def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+        """
+
+        quest = baker.make(Quest, name="test quest")
+        user = baker.make(User, username="test_user")
+
+        # various submissions
+        baker.make(QuestSubmission, semester=self.active_semester)  # in progress shoulnd't appear
+        baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)  # completed/submitted shouldn't appear
+        sub_approved = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
+        sub_approved_different_quest = baker.make(QuestSubmission, is_completed=True, is_approved=True, semester=self.active_semester)
+        sub_approved_other_semester = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True)
+        sub_approved_no_xp = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True,
+                                        do_not_grant_xp=True, semester=self.active_semester)
+        sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True,
+                                       semester=self.active_semester)
+
+        # Default parameters, all submissions this semester, as would be shown in staff "Approved" tab
+        all_approved = QuestSubmission.objects.all_approved()
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_no_xp, sub_approved_different_quest, sub_approved_user],
+            ordered=False
+        )
+
+        # active_semester_only=False should include sub_approved_other_semester
+        all_approved = QuestSubmission.objects.all_approved(active_semester_only=False)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_different_quest, sub_approved_other_semester, sub_approved_no_xp, sub_approved_user],
+            ordered=False
+        )
+
+        # quest=quest should not include sub_approved_different_quest
+        all_approved = QuestSubmission.objects.all_approved(quest=quest)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved, sub_approved_no_xp, sub_approved_user],
+            ordered=False
+        )
+
+        # user=test_user should only include sub_approved_user
+        all_approved = QuestSubmission.objects.all_approved(user=user)
+        self.assertQuerysetEqual(
+            all_approved,
+            [sub_approved_user],
+            ordered=False
+        )
+
+
 class SubmissionTestModel(TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        User = get_user_model()
         self.semester = baker.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = baker.make(User)

@@ -20,6 +20,7 @@ from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 
+from courses.models import Block
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -82,23 +83,37 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         q2_pk = self.quest2.pk
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_all')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_all_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:inprogress_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:completed_old')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:past_old')).status_code, 200)
         # anyone can view drafts if they figure out the url, but it will be blank for them
         self.assertEqual(self.client.get(reverse('quests:drafts')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:drafts_old')).status_code, 200)
 
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
+        self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approvals_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:submitted_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:returned_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:approved_old')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:flagged_old')).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
@@ -445,6 +460,21 @@ class SubmissionViewTests(TenantTestCase):
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
+
+    def test_all_old_submission_page_status_codes_for_teachers(self):
+        """After refactoring the submission pages to use bootstrap-tables, all of the old pages were made accessible
+        through the /old/ url prefix. This test makes sure that all of the old pages are still accessible to teachers"""
+        # log in a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Test the old flagged submissions page
+        self.assertEqual(self.client.get(reverse('quests:approvals_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submitted_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:submitted_all_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:returned_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:approved_old')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:flagged_old')).status_code, 200)
 
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
@@ -2296,24 +2326,32 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approved_for_quest_all(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
-    def test_approvals_all_buttons_does_not_exist(self):
-        """ My blocks should not be rendered when there is only one teacher"""
+    def test_approvals__my_groups_all_button_rendered(self):
+        """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""
 
+        # Only one user with assigned blocks but that user is not the current user (button should be rendered)
+
+        # Currently the only user with assigned blocks is "owner", who is assigned block "Default", The user for this test is "current_teacher"
         response = self.client.get(reverse('quests:approvals'))
-        self.assertNotContains(response, 'My blocks')
+        self.assertContains(response, 'My groups')
 
-    def test_approval_all_button_exists(self):
-        """ My blocks button should not be rendered """
+        # Multiple users with assigned blocks (button should be rendered)
 
-        baker.make('courses.Block', name='A', current_teacher=self.current_teacher)
-        baker.make('courses.Block', name='B', current_teacher=self.current_teacher)
-
-        another_teacher = baker.make(User, is_staff=True)
-        baker.make('courses.Block', name='C', current_teacher=another_teacher)
-        baker.make('courses.Block', name='D', current_teacher=another_teacher)
-
+        # Make new block that's assigned to the current user
+        baker.make(Block, name='New Test Block', current_teacher=self.current_teacher)
+        # Users with assigned blocks are now "owner" and "current_teacher"
         response = self.client.get(reverse('quests:approvals'))
-        self.assertContains(response, 'My blocks')
+        self.assertContains(response, 'My groups')
+
+        # Only one user with assigned blocks and that user is the current user (button should NOT be rendered)
+
+        # Get default block and re-assign to current user
+        default_block = Block.objects.get(name='Default')
+        default_block.current_teacher = self.current_teacher
+        default_block.save()
+        # "current_teacher" is now the only user with assigned blocks
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertNotContains(response, 'My groups')
 
 
 class Is_staff_or_TA_test(TenantTestCase):

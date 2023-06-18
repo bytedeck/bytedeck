@@ -17,12 +17,11 @@
          data-search="true">
     <thead>
       <tr class="panel-heading">
-
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
         <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
-        <th class="col-sm-1 col-xs-2 text-right" data-field="xp" data-sortable="true">XP</th>
-        <th class="col-sm-2 hidden-xs text-center" data-field="campaign" data-sortable="true">Campaign</th>
-        <th class="col-sm-1 hidden-xs text-center" data-field="tags" data-sortable="true">{{config.custom_name_for_tag}}</th>
+        <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
+        <th class="col-sm-2 text-right hidden-xs" data-field="campaign" data-sortable="true">Campaign</th>
+        <th class="col-sm-1 text-center hidden-xs" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
         <th class="col-sm-2 hidden-xs" data-field="status_icons"><!-- status_icons --></th>
       </tr>
     </thead>
@@ -31,7 +30,7 @@
         <tr class="accordian-trigger panel-title
           {% if not q.visible_to_students %}danger
           {% elif q.expired %}warning
-          {% endif %}
+          {% else %}default{% endif %}
           {% if q.id == active_q_id %} active {% endif %}"
           role="tab"
           aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
@@ -46,8 +45,8 @@
             {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
           </td>
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
-          <td class="col-sm-2 hidden-xs text-center"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
-          <td class="col-sm-1 hidden-xs text-center"><small>{{q.tags.all|join:", "}}</small></td>
+          <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
+          <td class="col-sm-1 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
           <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
           {% comment %}
             ### COLLAPSING CONTENT ###
@@ -56,6 +55,9 @@
             If the content hasn't been retrieved yet from the server, a loading icon is displayed.
           {% endcomment %}
           <span style="display: none" id="collapse-quest-{{q.id}}"
+            class="{% if not q.visible_to_students %}danger
+                   {% elif q.expired %}warning
+                   {% else %}default{% endif %}"
             role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
             <ul class="list-group">
               <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">

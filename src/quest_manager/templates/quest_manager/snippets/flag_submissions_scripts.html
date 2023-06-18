@@ -2,7 +2,7 @@
 
     $(document).ready(function() {
         // Flag submissions via Ajax when button clicked:
-        $('.btn-flag-submission').on('click', function(event){
+        $(document).on('click', '.btn-flag-submission', function(event){
             event.preventDefault(); // prevent browser from reloading
             flag_submission(this);
         });

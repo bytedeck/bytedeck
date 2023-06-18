@@ -82,12 +82,6 @@ def comment(request, ann_id):
 
 @non_public_only_view
 @login_required
-def list2(request, ann_id=None):
-    return list(request, ann_id, template='announcements/list2.html')
-
-
-@non_public_only_view
-@login_required
 def list(request, ann_id=None, template='announcements/list.html'):
 
     active_object = None

@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from django.utils import timezone
 from django.db.models import ProtectedError
 
@@ -15,50 +16,73 @@ from siteconfig.models import SiteConfig
 User = get_user_model()
 
 
-class MarkRangeTestModel(TenantTestCase):
+class MarkRangeModelTest(TenantTestCase):
 
     def setUp(self):
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
-    def test_marke_range_creation(self):
+    def test_mark_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
-        # self.assertEqual(str(self.mr_50), self.user.username)
+
+    def test_mark_range__str__(self):
+        expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
+        self.assertEqual(str(self.mr_50), expected_str)
 
 
-class MarkRangeTestManager(TenantTestCase):
+class MarkRangeManagerTest(TenantTestCase):
     def setUp(self):
         # clear default mark range variables
         MarkRange.objects.all().delete()
 
         self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
 
     def test_get_range(self):
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
-        self.mr_100 = baker.make(MarkRange, minimum_mark=100.0)
+        mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
-        self.assertEqual(MarkRange.objects.get_range(101.0), self.mr_100)
+        self.assertEqual(MarkRange.objects.get_range(101.0), mr_100)
 
     def test_get_range_with_course(self):
         c1 = baker.make(Course)
         c2 = baker.make(Course)
-        self.mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
-        self.mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
-        self.mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
+        mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
+        mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
+        mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
-        self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), self.mr_50_c1)
-        self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), self.mr_50_c2)
+        self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), mr_50_c1)
+        self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), mr_50_c2)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0, [c1]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
-        self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), self.mr_100_c1)
+        self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
+
+    @patch('profile_manager.models.Profile.mark')
+    def test_get_range_for_user(self, mock_mark):
+        """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
+        """
+        user = baker.make(User)
+
+        # A user with no courses should return None
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
+        # Put the student in a course and test with various marks
+        baker.make(CourseStudent, user=user, semester=SiteConfig.get().active_semester)
+
+        mock_mark.return_value = 60.0
+        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_50)
+
+        mock_mark.return_value = 80.0
+        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_75)
+
+        mock_mark.return_value = 40.0
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
 
 class BlockModelManagerTest(TenantTestCase):
@@ -269,6 +293,10 @@ class CourseModelTest(TenantTestCase):
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
+    def test_get_absolute_url(self):
+        """All courses return the course list"""
+        self.assertEqual(self.course.get_absolute_url(), reverse('courses:course_list'))
+
     def test_condition_met_as_prerequisite(self):
         """ If the user is CURRENTLY registered in this course, then condition is met """
         student = baker.make(User)
@@ -292,6 +320,76 @@ class CourseModelTest(TenantTestCase):
 
         # see if models.PROTECT is in place
         self.assertRaises(ProtectedError, self.course.delete)
+
+
+class CourseStudentManagerTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User)
+        self.course = baker.make(Course)
+        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+
+    def test_current_course(self):
+        """ Currently returns the first course in the active semester, if there are more than one"""
+        # Add a second course to the student during active semester (+ SetUp)
+        sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+        # order doesn't matter here, as long as it's one fo the courses the student is currently registered in
+        self.assertIn(CourseStudent.objects.current_course(self.student), [sc2, self.course_student])
+
+    def test_all_for_user_semester(self):
+        """ Test that method returns all CourseStudent objects for a given user and semester """
+        semester_to_check = baker.make(Semester)
+
+        # This should show up
+        sc1 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester_to_check)
+        # So should this
+        sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester_to_check)
+
+        # This shouldn't show up, different user
+        student2 = baker.make(User)
+        baker.make(CourseStudent, user=student2, course=self.course, semester=semester_to_check)
+
+        # This shouldn't show up, different semester
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+
+        course_students = CourseStudent.objects.all_for_user_semester(self.student, semester_to_check)
+        self.assertEqual(course_students.count(), 2)
+        self.assertQuerysetEqual(course_students, [sc1, sc2], ordered=False)
+
+    @patch('profile_manager.models.Profile.xp_per_course')
+    def test_calc_semester_grades(self, xp_per_course):
+        """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
+
+        # second student in same course as setup
+        student2 = baker.make(User)
+        course_student2 = baker.make(CourseStudent, user=student2, course=self.course, semester=SiteConfig.get().active_semester)
+
+        # 3rd student in different course
+        student3 = baker.make(User)
+        course2 = baker.make(Course)
+        course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
+
+        xp_per_course.return_value = 500
+        CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
+
+        self.course_student.refresh_from_db()
+        course_student2.refresh_from_db()
+        course_student3.refresh_from_db()
+
+        self.assertFalse(self.course_student.active)
+        self.assertFalse(course_student2.active)
+        self.assertFalse(course_student3.active)
+
+        self.assertEqual(self.course_student.final_xp, 500)
+        self.assertEqual(course_student2.final_xp, 500)
+        self.assertEqual(course_student3.final_xp, 500)
+
+    @patch('profile_manager.models.Profile.xp_per_course')
+    def test_calc_semester_grades__student_with_negative_xp(self, xp_per_course):
+        """Test that an assertion error is raised when there is a student with negative xp"""
+        xp_per_course.return_value = -10
+        self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
+                          Semester.objects.get_current())
 
 
 class CourseStudentModelTest(TenantTestCase):
@@ -338,13 +436,6 @@ class CourseStudentModelTest(TenantTestCase):
         days_so_far.return_value = 0
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
-
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_student_with_negative_xp(self, xp_per_course):
-        """Test if an assertion error is raised when there is a student with negative xp"""
-        xp_per_course.return_value = -10
-        self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
-                          Semester.objects.get_current())
 
 
 class BlockModelTest(TenantTestCase):
@@ -413,6 +504,11 @@ class RankManagerTest(TenantTestCase):
         rank_0 = Rank.objects.get_rank(0)
         self.assertIsNotNone(rank_0)
 
+    def test_get_rank__negative_XP(self):
+        """ If a user has negative XP, they should still be assigned the lowest rank """
+        rank_0 = Rank.objects.get_rank(-100)
+        self.assertIsNotNone(rank_0)
+
     def test_get_next_rank(self):
         """ Test that the correct rank is returned for a given XP value"""
 
@@ -429,3 +525,26 @@ class RankManagerTest(TenantTestCase):
         Rank.objects.all().delete()
         rank_1000 = Rank.objects.get_next_rank(1000)
         self.assertIsNone(rank_1000)
+
+
+class RankModelTest(TenantTestCase):
+
+    def setUp(self):
+        Rank.objects.all().delete()
+        self.rank = baker.make(Rank, name="TestRank", xp=0)
+
+    def test_rank_creation(self):
+        self.assertIsInstance(self.rank, Rank)
+        self.assertEqual(str(self.rank), self.rank.name)
+
+    def test_get_absolute_url(self):
+        """Absolute url for all ranks is the ranks list page"""
+        self.assertEqual(self.rank.get_absolute_url(), reverse('courses:ranks'))
+
+    def test_get_icon_url(self):
+        """Returns the icon url for the rank, if no url then returns the default icon from SiteConfig"""
+        self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
+        self.rank.icon = 'test.png'
+        self.rank.save()
+
+        self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
