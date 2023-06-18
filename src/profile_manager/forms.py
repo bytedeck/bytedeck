@@ -33,7 +33,7 @@ class ProfileForm(forms.ModelForm):
         self.fields['email'].initial = self.instance.user.email
 
         # gets value from deck's custom_name_for_student field in siteconfig.models
-        custom_student_name = SiteConfig.objects.get().custom_name_for_student
+        custom_student_name = SiteConfig.get().custom_name_for_student
         # sets visible_to_other_students field name and help text on student profile settings page
         self.fields['visible_to_other_students'].label = f"Visible to other {custom_student_name.lower()}s"
         # setting help text with a variable in two steps isn't ideal but linebreaking with a backslash breaks tests that parse for exact help text.

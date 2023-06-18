@@ -247,7 +247,7 @@ class SemesterCreateUpdateFormsetMixin:
         self.object = self.get_object()
         forms = [self.get_form(), self.get_formset()]
 
-        if all([form.is_valid() for form in forms]):
+        if all(form.is_valid() for form in forms):
             return self.form_valid(*forms)
         return self.form_invalid(*forms)
 
@@ -321,7 +321,7 @@ class SemesterActivate(View):
     def get(self, request, *args, **kwargs):
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
-        siteconfig = SiteConfig.objects.get()
+        siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
         siteconfig.save()
 
@@ -341,7 +341,7 @@ class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Create New {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -355,7 +355,7 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
