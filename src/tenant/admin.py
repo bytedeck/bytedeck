@@ -1,9 +1,9 @@
 from django import forms
 from django.contrib import admin, messages
-from django.shortcuts import render
 from django.contrib.auth import get_user_model
-from django.contrib.admin import helpers
+from django.contrib.admin import helpers, widgets
 from django.contrib.sites.models import Site
+from django.template.response import TemplateResponse
 from django.db import connection, transaction
 from django.utils.translation import ngettext
 from django.urls import reverse
@@ -85,7 +85,7 @@ class SendEmailAdminForm(forms.Form):
     _selected_action = forms.CharField(widget=forms.MultipleHiddenInput)
 
     subject = forms.CharField(
-        widget=forms.TextInput(attrs={"placeholder": "Subject", "class": "vTextField"}))
+        widget=widgets.AdminTextInputWidget(attrs={"placeholder": "Subject"}))
     message = forms.CharField(widget=ByteDeckSummernoteSafeWidget)
 
 
@@ -141,8 +141,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         # get a list of selected tenant(s), excluding public schema
         objects = self.model.objects.filter(
-            pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]).exclude(
-                schema_name=get_public_schema_name())
+            pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
+        ).exclude(schema_name=get_public_schema_name())
 
         # get a list of all owners (recipients) for selected tenant(s)
         owners = []
@@ -151,21 +151,28 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 config = SiteConfig.get()
                 if config.deck_owner is not None:
                     owners.append(config.deck_owner)
+        # Removing duplicate elements from the list.
+        #
+        # Using *set() is the fastest and smallest method to achieve it.
+        # It first removes the duplicates and returns a dictionary which has
+        # to be converted to list.
+        owners = [*set(owners)]
 
         if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
             form = SendEmailAdminForm(data=request.POST)
             if form.is_valid():
                 cleaned_data = form.cleaned_data
 
+                recipient_list = [o.email for o in owners if o.email]
                 # run background task that will send email messages
                 send_email_message.apply_async(
                     # subject, message and recipient_list (emails)
-                    args=[cleaned_data["subject"], cleaned_data["message"], [o.email for o in owners if o.email]],
+                    args=[cleaned_data["subject"], cleaned_data["message"], recipient_list],
                     queue="default",
                 )
 
                 # show alert that everything is cool
-                self.message_user(request, "%s users emailed successfully!" % len(owners), messages.SUCCESS)
+                self.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
 
                 # return None to display the change list page again.
                 return None
@@ -174,17 +181,32 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
             form = SendEmailAdminForm(initial={helpers.ACTION_CHECKBOX_NAME: objects.values_list("id", flat=True)})
 
+        # AdminForm is a class within the `django.contrib.admin.helpers` module of the Django project.
+        #
+        # AdminForm is not usually used directly by developers, but can be used by libraries that want to
+        # extend the forms within the Django Admin.
+        adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
+        media = self.media + adminform.media
+
+        request.current_app = self.admin_site.name
+
         # we need to create a template of intermediate page with form
-        return render(request, "admin/tenant/send_email_message.html", {
-            "title": "Write your message here",
-            "form": form,
-            "owners": owners,
-            "queryset": objects,
-            # building proper breadcrumb in admin
-            "opts": self.model._meta,
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "media": self.media + form.media,
-        })
+        return TemplateResponse(
+            request,
+            "admin/tenant/send_email_message.html",
+            context={
+                **self.admin_site.each_context(request),
+                "title": "Write your message here",
+                "adminform": adminform,
+                "subtitle": None,
+                "owners": owners,
+                "queryset": objects,
+                # building proper breadcrumb in admin
+                "opts": self.model._meta,
+                "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                "media": media,
+            },
+        )
 
     @admin.action(description="Enable google signin for tenant(s)")
     def enable_google_signin(self, request, queryset):

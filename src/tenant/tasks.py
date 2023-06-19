@@ -11,7 +11,7 @@ def send_email_message(subject, message, recipient_list, **kwargs):
     """
     Simple task that's intended to handle mass emailing.
     """
-    # load and render "message.txt" template
+    # load and render base template with message content
     msg = get_template("admin/tenant/email/message.txt").render(context={
         "message": message,
     })

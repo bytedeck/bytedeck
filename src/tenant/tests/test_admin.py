@@ -1,23 +1,26 @@
 # With help from https://stackoverflow.com/questions/6498488/testing-admin-modeladmin-in-django
-
-from django.contrib.admin.sites import AdminSite
-from django.contrib.auth import get_user_model
-from django.test import RequestFactory
-# from django.core.exceptions import ValidationError
-
-from django_tenants.test.cases import TenantTestCase
-# from django_tenants.test.client import TenantClient
-from django_tenants.utils import tenant_context
-from django.utils import timezone
-from django.contrib.sites.models import Site
 from unittest.mock import patch
-from siteconfig.models import SiteConfig
 
-from tenant.admin import TenantAdmin, TenantAdminForm
-from tenant.models import Tenant
-from django_tenants.test.client import TenantClient
+from django.core import mail
+from django.contrib.admin.sites import AdminSite
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+from django.conf import settings
+from django.template.response import TemplateResponse
+from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
+from django.test import RequestFactory
+from django.utils import timezone
+from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
+from django_tenants.utils import tenant_context, schema_context, get_public_schema_name
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
+
+from hackerspace_online.celery import app
+from siteconfig.models import SiteConfig
+from tenant.admin import TenantAdmin, TenantAdminForm
+from tenant.models import Tenant
 
 User = get_user_model()
 
@@ -250,3 +253,101 @@ class TenantAdminFormTest(TenantTestCase):
         form = TenantAdminForm(self.form_data)
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertFalse(form.is_valid())
+
+
+class TenantAdminActionsTest(TenantTestCase):
+    """TenantAdmin class is shipped with various admin actions"""
+
+    def setUp(self):
+        # create the public schema
+        self.public_tenant = Tenant(schema_name='public', name='public')
+        with tenant_context(self.public_tenant):
+            # create superuser account
+            self.superuser = User.objects.create_superuser(
+                username="admin",
+                password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
+            )
+            Tenant.objects.bulk_create([self.public_tenant])
+            self.public_tenant.refresh_from_db()
+            self.public_tenant.domains.create(domain='localhost', is_primary=True)
+
+        # create extra tenant for testing purpose
+        with schema_context(get_public_schema_name()):
+            self.extra_tenant = Tenant(
+                schema_name='extra',
+                name='extra'
+            )
+            self.extra_tenant.save()
+            domain = self.extra_tenant.get_primary_domain()
+            domain.domain = 'extra.localhost'
+
+        # update "owner" and add missing email address
+        with tenant_context(self.extra_tenant):
+            config = SiteConfig.get()
+            if config.deck_owner is not None and not config.deck_owner.email:
+                config.deck_owner.email = "owner@example.com"
+                config.deck_owner.save()
+
+        self.client = TenantClient(self.public_tenant)
+
+        self.old_celery_always_eager = app.conf.task_always_eager
+        app.conf.task_always_eager = True
+
+    def tearDown(self):
+        app.conf.task_always_eager = self.old_celery_always_eager
+
+    def test_model_admin_send_email_message_action(self):
+        """
+        The send_email_message action on public tenant sends emails to selected tenant "owners".
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:app_list", kwargs={"app_label": "tenant"}))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:app_list", kwargs={"app_label": "tenant"}))
+        self.assertEqual(response.status_code, 200)
+
+        # third case, select tenants and execute "send_email_message" action
+        # should returns 200 (intermediate page)
+        action_data = {
+            # trying to send message on multiple tenants,
+            # but only one is legit (extra_tenant)
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
+            "action": "send_email_message",
+            "index": 0,
+        }
+        response = self.client.post(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")), action_data
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response, TemplateResponse)
+        self.assertContains(
+            response, "Send email to multiple users"
+        )
+        self.assertContains(response, "<h1>Write your message here</h1>")
+        # should be only one valid recipient
+        self.assertContains(response, ACTION_CHECKBOX_NAME, count=1)
+
+        # fourth case, complete "intermediate" page/form
+        # should returns 302 (redirect back to "changelist" page)
+        compose_confirmation_data = {
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
+            "action": "send_email_message",
+            # submit intermediate form (subject and message)
+            "subject": "Greetings from a TenantAdmin action",
+            "message": "Lorem ipsum dolor sit amet..",
+            # click "confirmation" button
+            "post": "yes",  # confirm form
+        }
+        response = self.client.post(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")), compose_confirmation_data
+        )
+        self.assertEqual(response.status_code, 302)
+        # check mailbox after submitting form
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
