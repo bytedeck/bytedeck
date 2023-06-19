@@ -13,6 +13,10 @@
   border-bottom-width: 2px !important;
 }
 
+.accordian-table {
+  border: transparent;
+}
+
 /* Remove unnecessary transparent border to prevent gaps in row borders */
 .bootstrap-table .table.table-no-bordered > tbody > tr > td,
 .bootstrap-table .table.table-no-bordered > thead > tr > th {
@@ -56,6 +60,7 @@
   background-repeat: repeat-x;
 }
 
+/* ##################################### */
 
 /*============================================
 =            Detailed View Styles            =
@@ -81,12 +86,6 @@
 .detail-view .list-group-item:last-child {
   border-bottom-right-radius: 0px;
   border-bottom-left-radius: 0px;
-  border-bottom-color: #337ab7;
-}
-
-.detail-view .list-group-item {
-  border-left-color: #337ab7;
-  border-right-color: #337ab7;
 }
 
 .detail-view .list-group {
@@ -113,8 +112,9 @@
 
 /* Updating border-color based on class */
 /* Specify the colors for each class */
-.accordian-table > tbody > tr {
-  --accordian-table-border-color: transparent;
+.accordian-table > tbody > tr,
+.accordian-table > tbody > tr > .collapsing {
+  --accordian-table-border-color: transparent !important;
 }
 
 .accordian-table > tbody > tr > .default {
@@ -123,7 +123,7 @@
 }
 
 .accordian-table > tbody > tr > .muted {
-  --accordian-table-border-color: #333;
+  --accordian-table-border-color: transparent;
 }
 
 .accordian-table > tbody > tr > .warning {

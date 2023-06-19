@@ -26,29 +26,29 @@ $(document).ready(function () {
       var row_html_id = row._id;
       var quest_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
 
-      // Get the hidden span element
-      var $hiddenSpan = $("#collapse-quest-" + quest_id);
+      // Get the hidden div element
+      var $hiddenDIV = $("#collapse-quest-" + quest_id);
 
       $detail.html('<div class="detail-container" style="display:none;"></div>');
-      // Add all classes from the hidden span to the tr.detail-view element
-      $detail.addClass($hiddenSpan.attr('class'));
+      // Add all classes from the hidden div to the tr.detail-view element
+      $detail.addClass($hiddenDIV.attr('class'));
 
       // Get the detail container div
       var $detailContainer = $detail.find('div.detail-container');
 
       // Create a function to update the row's content
       var updateContent = function () {
-        var detailContent = $hiddenSpan.html();
+        var detailContent = $hiddenDIV.html();
         $detailContainer.html(detailContent);
       };
 
       // Update the row's content initially
       updateContent();
 
-      // Create an observer that updates the row's content when the span's content changes
+      // Create an observer that updates the row's content when the div's content changes
       // This is activated when the ajax script updates the quest content
       var observer = new MutationObserver(updateContent);
-      observer.observe($hiddenSpan[0], { childList: true, subtree: true });
+      observer.observe($hiddenDIV[0], { childList: true, subtree: true });
 
       // When the row is expanded, slide down the detail container
       $detailContainer.slideDown();
@@ -58,6 +58,9 @@ $(document).ready(function () {
       // If the row is already expanded, collapse it
       if ($tr.next().is('tr.detail-view')) {
         $tr.removeClass('active');
+        // Add a class to the row before it starts collapsing
+        var $detailViewRow = $tr.next();
+        $detailViewRow.find('td').addClass('collapsing');
         // send slideUp callback to collapseRow. This causes the currently expanded row to collapse
         $tr.next().find('div.detail-container').slideUp(function () {
           $table.bootstrapTable('collapseRow', $tr.data('index'));
@@ -68,6 +71,8 @@ $(document).ready(function () {
         $table.find('tr.active').each(function () {
           var $expandedRow = $(this);
           $expandedRow.removeClass('active');
+          // Add a class to the row before it starts collapsing
+          $expandedRow.next().find('td').addClass('collapsing');
           $expandedRow.next().find('div.detail-container').slideUp(function () {
             $table.bootstrapTable('collapseRow', $expandedRow.data('index'));
           });
