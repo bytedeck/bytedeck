@@ -69,8 +69,9 @@ class Category(IsAPrereqMixin, models.Model):
         param num_required: not used.
         """
 
-        # get all the quests in this campaign/category
-        quests = self.quest_set.all()
+        # get all the active quests in this campaign/category
+        # active = not expired, past availability date and time, not archived, visible to students (not draft)
+        quests = self.quest_set.get_active()
 
         # get all approved submissions of these quests for this user
         submissions = QuestSubmission.objects.all_approved(user=user, active_semester_only=False).filter(quest__in=quests)
