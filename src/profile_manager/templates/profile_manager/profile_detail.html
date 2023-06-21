@@ -189,9 +189,11 @@
                <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
                {{s|truncatechars:40}} <small>
                 {% if s.do_not_grant_xp %}
-                  (Quest Skipped)
+                  (0 XP - skipped)
+                {% elif s.quest.xp_can_be_entered_by_students %}
+                  ({{s.xp_requested}}* XP)
                 {% else %}
-                  <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
+                  ({{s.quest.xp}} XP)
                 {% endif %}
                 <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
              </a>
