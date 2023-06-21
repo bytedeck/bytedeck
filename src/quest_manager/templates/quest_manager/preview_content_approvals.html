@@ -8,7 +8,7 @@
             {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </div>
         <div class="col-xs-6">
-            {% with label=True %}{% include "quest_manager/submitted_time.html" %}{% endwith %}
+            {% with label=True %}{% include "quest_manager/snippets/submitted_status.html" %}{% endwith %}
         </div>
 
     </div>
