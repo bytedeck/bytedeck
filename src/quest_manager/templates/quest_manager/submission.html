@@ -16,7 +16,11 @@
 <small id='submission-inprogress-{{submission.quest.id}}'>
 {% if request.user.is_staff %} {{submission.user}} | {% endif %}
 {% if submission.is_approved %}
-  Approved - {{submission.time_approved}}
+  {% if submission.do_not_grant_xp %}
+    Skipped
+  {% else %}
+    Approved
+  {% endif %} - {{submission.time_approved}}
 {% elif submission.is_awaiting_approval %}
   Submitted - {{submission.time_completed}}
 {% elif submission.is_returned %}

@@ -1,5 +1,9 @@
   {% if s.is_approved %}
-    Approved<br>
+    {% if s.do_not_grant_xp %}
+      Skipped<br>
+    {% else %}
+      Approved<br>
+    {% endif %}
     <small>{{s.time_approved|timesince}} ago</small>
   {% elif s.is_awaiting_approval %}
     Awaiting Approval<br>

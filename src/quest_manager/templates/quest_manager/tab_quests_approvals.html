@@ -43,7 +43,10 @@
           </td>
           <td class="col-sm-4 col-xs-5">{{s.quest_name}}</td>
           <td class="col-sm-1 col-xs-2">
-            {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+            {% if s.do_not_grant_xp %}<span title="Skipped quests do not grant XP">0*</span>
+            {% elif s.quest.xp_can_be_entered_by_students %}<span title="XP requested by student">{{s.xp_requested}}*</span>
+            {% else %}{{s.quest.xp}}
+            {% endif %}
           </td>
           <td class="col-sm-1 hidden-xs">
             {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
