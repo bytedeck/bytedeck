@@ -1,17 +1,10 @@
   {% if s.is_approved %}
-    {% if label %}Approved<br/>{% endif %}
-    Completed<br>
-    <small>
-      {{s.time_approved|timesince}} ago
-    </small>
+    Approved<br>
+    <small>{{s.time_approved|timesince}} ago</small>
   {% elif s.is_awaiting_approval %}
-    {% if label %}Submitted<br/>{% endif %}
     Awaiting Approval<br>
-    <small>
-      {{s.time_completed|timesince}} ago
-    </small>
+    <small>{{s.time_completed|timesince}} ago</small>
   {% elif s.is_returned %}
-    {% if label %}Returned<br/>{% endif %}
     Returned<br>
     <small>
       {% if s.time_returned %}
