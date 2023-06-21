@@ -675,6 +675,13 @@ def approve(request, submission_id):
                        "</span>"
                 blank_comment_text = SiteConfig.get().blank_return_text
                 submission.mark_returned()
+            elif 'skip_button' in request.POST:
+                note_verb = "skipped"
+                icon = "<span class='fa-stack text-muted'>" + \
+                       "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                       "</span>"
+                blank_comment_text = "(Skipped - You were not granted XP for this quest)"
+                submission.mark_approved(transfer=True)
             else:
                 raise Http404("unrecognized submit button")
 

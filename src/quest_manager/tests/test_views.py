@@ -2190,6 +2190,34 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
         self.assertEqual(response.status_code, 404)
 
+    def test_skip_button(self):
+        """ The skip button should mark the submission as approved and leave a comment,
+            but not grant XP to the user
+        """
+        comment_text = "Lorum Ipsum"
+        form_data = {'comment_text': comment_text, 'skip_button': True}
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # This submission should be marked as skipped (do_not_grant_xp)
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.do_not_grant_xp)
+
+    def test_skip_button__no_comment(self):
+        """ The skip button should leave a default comment if none if provided.
+        """
+        form_data = {'comment_text': "", 'skip_button': True}
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # And the submission should have a comment
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, "(Skipped - You were not granted XP for this quest)")
+
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:

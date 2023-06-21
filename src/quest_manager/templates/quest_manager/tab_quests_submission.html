@@ -42,14 +42,17 @@
         </td>
         <td class="col-sm-5 col-xs-8">{{s.quest_name}}</td>
         <td class="col-sm-1 col-xs-2 text-center">
-          {% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %}
+          {% if s.do_not_grant_xp %}<span title="Skipped quests do not grant XP">0*</span>
+          {% elif s.quest.xp_can_be_entered_by_students %}<span title="XP requested by student">{{s.xp_requested}}*</span>
+          {% else %}{{s.quest.xp}}
+          {% endif %}
         </td>
         <td class="col-sm-2 text-center hidden-xs"><small>
           {{ s.quest.campaign|default:"-" }}
         </small></td>
         <td class="col-sm-1 text-center hidden-xs"><small>{{ s.quest.tags.all|join:", "|default:"-" }}</small></td>
         <td class="col-sm-3 hidden-xs">
-          {% include "quest_manager/submitted_time.html" %}
+          {% include "quest_manager/snippets/submitted_status.html" %}
         </td>
       </tr>
       {% endfor %}
