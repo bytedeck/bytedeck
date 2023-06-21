@@ -98,14 +98,3 @@
 {% else %}
   <p>There are no quests in this campaign.</p>
 {% endif %}
-
-{% block js %}
-  {% include "quest_manager/ajax_content_loading.html" %}
-
-  {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-  integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-  crossorigin="anonymous"></script>
-
-  <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
-{% endblock %}
