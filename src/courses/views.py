@@ -236,6 +236,27 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterDelete(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, DeleteView):
+    model = Semester
+    success_url = reverse_lazy('courses:semester_list')
+    success_message = "Semester deleted."
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
+        context["registrations"] = registrations
+        return context
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
+
+
 class SemesterCreateUpdateFormsetMixin:
     formset_class = ExcludedDateFormset
 
