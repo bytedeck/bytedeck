@@ -148,6 +148,9 @@ class Profile(models.Model):
                                             help_text='ADVANCED: A CSS file to customize this site!  You can use  \
                                                    this to tweak something, or create a completely new theme.')
 
+    # Fields for caching data
+    time_of_last_submission = models.DateTimeField(null=True, blank=True)
+
     objects = ProfileManager()
 
     #################################
@@ -380,18 +383,12 @@ class Profile(models.Model):
     #
     #################################
 
-    def last_submission_completed(self):
-        return QuestSubmission.objects.user_last_submission_completed(self.user)
-
     def gone_stale(self):
-        last_sub = self.last_submission_completed()
-        if last_sub is None:
+        """ Return True if the user has not submitted a quest in the last 5 days"""
+        if self.time_of_last_submission is None:
             return True
         else:
-            if last_sub.time_completed:
-                return last_sub.time_completed < timezone.now() - timezone.timedelta(days=5)
-            else:
-                return True
+            return self.time_of_last_submission < timezone.now() - timezone.timedelta(days=5)
 
     def current_teachers(self):
         user_id_list = CourseStudent.objects.get_current_teacher_list(self.user)

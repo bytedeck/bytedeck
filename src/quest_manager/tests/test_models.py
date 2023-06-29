@@ -473,10 +473,13 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_mark_completed(self):
         draft_text = "Draft words"
-        sub = baker.make(QuestSubmission, draft_text=draft_text)
+        user = baker.make(User)
+        sub = baker.make(QuestSubmission, draft_text=draft_text, user=user)
         self.assertFalse(sub.is_completed)
         self.assertEqual(sub.draft_text, draft_text)
+        self.assertIsNone(user.profile.time_of_last_submission)
         sub.mark_completed()
+        self.assertEqual(user.profile.time_of_last_submission, sub.time_completed)
         self.assertTrue(sub.is_completed)
         self.assertIsNotNone(sub.first_time_completed)
         self.assertIsNone(sub.draft_text)

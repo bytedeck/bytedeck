@@ -57,7 +57,6 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
             profile.blocks_value = profile.blocks()
             profile.courses = profile.current_courses().values_list('course__title', flat=True)
             profile.mark_value = profile.mark()
-            profile.last_submission_completed_value = profile.last_submission_completed()
         return profiles_qs
 
     def get_queryset(self):
@@ -201,7 +200,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateVi
         forms = self.get_forms()
 
         # check if all form instances are valid else ...
-        if all([form.is_valid() for form in forms]):
+        if all(form.is_valid() for form in forms):
             return self.form_valid(forms)
         return self.form_invalid(forms)
 

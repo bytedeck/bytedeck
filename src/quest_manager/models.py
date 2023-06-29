@@ -783,13 +783,6 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def user_last_submission_completed(self, user):
-        qs = self.get_queryset(True).get_user(user).completed()
-        if not qs:
-            return None
-        else:
-            return qs.latest('time_completed')
-
     def remove_in_progress(self):
         # In Progress Quests
         qs = self.all_not_completed(active_semester_only=False)
@@ -853,6 +846,8 @@ class QuestSubmission(models.Model):
     def mark_completed(self, xp_requested=0):
         self.is_completed = True
         self.time_completed = timezone.now()
+        self.user.profile.time_of_last_submission = self.time_completed
+        self.user.profile.save()
         # this is only set the first time, so it can be referenced to
         # when calculating repeatable quests
         if self.first_time_completed is None:
