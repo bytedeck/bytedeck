@@ -23,7 +23,10 @@
         <th class="col-sm-1 col-xs-2" data-field="xp" data-sortable="true">XP</th>
         <th class="col-sm-1 hidden-xs" data-field="group_name" data-sortable="true">{% group_name %}</th>
         <th class="col-sm-2 col-xs-3 hidden-xs" data-field="user" data-sortable="true">User</th>
-        <th class="col-sm-3 hidden-xs" data-field="status" data-sortable="true">Status</th>
+        <!-- Uses `status_timestamps` for sorting the status column by the submission time -->
+        <th class="col-sm-3 hidden-xs" data-field="status" data-sortable="true" data-sort-name="status_timestamps">Status</th>
+        <th data-field="status_timestamps" data-switchable="false" data-visible="false"></th>
+        <!-- End sorting group -->
       </tr>
     </thead>
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
@@ -57,6 +60,11 @@
           <td class="col-sm-3 hidden-xs">
             {% include "quest_manager/snippets/submitted_status.html" %}
           </td>
+          <!-- `status_timestamps` -->
+          <td>
+            {% include "quest_manager/snippets/submission_status_timestamp.html" %}
+          </td>
+          <!-- end `status_timestamps` -->
         </tr>
         {% endfor %}
       </tbody>
