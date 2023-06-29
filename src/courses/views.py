@@ -150,6 +150,14 @@ class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
+    success_message = "Course deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -386,6 +394,14 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Block
     success_url = reverse_lazy('courses:block_list')
+    success_message = "Block deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
