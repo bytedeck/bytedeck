@@ -245,7 +245,7 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterDelete(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, DeleteView):
+class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."

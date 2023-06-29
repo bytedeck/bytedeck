@@ -709,7 +709,6 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         semester = baker.make(Semester)
 
-        # Can't delete active semester:
         response = self.client.post(reverse('courses:semester_delete', args=[semester.pk]))
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
