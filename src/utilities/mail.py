@@ -10,6 +10,11 @@ def send_mass_mail(datatuple, fail_silently=False, auth_user=None, auth_password
     each message to each recipient list. Return the number of emails sent.
 
     If from_email is None, use the DEFAULT_FROM_EMAIL setting.
+
+    The fail_silently argument controls how the backend should handle errors.
+    If fail_silently is True, exceptions during the email sending process
+    will be silently ignored.
+
     If auth_user and auth_password are set, use them to log in.
     If auth_user is None, use the EMAIL_HOST_USER setting.
     If auth_password is None, use the EMAIL_HOST_PASSWORD setting.

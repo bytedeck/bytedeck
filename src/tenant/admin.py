@@ -104,7 +104,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
 
-    actions = ['send_email_message', 'enable_google_signin', 'disable_google_signin']
+    actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
@@ -128,7 +128,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         return qs
 
     @admin.action(description="Send an email message to all owners for the selected tenant(s)")
-    def send_email_message(self, request, queryset):
+    def message_selected(self, request, queryset):
         """
         Send an email message to all owners for selected tenant(s).
 
@@ -145,25 +145,27 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         ).exclude(schema_name=get_public_schema_name())
 
         # get a list of all owners (recipients) for selected tenant(s)
-        owners = []
+        recipient_list = []
         for tenant in objects:
             with tenant_context(tenant):
                 config = SiteConfig.get()
                 if config.deck_owner is not None:
-                    owners.append(config.deck_owner)
+                    # get the full name of the user, or if none is supplied will return the username
+                    full_name_or_username = config.deck_owner.get_full_name() or config.deck_owner.username
+                    email = config.deck_owner.email
+                    recipient_list.append(f"{full_name_or_username} <{email}>")
         # Removing duplicate elements from the list.
         #
         # Using *set() is the fastest and smallest method to achieve it.
         # It first removes the duplicates and returns a dictionary which has
         # to be converted to list.
-        owners = [*set(owners)]
+        recipient_list = [*set(recipient_list)]
 
         if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
             form = SendEmailAdminForm(data=request.POST)
             if form.is_valid():
                 cleaned_data = form.cleaned_data
 
-                recipient_list = [o.email for o in owners if o.email]
                 # run background task that will send email messages
                 send_email_message.apply_async(
                     # subject, message and recipient_list (emails)
@@ -193,13 +195,13 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # we need to create a template of intermediate page with form
         return TemplateResponse(
             request,
-            "admin/tenant/send_email_message.html",
+            "admin/tenant/tenant/message_selected_compose.html",
             context={
                 **self.admin_site.each_context(request),
                 "title": "Write your message here",
                 "adminform": adminform,
                 "subtitle": None,
-                "owners": owners,
+                "recipient_list": recipient_list,
                 "queryset": objects,
                 # building proper breadcrumb in admin
                 "opts": self.model._meta,

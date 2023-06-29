@@ -1,4 +1,4 @@
-<!-- tenant/templates/admin/tenant/action_send_email.html -->
+<!-- tenant/templates/admin/tenant/tenant/message_selected_compose.html -->
 
 <!-- This block will be included to django admin basic template -->
 {% extends "admin/base_site.html" %}
@@ -47,7 +47,7 @@
                 <div class="field-box l-2c-fluid l-d-4">
                     <div class="c-1"><label for="id_recipient_list" class="required">{% trans 'To' %}</label></div>
                     <div class="c-2">
-                        <ul>{{ owners|unordered_list }}</ul>
+                        <ul>{{ recipient_list|unordered_list }}</ul>
                         <p class="grp-help">{% trans 'Email message will be sent to these users' %}</p>
                     </div>
                 </div>
@@ -70,7 +70,7 @@
             {% for obj in queryset %}
                 <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk|unlocalize }}">
             {% endfor %}
-            <input type="hidden" name="action" value="send_email_message" />
+            <input type="hidden" name="action" value="message_selected" />
             <input type="hidden" name="post" value="yes">
             <ul>
                 <li class="grp-float-left"><a href="." class="grp-button grp-cancel-link">{% trans "No, take me back" %}</a></li>

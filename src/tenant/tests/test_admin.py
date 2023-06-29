@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
-from django_tenants.utils import tenant_context, schema_context, get_public_schema_name
+from django_tenants.utils import tenant_context
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -260,7 +260,7 @@ class TenantAdminActionsTest(TenantTestCase):
 
     def setUp(self):
         # create the public schema
-        self.public_tenant = Tenant(schema_name='public', name='public')
+        self.public_tenant = Tenant(schema_name="public", name="public")
         with tenant_context(self.public_tenant):
             # create superuser account
             self.superuser = User.objects.create_superuser(
@@ -269,17 +269,16 @@ class TenantAdminActionsTest(TenantTestCase):
             )
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
-            self.public_tenant.domains.create(domain='localhost', is_primary=True)
+            self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-        # create extra tenant for testing purpose
-        with schema_context(get_public_schema_name()):
+            # create extra tenant for testing purpose
             self.extra_tenant = Tenant(
-                schema_name='extra',
-                name='extra'
+                schema_name="extra",
+                name="extra"
             )
             self.extra_tenant.save()
             domain = self.extra_tenant.get_primary_domain()
-            domain.domain = 'extra.localhost'
+            domain.domain = "extra.localhost"
 
         # update "owner" and add missing email address
         with tenant_context(self.extra_tenant):
@@ -302,14 +301,14 @@ class TenantAdminActionsTest(TenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:app_list", kwargs={"app_label": "tenant"}))
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
         self.assertEqual(response.status_code, 302)
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:app_list", kwargs={"app_label": "tenant"}))
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
         self.assertEqual(response.status_code, 200)
 
         # third case, select tenants and execute "send_email_message" action
@@ -318,7 +317,7 @@ class TenantAdminActionsTest(TenantTestCase):
             # trying to send message on multiple tenants,
             # but only one is legit (extra_tenant)
             ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
-            "action": "send_email_message",
+            "action": "message_selected",
             "index": 0,
         }
         response = self.client.post(
@@ -337,7 +336,7 @@ class TenantAdminActionsTest(TenantTestCase):
         # should returns 302 (redirect back to "changelist" page)
         compose_confirmation_data = {
             ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
-            "action": "send_email_message",
+            "action": "message_selected",
             # submit intermediate form (subject and message)
             "subject": "Greetings from a TenantAdmin action",
             "message": "Lorem ipsum dolor sit amet..",

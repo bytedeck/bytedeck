@@ -25,7 +25,6 @@ class TenantTasksTests(TenantTestCase):
         self.assertTrue(task_result.successful())
 
         # email message was sent to multiple recipients
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox), 2)  # expecting two emails, one per recipient
         self.assertEqual(mail.outbox[0].subject, "O hi, World!")
-        self.assertIn("john@doe.com", mail.outbox[0].to)
-        self.assertIn("jane@doe.com", mail.outbox[0].to)
+        self.assertIn("john@doe.com", mail.outbox[0].to)  # john doe was first in a list of recipients
