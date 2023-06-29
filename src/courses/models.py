@@ -34,7 +34,7 @@ class MarkRangeManager(models.Manager):
         return ranges_qs.last()  # return the highest range that qualifies
 
     def get_range_for_user(self, user):
-        mark = user.profile.mark()
+        mark = user.profile.mark_cached
         student_course_ids = user.profile.current_courses().values_list('course', flat=True)
         if student_course_ids:
             courses = Course.objects.filter(id__in=student_course_ids)
@@ -331,7 +331,7 @@ class Semester(models.Model):
         students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
         mark_list = []
         for student in students:
-            mark_list.append(student.profile.mark())
+            mark_list.append(student.profile.mark_cached)
         return mark_list
 
 

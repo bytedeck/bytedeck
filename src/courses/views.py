@@ -508,7 +508,7 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
             tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
         """
         # grab dataset
-        user_mark = self.user.profile.mark() or 0  # can be nonetype
+        user_mark = self.user.profile.mark_cached or 0  # can be nonetype
         student_marks = Semester.get_student_mark_list(Semester, students_only=True)
         # only remove user's mark from student_marks if user is part of active sem
         if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():

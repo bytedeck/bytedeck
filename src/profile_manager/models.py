@@ -116,7 +116,6 @@ class Profile(models.Model):
     intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
-    xp_cached = models.IntegerField(default=0)
 
     # Student options
     get_announcements_by_email = models.BooleanField(
@@ -150,6 +149,8 @@ class Profile(models.Model):
 
     # Fields for caching data
     time_of_last_submission = models.DateTimeField(null=True, blank=True)
+    xp_cached = models.IntegerField(default=0)
+    mark_cached = models.DecimalField(max_digits=4, decimal_places=1, default=None, null=True, blank=True)
 
     objects = ProfileManager()
 
@@ -314,6 +315,7 @@ class Profile(models.Model):
         xp += BadgeAssertion.objects.calculate_xp(self.user)
         xp += CourseStudent.objects.calculate_xp(self.user)
         self.xp_cached = xp
+        self.mark_cached = self.mark()
         self.save()
         return xp
 

@@ -56,7 +56,6 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         for profile in profiles_qs:
             profile.blocks_value = profile.blocks()
             profile.courses = profile.current_courses().values_list('course__title', flat=True)
-            profile.mark_value = profile.mark()
         return profiles_qs
 
     def get_queryset(self):
