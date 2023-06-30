@@ -153,11 +153,11 @@ data-classes="table table-no-bordered table-hover"
                     <td>{{ object.grad_year|default:"-" }}</td>
 
                     <td>
-                        {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                        {% for course in object.user.coursestudent_set.all %}{{ course.block }}{% if not forloop.last %}, {% endif %} {% endfor %}
                     </td>
 
                     <td>
-                        {% for course in object.courses %}{{ course }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                        {% for course in object.user.coursestudent_set.all %}{{ course.course.title }}{% if not forloop.last %}, {% endif %} {% endfor %}
                     </td>
 
                     <td>{% if object.visible_to_other_students or request.user.is_staff %}
@@ -166,7 +166,7 @@ data-classes="table table-no-bordered table-hover"
                     </td>
 
                     {% if config.display_marks_calculation %}
-                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_cached }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_cached|default_if_none:0 }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
                     {% endif %}
 
                 {% endif %}

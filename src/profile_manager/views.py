@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Prefetch
 from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,6 +13,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView
 
 from hackerspace_online.decorators import staff_member_required
+from siteconfig.models import SiteConfig
 
 from .models import Profile
 from .forms import ProfileForm, UserForm
@@ -53,9 +55,18 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     def queryset_append(self, profiles_qs):
         profiles_qs = profiles_qs.select_related('user__portfolio')
 
-        for profile in profiles_qs:
-            profile.blocks_value = profile.blocks()
-            profile.courses = profile.current_courses().values_list('course__title', flat=True)
+        # this prefetch prevents runnaway queries when looping through profiles in list view
+        # in Profile_list.html it is used to get courses via:
+        #  {% for course in object.user.coursestudent_set.all %}{{ course.course.title }}...etc
+        # and blocks via
+        #  {% for course in object.user.coursestudent_set.all %}{{ course.block }}...etc
+        profiles_qs = profiles_qs.prefetch_related(
+            Prefetch(
+                'user__coursestudent_set',
+                queryset=CourseStudent.objects.filter(semester=SiteConfig.get().active_semester).select_related('course', 'block'),
+            )
+        )
+
         return profiles_qs
 
     def get_queryset(self):
