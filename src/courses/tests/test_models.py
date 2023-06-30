@@ -424,6 +424,17 @@ class CourseStudentModelTest(TenantTestCase):
         mark = course_student.calc_mark(50)
         self.assertEqual(mark, 50)
 
+    @patch('courses.models.Semester.fraction_complete')
+    def test_calc_mark__no_course(self, fraction_complete):
+        """ calc_mark() method should be able to handle a CourseStudent with a null course
+        """
+        fraction_complete.return_value = 0.5
+
+        # course isn't specific so baker won't make it since null=True
+        course_student = baker.make(CourseStudent, user=self.student, semester=SiteConfig.get().active_semester)
+        # this shouldn't error: 'NoneType' object has no attribute 'xp_for_100_percent'
+        course_student.calc_mark(50)
+
     @patch('courses.models.Semester.days_so_far')
     def test_xp_per_day_ave(self, days_so_far):
 
