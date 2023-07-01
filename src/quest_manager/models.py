@@ -5,10 +5,8 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Q, Max, Sum
+from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
 from django.db.models.functions import Greatest
-# from django.shortcuts import get_object_or_404
-# from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
 
@@ -18,10 +16,6 @@ from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from tags.models import TagsModelMixin
-# from utilities.models import ImageResource
-
-# from django.contrib.contenttypes.models import ContentType
-# from django.contrib.contenttypes import generic
 
 
 class Category(IsAPrereqMixin, models.Model):
@@ -298,27 +292,91 @@ class QuestQuerySet(models.QuerySet):
         pk_met_list = self.get_pk_met_list(user) or [0]
         return self.filter(pk__in=pk_met_list)
 
-    def not_submitted_or_inprogress(self, user):
+    def not_in_progress_completed_or_cooldown(self, user):
+        """filter the queryset to remove quests that are:
+          1. already inprogress for the user (is_completed=False)
+          2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
+          3. completed, repeatable but still in hourly (max_repeats>0 and now - first_time_completed > hours_between_repeats)
+          4. completed and repeatable and max repeats reached this semester
+          5. completed and repeatable and max all time repeats reached (for repeatable_per_semester=False)
 
-        quest_list = list(self)
-        quest_list = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
-        pk_list = [quest.id for quest in quest_list]
-
-        # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
-        return self.filter(pk__in=pk_list)
-
-    def not_completed(self, user):
+          These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
+          and don't have to worry about them when considering repeats, which are more complicated.
         """
-        Exclude all quests where the user has a completed submission (whether approved or not)
-        """
-        completed_subs = QuestSubmission.objects.all_completed(user=user)
-        return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
+
+        # Condition 1: remove inprogress submissions
+        # remember qs is a queryset of Quest objects, not QuestSubmission objects.
+        qs = self.not_in_progress(user)
+
+        # This is completed submissions and quests ALL TIME, not just current semester
+        completed_subs_all_time = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
+        completed_quests_all_time = qs.filter(pk__in=completed_subs_all_time.values_list('quest__id', flat=True))
+
+        # This is completed submissions THIS SEMESTER ONLY
+        completed_subs_current = QuestSubmission.objects.all_completed(user=user)
+        completed_quests_current = qs.filter(pk__in=completed_subs_current.values_list('quest__id', flat=True))
+
+        # Condition 2: remove completed submissions that are not repeatable
+        subs_to_exclude_2 = completed_subs_all_time.filter(Q(quest__max_repeats=0) & Q(quest__repeat_per_semester=False))
+        quests_to_exclude = subs_to_exclude_2.values_list('quest__id', flat=True)
+
+        qs = qs.exclude(pk__in=quests_to_exclude)
+
+        # Condition 3: remove completed submissions that are repeatable, but still in cooldown
+
+        # Calculate the cooldown expression based on hours_between_repeats
+        current_time = timezone.now()
+        cooldown_time = ExpressionWrapper(
+            current_time - F('hours_between_repeats') * timezone.timedelta(hours=1),
+            output_field=DateTimeField()
+        )
+
+        # start with completed subs this semester (already filtered our non-repeatable)
+        # annotate the latest `first_time_completed` for submissions of this quest
+        # so we can use that time to determine if cooldown is complete
+        cooldown_quests = completed_quests_current.annotate(
+            latest_submission_time=Max(
+                'questsubmission__first_time_completed',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # Quests in cooldown will have latest_submission_time > now - hours_between_repeats
+        # (cooldown_time = now - hours_between_repeats)
+        cooldown_quests = cooldown_quests.filter(latest_submission_time__gt=cooldown_time)
+
+        qs = qs.exclude(pk__in=cooldown_quests)
+
+        # CONDITION 4: remove completed and repeatable and max repeats reached this semester
+        max_repeats_this_sem = completed_quests_current.annotate(
+            submission_count=Count(
+                'questsubmission',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # need to account for max_repeats=-1 (unlimited repeats), don't remove those
+        max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
+
+        qs = qs.exclude(pk__in=max_repeats_this_sem)
+
+        # CONDITION 5: remove completed and repeatable and max all-time repeats reached (for repeatable_per_semester=False)
+        max_repeats_all_time = completed_quests_all_time.filter(repeat_per_semester=False).annotate(
+            submission_count=Count(
+                'questsubmission',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # need to account for max_repeats=-1 (unlimited repeats), don't remove those
+        max_repeats_all_time = max_repeats_all_time.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
+
+        qs = qs.exclude(pk__in=max_repeats_all_time)
+
+        return qs
 
     def not_in_progress(self, user):
         """
         Exclude all quests where the user has a submission in progress,
         """
-        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
+        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user, active_semester_only=False)
         return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
 
     def editable(self, user):
@@ -354,13 +412,13 @@ class QuestManager(models.Manager):
         3. Quests that are a part of an inactive campaign
         4. Quests whose prerequisites have not been met
         5. Quests that are not currently submitted for approval or already in progress
-        6. Quests whose maximum repeats have been completed
+        6. Quests whose maximum repeats have been completed (including repeat_per_semester)
         7. Quests whose repeat time has not passed since last completion
         8. Check for blocking quests (available and in-progress), if present, remove all others
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1, 2 & 3
         qs = qs.get_conditions_met(user)  # 4
-        available_quests = qs.not_submitted_or_inprogress(user)  # 5, 6 & 7
+        available_quests = qs.not_in_progress_completed_or_cooldown(user)  # 5, 6 & 7
 
         available_quests = available_quests.block_if_needed(user=user)  # 8
         if remove_hidden:
@@ -369,7 +427,7 @@ class QuestManager(models.Manager):
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
-        return qs.not_submitted_or_inprogress(user)
+        return qs.not_in_progress_completed_or_cooldown(user)
 
     def all_drafts(self, user):
         qs = self.get_queryset().filter(visible_to_students=False)
@@ -465,14 +523,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         if not time_of_last:
             return False
 
-        # # to handle cases before first_time_completed existed as a property
-        # if not latest_dt:
-        #     # then latest_sub could be wrong.  Need to get latest completed date
-        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
-        #     latest_dt = latest_sub.time_completed
-
         # if haven't maxed out repeats
-
         if self.repeat_per_semester:
             # get all completed this semester
             qs = QuestSubmission.objects.all_completed(user=user).filter(quest=self)
