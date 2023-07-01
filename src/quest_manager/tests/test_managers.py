@@ -213,19 +213,33 @@ class QuestManagerTest(TenantTestCase):
                  'Quest-1hr-cooldown'] + self.initial_quest_name_list)
         )
 
-    def test_quest_manager_get_available(self):
+    def test_get_available(self):
         """ DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
-        2. Quests that are not visible to students or archived
-        3. Quests who's prerequisites have not been met
-        4. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
-        5. Quests who's maximum repeats have been completed
-        6. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
-        7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
+        2. Quests that are not visible to students or archived  <<<< COVERED HERE
+        3. Quests that are a part of an inactive campaign/category <<<< COVERED HERE
+        4. Quests who's prerequisites have not been met
+        5. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
+        6. Quests who's maximum repeats have been completed <<<< COVERED HERE
+        7. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        8. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
         """
+
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
+
+        # a couple additions just for this test:
+        baker.make(Quest, name='Quest-expired', date_expired=(localtime() - timedelta(days=1)))  # 1
+        baker.make(Quest, name='Quest-future', date_available=(localtime() + timedelta(days=1)))  # 1
+        baker.make(Quest, name='Quest-not-visible', visible_to_students=False)  # 2
+        baker.make(Quest, name='Quest-archived', archived=True)  # 2
+        inactive_campaign = baker.make('quest_manager.Category', active=False)
+        baker.make(Quest, name='Quest-inactive-campaign', campaign=inactive_campaign)  # 3
+
+        ########################################
+        # 8. Check for blocking quests (available and in-progress), if present, remove all others
+        #########################################
         qs = Quest.objects.get_available(self.student)
         self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])
 
@@ -242,6 +256,57 @@ class QuestManagerTest(TenantTestCase):
         qs = Quest.objects.get_available(self.student)
         self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
+        ########################################
+        # 2. Quests that are not visible to students or archived
+        #########################################
+        # The assert above checks this condition, because these two do not appear:
+        #  Quest-not-visible
+        #  Quest-archived
+
+        ########################################
+        # 3. Quests that are a part of an inactive campaign
+        ########################################
+        # The assert above checks this condition, because this one don't appear:
+        #  Quest-inactive-campaign
+
+        ########################################
+        # 5. Quests that are not currently submitted for approval or already in progress
+        #########################################
+        # The assert above checks this condition, because these two do not appear:
+        #  Quest-inprogress
+        #  Quest-completed
+
+        #########################################
+        # 7. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        #########################################
+        # The assert above checks this condition, because this one don't appear:
+        #  Quest-1hr-cooldown
+
+        # move 1 hour out and the cooldown quest should now appear:
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            qs = Quest.objects.get_available(self.student)
+            self.assertQuerysetEqual(
+                list(qs.values_list('name', flat=True)),
+                ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'],
+                ordered=False
+            )
+
+            #########################################
+            # 6. Quests who's maximum repeats have been completed
+            #########################################
+            quest_1hr_cooldown = Quest.objects.get(name='Quest-1hr-cooldown')
+            sub_1hr_cooldown = baker.make(QuestSubmission, quest=quest_1hr_cooldown, user=self.student, semester=active_semester)
+            sub_1hr_cooldown.mark_completed()
+
+            # increment time another hour just be sure it doesn't appear (max repeats of 1 reached)
+            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+                qs = Quest.objects.get_available(self.student)
+                self.assertQuerysetEqual(
+                    list(qs.values_list('name', flat=True)),
+                    ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'],
+                    ordered=False
+                )
+
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
         Quest                   sub     .completed   .semester
@@ -252,6 +317,9 @@ class QuestManagerTest(TenantTestCase):
         Quest-completed         Y       True         1
         Quest-1hr-cooldown      Y       True         1
         Quest-blocking          N       NA           NA
+
+        Note that other quests automatically created in every deck will exist, like `Welcome to Bytedeck`
+
         """
         active_semester = baker.make(Semester)
 
@@ -275,6 +343,7 @@ class QuestManagerTest(TenantTestCase):
         sub_cooldown_complete = baker.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
                                            semester=active_semester)  # noqa
         sub_cooldown_complete.mark_completed()
+
         return active_semester
 
 

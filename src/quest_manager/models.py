@@ -298,13 +298,10 @@ class QuestQuerySet(models.QuerySet):
         pk_met_list = self.get_pk_met_list(user) or [0]
         return self.filter(pk__in=pk_met_list)
 
-    def get_list_not_submitted_or_inprogress(self, user):
-        quest_list = list(self)
-        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
-
     def not_submitted_or_inprogress(self, user):
-        quest_list = self.get_list_not_submitted_or_inprogress(user)
+
+        quest_list = list(self)
+        quest_list = [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
         pk_list = [quest.id for quest in quest_list]
 
         # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
