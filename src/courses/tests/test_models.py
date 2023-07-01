@@ -63,8 +63,7 @@ class MarkRangeManagerTest(TenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
 
-    @patch('profile_manager.models.Profile.mark')
-    def test_get_range_for_user(self, mock_mark):
+    def test_get_range_for_user(self):
         """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
         """
         user = baker.make(User)
@@ -75,14 +74,14 @@ class MarkRangeManagerTest(TenantTestCase):
         # Put the student in a course and test with various marks
         baker.make(CourseStudent, user=user, semester=SiteConfig.get().active_semester)
 
-        mock_mark.return_value = 60.0
-        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_50)
+        with patch.object(user.profile, 'mark_cached', new=60.0):
+            self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_50)
 
-        mock_mark.return_value = 80.0
-        self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_75)
+        with patch.object(user.profile, 'mark_cached', new=80.0):
+            self.assertEqual(MarkRange.objects.get_range_for_user(user), self.mr_75)
 
-        mock_mark.return_value = 40.0
-        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+        with patch.object(user.profile, 'mark_cached', new=40.0):
+            self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
 
 class BlockModelManagerTest(TenantTestCase):
