@@ -548,6 +548,9 @@ class CourseStudent(models.Model):
 
     # @cached_property
     def calc_mark(self, xp):
+        if not self.course:  # course may be null if it was deleted.
+            return 0
+
         fraction_complete = self.semester.fraction_complete()
         if fraction_complete > 0:
             return xp / fraction_complete * 100 / self.course.xp_for_100_percent
