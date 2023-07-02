@@ -3,15 +3,11 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.admin import helpers, widgets
-from allauth.socialaccount.models import SocialApp
-from django.contrib import admin, messages
-from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.contrib.sites.models import Site
 from django.template.response import TemplateResponse
 from django.db import connection, transaction
 from django.utils.translation import ngettext
-from django.contrib.admin import helpers, widgets
 from django.contrib.admin.utils import unquote
 from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
@@ -25,6 +21,7 @@ from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
+from siteconfig.models import SiteConfig
 from tenant.models import Tenant, TenantDomain
 from tenant.actions import delete_selected
 from tenant.utils import generate_schema_name
@@ -114,17 +111,14 @@ class DeleteConfirmationForm(forms.Form):
     keyword = None
 
     def __init__(self, *args, **kwargs):
-        from siteconfig.models import SiteConfig
-
         self.target_object = kwargs.pop('target_object')
         super().__init__(*args, **kwargs)
 
         # generate keyword as confirmation code / phrase
         keyword = str(self.target_object.name)
         with tenant_context(self.target_object):
-            config = SiteConfig.get()
-            if config.deck_owner is not None:
-                keyword = "/".join([config.deck_owner.username, keyword])
+            owner = SiteConfig.get().deck_owner or None
+            keyword = "/".join([owner.username if owner else "bytedeck", keyword])
         self.keyword = keyword
 
     def clean(self):
@@ -275,12 +269,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         Next, it send email message to all selected users and redirects back to the change list.
         """
-        from siteconfig.models import SiteConfig
-
-        def get_owner_or_none():
-            """Returns owner (User) object or None"""
-            return SiteConfig.get().deck_owner or None
-
         # get a list of selected tenant(s), excluding public schema
         objects = self.model.objects.filter(
             pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
@@ -290,7 +278,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         recipient_list = []
         for tenant in objects:
             with tenant_context(tenant):
-                owner = get_owner_or_none()
+                owner = SiteConfig.get().deck_owner or None
                 if owner is None:  # where is the owner?
                     continue
                 # get the full name of the user, or if none is supplied will return the username
