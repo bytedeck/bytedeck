@@ -28,9 +28,13 @@
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
       {% for q in available_quests %}
         <tr class="accordian-trigger panel-title
-          {% if not q.visible_to_students %}danger
-          {% elif q.expired %}warning
-          {% else %}default{% endif %}
+          {% if request.user.is_staff %}
+            {% if not q.visible_to_students %}danger
+            {% elif q.expired %}warning
+            {% else %}default{% endif %}
+          {% else %}
+            default
+          {% endif %}"
           {% if q.id == active_q_id %} active {% endif %}"
           role="tab"
           aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
@@ -61,9 +65,13 @@
       If the content hasn't been retrieved yet from the server, a loading icon is displayed.
     {% endcomment %}
     <div style="display: none" id="collapse-quest-{{q.id}}"
-      class="{% if not q.visible_to_students %}danger
+      class="{% if request.user.is_staff %}
+              {% if not q.visible_to_students %}danger
               {% elif q.expired %}warning
-              {% else %}default{% endif %}"
+              {% else %}default{% endif %}
+            {% else %}
+              default
+            {% endif %}"
       role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
       <ul class="list-group">
         <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">
