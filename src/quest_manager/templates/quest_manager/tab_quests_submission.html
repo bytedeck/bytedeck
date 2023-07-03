@@ -32,7 +32,7 @@
       <tr class="accordian-trigger panel-title
         {% if s.is_awaiting_approval %}warning
         {% elif s.is_returned %}danger
-        {% elif s.do_not_grant_xp %}panel-muted
+        {% elif s.do_not_grant_xp %}panel-muted muted
         {% else %}default{% endif %}"
         role="tab"
         aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
@@ -76,11 +76,10 @@
         ajax_content_loading.html inserts quest content here.
         If the content hasn't been retrieved yet from the server, a loading icon is displayed.
       {% endcomment %}
-      {% comment %} Lamma remove class="tab-warning" {% endcomment %}
       <div style="display: none" id="collapse-quest-{{s.id}}"
         class="{% if s.is_awaiting_approval %}warning
                {% elif s.is_returned %}danger
-               {% elif s.do_not_grant_xp %}panel-muted
+               {% elif s.do_not_grant_xp %}muted
                {% else %}default{% endif %}"
         role="tabpanel" aria-labelledby="heading-quest-{{s.id}}">
         <ul id="preview-content-{{s.id}}" class="list-group" data-completed="{{completed}}" data-past="{{past}}">

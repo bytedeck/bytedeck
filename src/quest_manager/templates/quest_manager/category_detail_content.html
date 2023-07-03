@@ -65,47 +65,36 @@
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}</td>
           <td class="col-sm-1 hidden-xs text-center"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
           <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
-
-          {% comment %}
-            ### COLLAPSING CONTENT ###
-            This is the content that is hidden until the row is clicked.
-            ajax_content_loading.html inserts quest content here.
-            If the content hasn't been retrieved yet from the server, a loading icon is displayed.
-          {% endcomment %}
-          <span style="display: none" id="collapse-quest-{{q.id}}"
-            class="{% if not q.visible_to_students %}danger
-                   {% elif q.expired %}warning
-                   {% else %}default{% endif %}"
-            role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
-            <ul class="list-group">
-              <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">
-                  <p>
-                    <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                    &nbsp;Loading content...
-                    <!-- preview_content_quests_avail.html via AJAX -->
-                  </p>
-              </li>
-            </ul>
-          </span> <!-- accordian panel-collapse -->
-
-
         </tr> <!-- accordian -->
 
       {% endfor %} <!-- for each quest -->
     </tbody>
   </table>
 
+  {% for q in category_displayed_quests %}
+    {% comment %}
+      ### COLLAPSING CONTENT ###
+      This is the content that is hidden until the row is clicked.
+      ajax_content_loading.html inserts quest content here.
+      If the content hasn't been retrieved yet from the server, a loading icon is displayed.
+    {% endcomment %}
+    <div style="display: none" id="collapse-quest-{{q.id}}"
+      class="{% if not q.visible_to_students %}danger
+              {% elif q.expired %}warning
+              {% else %}default{% endif %}"
+      role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
+      <ul class="list-group">
+        <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">
+            <p>
+              <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+              &nbsp;Loading content...
+              <!-- preview_content_quests_avail.html via AJAX -->
+            </p>
+        </li>
+      </ul>
+    </div> <!-- accordian panel-collapse -->
+  {% endfor %} <!-- for each quest -->
+
 {% else %}
   <p>There are no quests in this campaign.</p>
 {% endif %}
-
-{% block js %}
-  {% include "quest_manager/ajax_content_loading.html" %}
-
-  {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-  integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-  crossorigin="anonymous"></script>
-
-  <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
-{% endblock %}

@@ -58,6 +58,9 @@
 {% endblock %}
 
 {% block js %}
+
+{{ block.super }}
+
 <script>
 $( document ).ready(function() {
     // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'
@@ -74,12 +77,5 @@ $( document ).ready(function() {
 {% include "quest_manager/ajax_content_loading.html" %}
 
 {% include "quest_manager/snippets/flag_submissions_scripts.html" %}
-
-{% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-crossorigin="anonymous"></script>
-
-<script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
 
 {% endblock %}

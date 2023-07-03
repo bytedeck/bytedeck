@@ -48,31 +48,34 @@
           <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
           <td class="col-sm-1 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
           <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
-          {% comment %}
-            ### COLLAPSING CONTENT ###
-            This is the content that is hidden until the row is clicked.
-            ajax_content_loading.html inserts quest content here.
-            If the content hasn't been retrieved yet from the server, a loading icon is displayed.
-          {% endcomment %}
-          <span style="display: none" id="collapse-quest-{{q.id}}"
-            class="{% if not q.visible_to_students %}danger
-                   {% elif q.expired %}warning
-                   {% else %}default{% endif %}"
-            role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
-            <ul class="list-group">
-              <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">
-                  <p>
-                    <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-                    &nbsp;Loading content...
-                    <!-- preview_content_quests_avail.html via AJAX -->
-                  </p>
-              </li>
-            </ul>
-          </span>
         </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  {% for q in available_quests %}
+    {% comment %}
+      ### COLLAPSING CONTENT ###
+      This is the content that is hidden until the row is clicked.
+      ajax_content_loading.html inserts quest content here.
+      If the content hasn't been retrieved yet from the server, a loading icon is displayed.
+    {% endcomment %}
+    <div style="display: none" id="collapse-quest-{{q.id}}"
+      class="{% if not q.visible_to_students %}danger
+              {% elif q.expired %}warning
+              {% else %}default{% endif %}"
+      role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
+      <ul class="list-group">
+        <li id="preview-content-{{q.id}}" class="list-group-item list-group-item-buttons">
+            <p>
+              <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+              &nbsp;Loading content...
+              <!-- preview_content_quests_avail.html via AJAX -->
+            </p>
+        </li>
+      </ul>
+    </div>
+  {% endfor %}
 {% else %}
   <p>No quests are available.</p>
 {% endif %}

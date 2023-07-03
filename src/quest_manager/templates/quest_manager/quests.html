@@ -117,15 +117,11 @@
 {% endblock %}
 
 {% block js %}
+  {% comment %} Include from quest_manager/base.html {% endcomment %}
+  {{ block.super }}
+
   {% with quests_available_page=True %}
     {% include "quest_manager/ajax_content_loading.html" %}
   {% endwith %}
-
-  {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
-          integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
-          crossorigin="anonymous"></script>
-
-  <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
 
 {% endblock %}
