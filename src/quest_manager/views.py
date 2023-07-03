@@ -12,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import F, ExpressionWrapper, fields
+from django.db.models import BooleanField, Exists, OuterRef
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -405,6 +406,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     # Quest and Submission Querysets (in order of tabs =)
     if request.user.is_staff:
         available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile').prefetch_related('tags')
+        # There was a looping call to quest.expired() which was causing a lot of queries.  Instead, annotate the value here
+        not_expired_subquery = available_quests.not_expired().values('id')
+        available_quests = available_quests.annotate(
+            is_expired=ExpressionWrapper(
+                ~Exists(not_expired_subquery.filter(id=OuterRef('id'))),
+                output_field=BooleanField()
+            )
+        )
     else:
         if request.user.profile.has_current_course:
             available_quests = Quest.objects.get_available(request.user, remove_hidden)

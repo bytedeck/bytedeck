@@ -30,7 +30,7 @@
         <tr class="accordian-trigger panel-title
           {% if request.user.is_staff %}
             {% if not q.visible_to_students %}danger
-            {% elif q.expired %}warning
+            {% elif q.is_expired %}warning
             {% else %}default{% endif %}
           {% else %}
             default
@@ -67,7 +67,7 @@
     <div style="display: none" id="collapse-quest-{{q.id}}"
       class="{% if request.user.is_staff %}
               {% if not q.visible_to_students %}danger
-              {% elif q.expired %}warning
+              {% elif q.is_expired %}warning
               {% else %}default{% endif %}
             {% else %}
               default
