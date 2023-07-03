@@ -650,7 +650,8 @@ class QuestSubmissionManager(models.Manager):
     def get_queryset(self,
                      active_semester_only=False,
                      exclude_archived_quests=True,
-                     exclude_quests_not_visible_to_students=True):
+                     exclude_quests_not_visible_to_students=True,
+                     include_related=True):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
@@ -659,7 +660,13 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_visible_to_students:
             qs = qs.exclude_quests_not_visible_to_students()
-        return qs.select_related('quest')
+
+        # Add effiencies by getting additional related objects we'll almost always need
+        if include_related:
+            qs = qs.select_related('quest', 'quest__campaign')
+            qs = qs.prefetch_related('quest__tags')
+
+        return qs
 
     def flagged(self, user):
         return self.get_queryset().filter(flagged_by=user)
