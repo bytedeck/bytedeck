@@ -4,6 +4,26 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.21.2] 2023-07-03 - Summer speed up #1
+ * Feature: Campaign lists are now searchable and sortable (via bootstrap-tables)
+ * Optimizations
+  - Major refactor of Students lists to speed up page load times
+  - Refactor of some Quest and Submission pages to speed up page load times
+ * Tweaks:
+  - Organize Quest related items in Admin menu and add Common Info
+  - Reorganize Quests submenu for consistancy with Admin menu items
+  - Clean up mobile layout of content for quest asnd submission previews (accordian expansion)
+  - Indicate skipepd quests in status field of submissions and approvals tabs
+ * Bugfixes:
+  - Skipped quests now save comments
+  - Ignore draft and archived quests when considering Campaign completion; [#1286](https://github.com/bytedeck/bytedeck/issues/1286)
+  - Sort badges by sort_order on profiles [#1411](https://github.com/bytedeck/bytedeck/issues/1411);
+  - Allow deletion of (non-current) semesters with no students [#1418](https://github.com/bytedeck/bytedeck/issues/1418);
+  - Added proper sorting to status column [#1420](https://github.com/bytedeck/bytedeck/issues/1420);
+
+
+
 ### [1.21.1] 2023-06-17
  * Feature: Refactor all quest/submission lists to be searchable and sortable.
  * Feature: Add list of badge assertions to the badge detail page
