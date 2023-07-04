@@ -13,7 +13,7 @@
 {% endblock %}
 
 {% block content %}
-{% if archived %}<p>This page if visible to staff only.</p>{% endif %}
+{% if archived %}<p>This page is visible to staff only.</p>{% endif %}
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div id="{{object.id}}"

@@ -167,13 +167,7 @@
          <div class="list-group-item list-group-item-info">In Progress</div>
          {% if in_progress_submissions %}
            {% for s in in_progress_submissions %}
-             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
-                 {% if s.is_returned %}list-group-item-danger
-                 {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}}
-               <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
-             </a>
+              {% include "profile_manager/snippets/profile_quest_list.html" %}
            {% endfor %}
          {% else %}
            <div class="list-group-item">None.</div>
@@ -182,19 +176,7 @@
          <div class="list-group-item list-group-item-info">Completed</div>
          {% if completed_submissions %}
            {% for s in completed_submissions %}
-             <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed clearfix
-                 {% if s.is_awaiting_approval %}list-group-item-warning
-                 {% elif s.do_not_grant_xp %}list-group-item-muted
-                 {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} <small>
-                {% if s.do_not_grant_xp %}
-                  (Quest Skipped)
-                {% else %}
-                  <small>({% if s.quest.xp_can_be_entered_by_students %}{{s.xp_requested}}*{% else %}{{s.quest.xp}}{% endif %} XP)</small>
-                {% endif %}
-                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
-             </a>
+             {% include "profile_manager/snippets/profile_quest_list.html" %}
            {% endfor %}
          {% else %}
            <div class="list-group-item">None.</div>
@@ -213,19 +195,7 @@
          <div class="list-group-item list-group-item-info">Completed</div>
          {% if completed_past_submissions %}
            {% for s in completed_past_submissions %}
-               <a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed
-                 {% if s.is_awaiting_approval %}list-group-item-warning
-                 {% elif s.do_not_grant_xp %}list-group-item-muted
-                 {% endif %}">
-               <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
-               {{s|truncatechars:40}} <small>
-                {% if s.do_not_grant_xp %}
-                  (Quest Skipped)
-                {% else %}
-                  ({{s.quest.xp}} XP)
-                {% endif %}
-                <span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span></small>
-             </a>
+              {% include "profile_manager/snippets/profile_quest_list.html" %}
            {% endfor %}
          {% else %}
            <div class="list-group-item">None.</div>

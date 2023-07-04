@@ -12,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import F, ExpressionWrapper, fields
+from django.db.models import BooleanField, Exists, OuterRef
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -402,27 +403,34 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     page = request.GET.get('page')
 
-    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
-    completed_submissions = QuestSubmission.objects.all_completed(request.user)
-
+    # Quest and Submission Querysets (in order of tabs =)
     if request.user.is_staff:
-        available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
+        available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile').prefetch_related('tags')
+        # There was a looping call to quest.expired() which was causing a lot of queries.  Instead, annotate the value here
+        not_expired_subquery = available_quests.not_expired().values('id')
+        available_quests = available_quests.annotate(
+            is_expired=ExpressionWrapper(
+                ~Exists(not_expired_subquery.filter(id=OuterRef('id'))),
+                output_field=BooleanField()
+            )
+        )
     else:
         if request.user.profile.has_current_course:
             available_quests = Quest.objects.get_available(request.user, remove_hidden)
         else:
             available_quests = Quest.objects.get_available_without_course(request.user)
 
-    available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
+    in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user, blocking=True)
+    completed_submissions = QuestSubmission.objects.all_completed(request.user)
+    past_submissions = QuestSubmission.objects.all_completed_past(request.user)
+    draft_quests = Quest.objects.all_drafts(request.user)
 
+    # Counts
     in_progress_submissions_count = in_progress_submissions.count()
     completed_submissions_count = completed_submissions.count()
-
-    draft_quests = Quest.objects.all_drafts(request.user)
-    drafts_count = draft_quests.count()
-
-    past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     past_submissions_count = past_submissions.count()
+    drafts_count = draft_quests.count()
+    available_quests_count = len(available_quests) if type(available_quests) is list else available_quests.count()
 
     quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
 
@@ -436,27 +444,10 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     elif past_tab_active:
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
-    # elif drafts_tab_active:
-    #     draft_quests = Quest.objects.all_drafts(request.user)
-    # else:
-    #     if request.user.is_staff:
-    #         available_quests = Quest.objects.all().visible().select_related('campaign', 'editor__profile')
-    #         available_quests_count = available_quests.count()
-    #     else:
-    #         if request.user.profile.has_current_course:
-    #             available_quests = Quest.objects.get_available(request.user, remove_hidden)
-    #             available_quests_count = len(available_quests)
-    #         else:
-    #             available_quests = Quest.objects.get_available_without_course(request.user)
-    #             available_quests_count = available_quests.count()
 
-    # paginate or no?
-    # available_quests = paginate(available_quests, page)
-
-    # num_inprogress = QuestSubmission.objects.all_not_completed(request.user).count()
-    # num_completed = QuestSubmission.objects.all_completed(request.user).count()
-
+    # Used to explain why the "Available" tab is empty, if it is
     awaiting_approval = QuestSubmission.objects.filter(user=request.user, is_approved=False, is_completed=True).exists()
+
     context = {
         "heading": "Quests",
         "awaiting_approval": awaiting_approval,
@@ -675,6 +666,13 @@ def approve(request, submission_id):
                        "</span>"
                 blank_comment_text = SiteConfig.get().blank_return_text
                 submission.mark_returned()
+            elif 'skip_button' in request.POST:
+                note_verb = "skipped"
+                icon = "<span class='fa-stack text-muted'>" + \
+                       "<i class='fa fa-shield fa-stack-1x'></i>" + \
+                       "</span>"
+                blank_comment_text = "(Skipped - You were not granted XP for this quest)"
+                submission.mark_approved(transfer=True)
             else:
                 raise Http404("unrecognized submit button")
 

@@ -43,42 +43,6 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def tearDown(self):
         cache.clear()
 
-    def test_courses_correct_displayed_text(self):
-        """
-            Admins in their course tab should only see: 'Not applicable to staff users.'
-            Students that havent joined a course should only be able to see: 'You have not joined a course yet for this semester'
-            else should see course
-        """
-        course = baker.make('courses.Course', title='Test Course')
-        tpk = self.test_teacher.profile.pk
-        spk = self.test_student1.profile.pk
-
-        # login as teacher/admin and check if 'add course' doesnt exists
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
-
-        # no course
-        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
-        self.assertContains(request, 'Not applicable to staff users.')
-
-        # with course
-        baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
-        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
-        self.assertContains(request, 'Not applicable to staff users.')
-
-        # login as student and check if 'add course' and 'course' exists
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
-
-        # no course
-        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
-        self.assertContains(request, 'You have not joined a course yet for this semester')
-
-        # with course
-        baker.make('courses.CourseStudent', user=self.test_student1, course=course)
-        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
-        self.assertContains(request, course.title)
-
     def test_all_profile_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
 
@@ -137,14 +101,50 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_profile_recalculate_xp_status_codes(self):
+    def test_profile_recalculate_xp__status_codes(self):
         """Need to test this view with students in an active course"""
         # why testing this here?
         self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_student_marks_button(self):
+    def test_profile_detail__courses_correct_displayed_text(self):
+        """
+            Admins in their course tab should only see: 'Not applicable to staff users.'
+            Students that havent joined a course should only be able to see: 'You have not joined a course yet for this semester'
+            else should see course
+        """
+        course = baker.make('courses.Course', title='Test Course')
+        tpk = self.test_teacher.profile.pk
+        spk = self.test_student1.profile.pk
+
+        # login as teacher/admin and check if 'add course' doesnt exists
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # no course
+        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
+        self.assertContains(request, 'Not applicable to staff users.')
+
+        # with course
+        baker.make('courses.CourseStudent', user=self.test_teacher, course=course)
+        request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
+        self.assertContains(request, 'Not applicable to staff users.')
+
+        # login as student and check if 'add course' and 'course' exists
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # no course
+        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(request, 'You have not joined a course yet for this semester')
+
+        # with course
+        baker.make('courses.CourseStudent', user=self.test_student1, course=course)
+        request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(request, course.title)
+
+    def test_profile_detail__student_marks_button(self):
         """
         Student should be able to see marks button when `display_marks_calculation` is True.
         Otherwise, they should not be able to see it.
@@ -194,7 +194,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('courses:my_marks')
 
-    def test_assert_correct_forms__not_staff(self):
+    def test_profile_update__correct_forms__not_staff(self):
         """
             test if non staff users have access to ProfileForm and not UserForm in ProfileView
         """
@@ -204,7 +204,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(any(isinstance(form, ProfileForm) for form in response.context["forms"]))
         self.assertFalse(any(isinstance(form, UserForm) for form in response.context["forms"]))
 
-    def test_assert_correct_forms__staff(self):
+    def test_profile_update__correct_forms__staff(self):
         """
             test if staff users have access to ProfileForm and UserForm in ProfileView
         """
@@ -215,7 +215,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(any(isinstance(form, ProfileForm) for form in response.context["forms"]))
         self.assertTrue(any(isinstance(form, UserForm) for form in response.context["forms"]))
 
-    def test_update_profile__not_staff(self):
+    def test_profile_update__not_staff(self):
         """
             Test to see if a user who is_staff=False can use the UserForm using ProfileView
             (They shouldn't)

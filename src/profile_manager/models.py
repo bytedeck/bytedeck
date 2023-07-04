@@ -116,7 +116,6 @@ class Profile(models.Model):
     intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
-    xp_cached = models.IntegerField(default=0)
 
     # Student options
     get_announcements_by_email = models.BooleanField(
@@ -147,6 +146,11 @@ class Profile(models.Model):
                                             max_upload_size=512000,
                                             help_text='ADVANCED: A CSS file to customize this site!  You can use  \
                                                    this to tweak something, or create a completely new theme.')
+
+    # Fields for caching data
+    time_of_last_submission = models.DateTimeField(null=True, blank=True)
+    xp_cached = models.IntegerField(default=0)
+    mark_cached = models.DecimalField(max_digits=4, decimal_places=1, default=None, null=True, blank=True)
 
     objects = ProfileManager()
 
@@ -311,6 +315,7 @@ class Profile(models.Model):
         xp += BadgeAssertion.objects.calculate_xp(self.user)
         xp += CourseStudent.objects.calculate_xp(self.user)
         self.xp_cached = xp
+        self.mark_cached = self.mark()
         self.save()
         return xp
 
@@ -380,18 +385,12 @@ class Profile(models.Model):
     #
     #################################
 
-    def last_submission_completed(self):
-        return QuestSubmission.objects.user_last_submission_completed(self.user)
-
     def gone_stale(self):
-        last_sub = self.last_submission_completed()
-        if last_sub is None:
+        """ Return True if the user has not submitted a quest in the last 5 days"""
+        if self.time_of_last_submission is None:
             return True
         else:
-            if last_sub.time_completed:
-                return last_sub.time_completed < timezone.now() - timezone.timedelta(days=5)
-            else:
-                return True
+            return self.time_of_last_submission < timezone.now() - timezone.timedelta(days=5)
 
     def current_teachers(self):
         user_id_list = CourseStudent.objects.get_current_teacher_list(self.user)

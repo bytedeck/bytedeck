@@ -154,6 +154,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:semester_list')
         self.assertRedirectsLogin('courses:semester_create')
         self.assertRedirectsLogin('courses:semester_update', args=[1])
+        self.assertRedirectsLogin('courses:semester_delete', args=[1])
 
         self.assertRedirectsLogin('courses:block_list')
         self.assertRedirectsLogin('courses:block_create')
@@ -190,6 +191,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('courses:semester_list')
         self.assert403('courses:semester_create')
         self.assert403('courses:semester_update', args=[1])
+        self.assert403('courses:semester_delete', args=[1])
 
         self.assert403('courses:block_list')
         self.assert403('courses:block_create')
@@ -696,6 +698,20 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         message = self.get_message_list(response)[0]
         self.assertIn('There are some students with negative XP', str(message))
+
+    def test_SemesterDelete_view(self):
+        """ Admin should be able to delete a semester, as long as:
+            - it is not the active semester
+            - it has no coursesstudent objects (students registered in a course in the semester)
+            - it is not closes
+            ^ However, all of the above 3 exceptions are checked in the template and not in the view
+        """
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(Semester)
+
+        response = self.client.post(reverse('courses:semester_delete', args=[semester.pk]))
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
 
 class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):

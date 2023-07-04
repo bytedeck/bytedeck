@@ -1,0 +1,18 @@
+<a href="{{s.get_absolute_url}}" class="list-group-item list-group-item-packed clearfix
+{% if s.is_awaiting_approval %}list-group-item-warning
+{% elif s.is_returned %}list-group-item-danger
+{% elif s.do_not_grant_xp %}list-group-item-muted
+{% endif %}">
+    <img class="icon-xs" src="{{ s.quest.get_icon_url }}" alt=""/>
+    {{s|truncatechars:40}}
+    <small>
+        {% if s.do_not_grant_xp %}
+        (0 XP - skipped)
+        {% elif s.quest.xp_can_be_entered_by_students %}
+        ({{s.xp_requested}}* XP)
+        {% else %}
+        ({{s.quest.xp}} XP)
+        {% endif %}
+        {% if s.completed %}<span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span>{% endif %}
+    </small>
+</a>
