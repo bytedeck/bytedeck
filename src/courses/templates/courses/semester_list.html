@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<p>This page if visible to staff only.</p>
+<p>This page is visible to staff only.</p>
 
 <h3>Current Active Semester: {{ config.active_semester }}</h3>
 
@@ -51,13 +51,16 @@
         {% endif %}
         {% if not object.closed and object == config.active_semester%}
         <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button"
-          title="WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements, and delete any in-progress submissions.">
+          title="Close this semester. WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements, and delete any in-progress submissions.">
           <i class="fa fa-calendar-times-o"></i>
         </a>
         {% endif %}
         {% if not object.closed and object != config.active_semester %}
         <a class="btn btn-success" href="{% url 'courses:semester_activate' object.id %}" role="button" title="Activate this semester">
           <i class="fa fa-calendar-check-o"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'courses:semester_delete' object.id %}" role="button" title="Delete this semester">
+          <i class="fa fa-trash-o"></i>
         </a>
         {% endif %}
       </td>

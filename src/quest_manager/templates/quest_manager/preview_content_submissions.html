@@ -1,7 +1,16 @@
 <!-- inserted via AJAX into tab_quest_submissions -->
-<li class="list-group-item list-group-item-info visible-xs-block">Status</li>
 <li class="list-group-item visible-xs-block">
-    {% with label=True %}{% include "quest_manager/submitted_time.html" %}{% endwith %}
+  <div class="row">
+      <div class="col-xs-4">
+          <p>Campaign: {{ s.quest.campaign|default:"-" }}</p>
+      </div>
+      <div class="col-xs-4">
+          <p>{{ config.custom_name_for_tag }}s: <small>{{ s.quest.tags.all|join:", "|default:"-" }}</small></p>
+      </div>
+      <div class="col-xs-4">
+          <p>Status: {% include "quest_manager/snippets/submitted_status.html" %}</p>
+      </div>
+  </div>
 </li>
 <li class="list-group-item list-group-item-info">Submission Instructions</li>
 <li class="list-group-item list-group-item-buttons">

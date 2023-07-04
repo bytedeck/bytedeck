@@ -1,9 +1,20 @@
+<div class="row visible-xs-block">
+  <div class="col-xs-6">
+    <p>Campaign: {{ q.campaign|default:"-" }}</p>
+  </div>
+  <div class="col-xs-6">
+    <p>{{ config.custom_name_for_tag }}s: <small>{{ q.tags.all|join:", "|default:"-" }}</small></p>
+  </div>
+
+</div>
+<hr class ="visible-xs-block" >
 {% include "quest_manager/buttons.html" %}
-{{q.short_description|safe}}
+  <p>{{q.short_description|safe}}</p>
 {% if request.user.is_staff or request.user == q.editor %}
+
   <hr />
   <div class="row">
-    <div class="col-sm-6">
+    <div class="col-xs-6">
       <ul class="list-unstyled">
         <li>Available Date: {{q.date_available}}</li>
         <li>Available Time: {{q.time_available}}</li>
@@ -11,7 +22,7 @@
         <li>Requires Approval: {{q.verification_required|yesno}}</li>
       </ul>
     </div>
-    <div class="col-sm-6">
+    <div class="col-xs-6">
       <ul class="list-unstyled">
       <li>Available without course: {{ q.available_outside_course|yesno }}</li>
       <li>Repeatable: {% if q.max_repeats == 0 %}no
@@ -24,13 +35,8 @@
                {% endif %}
             {% endif %}</li>
       <li>Prerequisites:
-            {% for p in q.prereqs %}
-              {% if forloop.first %}<ul class="left-aligned"><small>{% endif %}
-              <li>{{ p }}</li>
-              {% if forloop.last %}</ul></small>{% endif %}
-            {% empty %}
-              None
-            {% endfor %}</li>
+        {% with q as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
+      </li>
     </ul>
   </div>
 </div> <!-- row -->

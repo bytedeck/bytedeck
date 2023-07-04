@@ -13,9 +13,13 @@
     <a title="View summary data for this quest" class="btn btn-default" role="button"
         target="_blank" href="{% url 'quests:summary' s.quest.id %}">
         <i class="fa fa-fw fa-bar-chart"></i></a>
-    <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
+    <!-- <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
         title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
+        <i class="fa fa-fw fa-share"></i></a> -->
+    <button type='submit' name='skip_button' class='btn btn-default'
+        title='SKIP this quest: do not grant XP for this quest (or badges resulting), but mark as approved'>
         <i class="fa fa-fw fa-share"></i></a>
+    </button>
 
       {% if not s.flagged_by %}
         <a href="#" class="btn btn-default btn-flag-submission" role="button"

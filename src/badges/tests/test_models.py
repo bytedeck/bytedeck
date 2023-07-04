@@ -149,16 +149,22 @@ class BadgeAssertionManagerTest(TenantTestCase):
         self.assertNotIn(user3, qs)
 
     def test_all_for_user_distinct(self):
-        badge = baker.make(Badge)
+        """ Test that BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions
+        that are distinct on the badge, and sorted by badge.sort_order"""
 
-        # give the student two of the badge
-        badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge)
-        baker.make(BadgeAssertion, user=self.student, badge=badge)
+        badge1 = baker.make(Badge, sort_order=2)
+        badge2 = baker.make(Badge, sort_order=1)
 
-        # this should only return the first one
+        # give the student two of badge1
+        badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge1)
+        baker.make(BadgeAssertion, user=self.student, badge=badge1)
+        # and one of badge2
+        badge_assertion2 = baker.make(BadgeAssertion, user=self.student, badge=badge2)
+
+        # this should only return two, not the duplicate badge_assertion of badge1
+        # and they should be sorted by badge.sort_order
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-
-        self.assertListEqual(list(qs), [badge_assertion])
+        self.assertQuerysetEqual(qs, [badge_assertion2, badge_assertion])
 
 
 class BadgeAssertionTestModel(TenantTestCase):

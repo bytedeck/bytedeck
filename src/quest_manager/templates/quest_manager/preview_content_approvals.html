@@ -1,18 +1,20 @@
 {% load crispy_forms_tags %}
 {% load utility_tags %}
-<li class="list-group-item list-group-item-info visible-xs-block">Status</li>
+
 <li class="list-group-item visible-xs-block">
     <div class="row">
-        <div class="col-xs-6">
-            {% group_name %}<br>
-            {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        <div class="col-xs-4">
+            <p>{% group_name %}:
+            {% for block in s.user.profile.blocks %}{{ block }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
         </div>
-        <div class="col-xs-6">
-            {% with label=True %}{% include "quest_manager/submitted_time.html" %}{% endwith %}
+        <div class="col-xs-4">
+            <p>User: {{s.user.username|truncatechars:14}} <br />
+                <small>{{ s.user.profile.preferred_full_name }}</small></p>
         </div>
-
+        <div class="col-xs-4">
+            <p>Status: {% include "quest_manager/snippets/submitted_status.html" %}</p>
+        </div>
     </div>
-
 </li>
 <li class="list-group-item list-group-item-info">Submission Instructions</li>
 <li class="list-group-item clearfix">{{s.quest.submission_details|safe}}</li>

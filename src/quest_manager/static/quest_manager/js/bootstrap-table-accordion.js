@@ -11,71 +11,73 @@
     - Adding "active" and "collapse" classes to rows when they are expanded or collapsed
 
 */
-$(document).ready(function () {
-  // Changed from id selector to class selector to target all tables with the class '.accordian-table'
-  var $tables = $('.accordian-table');
 
+/**
+     * Collapses the provided row, animates the collapse, moves the content back to its original location,
+     * and updates the Bootstrap table to reflect the row's collapsed state.
+     *
+     * @param {JQuery} $expandedRow - The row to collapse. Should be a JQuery object.
+     * @param {JQuery} $table - The Bootstrap table in which the row is located. Should be a JQuery object.
+     */
+function collapseRow($expandedRow, $table) {
+  $expandedRow.removeClass('active');
+  $expandedRow.next().find('td').addClass('collapsing');
+  const $detailViewRow = $expandedRow.next();
+  const expanded_row_html_id = $expandedRow.attr("id");
+  const expanded_quest_id = parseInt(expanded_row_html_id.match(/\d+$/)[0], 10);
+  const $expanded_hiddenDIV = $detailViewRow.find("#collapse-quest-" + expanded_quest_id);
+
+  $expanded_hiddenDIV.slideUp(function() {
+    // After animation complete, hide the div and append it back to its original parent
+    $expanded_hiddenDIV.hide().appendTo($expanded_hiddenDIV.data('originalParent'));
+    $table.bootstrapTable('collapseRow', $expandedRow.data('index'));
+  });
+}
+
+$(document).ready(function () {
+  // class selector to target all tables with the class '.accordian-table'
+  const $tables = $('.accordian-table');
+
+  // For each table, initialize the Bootstrap Table and add event listeners for expanding/collapsing rows
   $tables.each(function() {
-    var $table = $(this);
+    const $table = $(this);
 
     // Initialize the Bootstrap Table
     $table.bootstrapTable();
 
     $table.on('expand-row.bs.table', function (e, index, row, $detail) {
       // Get the row's html id, then extract the last digit (quest id) from it
-      var row_html_id = row._id;
-      var quest_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
+      const row_html_id = row._id;
+      const quest_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
+      const $hiddenDIV = $("#collapse-quest-" + quest_id);
 
-      // Get the hidden span element
-      var $hiddenSpan = $("#collapse-quest-" + quest_id);
+      // Save the original parent of the hidden div for later use
+      $hiddenDIV.data('originalParent', $hiddenDIV.parent());
 
-      $detail.html('<div class="detail-container" style="display:none;"></div>');
-      // Add all classes from the hidden span to the tr.detail-view element
-      $detail.addClass($hiddenSpan.attr('class'));
+      // The primary change is here: instead of copying the content, we're moving it
+      $hiddenDIV.appendTo($detail);
 
-      // Get the detail container div
-      var $detailContainer = $detail.find('div.detail-container');
+      // Add all classes from the hidden div to the detail element
+      $detail.addClass($hiddenDIV.attr('class'));
 
-      // Create a function to update the row's content
-      var updateContent = function () {
-        var detailContent = $hiddenSpan.html();
-        $detailContainer.html(detailContent);
-      };
-
-      // Update the row's content initially
-      updateContent();
-
-      // Create an observer that updates the row's content when the span's content changes
-      // This is activated when the ajax script updates the quest content
-      var observer = new MutationObserver(updateContent);
-      observer.observe($hiddenSpan[0], { childList: true, subtree: true });
-
-      // When the row is expanded, slide down the detail container
-      $detailContainer.slideDown();
+      // Start animation for expanding
+      // .hide() sets display to none, and slideDown() does animation before setting display to block
+      $hiddenDIV.hide().slideDown();
     });
 
-    $table.on("click-row.bs.table", function (e, row, $tr) {
-      // If the row is already expanded, collapse it
+    $table.on('click-row.bs.table', function (e, row, $tr) {
+      // If the clicked row is already expanded, collapse it
       if ($tr.next().is('tr.detail-view')) {
-        $tr.removeClass('active');
-        // send slideUp callback to collapseRow. This causes the currently expanded row to collapse
-        $tr.next().find('div.detail-container').slideUp(function () {
-          $table.bootstrapTable('collapseRow', $tr.data('index'));
-        });
-        // If the row is collapsed, expand it
+        collapseRow($tr, $table);
+      // If the clicked row is collapsed, expand it
       } else {
         // Collapse all other expanded rows
         $table.find('tr.active').each(function () {
-          var $expandedRow = $(this);
-          $expandedRow.removeClass('active');
-          $expandedRow.next().find('div.detail-container').slideUp(function () {
-            $table.bootstrapTable('collapseRow', $expandedRow.data('index'));
-          });
+          const $expandedRow = $(this);
+          collapseRow($expandedRow, $table);
         });
 
-        // Expand the row
         $table.bootstrapTable('expandRow', $tr.data('index'));
-        // And mark it as expanded
         $tr.addClass('active');
       }
     });

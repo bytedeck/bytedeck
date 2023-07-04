@@ -56,6 +56,28 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         # But other random user still doesn't meet prereq
         self.assertFalse(self.category.condition_met_as_prerequisite(user2))
 
+    def test_condition_met_as_prerequisite__draft_and_archived_quests(self):
+        """ Test that visible_to_students=False (draft) and archived quests
+        are not needed when checking if campaign is met as a prerequisite.
+        """
+        user = baker.make('user')
+
+        quest1 = baker.make(Quest, campaign=self.category)
+        # draft quest shouldn't be required to fulfill campaign
+        baker.make(Quest, campaign=self.category, visible_to_students=False)
+        # archived quest shouldn't be required
+        baker.make(Quest, campaign=self.category, archived=True)
+
+        # user should not meet the prerequisite at this point (no quests completed)
+        self.assertFalse(self.category.condition_met_as_prerequisite(user))
+
+        # create and complete a quest submission for the first quest,
+        # should now meet Campaign prereq because
+        # - quest2 is a draft,
+        # - quest3 is archived
+        baker.make(QuestSubmission, quest=quest1, user=user, is_completed=True, is_approved=True)
+        self.assertTrue(self.category.condition_met_as_prerequisite(user))
+
     def test_category_icon(self):
         pass
 
@@ -451,10 +473,13 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_mark_completed(self):
         draft_text = "Draft words"
-        sub = baker.make(QuestSubmission, draft_text=draft_text)
+        user = baker.make(User)
+        sub = baker.make(QuestSubmission, draft_text=draft_text, user=user)
         self.assertFalse(sub.is_completed)
         self.assertEqual(sub.draft_text, draft_text)
+        self.assertIsNone(user.profile.time_of_last_submission)
         sub.mark_completed()
+        self.assertEqual(user.profile.time_of_last_submission, sub.time_completed)
         self.assertTrue(sub.is_completed)
         self.assertIsNotNone(sub.first_time_completed)
         self.assertIsNone(sub.draft_text)

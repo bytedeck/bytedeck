@@ -266,10 +266,13 @@ class BadgeAssertionManager(models.Manager):
 
     def all_for_user_distinct(self, user):
         """
+        Return a list of distinct badges the user has earned, as an assertion queryset
         This only works in a postgresql database, but the app is designed around postgres
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
-        return self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge')
+        qs = self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge_id')
+        sorted_qs = sorted(qs, key=lambda x: x.badge.sort_order)
+        return sorted_qs
 
     def badge_assertions_dict_items(self, user):
         earned_assertions = self.all_for_user_distinct(user)
