@@ -157,8 +157,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # Removing duplicate elements from the list.
         #
         # Using *set() is the fastest and smallest method to achieve it.
-        # It first removes the duplicates and returns a dictionary which has
-        # to be converted to list.
+        # It first removes the duplicates and returns unpacked set using * operator
+        # which has to be converted to list.
         recipient_list = [*set(recipient_list)]
 
         if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
