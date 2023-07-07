@@ -5,7 +5,6 @@ from cssutils import CSSParser
 
 from django import forms
 from django.contrib.auth import get_user_model
-from django.utils.translation import ugettext_lazy as _
 
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
@@ -104,15 +103,18 @@ class SiteConfigForm(forms.ModelForm):
             try:
                 # call `parseString` method and parse uploaded file as string,
                 # errors may be raised
-                stylesheet = parser.parseString(css.read(), validate=True)
+                stylesheet = parser.parseString(css.read(), validate=True)  # noqa
             except DOMException as e:
                 # something wrong, render exception as validation error
                 raise forms.ValidationError(e)
 
-            # check if parsed stylesheet is a "valid" CSS file (according to `cssutils`),
-            # if not raise validation error
-            if not stylesheet.valid:
-                raise forms.ValidationError(_("This stylesheet is not valid CSS."))
+            # FIXME: upstream issue: https://github.com/jaraco/cssutils/issues/38
+            # temporarily disabled, until fixed
+            #
+            # # check if parsed stylesheet is a "valid" CSS file (according to `cssutils`),
+            # # if not raise validation error
+            # if not stylesheet.valid:
+            #     raise forms.ValidationError(_("This stylesheet is not valid CSS."))
 
             # returns form upload as is
             return css

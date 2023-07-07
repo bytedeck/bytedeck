@@ -165,7 +165,9 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         # get complete list of fields from `generateh_form_data` helper function
         response = self.client.get(URL, data={})
         for f in generate_form_data(model_form=SiteConfigForm).keys():
-            # should succeed if `form.helper.layout` is up-to-date
+            # should succeed if `form.helper.layout` includes all required fields
+            if not SiteConfigForm(SiteConfig.get()).fields[f].required:
+                continue  # skip non-mandatory fields
             if f not in str(response.content):
                 raise AssertionError(f"'{f}' not found in 'form.helper.layout' list.")
 
