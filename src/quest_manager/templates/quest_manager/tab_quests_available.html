@@ -50,8 +50,13 @@
           </td>
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
           <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
-          <td class="col-sm-1 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
-          <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
+          <td class="col-sm-2 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
+          <td id="status-icon-{{q.id}}" class="col-sm-1 hidden-xs text-muted">
+            {% if q.max_repeats != 0 %}<i title='Repeat: this quest is repeatable' class='icon-spacing fa fa-fw fa-undo'></i>
+            {% else %}<i class='icon-spacing fa fa-fw'></i>{% endif %}
+            {% if q.blocking %}<i title='Blocking: all other quests are unavailable until you complete this one.' class='icon-spacing fa fa-fw fa-exclamation-triangle'></i>
+            {% else %}<i class='icon-spacing fa fa-fw'></i>{% endif %}
+          </td>
         </tr>
       {% endfor %}
     </tbody>

@@ -92,9 +92,6 @@
               var preview_content_selector = "#preview-content-" + id;
               var hidden_selector = "#status-icon-" + id;
 
-              //console.log(preview_content_selector);
-              //console.log(ajax_url);
-
               $.ajax({
                   type: "POST",
                   url: ajax_url,
@@ -104,26 +101,6 @@
                   success: function (data) {
                       //console.log(data)
                       $(preview_content_selector).html(data.quest_info_html);
-
-                      // Quest status icons
-                      if (data.is_prerequisite) {
-                          $(hidden_selector).append("<i title='Prerequisite: completing this will cause additional quests to become available' class='icon-spacing fa fa-fw fa-share-alt'></i>");
-                      }
-                      else {
-                          $(hidden_selector).append("<i class='icon-spacing fa fa-fw'></i>");
-                      }
-                      if (data.is_repeatable) {
-                          $(hidden_selector).append("<i title='Repeat: this quest is repeatable' class='icon-spacing fa fa-fw fa-undo'></i>");
-                      }
-                      else {
-                          $(hidden_selector).append("<i class='icon-spacing fa fa-fw'></i>");
-                      }
-                      if (data.is_hidden) {
-                          $(hidden_selector).append("<i title='Hidden: this quest is on your hidden list' class='icon-spacing fa fa-fw fa-eye-slash'></i>");
-                      }
-                      else {
-                          $(hidden_selector).append("<i class='icon-spacing fa fa-fw'></i>");
-                      }
 
                       $('div.pack').pack()
                   },
