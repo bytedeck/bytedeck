@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
+from allauth.account.models import EmailAddress
 from django_tenants.utils import tenant_context
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -274,7 +275,7 @@ class TenantAdminActionsTest(TenantTestCase):
             # create extra tenant for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
-                name="extra"
+                name="extra",
             )
             self.extra_tenant.save()
             domain = self.extra_tenant.get_primary_domain()
@@ -284,8 +285,16 @@ class TenantAdminActionsTest(TenantTestCase):
         with tenant_context(self.extra_tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
-                config.deck_owner.email = "owner@example.com"
+                # using different name/email to test fallback feature
+                config.deck_owner.first_name = "John"
+                config.deck_owner.last_name = "Doe"
                 config.deck_owner.save()
+                # make email address verified and primary (done via allauth)
+                email_address = EmailAddress.objects.add_email(
+                    request=None, user=config.deck_owner, email="john@doe.com")
+                email_address.set_as_primary()
+                email_address.verified = True
+                email_address.save()
 
         self.client = TenantClient(self.public_tenant)
 
@@ -350,3 +359,4 @@ class TenantAdminActionsTest(TenantTestCase):
         # check mailbox after submitting form
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
+        self.assertEqual(mail.outbox[0].to, ["John Doe <john@doe.com>"])

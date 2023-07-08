@@ -9,6 +9,8 @@ from django.utils.translation import ngettext
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
+from allauth.account.models import EmailAddress
+from allauth.account.utils import user_email
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
@@ -139,6 +141,10 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """
         from siteconfig.models import SiteConfig
 
+        def get_owner_or_none():
+            """Returns owner (User) object or None"""
+            return SiteConfig.get().deck_owner or None
+
         # get a list of selected tenant(s), excluding public schema
         objects = self.model.objects.filter(
             pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
@@ -148,12 +154,21 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         recipient_list = []
         for tenant in objects:
             with tenant_context(tenant):
-                config = SiteConfig.get()
-                if config.deck_owner is not None:
-                    # get the full name of the user, or if none is supplied will return the username
-                    full_name_or_username = config.deck_owner.get_full_name() or config.deck_owner.username
-                    email = config.deck_owner.email
+                owner = get_owner_or_none()
+                if owner is None:  # where is the owner?
+                    continue
+                # get the full name of the user, or if none is supplied will return the username
+                full_name_or_username = owner.get_full_name() or owner.username
+
+                # get the email address, but only primary and verified
+                for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                    # make sure it's primary email for real
+                    if primary_email_address.email == user_email(owner):
+                        email = owner.email
+
+                if len(email):  # skip, if email address is empty
                     recipient_list.append(f"{full_name_or_username} <{email}>")
+
         # Removing duplicate elements from the list.
         #
         # Using *set() is the fastest and smallest method to achieve it.
