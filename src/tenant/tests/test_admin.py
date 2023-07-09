@@ -359,4 +359,5 @@ class TenantAdminActionsTest(TenantTestCase):
         # check mailbox after submitting form
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
-        self.assertEqual(mail.outbox[0].to, ["John Doe <john@doe.com>"])
+        # expecting to see recipients in BCC list
+        self.assertEqual(mail.outbox[0].bcc, ["John Doe <john@doe.com>"])
