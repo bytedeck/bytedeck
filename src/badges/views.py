@@ -15,6 +15,7 @@ from hackerspace_online.decorators import staff_member_required
 
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
+from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
@@ -36,7 +37,7 @@ def badge_list(request):
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
 
     context = {
-        "heading": "Badges",
+        "heading": f"{SiteConfig.get().custom_name_for_badge}s",
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
         "earned_badges": earned_badges,
@@ -55,7 +56,7 @@ class BadgeDelete(NonPublicOnlyViewMixin, DeleteView):
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(BadgeDelete, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
@@ -66,14 +67,14 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(BadgeUpdate, self).get_context_data(**kwargs)
-        context['heading'] = "Update Badge"
+        context = super().get_context_data(**kwargs)
+        context['heading'] = f"Update {SiteConfig.get().custom_name_for_badge}"
         context['submit_btn_value'] = "Update"
         return context
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(BadgeUpdate, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 @non_public_only_view
@@ -85,7 +86,7 @@ def badge_create(request):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": "Create New Badge",
+        "heading": f"Create New {SiteConfig.get().custom_name_for_badge}",
         "form": form,
         "submit_btn_value": "Create",
     }
@@ -106,7 +107,7 @@ def badge_copy(request, badge_id):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": "Copy a Badge",
+        "heading": f"Copy another {SiteConfig.get().custom_name_for_badge}",
         "form": form,
         "submit_btn_value": "Create",
     }
@@ -116,15 +117,31 @@ def badge_copy(request, badge_id):
 @non_public_only_view
 @login_required
 def detail(request, badge_id):
-    # if there is an active submission, get it and display accordingly
 
     badge = get_object_or_404(Badge, pk=badge_id)
-    # active_submission = QuestSubmission.objects.quest_is_available(request.user, q)
 
     context = {
         "heading": badge.name,
         "badge": badge,
-        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False)
+        "current": True,
+        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
+        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, True),
+    }
+    return render(request, 'badges/detail.html', context)
+
+
+@non_public_only_view
+@login_required
+def detail_all(request, badge_id):
+
+    badge = get_object_or_404(Badge, pk=badge_id)
+
+    context = {
+        "heading": badge.name,
+        "badge": badge,
+        "current": False,
+        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
+        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, False),
     }
     return render(request, 'badges/detail.html', context)
 
@@ -144,7 +161,7 @@ class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = 'Create New Badge Type'
+        kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -158,7 +175,7 @@ class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = 'Update Badge Type'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
@@ -168,7 +185,7 @@ class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
 class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
@@ -177,7 +194,7 @@ class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
         return context
 
     def post(self, request, *args, **kwargs):
-        # make sure no data can be passed in POST if populated 
+        # make sure no data can be passed in POST if populated
         # makes sure to prevent 404/delete (because deletion still goes off)
         has_badges = Badge.objects.filter(badge_type=self.get_object()).exists()
         if has_badges:
@@ -203,7 +220,7 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = "Badge " + str(badge) + " granted to "
+        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
             result_message += profile.preferred_full_name() + "; "
@@ -212,7 +229,7 @@ def bulk_assertion_create(request, badge_id=None):
         return redirect('badges:list')
 
     context = {
-        "heading": "Grant Badges in Bulk",
+        "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
         "form": form,
         "submit_btn_value": "Grant",
     }
@@ -236,7 +253,7 @@ def assertion_create(request, user_id, badge_id):
     if form.is_valid():
         new_ass = form.save(commit=False)
         BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
-        messages.success(request, ("Badge " + str(new_ass) + " granted to " + str(new_ass.user)))
+        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
         return redirect('badges:list')
 
     context = {

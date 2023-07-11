@@ -24,7 +24,7 @@
 
     <h3>Excluded Dates</h3>
     <p>Weekends are automatically excluded in mark calculations. To exclude additional dates, add them here:</p>
-    
+
     <div id="form-management"> {{ formset.management_form }} </div>
     <div id="form-container">
         <div class="row">
@@ -60,7 +60,7 @@
     const container = document.getElementById("form-container");
     const removeButtonCopy = '<button type="button" class="btn btn-danger" onclick="RemoveForm(__prefix__)"><i class="fa fa-minus"></i></button>';
     const addButtonCopy = '<button type="button" class="btn btn-success" onclick="AddForm()"><i class="fa fa-plus"></i></button>'
-    
+
     // management form
     const formTotalForms = document.getElementById("id_form-TOTAL_FORMS");
     const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
@@ -89,16 +89,16 @@
 
         // field
         formRowElement.innerHTML = `{% crispy formset.empty_form helper  %}`.replaceAll("__prefix__", newIndex);
-        
+
         // container for buttons
         var buttonElement = document.createElement('div');
         buttonElement.setAttribute("class", "button-container col-xs-1");
         formRowElement.insertAdjacentElement("beforeend", buttonElement);
 
         buttonElement.insertAdjacentHTML("beforeend", addButtonCopy);
-        
+
         if (!cached_datepicker_data) {
-            var datepicker = document.getElementById(`id_form-${newIndex}-date`); 
+            var datepicker = document.getElementById(`id_form-${newIndex}-date`);
             cached_datepicker_data = JSON.parse(datepicker.getAttribute("data-dp-config")).options;
         }
     }
@@ -129,7 +129,7 @@
         var deleteInput = document.getElementById(`id_form-${index}-DELETE`);
         deleteInput.setAttribute("value", "on");
     }
-    
+
 </script>
 
 {% endblock %}

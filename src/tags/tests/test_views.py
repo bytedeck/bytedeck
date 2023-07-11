@@ -102,7 +102,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_page_status_code__teacher(self):
         """Make sure the everything is accessible to teachers"""
         self.client.force_login(self.test_teacher)
-        
+
         self.assert200('tags:list')
         self.assert200('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
         self.assert200('tags:detail_staff', args=[self.tag.pk])
@@ -113,14 +113,14 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_ListView(self):
         """Make sure list view displays all tags correctly"""
         baker.make(Tag, _quantity=5)
-        
+
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('tags:list'))
 
         object_list = response.context['object_list']
 
         self.assertEqual(Tag.objects.count(), len(object_list))
-        
+
         for model_obj, ctx_obj in zip(Tag.objects.all(), object_list):
             self.assertEqual(model_obj.pk, ctx_obj.pk)
 
@@ -162,7 +162,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Make sure detail view displays related quest/badges correctly.
             Students should only have access to quest and badges they have completed/earned
-        """ 
+        """
         # generate quests + badges and link to tag
         quest_set = baker.make('quest_manager.quest', xp=1, _quantity=5)
         badge_set = baker.make('badges.badge', xp=1, _quantity=5)
@@ -171,13 +171,13 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # only assign first set element from quest and badge to user
         # make 2 submission/assertion to check if total xp is calculated correctly
-        for i in range(2):
-            baker.make( 
+        for _i in range(2):
+            baker.make(
                 'quest_manager.questsubmission',
-                quest=quest_set[0], 
-                user=self.test_student, 
-                is_completed=True, 
-                is_approved=True, 
+                quest=quest_set[0],
+                user=self.test_student,
+                is_completed=True,
+                is_approved=True,
                 semester=SiteConfig().get().active_semester,
             )
             baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)

@@ -8,12 +8,14 @@
 
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
+{% load static %}
+
 {% block heading_inner %}{{ heading }}
     {% if submitted_tab_active %}
       {% if show_all_blocks_button %}
         <div class="btn-group">
             <a href="{% url 'quests:submitted' %}"
-               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My blocks</a>
+               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My {{ config.custom_name_for_group|lower }}s</a>
             <a href="{% url 'quests:submitted_all' %}"
                class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
         </div>
@@ -56,9 +58,13 @@
 {% endblock %}
 
 {% block js %}
+
+{{ block.super }}
+
 <script>
 $( document ).ready(function() {
-    $('[id^=btn_quick_text]').on('click', function () {
+    // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'
+    $(document).on('click', '[id^=btn_quick_text]', function () {
         var msg = ' {{ quick_reply_text }} ';
         var textarea = $($(this).data('target')).find('textarea');
         textarea.val(textarea.val() + msg);

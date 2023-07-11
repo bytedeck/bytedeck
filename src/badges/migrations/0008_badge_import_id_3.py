@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             model_name='badge',
             name='import_id',
             field=models.UUIDField(
-                default=uuid.uuid4, 
+                default=uuid.uuid4,
                 unique=True,
                 help_text='Only edit this if you want to link to a badge in another system so that when importing from that other system, it will update this badge too. Otherwise do not edit this or it will break existing links!'),
         ),

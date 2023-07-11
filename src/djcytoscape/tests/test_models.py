@@ -152,11 +152,29 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIsInstance(self.map, CytoScape)
         self.assertEqual(str(self.map), self.map.name)
 
+    def test_object_alphabetical_order(self):
+        """
+        Map objects are ordered alphabetically at the model level to ensure
+        proper sorting consistently sitewide.
+        """
+        # Need to generate three different quests here so that the maps are
+        # created with no error
+        questA = baker.make('quest_manager.Quest')
+        questB = baker.make('quest_manager.Quest')
+        questC = baker.make('quest_manager.Quest')
+        # Generate maps out of order to ensure they're sorted by name
+        CytoScape.generate_map(questB, "B")
+        CytoScape.generate_map(questC, "C")
+        CytoScape.generate_map(questA, "A")
+        all_maps = CytoScape.objects.all()  # Main is included in this list
+        # A queryset created from all objects is ordered correctly by default
+        self.assertQuerysetEqual(all_maps, all_maps.order_by('name'))
+
     def test_generate_map(self):
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
-    
+
     def test_save__sets_first_scape_as_primary(self):
         newmap = baker.make('djcytoscape.CytoScape')
         self.assertTrue(self.map.is_the_primary_scape)
@@ -194,6 +212,34 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
     def test_regenerate(self):
         """Can regenerate without error on a known good map object"""
         self.map.regenerate()
+
+    def test_maps_dont_include_drafts(self):
+        """Draft (unpublished) quests should not appear in maps (quest.visible_to_students = False)"""
+
+        # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
+        self.assertIn("/quests/6/", self.map.elements_json)
+
+        # Make quest 6 a draft and regenerate the map
+        quest_6 = Quest.objects.get(id=6)
+        quest_6.visible_to_students = False  # draft/unpublished
+        quest_6.save()
+        self.map.regenerate()
+
+        # should no longer be in the map
+        self.assertNotIn("/quests/6/", self.map.elements_json)
+
+    def test_maps_dont_include_archived_quests(self):
+        # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
+        self.assertIn("/quests/6/", self.map.elements_json)
+
+        # Archive quest #6 and regenerate the map
+        quest_6 = Quest.objects.get(id=6)
+        quest_6.archived = True
+        quest_6.save()
+        self.map.regenerate()
+
+        # should no longer be in the map
+        self.assertNotIn("/quests/6/", self.map.elements_json)
 
     def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""

@@ -30,7 +30,7 @@ class TransactionAwareTask(TenantTask):
             logger.info(traceback.format_exc())
             countdown = kwargs.get('countdown', 60)
             kwargs['countdown'] = countdown * 2
-            return super(TransactionAwareTask, self).apply_async(*args, **kwargs)
+            return super().apply_async(*args, **kwargs)
         except Exception:
             logger.error(traceback.format_exc())
 

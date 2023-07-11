@@ -31,7 +31,7 @@ class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(ScapeUpdate, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -41,7 +41,7 @@ class ScapeDelete(NonPublicOnlyViewMixin, DeleteView):
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(ScapeDelete, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 class ScapeList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
@@ -97,7 +97,7 @@ def quest_map_personalized(request, scape_id, user_id):
             'class_styles': scape.class_styles_json,
             'completed_quests': quest_ids,
             'fullscreen': True,
-            'personalized_user': personalized_user,  
+            'personalized_user': personalized_user,
         }
 
         return render(request, 'djcytoscape/quest_map.html', context)
@@ -127,7 +127,7 @@ def primary(request):
     if not CytoScape.objects.exists() and Quest.objects.filter(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1').exists():
         welcome_quest = Quest.objects.get(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1')
         CytoScape.generate_map(welcome_quest, 'Main')
-    
+
     try:
         scape = CytoScape.objects.get(is_the_primary_scape=True)
         return quest_map(request, scape.id)
@@ -138,7 +138,7 @@ def primary(request):
 class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
     form_class = GenerateQuestMapForm
     template_name = 'djcytoscape/generate_new_form.html'
-    
+
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
         """
@@ -150,16 +150,16 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
         """
         self.ct_id = kwargs.get('ct_id')
         self.obj_id = kwargs.get('obj_id')
-        self.scape_id = kwargs.get('scape_id')  
+        self.scape_id = kwargs.get('scape_id')
         self.autobreak = kwargs.get('autobreak', True)
         self.interlink = False
 
         return super().dispatch(*args, **kwargs)
-    
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs().copy()
         kwargs['autobreak'] = self.autobreak
-        
+
         if self.ct_id and self.obj_id:
             ct = get_object_or_404(ContentType, pk=self.ct_id)
             obj = get_object_or_404(ct.model_class(), pk=self.obj_id)
@@ -168,7 +168,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
         if self.scape_id:
             kwargs['initial']['parent_scape'] = get_object_or_404(CytoScape, pk=self.scape_id)
             self.interlink = True
-        
+
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -182,7 +182,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
             self.request,
             f"New map {self.object.name} was successfully generated."
         )
-        return HttpResponseRedirect(self.get_success_url()) 
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse('djcytoscape:quest_map', args=[self.object.id])

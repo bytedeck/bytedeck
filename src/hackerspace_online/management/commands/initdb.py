@@ -117,7 +117,7 @@ class Command(BaseCommand):
 def get_homepage_content():
     return """
 <!-- Heading Row-->
-    
+
 <div class="BG-BD-White" id="top">
     <div class="row justify-content-center">
       <!-- <div class="col-lg-1"></div> -->
@@ -126,9 +126,9 @@ def get_homepage_content():
           <img class="bd-wordmark img-fluid" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png">
         </div>
         <p class="lead">ByteDeck is a learning management system created BY teachers and students FOR teachers and students.</p>
-        <p class="lead">ByteDeck is different than other learning management systems. It's flexible in how teachers deliver content, 
+        <p class="lead">ByteDeck is different than other learning management systems. It's flexible in how teachers deliver content,
         and supports teachers who take a less traditional approach to education.</p>
-        <p class="lead">ByteDeck is easy for both teachers and students to use. Teachers and students can use it in any setting, 
+        <p class="lead">ByteDeck is easy for both teachers and students to use. Teachers and students can use it in any setting,
         whether you are working in a classroom, remotely, or both. </p>
         <div class="row">
           <div class="col-md-4">
@@ -154,7 +154,7 @@ def get_homepage_content():
     <!-- /Heading Row-->
 
     <!-- What is BD row -->
-    
+
 <div class="BD-bg-DarkBlue" id="WhatisByteDeck">
 
     <div class="row BD-content2 text-center">
@@ -169,21 +169,21 @@ def get_homepage_content():
       <div class="col-md-3 col-xl-2 text-center BD-content3">
         <img class="img-center console-img-size-1 " src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/laptop-code-solid%201.png">
         <h2 style="font-size:23px">Easy to Use</h2>
-        <p style="font-size:16px">The interface is intuitive, responsive, and mobile-friendly. Students can use ByteDeck on any device, 
+        <p style="font-size:16px">The interface is intuitive, responsive, and mobile-friendly. Students can use ByteDeck on any device,
         anywhere they have access to the internet.</p>
       </div>
 
       <div class="col-md-3 col-xl-2 offset-md-1 text-center BD-content3">
         <img class="img-center gamepad-img-size-1 " src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/gamepad-solid%201.png">
         <h2 style="font-size:23px">Quest-Based Learning</h2>
-        <p style="font-size:16px">The quest format makes it easy for teachers to break learning into small chunks. Students are motivated 
+        <p style="font-size:16px">The quest format makes it easy for teachers to break learning into small chunks. Students are motivated
         to "level up" as they work through quests.</p>
       </div>
 
       <div class="col-md-3 col-xl-2 offset-md-1 text-center BD-content3">
         <img class="img-center  apple-img-size-1" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/apple-alt-solid%201.png">
         <h2 style="font-size:23px">Flexibility and Choice</h2>
-        <p style="font-size:16px">Students work through quests at their own pace. Create one learning path for all students, or multiple 
+        <p style="font-size:16px">Students work through quests at their own pace. Create one learning path for all students, or multiple
         paths to provide students with more choice.</p>
       </div>
 
@@ -195,7 +195,7 @@ def get_homepage_content():
     <!-- /What is BD row-->
 
     <!-- How it Works row -->
-    
+
   <div id="how">
     <div class="row">
       <div class="col-lg-7 BD-bg-LightBlue">
@@ -207,17 +207,17 @@ def get_homepage_content():
                 <img class="BD-img-pixels-topright BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%203.png">
               </div>
             </div>
-            <p class="lead">ByteDeck uses quest-based learning, an instructional design theory that leverages game mechanics to support 
+            <p class="lead">ByteDeck uses quest-based learning, an instructional design theory that leverages game mechanics to support
             student engagement and motivation.
             </p><ul class="lead">
               <li>Your lessons become "quests."</li>
               <li>Units of study become "campaigns."</li>
               <li>Marks become experience points, "XP."</li>
             </ul>
-            <p class="lead">Quests are a great way to scaffold student learning. Break down your lessons into small chunks, and support students 
+            <p class="lead">Quests are a great way to scaffold student learning. Break down your lessons into small chunks, and support students
             as they "level up" and move from basic to more complex concepts.</p>
             <p class="lead">Learning is continuous. Students work through quests at their own pace.</p>
-            <p class="lead">Quests can vary. Some may be short, prescribed activities that show students' understanding. Others may be 
+            <p class="lead">Quests can vary. Some may be short, prescribed activities that show students' understanding. Others may be
             open-ended, self-directed activities, where students can showcase their learning and creativity.</p>
             <div class="row">
               <div class="col-lg-4 BD-title-pixels">
@@ -230,9 +230,9 @@ def get_homepage_content():
           </div> <!-- /col-10 -->
         </div> <!-- /content row -->
       </div> <!-- /content col -->
-      <div class="col-lg-5 d-flex justify-content-center align-items-center order-xl-last order-lg-last order-first order-sm-first 
+      <div class="col-lg-5 d-flex justify-content-center align-items-center order-xl-last order-lg-last order-first order-sm-first
       order-md-first BD-bg-White">
-        <img class="img-fluid BD-undraw-img BD-undraw-img-right" 
+        <img class="img-fluid BD-undraw-img BD-undraw-img-right"
         src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/undraw_video_game_night_rev.png" alt="">
       </div>
     </div>
@@ -241,11 +241,11 @@ def get_homepage_content():
     <!-- /How BD Works row-->
 
     <!-- Teachers row -->
-    
+
 <div id="teachers">
     <div class="row">
       <div class="col-lg-5 d-flex justify-content-center align-items-center BD-bg-White">
-        <img class="img-fluid BD-undraw-img BD-undraw-img-left" 
+        <img class="img-fluid BD-undraw-img BD-undraw-img-left"
         src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/undraw_teaching_revised2.png" alt="">
       </div>
       <div class="col-lg-7 BD-bg-Yellow">
@@ -257,11 +257,11 @@ def get_homepage_content():
                 <img class="BD-img-pixels-topright BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%202.png">
               </div>
             </div>
-            <p class="lead">As a teacher, you decide whether students will all follow a single learning pathway, or have access 
+            <p class="lead">As a teacher, you decide whether students will all follow a single learning pathway, or have access
             to a range of pathways they can choose from. Either way, students can always see what their options are, and what comes next.</p>
-            <p class="lead">Students can submit quests regularly, whether their work is complete or in-progress. Teachers can 
+            <p class="lead">Students can submit quests regularly, whether their work is complete or in-progress. Teachers can
             provide feedback as needed, and assessment is ongoing.</p>
-            <p class="lead">Students' progress through campaigns is continuously tracked, so both students and teachers know exactly 
+            <p class="lead">Students' progress through campaigns is continuously tracked, so both students and teachers know exactly
             where they're at.</p>
             <div class="row">
               <div class="col-lg-4">

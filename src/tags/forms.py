@@ -1,5 +1,5 @@
 from django import forms
-from django.utils.text import slugify 
+from django.utils.text import slugify
 
 from taggit.models import Tag
 
@@ -25,6 +25,6 @@ class TagForm(forms.ModelForm):
     def save(self, *args):
         # will be saved on super func, assuming commit=True
         # necessary since slug is unique=True, so we use unique name to generate a new slug to prevent possible duplicates
-        self.instance.slug = slugify(self.cleaned_data['name'])  
+        self.instance.slug = slugify(self.cleaned_data['name'])
 
         return super().save(*args)

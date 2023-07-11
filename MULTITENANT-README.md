@@ -13,11 +13,11 @@ Multitenancy is an interesting problem to solve and there are basically three so
 2. Semi Isolated Approach: Shared Database, Separate Schemas. One database for all tenants, but one schema per tenant.
 3. Shared Approach: Shared Database, Shared Schema. All tenants share the same database and schema. There is a main tenant-table, where all other tables have a foreign key pointing to.
 
-On this application, Semi Isolated Approach has been followed. 
+On this application, Semi Isolated Approach has been followed.
 
 ### How does it work?
 Tenants are identified via their host name (i.e tenant.domain.com). This information is stored on a table on the public schema. Whenever a request is made, the host name is used to match a tenant in the database. If there’s a match, the search path is updated to use this tenant’s schema. So from now on all queries will take place at the tenant’s schema.
-*Tenant* model is used who store tenant information.
+*Tenant* model is used for storing tenant information.
 
 #### How to create tenants?
 1. Login to superadmin area http://url.com/admin.
@@ -56,7 +56,7 @@ $ bash init_public_schema.sh
 ### Loading the dump
 - place your dumps to the host location which can accessible by the `db` container (using volume mounts)
 
-- create a tenant for the schema you want to dump, from admin 
+- create a tenant for the schema you want to dump, from admin
 
 - ```$ docker exec db bash scripts/load_dump.sh <dump_location> <schema_name_to_dump_in>```
 
@@ -66,7 +66,7 @@ _Note: scheman_name_to_dump_in is same as tenant's name._
 
 ### Accessing the django shell
 
-`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "./src/manage.py tenant_command shell"`
+`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "python src/manage.py tenant_command shell"`
 
 
 ### Deleting a Tenant

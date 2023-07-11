@@ -21,7 +21,7 @@ services:
       #   WGID: $WGID
     env_file: .env
     # command: # see docker-compose.overide.yml or docker-compose.prod.yml
-    volumes: 
+    volumes:
       - .:/app
     ports:
       - 8000:8000

@@ -10,9 +10,7 @@
 
 <h3>Site Settings</h3>
 <form method="post" enctype="multipart/form-data">{% csrf_token %}
-    <p><input type="submit" value="Update" class="btn btn-success"/></p>
-   {{ form|crispy }}
-    <input type="submit" value="Update" class="btn btn-success"/>
+    {% crispy form form.helper %}
 </form>
 
 

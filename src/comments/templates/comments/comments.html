@@ -28,10 +28,10 @@
           {% if request.user.is_staff %}
           <a href="{% url 'profiles:profile_detail' comment.user.profile.id %}">{{comment.user}}</a>
           <small>
-            ({{comment.user.profile.preferred_full_name}}, 
+            ({{comment.user.profile.preferred_full_name}},
             {% if config.display_marks_calculation and not comment.user.is_staff %}
             Current Mark: {{comment.user.profile.mark|floatformat:0}}%
-            {% elif comment.user.is_staff%} 
+            {% elif comment.user.is_staff%}
             Teacher
             {% endif %})
           </small>
