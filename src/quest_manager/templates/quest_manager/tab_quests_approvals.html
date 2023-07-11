@@ -33,7 +33,7 @@
       {% for s in tab.submissions %}
         <tr class="accordian-trigger panel-title
           {% if object.sticky %}info
-          {% elif s.do_not_grant_xp %}panel-muted
+          {% elif s.do_not_grant_xp %}panel-muted muted
           {% else %}default{% endif %}"
           role="tab"
           aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
@@ -81,7 +81,7 @@
       {% endcomment %}
       <div style="display: none" id="collapse-quest-{{s.id}}"
         class="{% if object.sticky %}info
-              {% elif s.do_not_grant_xp %}panel-muted
+              {% elif s.do_not_grant_xp %}muted
               {% else %}default{% endif %}"
         role="tabpanel" aria-labelledby="heading-quest-{{s.id}}">
         <ul id="preview-content-{{s.id}}" class="list-group">

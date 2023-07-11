@@ -13,6 +13,6 @@
         {% else %}
         ({{s.quest.xp}} XP)
         {% endif %}
-        {% if s.completed %}<span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span>{% endif %}
+        {% if s.is_completed %}<span class="pull-right">{{s.time_completed|date:'j-M-y'}}</span>{% endif %}
     </small>
 </a>
