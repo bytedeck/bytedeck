@@ -35,7 +35,7 @@ RUN apt-get install -y libpcre3 libpcre3-dev
 RUN python3 -m pip install --upgrade pip
 
 # Why isn't this in requirements?!  Move it there?
-RUN python3 -m pip install uwsgi 
+RUN python3 -m pip install uwsgi
 
 # Clean up
 RUN apt-get autoremove -y \

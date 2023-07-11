@@ -34,7 +34,7 @@ class TenantModelTest(TenantTestCase):
         """
         self.assertIsInstance(self.tenant, Tenant)
         self.assertEqual(self.tenant.schema_name, 'test')
-        self.assertEqual(str(self.tenant), '%s - %s' % (self.tenant.schema_name, self.tenant.primary_domain_url))
+        self.assertEqual(str(self.tenant), f'{self.tenant.schema_name} - {self.tenant.primary_domain_url}')
 
     def test_tenant_creation(self):
         self.assertIsInstance(self.tenant_localhost, Tenant)

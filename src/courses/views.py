@@ -150,6 +150,14 @@ class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
+    success_message = "Course deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -236,6 +244,27 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+    model = Semester
+    success_url = reverse_lazy('courses:semester_list')
+    success_message = "Semester deleted."
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
+        context["registrations"] = registrations
+        return context
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
+
+
 class SemesterCreateUpdateFormsetMixin:
     formset_class = ExcludedDateFormset
 
@@ -247,7 +276,7 @@ class SemesterCreateUpdateFormsetMixin:
         self.object = self.get_object()
         forms = [self.get_form(), self.get_formset()]
 
-        if all([form.is_valid() for form in forms]):
+        if all(form.is_valid() for form in forms):
             return self.form_valid(*forms)
         return self.form_invalid(*forms)
 
@@ -321,7 +350,7 @@ class SemesterActivate(View):
     def get(self, request, *args, **kwargs):
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
-        siteconfig = SiteConfig.objects.get()
+        siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
         siteconfig.save()
 
@@ -341,7 +370,7 @@ class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Create New {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -355,7 +384,7 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
@@ -365,6 +394,14 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Block
     success_url = reverse_lazy('courses:block_list')
+    success_message = "Block deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -471,7 +508,7 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
             tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
         """
         # grab dataset
-        user_mark = self.user.profile.mark() or 0  # can be nonetype
+        user_mark = self.user.profile.mark_cached or 0  # can be nonetype
         student_marks = Semester.get_student_mark_list(Semester, students_only=True)
         # only remove user's mark from student_marks if user is part of active sem
         if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():

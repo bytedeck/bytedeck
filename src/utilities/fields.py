@@ -1,13 +1,16 @@
-import six
-
 from django import forms
 from django.contrib.contenttypes.models import ContentType
+from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import ValidationError
 from django.forms.models import ModelChoiceIterator
 from django.template.defaultfilters import filesizeformat
 
+from queryset_sequence import QuerySetSequence
 
-class ContentObjectChoiceIterator(ModelChoiceIterator):
+from .widgets import GFKSelect2Widget
+
+
+class GFKChoiceIterator(ModelChoiceIterator):
 
     def __iter__(self):
         if self.field.empty_label is not None:
@@ -19,7 +22,7 @@ class ContentObjectChoiceIterator(ModelChoiceIterator):
         return (self.field.prepare_value(obj), self.field.label_from_instance(obj))
 
 
-class QuerySetSequenceFieldMixin(object):
+class QuerySetSequenceFieldMixin:
     """Base methods for QuerySetSequence fields."""
 
     def get_queryset_for_content_type(self, content_type_id):
@@ -57,11 +60,11 @@ class QuerySetSequenceFieldMixin(object):
         return value.split('-', 1)
 
 
-class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
+class GFKChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
     """
     Replacement for ModelChoiceField supporting QuerySetSequence choices.
 
-    ContentObjectChoiceField expects options to look like::
+    GFKChoiceField expects options to look like::
 
         <option value="4">Model #4</option>
 
@@ -70,20 +73,19 @@ class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceFiel
         <option value="3-4">Model #4</option>
     """
 
-    iterator = ContentObjectChoiceIterator
+    iterator = GFKChoiceIterator
 
     def prepare_value(self, value):
         """Return a ctypeid-objpk string for value."""
         if not value:
             return ''
 
-        if isinstance(value, six.string_types):
+        if isinstance(value, str):
             # Apparently Django's ModelChoiceField also expects two kinds of
             # "value" to be passed in this method.
             return value
 
-        return '%s-%s' % (ContentType.objects.get_for_model(value).pk,
-                          value.pk)
+        return f'{ContentType.objects.get_for_model(value).pk}-{value.pk}'
 
     def to_python(self, value):
         """
@@ -118,21 +120,59 @@ class ContentObjectChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceFiel
         return getattr(instance, name)
 
 
+class AllowedGFKChoiceField(GFKChoiceField):
+
+    widget = GFKSelect2Widget
+
+    def __init__(self, *args, **kwargs):
+        model_classes = []
+        try:
+            model_classes = self.get_allowed_model_classes()
+        except ContentType.DoesNotExist:
+            # table doesn't exist yet
+            pass
+        except ProgrammingError:
+            # django.db.utils.ProgrammingError: no such table:
+            # django_content_type (e.g. postgresql)
+            pass
+        except OperationalError:
+            # django.db.utils.OperationalError: no such table:
+            # django_content_type (e.g. sqlite)
+            pass
+
+        super().__init__(QuerySetSequence(*[x.objects.all() for x in model_classes]), *args, **kwargs)
+
+        search_fields = {}
+        for qs in self.queryset.get_querysets():
+            klass = qs.model
+            search_fields.setdefault(klass._meta.app_label, {}).update({
+                klass._meta.model_name: klass.gfk_search_fields()
+            })
+        self.widget.search_fields = search_fields
+        self.widget.attrs['data-placeholder'] = 'Type to search'
+
+    def get_allowed_model_classes(self):
+        """Returns a list of allowed Model classes"""
+        raise NotImplementedError(
+            '%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__
+        )
+
+
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 class RestrictedFileFormField(forms.FileField):
 
     def __init__(self, **kwargs):
         self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
-        super(RestrictedFileFormField, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def clean(self, data, initial=None):
-        file = super(RestrictedFileFormField, self).clean(data, initial)
+        file = super().clean(data, initial)
         try:
             content_type = file.content_type
             if self.content_types == "All" or content_type in self.content_types:
                 if file.size > self.max_upload_size:
-                    raise ValidationError('Max filesize is %s. Current filesize %s' % (
+                    raise ValidationError('Max filesize is {}. Current filesize {}'.format(
                         filesizeformat(self.max_upload_size), filesizeformat(file.size))
                     )
             else:

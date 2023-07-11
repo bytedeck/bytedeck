@@ -1,5 +1,3 @@
-from __future__ import absolute_import, unicode_literals
-
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.shortcuts import get_object_or_404
@@ -35,12 +33,14 @@ def send_notifications(user_id, announcement_id):
 def get_users_to_email():
     students_to_email = list(
         CourseStudent.objects.all_users_for_active_semester()
+                             .filter(emailaddress__verified=True, emailaddress__primary=True)
                              .filter(profile__get_announcements_by_email=True)
                              .exclude(email='')
                              .values_list('email', flat=True))
 
     teachers_to_email = list(
         User.objects.filter(is_staff=True)
+                    .filter(emailaddress__verified=True, emailaddress__primary=True)
                     .filter(profile__get_announcements_by_email=True)
                     .exclude(email='')
                     .values_list('email', flat=True))
@@ -53,7 +53,7 @@ def get_users_to_email():
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
     siteconfig = SiteConfig.get()
-    subject = '{} Announcement'.format(siteconfig.site_name_short)
+    subject = f'{siteconfig.site_name_short} Announcement'
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({

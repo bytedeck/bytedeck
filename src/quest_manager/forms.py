@@ -1,4 +1,3 @@
-
 from datetime import date
 
 from django import forms
@@ -8,18 +7,19 @@ from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
-from django_summernote.widgets import SummernoteInplaceWidget
 from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
+
+from badges.models import Badge
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
+from utilities.fields import RestrictedFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
-from utilities.fields import RestrictedFileFormField
-from badges.models import Badge
 from .models import Category, Quest, CommonData
 
 
 class BadgeLabel:
     def label_from_instance(self, obj):
-        return "{} ({} XP)".format(str(obj), obj.xp)
+        return f"{str(obj)} ({obj.xp} XP)"
 
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
@@ -81,9 +81,9 @@ class QuestForm(forms.ModelForm):
         }
 
         widgets = {
-            'instructions': SummernoteInplaceWidget(),
-            'submission_details': SummernoteInplaceWidget(),
-            'instructor_notes': SummernoteInplaceWidget(),
+            'instructions': ByteDeckSummernoteAdvancedInplaceWidget(),
+            'submission_details': ByteDeckSummernoteAdvancedInplaceWidget(),
+            'instructor_notes': ByteDeckSummernoteAdvancedInplaceWidget(),
 
             'date_available': DatePickerInput(format='%Y-%m-%d'),
 
@@ -101,7 +101,7 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        super(QuestForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
 
@@ -116,7 +116,7 @@ class QuestForm(forms.ModelForm):
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
             '{% endif %}'
-    
+
         self.helper = FormHelper()
         self.helper.layout = Layout(
             HTML(cancel_btn),
@@ -211,7 +211,7 @@ class TAQuestForm(QuestForm):
 
 
 class SubmissionForm(forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=SummernoteInplaceWidget())
+    comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
     attachments = RestrictedFileFormField(required=False,
                                           max_upload_size=16777216,
@@ -222,8 +222,8 @@ class SubmissionForm(forms.Form):
 
 class SubmissionFormCustomXP(SubmissionForm):
     xp_requested = forms.IntegerField(
-        label="Requested XP", 
-        required=True, 
+        label="Requested XP",
+        required=True,
         help_text="You need to request an XP value for this submission."
     )
 
@@ -238,7 +238,7 @@ class SubmissionFormStaff(SubmissionForm):
     awards = forms.ModelMultipleChoiceField(queryset=None, label='Grant Awards', required=False)
 
     def __init__(self, *args, **kwds):
-        super(SubmissionFormStaff, self).__init__(*args, **kwds)
+        super().__init__(*args, **kwds)
 
         self.fields['awards'].queryset = Badge.objects.all_manually_granted()
         self.fields['awards'].widget = BadgeSelect2MultipleWidget(
@@ -264,7 +264,7 @@ class SubmissionQuickReplyForm(forms.Form):
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
     def __init__(self, *args, **kwds):
-        super(SubmissionQuickReplyForm, self).__init__(*args, **kwds)
+        super().__init__(*args, **kwds)
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
@@ -278,5 +278,5 @@ class CommonDataForm(forms.ModelForm):
         model = CommonData
         fields = "__all__"
         widgets = {
-            "instructions": SummernoteInplaceWidget()
+            "instructions": ByteDeckSummernoteSafeInplaceWidget()
         }

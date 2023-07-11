@@ -20,7 +20,6 @@
 <!-- Bootstrap Tables -->
 <link rel="stylesheet" href="{% static 'css/bootstrap-table.min.css' %}">
 <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
-<link rel="stylesheet" href="{% static 'css/bootstrap-table-accordion.css' %}" >
 
 <!-- KaTeX for math rendering -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css"
@@ -30,11 +29,11 @@
 
 <!-- Custom site-wide styles -->
 {% if request.user.profile.dark_theme %}
-<link href="{{ STATIC_PREFIX }}css/custom_slate.css?v=1.5" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_slate.css?v=1.6" rel="stylesheet">
 {% else %}
-<link href="{{ STATIC_PREFIX }}css/custom.css?v=1.5" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom.css?v=1.6" rel="stylesheet">
 {% endif %}
-<link href="{{ STATIC_PREFIX }}css/custom_common.css?v=1.5" rel="stylesheet">
+<link href="{{ STATIC_PREFIX }}css/custom_common.css?v=1.6" rel="stylesheet">
 <link href="{% static 'css/jquery-packed-img-strip.css' %}" rel="stylesheet">
 
 <!-- Bootstrap DateTimePicker Widget -->
@@ -47,6 +46,10 @@
       <link rel="icon" type="image/png" sizes="16x16" href="{{ STATIC_PREFIX }}icon/favicon-16x16.png?v=OmKpW3L7mY">
       <link rel="icon" type="image/png" sizes="32x32" href="{{ STATIC_PREFIX }}icon/favicon-32x32.png?v=OmKpW3L7mY">
       <link rel="shortcut icon" href="{{ STATIC_PREFIX }}icon/favicon.ico?v=OmKpW3L7mY">
+{% endif %}
+
+{% if config.custom_stylesheet %}<!-- Custom deck-specific stylesheet -->
+      <link href="{{ config.custom_stylesheet.url }}" rel="stylesheet">
 {% endif %}
 
 <!-- Mobile device icons -->

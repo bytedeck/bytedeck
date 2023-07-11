@@ -8,7 +8,7 @@
 
 {% block head_title %}{% if title %}{{ title }}{% endif %}{% endblock %}
 
-{% block heading %}Students
+{% block heading %}{{ config.custom_name_for_student }}s
     {% if request.user.is_staff %}
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"
@@ -28,7 +28,7 @@
 {% endblock %}
 
 {% block content %}
-    
+
 <table data-toggle='table'
 data-sort-name='first'
 data-sort-order='asc'
@@ -146,18 +146,18 @@ data-classes="table table-no-bordered table-hover"
                 <td>{{ object.user.last_name|default:"-" }}</td>
 
                 <td>{{ object.alias_clipped|default:"-" }}</td>
-                
+
 
                 {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
 
                     <td>{{ object.grad_year|default:"-" }}</td>
 
                     <td>
-                        {% for block in object.blocks_value %}{{ block }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                        {% for course in object.user.coursestudent_set.all %}{{ course.block }}{% if not forloop.last %}, {% endif %} {% endfor %}
                     </td>
 
                     <td>
-                        {% for course in object.courses %}{{ course }}{% if not forloop.last %}, {% endif %} {% endfor %}
+                        {% for course in object.user.coursestudent_set.all %}{{ course.course.title }}{% if not forloop.last %}, {% endif %} {% endfor %}
                     </td>
 
                     <td>{% if object.visible_to_other_students or request.user.is_staff %}
@@ -166,35 +166,31 @@ data-classes="table table-no-bordered table-hover"
                     </td>
 
                     {% if config.display_marks_calculation %}
-                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_value|floatformat }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_cached|default_if_none:0 }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
                     {% endif %}
-                
+
                 {% endif %}
 
                 <td>{% if object.user.portfolio.listed_locally or request.user.is_staff %}
                         <a href="{{ object.user.portfolio.get_absolute_url }}">View</a>
                     {% else %}<i class="fa fa-eye-slash"></i>{% endif %}
                 </td>
-                
-                {% if request.user.is_staff %}
 
+                {% if request.user.is_staff %}
                     {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
-                        {% with last_submission=object.last_submission_completed_value %}
                             <td>
-                                {% if last_submission %}
-                                    {{ last_submission.time_completed|date:'y/m/d' }}<br>
-                                    <small>{{ last_submission.time_completed|timesince }} ago</small>
+                                {% if object.time_of_last_submission %}
+                                    {{ object.time_of_last_submission|date:'y/m/d' }}<br>
+                                    <small>{{ object.time_of_last_submission|timesince }} ago</small>
                                 {% else %}
                                     &nbsp;Never
                                 {% endif %}
                             </td>
                             <!-- `last_sub_datetime` -->
                             <td>
-                            {{ last_submission.time_completed|date:"y/m/d" }} {{ last_submission.time_completed|time:"H:i:s"}}
+                            {{ object.time_of_last_submission|date:"y/m/d" }} {{ object.time_of_last_submission|time:"H:i:s"}}
                             </td>
                             <!-- end `last_sub_datetime` -->
-
-                        {% endwith %}
                     {% endif %}
 
                     <td>
@@ -207,7 +203,7 @@ data-classes="table table-no-bordered table-hover"
                     </td>
                     <!-- end `last_login_datetime` -->
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
-                    
+
                     {#      Admin buttons #}
                     {% if view_type != VIEW_TYPES.STAFF %}
                         <td>

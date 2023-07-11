@@ -2,10 +2,10 @@ name: Build and Tests
 
 on: [push, pull_request]
 
-jobs: 
+jobs:
   build-and-test:
     name: Build and Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - name: Copy sample environment variables
@@ -14,8 +14,14 @@ jobs:
         run: docker-compose up -d
       - name: Check running containers
         run: docker ps -a
+      - name: Check for potential django problems
+        run: docker-compose run web python src/manage.py check
+      - name: Check for missing migrations
+        run: docker-compose run web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
-        run: docker-compose run web coverage run src/manage.py test src
-      - name: Upload coverage data to coveralls.io
-        # https://github.com/coverallsapp/github-action/issues/30#issuecomment-829475358
-        run: docker-compose exec --env-file <(env | grep GITHUB_) -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} web coveralls --service=github
+        run: |
+          docker-compose exec -T web coverage run --parallel-mode src/manage.py test src
+          docker-compose exec -T web coverage combine
+          docker-compose exec -T web coverage xml
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3

@@ -28,7 +28,7 @@ from queryset_sequence import QuerySetSequence
 
 class QuerySetSequenceAutoResponseView(AutoResponseView):
     """
-    View that handles requests from ContentObjectSelect2Widget widgets.
+    View that handles requests from GFKSelect2Widget widgets.
 
     The view only supports HTTP's GET method.
 
@@ -38,7 +38,7 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
     def get(self, request, *args, **kwargs):
         """
         This is needed because `django_select2.views.AutoResponseView`
-        returns primary keys of selected options, and the ContentObjectChoiceField
+        returns primary keys of selected options, and the GFKChoiceField
         expects ctypeid-objectid for result.
 
         Return a :class:`.django.http.JsonResponse`.
@@ -103,7 +103,7 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
             Http404: If the widget can not be found or no id is provided.
 
         Returns:
-            ContentObjectSelect2Widget: Widget from cache.
+            GFKSelect2Widget: Widget from cache.
 
         """
         from django_select2.cache import cache
