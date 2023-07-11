@@ -14,6 +14,161 @@ from django_tenants.test.cases import TenantTestCase
 User = get_user_model()
 
 
+class QuestQuerysetTest(TenantTestCase):
+
+    def setUp(self):
+        self.student = baker.make(User, username='student', is_staff=False)
+
+    def test_not_in_progress_completed_or_cooldown(self):
+        """ Test that all 5 conditions are met for this queryset method:
+        it should remove quests that are:
+          1. already inprogress for the user (is_completed=False)
+          2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
+          3. completed and repeatable but still in hourly (max_repeats>0 and now - first_time_completed > hours_between_repeats)
+          4. completed and repeatable, but max repeats reached this semester
+          5. completed and repeatable, but max all time repeats reached (for repeatable_per_semester=False)
+
+        """
+        active_sem = SiteConfig.get().active_semester
+        quest_not_repeatable = baker.make(Quest, name='Quest-not-repeatable')
+        quest_repeatable_once_per_sem = baker.make(Quest,
+                                                   name='Quest-once-per-sem',
+                                                   max_repeats=1,
+                                                   hours_between_repeats=1,
+                                                   repeat_per_semester=True)
+        quest_repeatable_twice_all_time = baker.make(Quest,
+                                                     name='Quest-thrice-all-time',
+                                                     max_repeats=2,
+                                                     hours_between_repeats=2,
+                                                     repeat_per_semester=False)
+        quest_infinite_repeatables = baker.make(Quest,
+                                                name='Quest-infinite-repeatables',
+                                                max_repeats=-1,
+                                                hours_between_repeats=0)
+
+        # our repeatable quests should not be in cooldown to start, so should appear with the other 6 default quests
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertIn(quest_not_repeatable, qs)
+        self.assertIn(quest_repeatable_once_per_sem, qs)
+        self.assertIn(quest_repeatable_twice_all_time, qs)
+        self.assertIn(quest_infinite_repeatables, qs)
+
+        # have the student start all quests, should no longer be included because they are now inprogress: (CONDITION #1)
+        sub1 = baker.make(QuestSubmission, quest=quest_not_repeatable, user=self.student, semester=active_sem)
+        sub2 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=self.student, semester=active_sem)
+        sub3 = baker.make(QuestSubmission, quest=quest_repeatable_twice_all_time, user=self.student, semester=active_sem)
+        sub4 = baker.make(QuestSubmission, quest=quest_infinite_repeatables, user=self.student, semester=active_sem)
+
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertNotIn(quest_not_repeatable, qs)
+        self.assertNotIn(quest_repeatable_once_per_sem, qs)
+        self.assertNotIn(quest_repeatable_twice_all_time, qs)
+        self.assertNotIn(quest_infinite_repeatables, qs)
+
+        # now advance time by 5 hours, repeatable quests should still not be available because it's in progress: (CONDITION #1)
+        with freeze_time(localtime() + timedelta(hours=5)):
+            qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+            self.assertNotIn(quest_repeatable_once_per_sem, qs)
+            self.assertNotIn(quest_repeatable_twice_all_time, qs)
+            self.assertNotIn(quest_infinite_repeatables, qs)
+
+        # compelete the non-repeatable quest, should still not be available because it's completed and not repeatable: (CONDITION #2)
+        sub1.mark_completed()
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertNotIn(quest_not_repeatable, qs)
+
+        # complete the repeatable quests, cooldown time has not passed, so should still be excluded (CONDITION #3)
+        # except for quest with hours_between_repeats=0, which should be included
+        sub2.mark_completed()
+        sub3.mark_completed()
+        sub4.mark_completed()
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertNotIn(quest_repeatable_once_per_sem, qs)
+        self.assertNotIn(quest_repeatable_twice_all_time, qs)
+        self.assertIn(quest_infinite_repeatables, qs)
+
+        # advance 1 hour, cooldown time has passed for one of them, so should be included again (CONDITION #3)
+        with freeze_time(localtime() + timedelta(hours=1)):
+            qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+            self.assertNotIn(quest_not_repeatable, qs)
+            self.assertIn(quest_repeatable_once_per_sem, qs)
+            self.assertNotIn(quest_repeatable_twice_all_time, qs)
+            self.assertIn(quest_infinite_repeatables, qs)
+
+        # advance more time, all should now be available
+        with freeze_time(localtime() + timedelta(hours=3)):
+            qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+            self.assertNotIn(quest_not_repeatable, qs)
+            self.assertIn(quest_repeatable_once_per_sem, qs)
+            self.assertIn(quest_repeatable_twice_all_time, qs)
+            self.assertIn(quest_infinite_repeatables, qs)
+
+            # Sanity check, make sure another user completing the repeatable quest doesn't affect this user's ability to see it
+            student2 = baker.make(User)
+            sub = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=student2, semester=active_sem)
+            sub.mark_completed()
+            qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+            self.assertNotIn(quest_not_repeatable, qs)
+            self.assertIn(quest_repeatable_once_per_sem, qs)
+            self.assertIn(quest_repeatable_twice_all_time, qs)
+            self.assertIn(quest_infinite_repeatables, qs)
+
+            # complete the quests again, max repeats of 1 is now reached, so should always be excluded from now on (CONDITION #4)
+            # infinite repeatables should still be available
+            sub2_2 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=self.student, semester=active_sem)
+            sub2_2.mark_completed()
+            sub3_2 = baker.make(QuestSubmission, quest=quest_repeatable_twice_all_time, user=self.student, semester=active_sem)
+            sub3_2.mark_completed()
+            sub4_2 = baker.make(QuestSubmission, quest=quest_infinite_repeatables, user=self.student, semester=active_sem)
+            sub4_2.mark_completed()
+
+            # advance beyond cooldown just to be sure
+            with freeze_time(localtime() + timedelta(hours=12)):
+                qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+                self.assertNotIn(quest_not_repeatable, qs)
+                self.assertNotIn(quest_repeatable_once_per_sem, qs)
+                self.assertIn(quest_repeatable_twice_all_time, qs)
+                self.assertIn(quest_infinite_repeatables, qs)  # only the infinite repeats should be avail.
+
+                # Create a new semester and set it to the current one, which should make the per semester quest available again
+                new_semester = baker.make(Semester)
+                SiteConfig.get().set_active_semester(new_semester.id)
+                qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+                self.assertNotIn(quest_not_repeatable, qs)
+                self.assertIn(quest_repeatable_once_per_sem, qs)
+                self.assertIn(quest_repeatable_twice_all_time, qs)
+                self.assertIn(quest_infinite_repeatables, qs)
+
+                # Complete the per semester quest again, should not be available again
+                sub2_3 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=self.student, semester=new_semester)
+                sub2_3.mark_completed()
+                # Complete the max_repeats=2 quest, so all time repeats are complete and should not be available
+                sub3_3 = baker.make(QuestSubmission, quest=quest_repeatable_twice_all_time, user=self.student, semester=new_semester)
+                sub3_3.mark_completed()
+                # Complete infinitely repeatable quest, should still be available
+                sub4_3 = baker.make(QuestSubmission, quest=quest_infinite_repeatables, user=self.student, semester=new_semester)
+                sub4_3.mark_completed()
+
+                # advance beyond cooldown just to be sure
+                with freeze_time(localtime() + timedelta(hours=12)):
+                    qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+                    self.assertNotIn(quest_not_repeatable, qs)
+                    self.assertNotIn(quest_repeatable_once_per_sem, qs)
+                    self.assertNotIn(quest_repeatable_twice_all_time, qs)
+                    self.assertIn(quest_infinite_repeatables, qs)
+
+                    # Finally, make sure quest_repeatable_twice_all_time doesn't refresh in a new semester
+                    # Condition 5
+                    new_semester = baker.make(Semester)
+                    SiteConfig.get().set_active_semester(new_semester.id)
+                    qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+
+                    self.assertNotIn(quest_not_repeatable, qs)
+                    self.assertIn(quest_repeatable_once_per_sem, qs)  # reappearance expected!
+                    self.assertNotIn(quest_repeatable_twice_all_time, qs)
+                    self.assertIn(quest_infinite_repeatables, qs)
+
+
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(TenantTestCase):
 
@@ -175,57 +330,71 @@ class QuestManagerTest(TenantTestCase):
     #         ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
     #     )
 
-    def test_quest_qs_not_submitted_or_inprogress(self):
-        self.make_test_quests_and_submissions_stack()
+    # def test_quest_qs_not_submitted_or_inprogress(self):
+    #     self.make_test_quests_and_submissions_stack()
 
-        # jump ahead an hour so repeat cooldown is over
-        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-            qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
-        # compare sets so order doesn't matter
-        self.assertSetEqual(
-            set(qs.values_list('name', flat=True)),
-            set(['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_name_list)
-        )
+    #     # jump ahead an hour so repeat cooldown is over
+    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+    #         qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
+    #     # compare sets so order doesn't matter
+    #     self.assertSetEqual(
+    #         set(qs.values_list('name', flat=True)),
+    #         set(['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_name_list)
+    #     )
 
-    def test_quest_qs_not_completed(self):
-        """Should return all the quests that do NOT have a completed submission (during active semester)"""
-        active_semester = self.make_test_quests_and_submissions_stack()
-        SiteConfig.get().set_active_semester(active_semester.id)
-        qs = Quest.objects.order_by('id').not_completed(self.student)
-        # compare sets so order doesn't matter
-        self.assertSetEqual(
-            set(qs.values_list('name', flat=True)),
-            set(
-                ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
-                + self.initial_quest_name_list
-            )
-        )
+    # def test_quest_qs_not_completed(self):
+    #     """Should return all the quests that do NOT have a completed submission (during active semester)"""
+    #     active_semester = self.make_test_quests_and_submissions_stack()
+    #     SiteConfig.get().set_active_semester(active_semester.id)
+    #     qs = Quest.objects.order_by('id').not_completed(self.student)
+    #     # compare sets so order doesn't matter
+    #     self.assertSetEqual(
+    #         set(qs.values_list('name', flat=True)),
+    #         set(
+    #             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
+    #             + self.initial_quest_name_list
+    #         )
+    #     )
 
     def test_quest_qs_not_in_progress(self):
-        """Should return all the quests that do NOT have an inprogress submission (during active semester)"""
+        """Should return all the quests that do NOT have an inprogress submission"""
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
         qs = Quest.objects.order_by('id').not_in_progress(self.student)
         # compare sets so order doesn't matter
         self.assertSetEqual(
             set(qs.values_list('name', flat=True)),
-            set(['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
+            set(['Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
                  'Quest-1hr-cooldown'] + self.initial_quest_name_list)
         )
 
-    def test_quest_manager_get_available(self):
+    def test_get_available(self):
         """ DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
-        1. Quests whose available date & time has not past, or quest that have expired
-        2. Quests that are not visible to students or archived
-        3. Quests who's prerequisites have not been met
-        4. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
-        5. Quests who's maximum repeats have been completed
-        6. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
-        7. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
+        1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
+        2. Quests that are not visible to students or archived  <<<< COVERED HERE
+        3. Quests that are a part of an inactive campaign/category <<<< COVERED HERE
+        4. Quests who's prerequisites have not been met
+        5. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
+        6. Quests who's maximum repeats have been completed <<<< COVERED HERE
+        7. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        8. Check for blocking quests (available and in-progress), if present, remove all others <<<< COVERED HERE
         """
+
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
+
+        # a couple additions just for this test:
+        baker.make(Quest, name='Quest-expired', date_expired=(localtime() - timedelta(days=1)))  # 1
+        baker.make(Quest, name='Quest-future', date_available=(localtime() + timedelta(days=1)))  # 1
+        baker.make(Quest, name='Quest-not-visible', visible_to_students=False)  # 2
+        baker.make(Quest, name='Quest-archived', archived=True)  # 2
+        inactive_campaign = baker.make('quest_manager.Category', active=False)
+        baker.make(Quest, name='Quest-inactive-campaign', campaign=inactive_campaign)  # 3
+
+        ########################################
+        # 8. Check for blocking quests (available and in-progress), if present, remove all others
+        #########################################
         qs = Quest.objects.get_available(self.student)
         self.assertListEqual(list(qs.values_list('name', flat=True)), ['Quest-blocking'])
 
@@ -242,6 +411,57 @@ class QuestManagerTest(TenantTestCase):
         qs = Quest.objects.get_available(self.student)
         self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
+        ########################################
+        # 2. Quests that are not visible to students or archived
+        #########################################
+        # The assert above checks this condition, because these two do not appear:
+        #  Quest-not-visible
+        #  Quest-archived
+
+        ########################################
+        # 3. Quests that are a part of an inactive campaign
+        ########################################
+        # The assert above checks this condition, because this one don't appear:
+        #  Quest-inactive-campaign
+
+        ########################################
+        # 5. Quests that are not currently submitted for approval or already in progress
+        #########################################
+        # The assert above checks this condition, because these two do not appear:
+        #  Quest-inprogress
+        #  Quest-completed
+
+        #########################################
+        # 7. Quests who's repeat time has not passed since last completion <<<< COVERED HERE
+        #########################################
+        # The assert above checks this condition, because this one don't appear:
+        #  Quest-1hr-cooldown
+
+        # move 1 hour out and the cooldown quest should now appear:
+        with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+            qs = Quest.objects.get_available(self.student)
+            self.assertQuerysetEqual(
+                list(qs.values_list('name', flat=True)),
+                ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'],
+                ordered=False
+            )
+
+            #########################################
+            # 6. Quests who's maximum repeats have been completed
+            #########################################
+            quest_1hr_cooldown = Quest.objects.get(name='Quest-1hr-cooldown')
+            sub_1hr_cooldown = baker.make(QuestSubmission, quest=quest_1hr_cooldown, user=self.student, semester=active_semester)
+            sub_1hr_cooldown.mark_completed()
+
+            # increment time another hour just be sure it doesn't appear (max repeats of 1 reached)
+            with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
+                qs = Quest.objects.get_available(self.student)
+                self.assertQuerysetEqual(
+                    list(qs.values_list('name', flat=True)),
+                    ['Quest-not-started', 'Welcome to ByteDeck!'],
+                    ordered=False
+                )
+
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
         Quest                   sub     .completed   .semester
@@ -252,6 +472,9 @@ class QuestManagerTest(TenantTestCase):
         Quest-completed         Y       True         1
         Quest-1hr-cooldown      Y       True         1
         Quest-blocking          N       NA           NA
+
+        Note that other quests automatically created in every deck will exist, like `Welcome to Bytedeck`
+
         """
         active_semester = baker.make(Semester)
 
@@ -275,6 +498,7 @@ class QuestManagerTest(TenantTestCase):
         sub_cooldown_complete = baker.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
                                            semester=active_semester)  # noqa
         sub_cooldown_complete.mark_completed()
+
         return active_semester
 
 

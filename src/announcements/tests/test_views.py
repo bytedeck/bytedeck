@@ -12,6 +12,7 @@ from model_bakery import baker
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -36,7 +37,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertRedirectsLogin('announcements:list')
         self.assertRedirectsLogin('announcements:archived')
-        self.assertRedirectsLogin('announcements:list2')
         self.assertRedirectsLogin('announcements:comment', args=[1])
         self.assertRedirectsLogin('announcements:list', args=[1])
 
@@ -57,7 +57,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # students should have access to these:
         self.assert200('announcements:list')
-        self.assert200('announcements:list2')
         self.assert200('announcements:list', args=[self.ann_pk])
 
         # Announcement from setup() should appear in the list
@@ -85,7 +84,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         self.assert200('announcements:list')
-        self.assert200('announcements:list2')
         self.assert200('announcements:archived')
         self.assert200('announcements:list', args=[self.ann_pk])
 
@@ -235,6 +233,66 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
             response,
             new_ann.get_absolute_url()
         )
+
+    # Custom label tests
+    def test_announcement_views__header_custom_label_displayed(self):
+        """
+        Annnouncement Create, Copy, and Edit view headers should change 'announcement' to label set at custom_name_for_announcement model
+        field in Siteconfig
+        """
+        # Login a teacher
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.save()
+
+        # Get Create view and assert header is correct
+        request = self.client.get(reverse('announcements:create'))
+        self.assertContains(request, "Create New CustomAnnouncement")
+        # Get Copy view and assert header is correct
+        request = self.client.get(reverse('announcements:copy', args=[self.test_announcement.id]))
+        self.assertContains(request, "Copy another CustomAnnouncement")
+        # Get Edit view and assert header is correct
+        request = self.client.get(reverse('announcements:update', args=[self.test_announcement.id]))
+        self.assertContains(request, 'Edit CustomAnnouncement')
+        # Get Delete view and assert header is correct
+        request = self.client.get(reverse('announcements:delete', args=[self.test_announcement.id]))
+        self.assertContains(request, 'Delete CustomAnnouncement')
+
+    def test_comment_on_announcement__success_message_custom_label_displayed(self):
+        """
+        Commenting on an announcement should display a success message upon redirect that contains the label set at custom_name_for_announcement
+        model field in SiteConfig
+
+        i.e if custom_name_for_announcement = "CustomAnnouncement" success message will display as:
+        "CustomAnnouncement commented on"
+        """
+        # Login a teacher (could be a student, won't affect results but we need a logged-in user)
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # Change custom_name_for_announcement to a non-default option
+        config = SiteConfig.get()
+        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.save()
+
+        # set form data for test comment (comment itself isn't being tested, we just need to make one successfully to redirect with success message)
+        form_data = {
+            'comment_text': "test comment",
+            'comment_button': True,
+        }
+
+        # make the comment and follow redirect to list view, with success message displayed (follow=True)
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data=form_data, follow=True
+        )
+
+        # assert the custom label (and the success message) are displayed
+        self.assertContains(response, "CustomAnnouncement commented on")
 
 
 class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):

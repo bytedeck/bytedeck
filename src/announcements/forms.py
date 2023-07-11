@@ -41,6 +41,6 @@ class AnnouncementForm(forms.ModelForm):
 
         if auto_publish and datetime_released < timezone.now():
             raise forms.ValidationError(
-                'An announcement that is auto published cannot have a past release date.'
+                'An Announcement that is auto published cannot have a past release date.'
             )
         return data

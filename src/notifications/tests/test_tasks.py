@@ -88,7 +88,6 @@ class NotificationTasksTests(TenantTestCase):
         self.assertEqual(type(email), EmailMultiAlternatives)
         self.assertEqual(email.to, [self.test_student1.email])
         # Default deck short name is "Deck"
-        print(email.subject)
         self.assertEqual(email.subject, "Deck Notifications")
 
         # https://stackoverflow.com/questions/62958111/how-to-display-html-content-of-an-emailmultialternatives-mail-object

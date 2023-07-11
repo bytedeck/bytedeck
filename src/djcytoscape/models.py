@@ -486,6 +486,7 @@ class CytoScape(models.Model):
     class Meta:
         unique_together = (('initial_content_type', 'initial_object_id'),)
         verbose_name = "Quest Map"
+        ordering = ['name']
 
     def __str__(self):
         return self.name

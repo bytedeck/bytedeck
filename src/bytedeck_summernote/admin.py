@@ -18,14 +18,22 @@ class ByteDeckSummernoteModelAdminMixin:
 
     def formfield_for_dbfield(self, db_field, *args, **kwargs):
         """Override default `SummernoteModelAdminMixin` class by injecting customized version of SummernoteWidget(s)"""
-        summernote_widget = self.get_summernote_widget_class()
+        AdminSummernoteWidget = self.get_summernote_widget_class()
 
         if self.summernote_fields == "__all__":
             if isinstance(db_field, models.TextField):
-                kwargs["widget"] = summernote_widget
+                # use class name as CSS class
+                kwargs.setdefault("widget", AdminSummernoteWidget(
+                    attrs={
+                        "class": str(AdminSummernoteWidget.__name__).lower(),
+                    }))
         else:
             if db_field.name in self.summernote_fields:
-                kwargs["widget"] = summernote_widget
+                # use class name as CSS class
+                kwargs.setdefault("widget", AdminSummernoteWidget(
+                    attrs={
+                        "class": str(AdminSummernoteWidget.__name__).lower(),
+                    }))
 
         return super().formfield_for_dbfield(db_field, *args, **kwargs)
 

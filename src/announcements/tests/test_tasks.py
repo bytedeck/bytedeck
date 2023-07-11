@@ -80,6 +80,19 @@ class AnnouncementTasksTests(TenantTestCase):
                            course=course,
                            semester=semester)
         emails = get_users_to_email()
+
+        # Everyone is unverified so this should be 0
+        self.assertEqual(len(emails), 0)
+
+        # Make everyone verified
+        from allauth.account.models import EmailAddress
+        self.assertEqual(EmailAddress.objects.count(), 0)
+
+        for user_obj in User.objects.filter(email__isnull=False).exclude(email=''):
+            EmailAddress.objects.create(user=user_obj, email=user_obj.email, verified=True, primary=True)
+
+        emails = get_users_to_email()
+
         self.assertEqual(len(emails), 12 if settings.TENANT_DEFAULT_OWNER_EMAIL else 11)  # 11 + deck owner = 12
 
     def test_send_announcement_emails(self):

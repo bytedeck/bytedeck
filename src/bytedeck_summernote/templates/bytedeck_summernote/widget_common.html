@@ -9,6 +9,12 @@
          var csrftoken = '{{ csrf_token }}';
          var settings = window.parent.settings_{{ id_safe }};
          var $sn = $('#summernote');
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: fix bytedeck/issues/1334 issue, make the codeview icon red or yellow (or otherwise different)
+{% endcomment %}
+         $sn.parent("body").addClass(origin.className);
+{% comment %} End changes {% endcomment %}
          $(iframe).height(settings.height);
 {% else %}
          var origin = window.document.getElementById('{{ id }}');

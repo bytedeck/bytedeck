@@ -20,6 +20,7 @@ from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 
+from courses.models import Block
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -82,8 +83,9 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         q2_pk = self.quest2.pk
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:available2')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:available_all')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)
@@ -94,6 +96,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
 
         #  students shouldn't have access to these and should be redirected to login
+        self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
@@ -2160,6 +2163,34 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
         self.assertEqual(response.status_code, 404)
 
+    def test_skip_button(self):
+        """ The skip button should mark the submission as approved and leave a comment,
+            but not grant XP to the user
+        """
+        comment_text = "Lorum Ipsum"
+        form_data = {'comment_text': comment_text, 'skip_button': True}
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # This submission should be marked as skipped (do_not_grant_xp)
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.do_not_grant_xp)
+
+    def test_skip_button__no_comment(self):
+        """ The skip button should leave a default comment if none if provided.
+        """
+        form_data = {'comment_text': "", 'skip_button': True}
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+        # And the submission should have a comment
+        from comments.models import Comment
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertEqual(comments.first().text, "(Skipped - You were not granted XP for this quest)")
+
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
@@ -2296,24 +2327,32 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     def test_approved_for_quest_all(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
-    def test_approvals_all_buttons_does_not_exist(self):
-        """ My blocks should not be rendered when there is only one teacher"""
+    def test_approvals__my_groups_all_button_rendered(self):
+        """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""
 
+        # Only one user with assigned blocks but that user is not the current user (button should be rendered)
+
+        # Currently the only user with assigned blocks is "owner", who is assigned block "Default", The user for this test is "current_teacher"
         response = self.client.get(reverse('quests:approvals'))
-        self.assertNotContains(response, 'My blocks')
+        self.assertContains(response, 'My groups')
 
-    def test_approval_all_button_exists(self):
-        """ My blocks button should not be rendered """
+        # Multiple users with assigned blocks (button should be rendered)
 
-        baker.make('courses.Block', name='A', current_teacher=self.current_teacher)
-        baker.make('courses.Block', name='B', current_teacher=self.current_teacher)
-
-        another_teacher = baker.make(User, is_staff=True)
-        baker.make('courses.Block', name='C', current_teacher=another_teacher)
-        baker.make('courses.Block', name='D', current_teacher=another_teacher)
-
+        # Make new block that's assigned to the current user
+        baker.make(Block, name='New Test Block', current_teacher=self.current_teacher)
+        # Users with assigned blocks are now "owner" and "current_teacher"
         response = self.client.get(reverse('quests:approvals'))
-        self.assertContains(response, 'My blocks')
+        self.assertContains(response, 'My groups')
+
+        # Only one user with assigned blocks and that user is the current user (button should NOT be rendered)
+
+        # Get default block and re-assign to current user
+        default_block = Block.objects.get(name='Default')
+        default_block.current_teacher = self.current_teacher
+        default_block.save()
+        # "current_teacher" is now the only user with assigned blocks
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertNotContains(response, 'My groups')
 
 
 class Is_staff_or_TA_test(TenantTestCase):

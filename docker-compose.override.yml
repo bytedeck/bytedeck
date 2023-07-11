@@ -25,7 +25,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-    - 5432:5432  # Expose port so app can connect to db when developing locally with `./src/manage.py [runserver|test src]
+    - 5432:5432  # Expose port so app can connect to db when developing locally with `python src/manage.py [runserver|test src]
 
   redis:
     image: "redis:5.0-alpine"
@@ -41,7 +41,7 @@ services:
       timeout: 3s
       retries: 30
     ports:
-    - 6379:6379  # Expose port so app can connect to redis when developing locally with `./src/manage.py [runserver|test src]
+    - 6379:6379  # Expose port so app can connect to redis when developing locally with `python src/manage.py [runserver|test src]
 
   web:
     stdin_open: true
@@ -89,6 +89,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:80"
+    networks:
+      - backend-network
 
 volumes:
   postgres_data:

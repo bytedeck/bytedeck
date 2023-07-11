@@ -1,8 +1,12 @@
 from django import forms
 
 from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+from allauth.utils import email_address_exists
 
 from .models import Profile
+from siteconfig.models import SiteConfig
 
 
 class ProfileForm(forms.ModelForm):
@@ -18,6 +22,8 @@ class ProfileForm(forms.ModelForm):
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
     def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+
         super().__init__(*args, **kwargs)
 
         self.fields['grad_year'] = forms.ChoiceField(
@@ -26,16 +32,62 @@ class ProfileForm(forms.ModelForm):
 
         self.fields['email'].initial = self.instance.user.email
 
+        # gets value from deck's custom_name_for_student field in siteconfig.models
+        custom_student_name = SiteConfig.get().custom_name_for_student
+        # sets visible_to_other_students field name and help text on student profile settings page
+        self.fields['visible_to_other_students'].label = f"Visible to other {custom_student_name.lower()}s"
+        # setting help text with a variable in two steps isn't ideal but linebreaking with a backslash breaks tests that parse for exact help text.
+        # maybe another solution exists to cut down on line size?
+        helptext = f"Your marks will be visible to other {custom_student_name.lower()}s through the {custom_student_name.lower()} list."
+        self.fields['visible_to_other_students'].help_text = helptext
+
+        user = self.instance.user
+
+        # It is possible that the user registered without an email so instead of using
+        # user.emailaddress_set.get(...), let's just use .first() since it would return
+        # None instead of raising a DoesNotExist error
+        email_address = user.emailaddress_set.filter(email=user.email).first()
+
+        if (user.email and email_address is None) or (email_address and email_address.verified is False):
+            resend_email_url = reverse('profiles:profile_resend_email_verification', args=[self.instance.pk])
+            self.fields['email'].help_text = (
+                '<i class="fa fa-ban text-danger" aria-hidden="true"></i> Not yet verified. '
+                f'<a href="{resend_email_url}">Re-send verification link</a>'
+            )
+
+        if email_address and email_address.verified:
+            self.fields['email'].help_text = '<i class="fa fa-check text-success" aria-hidden="true"></i>&nbsp;Verified'
+
     # UNIQUE if NOT NULL
     def clean_alias(self):
         return self.cleaned_data['alias'] or None
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+
+        if email and email_address_exists(email, exclude_user=self.instance.user):
+            raise forms.ValidationError("A user is already registered with this email address")
+
+        return email
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
         user = self.instance.user
-        user.email = self.cleaned_data['email']
-        user.save()
+
+        modified_email = user.email != self.cleaned_data['email']
+        if modified_email:
+            user.email = self.cleaned_data['email']
+            user.save()
+
+        from allauth.account.utils import send_email_confirmation
+        if self.request and modified_email:
+            send_email_confirmation(
+                request=self.request,
+                user=user,
+                signup=False,
+                email=user.email,
+            )
 
         return self.instance
 
@@ -76,6 +128,7 @@ class UserForm(forms.ModelForm):
         user_fields = list(set(self._meta.fields) & {field.name for field in user._meta.fields})
         for name in user_fields:
             user.__dict__[name] = self.cleaned_data[name]
+
         user.save(update_fields=user_fields)
 
         # Use updated profile instance to save profile model

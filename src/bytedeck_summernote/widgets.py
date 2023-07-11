@@ -1,16 +1,17 @@
 import bleach
-import html as htmllib
 import json
 
 from django.conf import settings as django_settings
 from django.forms.utils import flatatt
 from django.template.loader import render_to_string
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 
-from bleach.css_sanitizer import CSSSanitizer
-from django_summernote.utils import get_config
+from django_summernote.utils import get_config, get_proper_language
 from django_summernote.widgets import SummernoteInplaceWidget, SummernoteWidget
+
+from .css_sanitizer import CSSSanitizer
 
 
 class ByteDeckSummernoteWidget(SummernoteWidget):
@@ -76,21 +77,38 @@ class ByteDeckSummernoteSafeWidgetMixin:
         # enable XSS protection for CodeView (mandatory for ByteDeck project)
         summernote_settings.update(
             {
-                "codeviewFilter": True,  # set this to true to filter entities (tags, attributes or styles).
+                # Summernote provides a XSS protection for CodeView.
+                # It consists of filtering tags and whitelist for iframe.
+                #
+                # Whitelist filter is turned on by default, but filtering tags is not.
+                # You can turn them on and off by options like below.
+                #
+                "codeviewFilter": True,  # set this to true (safe option) to filter entities (tags, attributes or styles).
+                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                # And, you can also add your own whitelist domains and use custom tag filters.
+                #
+                # "codeviewFilterRegex": 'custom-regex',
+                # "codeviewIframeWhitelistSrc: ['my-own-domainname']",
+                #
+                # But you have to remember that this protection only affects on front-end side –
+                # to prevent attacks thoroughly, you have to check it on back-end side again.
             }
         )
         return summernote_settings
 
     def value_from_datadict(self, data, files, name):
         """Override default `value_from_datadict` method to fix injection vulnerability"""
-        from django_summernote.settings import ALLOWED_TAGS, ATTRIBUTES, STYLES
+        from bytedeck_summernote.settings import ALLOWED_TAGS, STYLES
 
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
         return bleach.clean(
-            htmllib.unescape(value) if value else "",
+            value or "",
             tags=ALLOWED_TAGS,
-            attributes=ATTRIBUTES,
+            # skip attributes sanitization (always allowed), fix #1340
+            # for reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
+            attributes=lambda tag, name, value: True,
+            # improved CSS sanitization, fix #1340
             css_sanitizer=CSSSanitizer(allowed_css_properties=STYLES),
         )
 
@@ -101,13 +119,33 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
     def summernote_settings(self):
         """Override default `summernote_settings` method to inject mandatory settings"""
         summernote_settings = super().summernote_settings()
+        lang = get_proper_language()
 
         # disable XSS protection for CodeView (mandatory for ByteDeck project)
         summernote_settings.update(
             {
-                "codeviewFilter": False,  # set this to false to skip filtering entities (tags, attributes or styles).
+                # Summernote provides a XSS protection for CodeView.
+                # It consists of filtering tags and whitelist for iframe.
+                #
+                # Whitelist filter is turned on by default, but filtering tags is not.
+                # You can turn them on and off by options like below.
+                #
+                "codeviewFilter": False,  # set this to false (advanced option) to skip filterng entities (tags, attributes or styles).
+                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                # And, you can also add your own whitelist domains and use custom tag filters.
+                #
+                # "codeviewFilterRegex": 'custom-regex',
+                # "codeviewIframeWhitelistSrc: ['my-own-domainname']",
+                #
+                # But you have to remember that this protection only affects on front-end side –
+                # to prevent attacks thoroughly, you have to check it on back-end side again.
             }
         )
+        # replace original language js file (mandatory for ByteDeck project)
+        summernote_settings["url"].update({
+            'language': static('bytedeck_summernote/lang/bytedeck_summernote-advanced-' + lang + '.min.js'),
+        })
+
         return summernote_settings
 
 
