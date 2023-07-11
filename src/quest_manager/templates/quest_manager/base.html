@@ -3,10 +3,19 @@
 
 {% block head_title %}Quests | {% endblock %}
 {% block head_css %}{% endblock %}
-{% block head %}{% endblock %}
+{% block head %}
+    <link type="text/css" rel="stylesheet" href="{% static 'quest_manager/css/bootstrap-table-accordion.css' %}" />
+{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-shield pull-right"></i>{% block heading_inner %}{% endblock%}{% endblock %}
 
 {% block content %}{% endblock %}
-{% block js %}{% endblock %}
+{% block js %}
+    {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
+            integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
+            crossorigin="anonymous"></script>
+
+    <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}"></script>
+{% endblock %}

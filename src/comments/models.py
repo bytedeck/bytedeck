@@ -18,8 +18,6 @@ from django.db.models.signals import pre_delete
 
 
 class CommentQuerySet(models.query.QuerySet):
-    def get_user(self, recipient):
-        return self.filter(recipient=recipient)
 
     def get_object_target(self, object):
         object_type = ContentType.objects.get_for_model(object)
@@ -28,9 +26,6 @@ class CommentQuerySet(models.query.QuerySet):
 
     def get_no_parents(self):
         return self.filter(parent=None)
-
-    def get_not_flagged(self):
-        return self.filter(flagged=False)
 
 
 class CommentManager(models.Manager):
@@ -48,7 +43,7 @@ class CommentManager(models.Manager):
         if not path:
             raise ValueError("Must include a path when adding a comment")
         if not user:
-            raise ValueError("Must include a user  when adding a comment")
+            raise ValueError("Must include a user when adding a comment")
 
         text = clean_html(text, convert_newlines)
 
@@ -94,7 +89,7 @@ def clean_html(text, convert_newlines=True):
         if convert_newlines:
             escaped_text = '<br>'.join(escaped_text.splitlines())
 
-        if textNode.parent and getattr(textNode.parent, 'name') == 'a':
+        if textNode.parent and textNode.parent.name == 'a':
             continue  # skip already formatted links
         urlized_text = urlize(escaped_text, trim_url_limit=50)
         textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
@@ -164,7 +159,7 @@ class Comment(models.Model):
     def get_absolute_url(self):
         """ Find the aboslute url of the target object, then add the comment"""
         # find absolute url of the target
-        self.target_object.get_absolute_url()        
+        self.target_object.get_absolute_url()
         return reverse('comments:threads', kwargs={'id': self.id})
 
     def get_origin(self):
@@ -190,26 +185,26 @@ class Comment(models.Model):
         else:
             return Comment.objects.filter(parent=self)
 
-    def get_affected_users(self):
-        # it needs to be a parent and have children, which are the affected users
-        comment_children = self.get_children()
-        if comment_children is not None:
-            users = []
-            for comment in comment_children:
-                if comment.user in users:
-                    pass
-                else:
-                    users.append(comment.user)
-            return users
-        else:
-            return None
+    # def get_affected_users(self):
+    #     # it needs to be a parent and have children, which are the affected users
+    #     comment_children = self.get_children()
+    #     if comment_children is not None:
+    #         users = []
+    #         for comment in comment_children:
+    #             if comment.user in users:
+    #                 pass
+    #             else:
+    #                 users.append(comment.user)
+    #         return users
+    #     else:
+    #         return None
 
 
 # Document Handler ############################################
 class Document(models.Model):
     docfile = models.FileField(upload_to='documents/%Y/%m/%d')
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
-    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)  
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!

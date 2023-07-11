@@ -2,7 +2,7 @@
 
     $(document).ready(function() {
         // Flag submissions via Ajax when button clicked:
-        $('.btn-flag-submission').on('click', function(event){
+        $(document).on('click', '.btn-flag-submission', function(event){
             event.preventDefault(); // prevent browser from reloading
             flag_submission(this);
         });
@@ -11,7 +11,7 @@
 
     function flag_submission(btn) {
         $btn = $(btn);
-        
+
         $iconOriginal = $btn.find('i')
         $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>')
         $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>')
@@ -27,7 +27,7 @@
             $.ajax({
                 url : "{% url 'quests:ajax_flag' %}",
                 type : "POST", // http method
-                data : { 
+                data : {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
                     submission_id: sub_id
                 }, // data sent with the post request

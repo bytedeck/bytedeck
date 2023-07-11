@@ -11,11 +11,11 @@
       you: {
         {% if request.user.profile.dark_theme %}
           // dark theme
-          bg: 'rgba(150, 150, 150, 0.5)', 
+          bg: 'rgba(150, 150, 150, 0.5)',
           border: 'rgba(0, 0, 0, 0.1)'
         {% else %}
           // light theme
-          bg: 'rgba(25, 25, 25, 0.5)', 
+          bg: 'rgba(25, 25, 25, 0.5)',
           border: 'rgba(0, 0, 0, 0.1)'
         {% endif %}
       },
@@ -50,15 +50,15 @@
               borderColor: COLORS.you.border,
               borderWidth: 1,
               stack: 0,
-            }, 
+            },
           ]
         },
-        
+
         options: {
           maintainAspectRatio: false,
           scales: {
             xAxes: [{
-              barPercentage: 0.99,  
+              barPercentage: 0.99,
               categoryPercentage: 0.99,
               gridLines: {
                 offsetGridLines: false,
@@ -72,17 +72,17 @@
           tooltips: {
             callbacks: {
               // custom title text
-              title: function(tooltipItem, data) { 
+              title: function(tooltipItem, data) {
                 var index = tooltipItem[0].index;
 
                 // -2 since we have to skip overempty label
                 if (index >= data.labels.length-2)
-                  return data.labels[data.labels.length-2]; 
+                  return data.labels[data.labels.length-2];
 
-                return `${data.labels[index].slice(0, -1)}-${data.labels[index+1]}`; 
+                return `${data.labels[index].slice(0, -1)}-${data.labels[index+1]}`;
               },
               // show different label when hovering over bar where user is in
-              label: function(tooltipItem, data) {  
+              label: function(tooltipItem, data) {
                 var label = data.datasets[tooltipItem.datasetIndex].label;
                 var label_text = `${label}: ${tooltipItem.yLabel}`;
 
@@ -104,7 +104,7 @@
     });
 
   }
-  
+
   window.addEventListener("load", function() {
     $.ajax({
       url: "{% url 'courses:mark_distribution_chart' user.id %}",
@@ -117,7 +117,7 @@
           json.data.students,
           json.data.user_id,
         );
-        
+
       }
     });
   }, false);

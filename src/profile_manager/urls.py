@@ -25,7 +25,9 @@ urlpatterns = [
     url(r'^edit/own/$', views.ProfileUpdateOwn.as_view(), name='profile_edit_own'),
     path('chart/<pk>/', views.TagChart.as_view(), name='tag_chart'),
 
+    path('oauth-merge-account/', views.oauth_merge_account, name='oauth_merge_account'),
     path('password/change/<int:pk>/', views.PasswordReset.as_view(), name='change_password'),
+    path('<pk>/resend-email-verification/', views.ProfileResendEmailVerification.as_view(), name='profile_resend_email_verification'),
 
     # Examples
     # Template View Example
