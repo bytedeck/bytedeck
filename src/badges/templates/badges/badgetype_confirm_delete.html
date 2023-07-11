@@ -1,20 +1,20 @@
 {% extends "badges/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Delete Badge Type {% endblock %}
+{% block heading_inner %}Delete {{ config.custom_name_for_badge }} Type {% endblock %}
 
 {% block content %}
   {% if not has_badges %}
     <form action="" method="post">{% csrf_token %}
-      <p>Are you sure you want to delete this badge type? You can't delete types that have badges assigned to them.<p>
+      <p>Are you sure you want to delete this {{ config.custom_name_for_badge }} type? You can't delete types that have {{ config.custom_name_for_badge }} assigned to them.<p>
       <div class="well">
-        <p>Badge Type Name: {{object.name}}</p>
-        <p>Badge Type ID: {{object.id}}</p>
+        <p>{{ config.custom_name_for_badge }} Type Name: {{object.name}}</p>
+        <p>{{ config.custom_name_for_badge }} Type ID: {{object.id}}</p>
       </div>
       <a href="{% url 'badges:badge_types' %}" role="button" class="btn btn-info">Cancel</a>
       <input type="submit" value="Delete" class="btn btn-danger" />
     </form>
   {% else %}
-    <p>Unable to delete badge type '{{ object.name }}' as it still has badges assigned to it. See a list of current badges <a href="{% url 'badges:list' %}">here.</a></p>
+    <p>Unable to delete {{ config.custom_name_for_badge|lower }} type '{{ object.name }}' as it still has {{ config.custom_name_for_badge }}s assigned to it. See a list of current {{ config.custom_name_for_badge }}s <a href="{% url 'badges:list' %}">here.</a></p>
   {% endif %}
 {% endblock %}

@@ -30,3 +30,13 @@
 [data-theme="dark"] .note-color-palette div .note-color-btn {
     border-color: #272b30;
 }
+
+/* bytedeck_summernote custom widgets */
+
+.bytedecksummernoteadvancedinplacewidget .note-view .btn-codeview {
+}
+.bytedecksummernoteadvancedinplacewidget .note-view .btn-codeview:hover {
+   color: #fff;
+   background-color: #c82333;
+   border-color: #bd2130;
+}

@@ -11,18 +11,27 @@
 {% endblock %}
 
 {% block content %}
-<p>This page if visible to staff only.</p>
-<table class="table table-striped">
+<p>This page is visible to staff only.</p>
+
+<table
+  data-toggle='table'
+  data-search='true'
+  data-classes="table"
+  data-pagination='true'
+  data-page-size=15
+  data-page-list="[15, 50, 100, all]"
+>
   <thead>
     <tr>
-      <th>Title</th>
+      <th data-sortable='true' data-field='title'>Title</th>
       <th>Icon</th>
-      <th># of Quests</th>
-      <th>XP Available</th>
-      <th>Active</th>
+      <th data-sortable='true' data-field='count'># of Quests</th>
+      <th data-sortable='true' data-field='xp'>XP Available</th>
+      <th data-sortable='true' data-field='active'>Active</th>
       <th>Action</th>
     </tr>
   </thead>
+
   <tbody>
     {% for object in object_list %}
     <tr {% if not object.active %} class="text-muted" {% endif %}>
@@ -46,6 +55,5 @@
     {% endfor %}
   </tbody>
 </table>
-{% endblock %}
 
-{% block js %}{% endblock %}
+{% endblock %}

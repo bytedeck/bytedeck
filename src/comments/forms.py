@@ -1,6 +1,6 @@
 from django import forms
 
-from django_summernote.widgets import SummernoteWidget
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
 
 # class CommentForm(forms.ModelForm):
@@ -14,10 +14,10 @@ class CommentForm(forms.Form):
         self.label = kwargs.pop('label', 'Comment')
         # self.accept_files = kwargs.get('accept_files', False)
 
-        super(CommentForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # do some more stuff after the object has been created
         if self.wysiwyg:
-            self.fields['comment_text'].widget = SummernoteWidget()
+            self.fields['comment_text'].widget = ByteDeckSummernoteSafeInplaceWidget()
         else:
             self.fields['comment_text'].widget = forms.Textarea(attrs={'rows': 2})
 

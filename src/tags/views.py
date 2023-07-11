@@ -114,7 +114,7 @@ class TagDetailStudent(TagDetail):
             ordinal_check = submission.ordinal > 1
             multiple = submissions.filter(quest__id=submission.quest.id).count() > 1
 
-            setattr(submission, 'is_multiple', ordinal_check or multiple)
+            submission.is_multiple = ordinal_check or multiple
 
         return submissions
 
@@ -127,7 +127,7 @@ class TagDetailStudent(TagDetail):
             ordinal_check = assertion.ordinal > 1
             multiple = assertions.filter(badge__id=assertion.badge.id).count() > 1
 
-            setattr(assertion, 'is_multiple', ordinal_check or multiple)
+            assertion.is_multiple = ordinal_check or multiple
 
         return assertions
 
@@ -171,7 +171,7 @@ class TagCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = f'Create {SiteConfig.objects.get().custom_name_for_tag}'
+        kwargs['heading'] = f'Create {SiteConfig.get().custom_name_for_tag}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -185,7 +185,7 @@ class TagUpdate(NonPublicOnlyViewMixin, UpdateView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_tag}'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_tag}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)

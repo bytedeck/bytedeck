@@ -16,22 +16,6 @@ repos:
         args: [ "--py36-plus", "--py37-plus", "--py38-plus" ]
         types: [python]
 
-  - repo: local
-    hooks:
-      - id: django-check
-        name: Check django project for potential problems
-        entry: sh -c 'python src/manage.py check'
-        types: [python]
-        pass_filenames: false
-        language: system
-      - id: django-check-migrations
-        name: Check django project for missing migrations.
-        entry: sh -c 'python src/manage.py makemigrations --check --dry-run'
-        files: "models.py"
-        types: [python]
-        pass_filenames: false
-        language: system
-
   - repo: https://github.com/humitos/mirrors-autoflake
     rev: v1.1
     hooks:

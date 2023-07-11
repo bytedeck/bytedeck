@@ -5,10 +5,8 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Q, Max, Sum
+from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
 from django.db.models.functions import Greatest
-# from django.shortcuts import get_object_or_404
-# from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone, datetime_safe
 
@@ -18,10 +16,6 @@ from badges.models import BadgeAssertion
 from comments.models import Comment
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from tags.models import TagsModelMixin
-# from utilities.models import ImageResource
-
-# from django.contrib.contenttypes.models import ContentType
-# from django.contrib.contenttypes import generic
 
 
 class Category(IsAPrereqMixin, models.Model):
@@ -69,8 +63,9 @@ class Category(IsAPrereqMixin, models.Model):
         param num_required: not used.
         """
 
-        # get all the quests in this campaign/category
-        quests = self.quest_set.all()
+        # get all the active quests in this campaign/category
+        # active = not expired, past availability date and time, not archived, visible to students (not draft)
+        quests = self.quest_set.get_active()
 
         # get all approved submissions of these quests for this user
         submissions = QuestSubmission.objects.all_approved(user=user, active_semester_only=False).filter(quest__in=quests)
@@ -84,6 +79,10 @@ class Category(IsAPrereqMixin, models.Model):
     @staticmethod
     def autocomplete_search_fields():  # for grapelli prereq selection
         return ("title__icontains",)
+
+    @staticmethod
+    def gfk_search_fields():  # for AllowedGFKChoiceFiled
+        return ["title__icontains"]
 
     @property
     def name(self):
@@ -135,7 +134,7 @@ class XPItem(models.Model):
         help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
-    date_available = models.DateField(default=timezone.now)  # timezone aware!
+    date_available = models.DateField(default=timezone.localdate)  # timezone aware!
     time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')
@@ -166,48 +165,36 @@ class XPItem(models.Model):
         # def get_icon_url(self):
         #     return "/images/s.jpg"
 
-    # TODO: Repeat of queryset code logic, how to combine?
-    def expired(self):
-
-        now_tz = timezone.now()
-        now_local = now_tz.astimezone(timezone.get_default_timezone())
-
-        # quests that have the current date AND past expiry time
-        if self.date_expired and self.date_expired == now_local.date() \
-                and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        # quests with no expiry date AND past expiry time (i.e.daily expiration at set time)
-        if self.date_expired is None and self.time_expired and self.time_expired < now_local.time():
-            return True
-
-        if self.date_expired and self.date_expired < now_local.date():
-            return True
-
-        return False
-
-    @property  # required for prerequisite checking
+    @property  # requiredfor prerequisite checking
     def active(self):
         """
         Available as a property to make compatible with Badge.active attribute
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
-        now_local = timezone.now().astimezone(timezone.get_default_timezone())
-
-        # an XPItem object is inactive if its availability date is in the future
-        if self.date_available > now_local.date():
+        # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
+        if not self.visible_to_students or self.archived:
             return False
 
-        # an XPItem object is inactive on the day it's made available if its availability time is in the future
-        if self.date_available == now_local.date() and self.time_available > now_local.time():
-            return False
-
-        # a Quest object is inactive if it's a part of an inactive campaign
+        # XPItem/Quest object is inactive if it's a part of an inactive campaign
         if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
             return False
 
-        # an XPitem object is active if all of the previous criteria are met and it's both visible to students and not expired
-        return self.visible_to_students and not self.expired()
+        if self.expired():
+            return False
+
+        time_now = timezone.localtime().time()
+        date_now = timezone.localdate()
+
+        # an XPItem object is inactive if its availability date is in the future
+        if self.date_available > date_now:
+            return False
+
+        # an XPItem object is inactive on the day it's made available if its availability time is in the future
+        if self.date_available == date_now and self.time_available > time_now:
+            return False
+
+        # If survived all the conditions, then it's active
+        return True
 
     def is_available(self, user):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
@@ -267,11 +254,7 @@ class QuestQuerySet(models.QuerySet):
             (so would become not expired again at midnight when time = 00:00:00)
         :return:
         """
-        # TODO: Note that these dates and times are not timezone aware!  Maybe check out the widget to fix this
-        # https://docs.djangoproject.com/en/1.9/topics/i18n/timezones/
-
-        now_tz = timezone.now()
-        now_local = now_tz.astimezone(timezone.get_default_timezone())
+        now_local = timezone.localtime()
 
         # Filter for quests that have EITHER no expiry date, OR an expiry date that is after today
         qs_date = self.filter(Q(date_expired=None) | Q(date_expired__gte=now_local.date()))
@@ -309,30 +292,91 @@ class QuestQuerySet(models.QuerySet):
         pk_met_list = self.get_pk_met_list(user) or [0]
         return self.filter(pk__in=pk_met_list)
 
-    def get_list_not_submitted_or_inprogress(self, user):
-        quest_list = list(self)
-        # http://stackoverflow.com/questions/1207406/remove-items-from-a-list-while-iterating-in-python
-        return [q for q in quest_list if QuestSubmission.objects.not_submitted_or_inprogress(user, q)]
+    def not_in_progress_completed_or_cooldown(self, user):
+        """filter the queryset to remove quests that are:
+          1. already inprogress for the user (is_completed=False)
+          2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
+          3. completed, repeatable but still in hourly (max_repeats>0 and now - first_time_completed > hours_between_repeats)
+          4. completed and repeatable and max repeats reached this semester
+          5. completed and repeatable and max all time repeats reached (for repeatable_per_semester=False)
 
-    def not_submitted_or_inprogress(self, user):
-        quest_list = self.get_list_not_submitted_or_inprogress(user)
-        pk_list = [quest.id for quest in quest_list]
-
-        # sub_pk_list = QuestSubmission.objects.not_submitted_or_inprogress(user, q).value_list('id', flat=True)
-        return self.filter(pk__in=pk_list)
-
-    def not_completed(self, user):
+          These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
+          and don't have to worry about them when considering repeats, which are more complicated.
         """
-        Exclude all quests where the user has a completed submission (whether approved or not)
-        """
-        completed_subs = QuestSubmission.objects.all_completed(user=user)
-        return self.exclude(pk__in=completed_subs.values_list('quest__id', flat=True))
+
+        # Condition 1: remove inprogress submissions
+        # remember qs is a queryset of Quest objects, not QuestSubmission objects.
+        qs = self.not_in_progress(user)
+
+        # This is completed submissions and quests ALL TIME, not just current semester
+        completed_subs_all_time = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
+        completed_quests_all_time = qs.filter(pk__in=completed_subs_all_time.values_list('quest__id', flat=True))
+
+        # This is completed submissions THIS SEMESTER ONLY
+        completed_subs_current = QuestSubmission.objects.all_completed(user=user)
+        completed_quests_current = qs.filter(pk__in=completed_subs_current.values_list('quest__id', flat=True))
+
+        # Condition 2: remove completed submissions that are not repeatable
+        subs_to_exclude_2 = completed_subs_all_time.filter(Q(quest__max_repeats=0) & Q(quest__repeat_per_semester=False))
+        quests_to_exclude = subs_to_exclude_2.values_list('quest__id', flat=True)
+
+        qs = qs.exclude(pk__in=quests_to_exclude)
+
+        # Condition 3: remove completed submissions that are repeatable, but still in cooldown
+
+        # Calculate the cooldown expression based on hours_between_repeats
+        current_time = timezone.now()
+        cooldown_time = ExpressionWrapper(
+            current_time - F('hours_between_repeats') * timezone.timedelta(hours=1),
+            output_field=DateTimeField()
+        )
+
+        # start with completed subs this semester (already filtered our non-repeatable)
+        # annotate the latest `first_time_completed` for submissions of this quest
+        # so we can use that time to determine if cooldown is complete
+        cooldown_quests = completed_quests_current.annotate(
+            latest_submission_time=Max(
+                'questsubmission__first_time_completed',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # Quests in cooldown will have latest_submission_time > now - hours_between_repeats
+        # (cooldown_time = now - hours_between_repeats)
+        cooldown_quests = cooldown_quests.filter(latest_submission_time__gt=cooldown_time)
+
+        qs = qs.exclude(pk__in=cooldown_quests)
+
+        # CONDITION 4: remove completed and repeatable and max repeats reached this semester
+        max_repeats_this_sem = completed_quests_current.annotate(
+            submission_count=Count(
+                'questsubmission',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # need to account for max_repeats=-1 (unlimited repeats), don't remove those
+        max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
+
+        qs = qs.exclude(pk__in=max_repeats_this_sem)
+
+        # CONDITION 5: remove completed and repeatable and max all-time repeats reached (for repeatable_per_semester=False)
+        max_repeats_all_time = completed_quests_all_time.filter(repeat_per_semester=False).annotate(
+            submission_count=Count(
+                'questsubmission',
+                filter=Q(questsubmission__user_id=user.id)
+            )
+        )
+        # need to account for max_repeats=-1 (unlimited repeats), don't remove those
+        max_repeats_all_time = max_repeats_all_time.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
+
+        qs = qs.exclude(pk__in=max_repeats_all_time)
+
+        return qs
 
     def not_in_progress(self, user):
         """
         Exclude all quests where the user has a submission in progress,
         """
-        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user)
+        in_progress_subs = QuestSubmission.objects.all_not_completed(user=user, active_semester_only=False)
         return self.exclude(pk__in=in_progress_subs.values_list('quest__id', flat=True))
 
     def editable(self, user):
@@ -368,13 +412,13 @@ class QuestManager(models.Manager):
         3. Quests that are a part of an inactive campaign
         4. Quests whose prerequisites have not been met
         5. Quests that are not currently submitted for approval or already in progress
-        6. Quests whose maximum repeats have been completed
+        6. Quests whose maximum repeats have been completed (including repeat_per_semester)
         7. Quests whose repeat time has not passed since last completion
         8. Check for blocking quests (available and in-progress), if present, remove all others
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1, 2 & 3
         qs = qs.get_conditions_met(user)  # 4
-        available_quests = qs.not_submitted_or_inprogress(user)  # 5, 6 & 7
+        available_quests = qs.not_in_progress_completed_or_cooldown(user)  # 5, 6 & 7
 
         available_quests = available_quests.block_if_needed(user=user)  # 8
         if remove_hidden:
@@ -383,7 +427,7 @@ class QuestManager(models.Manager):
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
-        return qs.not_submitted_or_inprogress(user)
+        return qs.not_in_progress_completed_or_cooldown(user)
 
     def all_drafts(self, user):
         qs = self.get_queryset().filter(visible_to_students=False)
@@ -479,14 +523,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         if not time_of_last:
             return False
 
-        # # to handle cases before first_time_completed existed as a property
-        # if not latest_dt:
-        #     # then latest_sub could be wrong.  Need to get latest completed date
-        #     latest_sub = self.all_for_user_quest(user, quest, False).latest('time_completed')
-        #     latest_dt = latest_sub.time_completed
-
         # if haven't maxed out repeats
-
         if self.repeat_per_semester:
             # get all completed this semester
             qs = QuestSubmission.objects.all_completed(user=user).filter(quest=self)
@@ -520,6 +557,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
             return True
         else:
             return user == self.editor and not self.visible_to_students
+
+    def expired(self):
+        """Returns True if the quest has expired, False otherwise.
+        See QuestQueryset.expired() for details.
+        """
+        # utilize existing code in QuestQuerySet method not_expired()
+        return not Quest.objects.filter(id=self.id).not_expired().exists()
 
 
 # QuestSubmission ###############################################
@@ -560,9 +604,6 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def grant_xp(self):
         """Filter the queryset of submissions to only include those that are not skipped, i.e. filter for do_not_grant_xp=False."""
         return self.filter(do_not_grant_xp=False)
-
-    def dont_grant_xp(self):
-        return self.filter(do_not_grant_xp=True)
 
     def get_semester(self, semester):
         return self.filter(semester=semester)
@@ -609,7 +650,8 @@ class QuestSubmissionManager(models.Manager):
     def get_queryset(self,
                      active_semester_only=False,
                      exclude_archived_quests=True,
-                     exclude_quests_not_visible_to_students=True):
+                     exclude_quests_not_visible_to_students=True,
+                     include_related=True):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
@@ -618,32 +660,30 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_visible_to_students:
             qs = qs.exclude_quests_not_visible_to_students()
-        return qs.select_related('quest')
+
+        # Add effiencies by getting additional related objects we'll almost always need
+        if include_related:
+            qs = qs.select_related('quest', 'quest__campaign')
+            qs = qs.prefetch_related('quest__tags')
+
+        return qs
 
     def flagged(self, user):
         return self.get_queryset().filter(flagged_by=user)
 
-    def all_for_quest(self, quest):
-        return self.get_queryset(True).get_quest(quest)
-
-    def all_not_approved(self, user=None, active_semester_only=True):
-        if user is None:
-            return self.get_queryset(active_semester_only).not_approved()
-        return self.get_queryset(active_semester_only).get_user(user).not_approved()
-
     def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
         """
         Return a queryset of all approved submissions within the provided parameters.
+
+        If user is None, then this is a staff member's view of all approved submissions.
+        If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         """
         qs = self.get_queryset(active_semester_only,
                                exclude_archived_quests=False,
                                exclude_quests_not_visible_to_students=False
                                ).approved()
 
-        if user is None:
-            # Staff have a separate tab for skipped quests
-            qs = qs.grant_xp()
-        else:
+        if user:
             qs = qs.get_user(user)
 
         if quest is not None:
@@ -653,20 +693,6 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.get_completed_before(up_to_date)
 
         return qs
-        #     return self.get_queryset().approved().grant_xp()
-        # return self.get_queryset().get_user(user).approved()
-        #     return self.get_queryset().approved().completed().grant_xp()
-        # return self.get_queryset().get_user(user).approved().completed()
-
-    def all_skipped(self, user=None):
-        qs = self.get_queryset(active_semester_only=True,
-                               exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False
-                               )
-
-        if user is None:
-            return qs.approved().completed().dont_grant_xp()
-        return qs.get_user(user).approved().completed()
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
@@ -705,11 +731,6 @@ class QuestSubmissionManager(models.Manager):
 
         return qs
 
-    def num_completed(self, user=None):
-        if user is None:
-            return self.get_queryset(True).completed().count()
-        return self.get_queryset(True).get_user(user).completed().count()
-
     def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
             qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
@@ -744,13 +765,6 @@ class QuestSubmissionManager(models.Manager):
         qs = self.all_for_user_quest(user, quest, False).order_by('ordinal')
 
         return qs.last()
-
-    def quest_is_available(self, user, quest):
-        """
-        :return: True if the quest should appear on the user's available quests tab
-        See: QuestManager.get_available()
-        """
-        return self.not_submitted_or_inprogress(user, quest)
 
     def not_submitted_or_inprogress(self, user, quest):
         """
@@ -824,38 +838,6 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def user_last_submission_completed(self, user):
-        qs = self.get_queryset(True).get_user(user).completed()
-        if not qs:
-            return None
-        else:
-            return qs.latest('time_completed')
-
-    def move_incomplete_to_active_semester(self):
-        """ Called when changing Active Semesters, however should be uneccessary
-        as Closing a semester removes all incomplete quests.
-
-        Not sure why you would need to change active semester without having
-        closed other, perhaps to look at old quests?
-
-        Either way, this prevents them from getting stuck in an inactive semester
-        """
-        # submitted but not accepted
-        qs = self.all_not_approved(active_semester_only=False)
-        # print("NOT APPROVED ********")
-        # print(qs)
-        for sub in qs:
-            sub.semester_id = SiteConfig.get().active_semester.id
-            sub.save()
-
-        # started but not submitted
-        qs = self.all_not_completed(active_semester_only=False)
-        # print("NOT COMPLETED ********")
-        # print(qs)
-        for sub in qs:
-            sub.semester_id = SiteConfig.get().active_semester.id
-            sub.save()
-
     def remove_in_progress(self):
         # In Progress Quests
         qs = self.all_not_completed(active_semester_only=False)
@@ -919,6 +901,8 @@ class QuestSubmission(models.Model):
     def mark_completed(self, xp_requested=0):
         self.is_completed = True
         self.time_completed = timezone.now()
+        self.user.profile.time_of_last_submission = self.time_completed
+        self.user.profile.save()
         # this is only set the first time, so it can be referenced to
         # when calculating repeatable quests
         if self.first_time_completed is None:

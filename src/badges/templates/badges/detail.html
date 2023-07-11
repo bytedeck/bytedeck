@@ -2,7 +2,12 @@
 {% load crispy_forms_tags %}
 {% load utility_tags %}
 
-{% block heading_inner %} Badge: {{ heading }}{% endblock %}
+{% block head %}
+<link href="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.css" rel="stylesheet">
+<script src="https://unpkg.com/bootstrap-table@1.20.2/dist/bootstrap-table.min.js"></script>
+{% endblock %}
+
+{% block heading_inner %} {{ config.custom_name_for_badge }}: {{ heading }}{% endblock %}
 
 {% block content %}
 
@@ -17,14 +22,14 @@
   <p></p>
   <div class="panel panel-primary">
     <!-- Default panel contents -->
-    <div class="panel-heading"><h3 class="panel-title">Badge Details</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">{{ config.custom_name_for_badge }} Details</h3></div>
     <div class="panel-body">
       <div class="row">
         <div class="col-sm-6">
           <ul class="list-unstyled">
             <li><h4>XP: {{badge.xp}}</h4></li>
             <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p></li>
-            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this badge</p></li>
+            <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this {{ config.custom_name_for_badge|lower }}</p></li>
           </ul>
         </div>
         <div class="col-sm-6">
@@ -34,14 +39,14 @@
             {% else %}
             <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
             {% endif %}
-            <li>Prerequisites: 
+            <li>Prerequisites:
                   {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
-                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}     
+                  {% with badge as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
             </li>
           </ul>
         </div>
       </div> <!-- /.row -->
-     
+
 
 
       {% if assertions_of_this_badge %} {# If a student is looking at this, it will show which badges they have earned #}
@@ -84,6 +89,46 @@
       {% endif %} {# if staff #}
     </div>
   </div>
+
+
+  {% if request.user.is_staff %}
+  <h3>Assertions of this {{ config.custom_name_for_badge }}
+    <div class="btn-group">
+      <a href="{% url 'badges:badge_detail' badge.id %}"
+      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+
+      <a href="{% url 'badges:badge_detail_all' badge.id %}"
+      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+
+    </div>
+  </h3>
+  <table
+        data-toggle='table'
+        data-search='true'
+        data-classes="table table-striped"
+        data-pagination='true'
+        data-page-size=15
+        data-page-list="[15, 50, 100, all]"
+    >
+        <thead>
+            <tr>
+                <th data-sortable='true' data-field='tag' class="col-sm-4">User</th>
+                <th data-sortable='true' data-field='earned' class="col-sm-2">{{ config.custom_name_for_badge }}s Earned</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for user in user_assertion_count %}
+                <tr>
+                    <td><a href="{{ user.profile.get_absolute_url }}">{{ user.username }}</a></td>
+                    <td>{{ user.assertion_count }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+
+    </table>
+
+    {% endif %}
 
 
 {% endblock %}

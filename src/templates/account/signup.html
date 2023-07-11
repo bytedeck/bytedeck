@@ -1,5 +1,8 @@
 {% extends "base_no_sidebar.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
+{% load i18n %}
+{% load account socialaccount %}
 
 {% load i18n %}
 
@@ -9,6 +12,21 @@
 {% block content %}
 
 <p>{% blocktrans %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktrans %}</p>
+{% comment %}
+  Conditions are setup this way because checking socialaccount_providers returns a list of strings based on the INSTALLED_APPS
+  If you look at the get_providers tag, it returns all social account providers whether it is configured or not
+{% endcomment %}
+{% get_providers as socialaccount_providers %}
+{% if socialaccount_providers and config.enable_google_signin %}
+  <p>{% blocktrans %} Sign up via: {% endblocktrans %}</p>
+  <p>
+    <a href="{% provider_login_url 'google' process='login' %}">
+      <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+    </a>
+  </p>
+  <p class="login-or">{% trans 'or' %}</p>
+
+{% endif %}
 
 <form class="signup" id="signup_form" method="post" action="{% url 'account_signup' %}">
   {% csrf_token %}
