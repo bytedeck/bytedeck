@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
 
@@ -18,7 +19,7 @@ def send_email_message(subject, message, recipient_list, **kwargs):
     email = EmailMultiAlternatives(
         subject,
         body=textify(msg),  # convert msg to plain text, using textify utility
-        to=["contact@bytedeck.com"],
+        to=[settings.DEFAULT_FROM_EMAIL],
         bcc=recipient_list,
     )
     email.attach_alternative(msg, "text/html")

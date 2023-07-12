@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.admin import helpers, widgets
@@ -220,6 +221,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 "queryset": objects,
                 # building proper breadcrumb in admin
                 "opts": self.model._meta,
+                "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
                 "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
                 "media": media,
             },
