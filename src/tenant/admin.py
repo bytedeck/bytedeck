@@ -167,7 +167,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                         email = owner.email
 
                 if len(email):  # skip, if email address is empty
-                    recipient_list.append(f"{full_name_or_username} <{email}>")
+                    recipient_list.append(f"{tenant.name} - {full_name_or_username} <{email}>")
 
         # Removing duplicate elements from the list.
         #

@@ -360,4 +360,4 @@ class TenantAdminActionsTest(TenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
         # expecting to see recipients in BCC list
-        self.assertEqual(mail.outbox[0].bcc, ["John Doe <john@doe.com>"])
+        self.assertEqual(mail.outbox[0].bcc, ["extra - John Doe <john@doe.com>"])
