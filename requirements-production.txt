@@ -1,7 +1,7 @@
 django-tenants>=3.4,<3.5
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.8,<4.12
-celery>=5.2.2,<5.3
+celery>=5.2.2,<5.4
 Django==3.2.18  # pinned at .18 until issue #1353 is resolved
 django-allauth>=0.54,<0.55
 django-querysetsequence>=0.16
