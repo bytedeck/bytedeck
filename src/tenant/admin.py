@@ -162,6 +162,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 full_name_or_username = owner.get_full_name() or owner.username
 
                 # get the email address, but only primary and verified
+                email = ""
                 for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
                     # make sure it's primary email for real
                     if primary_email_address.email == user_email(owner):
