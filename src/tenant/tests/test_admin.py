@@ -323,9 +323,9 @@ class TenantAdminActionsTest(TenantTestCase):
         # third case, select tenants and execute "send_email_message" action
         # should returns 200 (intermediate page)
         action_data = {
-            # trying to send message on multiple tenants,
-            # but only one is legit (extra_tenant)
-            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
+            # trying to send message on multiple tenants (public, test and extra),
+            # but only one is legit (extra)
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
             "action": "message_selected",
             "index": 0,
         }
@@ -338,13 +338,13 @@ class TenantAdminActionsTest(TenantTestCase):
             response, "Send email to multiple users"
         )
         self.assertContains(response, "<h1>Write your message here</h1>")
-        # should be only one valid recipient
-        self.assertContains(response, ACTION_CHECKBOX_NAME, count=1)
+        # two objects were selected (test and extra)
+        self.assertContains(response, ACTION_CHECKBOX_NAME, count=2)
 
         # fourth case, complete "intermediate" page/form
         # should returns 302 (redirect back to "changelist" page)
         compose_confirmation_data = {
-            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.extra_tenant.pk],
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
             "action": "message_selected",
             # submit intermediate form (subject and message)
             "subject": "Greetings from a TenantAdmin action",
@@ -361,4 +361,5 @@ class TenantAdminActionsTest(TenantTestCase):
         self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
         # expecting to see recipients in BCC list
         self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+        # two objects were selected (test and extra), but only one valid recipient
         self.assertEqual(mail.outbox[0].bcc, ["extra - John Doe <john@doe.com>"])
