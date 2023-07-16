@@ -1,18 +1,24 @@
-from allauth.socialaccount.models import SocialApp
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.contrib.admin import helpers, widgets
 from django.contrib.sites.models import Site
+from django.template.response import TemplateResponse
 from django.db import connection, transaction
+from django.utils.translation import ngettext
 from django.urls import reverse
 
+from allauth.socialaccount.models import SocialApp
+from allauth.account.models import EmailAddress
+from allauth.account.utils import user_email
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from django.utils.translation import ngettext
-
+from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from tenant.models import Tenant, TenantDomain
 from tenant.utils import generate_schema_name
+from tenant.tasks import send_email_message
 
 User = get_user_model()
 
@@ -77,6 +83,15 @@ class TenantAdminForm(forms.ModelForm):
         return name
 
 
+class SendEmailAdminForm(forms.Form):
+    # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+    _selected_action = forms.CharField(widget=forms.MultipleHiddenInput)
+
+    subject = forms.CharField(
+        widget=widgets.AdminTextInputWidget(attrs={"placeholder": "Subject"}))
+    message = forms.CharField(widget=ByteDeckSummernoteSafeWidget)
+
+
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
         'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
@@ -92,7 +107,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
 
-    actions = ['enable_google_signin', 'disable_google_signin']
+    actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
 
     def delete_model(self, request, obj):
         messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
@@ -114,6 +129,111 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
         return qs
+
+    @admin.action(description="Send an email message to all owners for the selected tenant(s)")
+    def message_selected(self, request, queryset):
+        """
+        Send an email message to all owners for selected tenant(s).
+
+        This action first displays an intermediate page which shows compose message form and
+        a list of all recipients.
+
+        Next, it send email message to all selected users and redirects back to the change list.
+        """
+        from siteconfig.models import SiteConfig
+
+        def get_owner_or_none():
+            """Returns owner (User) object or None"""
+            return SiteConfig.get().deck_owner or None
+
+        # get a list of selected tenant(s), excluding public schema
+        objects = self.model.objects.filter(
+            pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
+        ).exclude(schema_name=get_public_schema_name())
+
+        # get a list of all owners (recipients) for selected tenant(s)
+        recipient_list = []
+        for tenant in objects:
+            with tenant_context(tenant):
+                owner = get_owner_or_none()
+                if owner is None:  # where is the owner?
+                    continue
+                # get the full name of the user, or if none is supplied will return the username
+                full_name_or_username = owner.get_full_name() or owner.username
+
+                # get the email address, but only primary and verified
+                email = ""
+                for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                    # make sure it's primary email for real
+                    if primary_email_address.email == user_email(owner):
+                        email = owner.email
+
+                if len(email):  # skip, if email address is empty
+                    recipient_list.append(f"{tenant.name} - {full_name_or_username} <{email}>")
+
+        # Create a message informing the user that the recipients were not found
+        # and return a redirect to the admin index page.
+        if not len(recipient_list):
+            self.message_user(request, "No recipients found.", messages.WARNING)
+            # return None to display the change list page again.
+            return None
+
+        # Removing duplicate elements from the list.
+        #
+        # Using *set() is the fastest and smallest method to achieve it.
+        # It first removes the duplicates and returns unpacked set using * operator
+        # which has to be converted to list.
+        recipient_list = [*set(recipient_list)]
+
+        if request.POST.get("post"):  # if admin pressed 'post' on intermediate page
+            form = SendEmailAdminForm(data=request.POST)
+            if form.is_valid():
+                cleaned_data = form.cleaned_data
+
+                # run background task that will send email messages
+                send_email_message.apply_async(
+                    # subject, message and recipient_list (emails)
+                    args=[cleaned_data["subject"], cleaned_data["message"], recipient_list],
+                    queue="default",
+                )
+
+                # show alert that everything is cool
+                self.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
+
+                # return None to display the change list page again.
+                return None
+        else:
+            # create form and pass the data which objects were selected before triggering 'post' action.
+            # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+            form = SendEmailAdminForm(initial={helpers.ACTION_CHECKBOX_NAME: objects.values_list("id", flat=True)})
+
+        # AdminForm is a class within the `django.contrib.admin.helpers` module of the Django project.
+        #
+        # AdminForm is not usually used directly by developers, but can be used by libraries that want to
+        # extend the forms within the Django Admin.
+        adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
+        media = self.media + adminform.media
+
+        request.current_app = self.admin_site.name
+
+        # we need to create a template of intermediate page with form
+        return TemplateResponse(
+            request,
+            "admin/tenant/tenant/message_selected_compose.html",
+            context={
+                **self.admin_site.each_context(request),
+                "title": "Write your message here",
+                "adminform": adminform,
+                "subtitle": None,
+                "recipient_list": recipient_list,
+                "queryset": objects,
+                # building proper breadcrumb in admin
+                "opts": self.model._meta,
+                "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
+                "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                "media": media,
+            },
+        )
 
     @admin.action(description="Enable google signin for tenant(s)")
     def enable_google_signin(self, request, queryset):
