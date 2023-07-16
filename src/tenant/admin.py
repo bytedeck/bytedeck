@@ -171,6 +171,13 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 if len(email):  # skip, if email address is empty
                     recipient_list.append(f"{tenant.name} - {full_name_or_username} <{email}>")
 
+        # Create a message informing the user that the recipients were not found
+        # and return a redirect to the admin index page.
+        if not len(recipient_list):
+            self.message_user(request, "No recipients found.", messages.WARNING)
+            # return None to display the change list page again.
+            return None
+
         # Removing duplicate elements from the list.
         #
         # Using *set() is the fastest and smallest method to achieve it.

@@ -378,5 +378,3 @@ class TenantAdminActionsTest(TenantTestCase):
         self.assertRedirects(response, url, fetch_redirect_response=False)
         response = self.client.get(response.url)
         self.assertContains(response, "No recipients found.")
-        # self.assertEqual(response.status_code, 302)
-        # self.assertContains(response, "No recipients found.")
