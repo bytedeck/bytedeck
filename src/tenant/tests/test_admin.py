@@ -363,3 +363,20 @@ class TenantAdminActionsTest(TenantTestCase):
         self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
         # two objects were selected (test and extra), but only one valid recipient
         self.assertEqual(mail.outbox[0].bcc, ["extra - John Doe <john@doe.com>"])
+
+        # fifth case, no recipients found
+        # should returns 302 (redirect back to "changelist" page) and show error message
+        action_data = {
+            # trying to send message on multiple tenants (public and test),
+            # but without any valid recipients
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk],
+            "action": "message_selected",
+            "index": 0,
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        response = self.client.post(url, action_data)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        response = self.client.get(response.url)
+        self.assertContains(response, "No recipients found.")
+        # self.assertEqual(response.status_code, 302)
+        # self.assertContains(response, "No recipients found.")
