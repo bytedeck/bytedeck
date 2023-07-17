@@ -1,4 +1,4 @@
-django-tenants>=3.4,<3.5
+django-tenants>=3.4,<3.6
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.8,<4.12
 celery>=5.2.2,<5.4
