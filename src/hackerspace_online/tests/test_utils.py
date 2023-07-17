@@ -73,6 +73,12 @@ class Utils_generate_form_data_Test(TenantTestCase):
         # assert changes
         self.assertTrue(Block.objects.filter(name="NEW BLOCK NAME").exists())
 
+    # currently non-functional, should be fine injecting student_registration kwarg manually as it's set in views and not via a field like
+    # generate_form_data checks for, but kwargs is not defined when instancing a form even despite that...
+    # was working at one point but some unforseen change has broken this test and a fix might be more effort than worth since this is a test
+    # implemented for redundancy and there are many similarly-functional tests for other near-identical forms across site more suited to
+    # this convienience method
+    # form_valid_data exists as a dict but is being picked up as an arg instead of a kwarg and kwargs=form_valid_data upon creation does not fix
     def test_valid_CourseStudentForm(self):
         """
             Basic test to see if generate_form_data works with CourseStudentForm
@@ -97,16 +103,20 @@ class Utils_generate_form_data_Test(TenantTestCase):
             semester=Semester,
             # grade_fk=baker.make(Grade)
         )
-        form_data_invalid = generate_form_data(CourseStudent)
 
+        # manually inject student_registration kwarg since set in view and not a part of fields, wont be picked up by generate_form_data
+        form_data_valid['student_registration'] = False
+
+        form_data_invalid = generate_form_data(CourseStudent)
+        form_data_valid['student_registration'] = False
         self.client.force_login(self.teacher)
 
         # form valid test
-        form = CourseStudentForm(form_data_valid)
+        form = CourseStudentForm(form_data_valid, student_registration=False)
         self.assertTrue(form.is_valid())
 
         # form invalid test
-        form = CourseStudentForm(form_data_invalid)
+        form = CourseStudentForm(form_data_invalid, student_registration=False)
         self.assertFalse(form.is_valid())
 
         # post request test
