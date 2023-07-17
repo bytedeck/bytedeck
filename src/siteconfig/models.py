@@ -186,6 +186,13 @@ class SiteConfig(models.Model):
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
     )
 
+    simplified_course_registration = models.BooleanField(
+        default=False,
+        help_text="If this option is enabled, when a student registers for a course they will only have to select fields that have more than one \
+            option. If your deck only has a single course, group, and semester, then the user will automatically be enrolled in the course without \
+            having to submit a form."
+    )
+
     # Field to select custom name to change all instances of "announcement" to site-wide
     # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
     custom_name_for_announcement = models.CharField(

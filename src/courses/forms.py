@@ -13,8 +13,11 @@ class CourseStudentForm(forms.ModelForm):
     # filtering the available options in a foreign key choice field
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
+        student_registration = kwargs.pop('student_registration')
         super().__init__(*args, **kwargs)
-        self.fields['semester'].queryset = Semester.objects.get_current(as_queryset=True)
+
+        semester_qs = Semester.objects.get_current(as_queryset=True)
+        self.fields['semester'].queryset = semester_qs
         self.fields['semester'].empty_label = None
 
         courses_qs = Course.objects.filter(active=True)
@@ -24,11 +27,24 @@ class CourseStudentForm(forms.ModelForm):
         self.fields['block'].queryset = block_qs
         self.fields['block'].label = SiteConfig.get().custom_name_for_group
 
-        # if there is only one option for the fields, then make them default by removing the blank option:
-        if block_qs.count() == 1:
-            self.fields['block'].empty_label = None
+        # if there is only one option for the fields, then make them default by removing the blank option
+        # then if simple_registration is true, hide the field
+        # simple_registration is true when the setting is enabled in config and the view being accessed is the student course self-registration view
+        simple_registration = SiteConfig.get().simplified_course_registration and student_registration
+
+        # semester field already sets a default, so only check for simple_registration
+        if semester_qs.count() == 1 and simple_registration:
+            self.fields['semester'].widget = forms.HiddenInput()
+
         if courses_qs.count() == 1:
             self.fields['course'].empty_label = None
+            if simple_registration:
+                self.fields['course'].widget = forms.HiddenInput()
+
+        if block_qs.count() == 1:
+            self.fields['block'].empty_label = None
+            if simple_registration:
+                self.fields['block'].widget = forms.HiddenInput()
 
     # http://stackoverflow.com/questions/32260785/django-validating-unique-together-constraints-in-a-modelform-with-excluded-fiel/32261039#32261039
     def full_clean(self):
