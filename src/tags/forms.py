@@ -1,5 +1,6 @@
 from django import forms
 from django.utils.text import slugify
+from django.core.validators import validate_slug
 
 from taggit.models import Tag
 
@@ -22,9 +23,15 @@ class TagForm(forms.ModelForm):
         model = Tag
         fields = ['name']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['name'].validators = [validate_slug]
+        self.fields['name'].help_text = 'Tags cannot contain spaces, use hyphens to create multi-word-tags-like-this'
+
     def save(self, *args):
         # will be saved on super func, assuming commit=True
-        # necessary since slug is unique=True, so we use unique name to generate a new slug to prevent possible duplicates
+        # save method override necessary since slug is unique=True, so we use unique name to generate a new slug to prevent possible duplicates
+        # without it, updating a tag and assigning it to an object will actually re-create the OLD tag and assign that instead...
         self.instance.slug = slugify(self.cleaned_data['name'])
 
         return super().save(*args)
