@@ -23,7 +23,6 @@ from django_tenants.utils import tenant_context
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant, TenantDomain
-from tenant.actions import delete_selected
 from tenant.utils import generate_schema_name
 from tenant.tasks import send_email_message
 
@@ -111,7 +110,7 @@ class DeleteConfirmationForm(forms.Form):
     keyword = None
 
     def __init__(self, *args, **kwargs):
-        self.target_object = kwargs.pop('target_object')
+        self.target_object = kwargs.pop("target_object")
         super().__init__(*args, **kwargs)
 
         # generate keyword as confirmation code / phrase
@@ -148,7 +147,19 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = [delete_selected, 'message_selected', 'enable_google_signin', 'disable_google_signin']
+    actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
+
+    def get_actions(self, request):
+        """
+        The method ``ModelAdmin.get_actions`` returns the list of registered actions.
+
+        By overriding this method, to remove `delete_selected`. We can remove it form the dropdown.
+        """
+        actions = super().get_actions(request)
+        # Removing "delete_selected" action in admin
+        if "delete_selected" in actions:
+            del actions["delete_selected"]
+        return actions
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
