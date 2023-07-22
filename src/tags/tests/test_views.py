@@ -207,6 +207,21 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertTrue(Tag.objects.filter(name=form_data['name']).exists())
 
+    def test_CreateView__slug_validation(self):
+        """
+        Invalid slug names provided to Tag CreateView should be rejected
+        validator that must be passed (validate-slug):
+        https://docs.djangoproject.com/en/3.2/ref/validators/#validate-slug
+        """
+        self.client.force_login(self.test_teacher)
+
+        # post to create form with an invalid name to trigger validator 'validate_slug'
+        response = self.client.post(reverse('tags:create'), data={'name': 'invalid name'})
+
+        # assert object is not created and error message displayed
+        self.assertContains(response, 'Enter a valid “slug” consisting of letters, numbers, underscores or hyphens.')
+        self.assertFalse(Tag.objects.filter(name='invalid name').exists())
+
     def test_UpdateView(self):
         """Make sure update view can change name + update slug"""
         form_data = generate_form_data(model_form=TagForm)
