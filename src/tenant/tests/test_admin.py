@@ -357,12 +357,29 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
 
     @override_settings(ROOT_URLCONF=__name__)
     def test_delete_view(self):
-        """Delete view should restrict access and actually delete items, but leaves schemas in database."""
+        """
+        Delete view should restrict access and actually delete items.
+
+        Django comes with a built-in permissions system. It provides a way to assign permissions to
+        specific users and groups of users, and it’s used by the Django admin site.
+
+        The Django admin site uses permissions as follows:
+
+        * Access to view objects is limited to users with the “view” or “change” permission for that type of object.
+        * Access to view the “add” form and add an object is limited to users with the “add” permission for
+          that type of object.
+        * Access to view the change list, view the “change” form and change an object is limited to users
+          with the “change” permission for that type of object.
+        * Access to delete an object is limited to users with the “delete” permission for that type of object.
+
+        Note: A superuser is a user type in Django that has every permission in the system.
+        Whether custom permissions or Django-created permissions, superusers have access to every permission.
+        A staff user is just like any other user in your system BUT with the added advantage of being
+        able to access the Django Admin interface.
+
+        """
         delete_dict = {"post": "yes", "confirmation": "owner/extra"}
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
-
-        # assert number of tenants, should be three objects (test, public and extra)
-        self.assertEqual(Tenant.objects.count(), 3)
 
         # first case, access /admin/tenant/<pk>/delete/ page as anonymous user
         # should returns 302 (login required)
@@ -401,7 +418,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
             post, "The confirmation does not match the keyword"
         )
 
-        # fifth case, delete user can delete
+        # fifth case, delete user can delete, using correct confirmation keyword/phrase
         # should returns 302 (redirect to admin homepage)
         response = self.client.get(delete_url)
         self.assertContains(response, "tenant/tenant/%s/" % self.extra_tenant.pk)
@@ -409,14 +426,28 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         self.assertContains(response, "Tenants: 1")
         post = self.client.post(delete_url, delete_dict)
         self.assertRedirects(post, reverse("admin:index"))
+        self.assertEqual(Tenant.objects.count(), 2)
+        tenant_ct = ContentType.objects.get_for_model(Tenant)
+        logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
+        self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
+
+    def test_delete_view_uses_delete_model(self):
+        """
+        The delete view uses ModelAdmin.delete_model() method, that delete items, but leaves schemas in database.
+        """
+        delete_dict = {"post": "yes", "confirmation": "owner/extra"}
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+
+        # assert number of tenants, should be three objects (test, public and extra)
+        self.assertEqual(Tenant.objects.count(), 3)
+
+        self.client.force_login(self.deleteuser)
+        post = self.client.post(delete_url, delete_dict)
+        self.assertRedirects(post, reverse("admin:index"))
         # tenant object was removed (extra tenant is gone)
         self.assertEqual(Tenant.objects.count(), 2)
         # ...but schema still in database
         self.assertTrue(schema_exists("extra"))
-
-        tenant_ct = ContentType.objects.get_for_model(Tenant)
-        logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
-        self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
 
     def test_delete_view_nonexistent_obj(self):
         self.client.force_login(self.deleteuser)
