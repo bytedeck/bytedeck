@@ -283,6 +283,9 @@ class TenantAdminFormTest(TenantTestCase):
         self.assertFalse(form.is_valid())
 
     def test_cant_create_if_schema_still_exists(self):
+        """
+        Creating new tenant object with a name of existing schema, should fail with form (validation) error
+        """
         # delete test tenant object without dropping schema
         Tenant.get().delete(force_drop=False)
         # trying to create new tenant, with name of existing schema
