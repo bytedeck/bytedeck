@@ -170,14 +170,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     tenant.update_cached_fields()
         return qs
 
-    def delete_queryset(self, request, queryset):
-        """
-        Given a queryset, delete (but leave the schema) it from the database.
-        """
-        # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
-        for obj in queryset:
-            obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema
-
     def delete_model(self, request, obj):
         # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
         obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema
