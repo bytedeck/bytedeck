@@ -37,6 +37,16 @@ def default_trial_end_date():
 
 
 class Tenant(TenantMixin):
+    # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
+    #
+    # make sure it set to False (mandatory for ByteDeck project)
+    auto_drop_schema = False
+    """
+    USE THIS WITH CAUTION!
+    Set this flag to true on a parent class if you want the schema to be
+    automatically deleted if the tenant row gets deleted.
+    """
+
     # tenant = Tenant(domain_url='test.localhost', schema_name='test', name='Test')
     name = models.CharField(
         max_length=62,  # max length of a postgres schema name is 62
