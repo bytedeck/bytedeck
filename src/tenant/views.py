@@ -8,6 +8,8 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
 from django_tenants.utils import get_public_schema_name
 
+from django_tenants.utils import tenant_context
+
 from .forms import TenantForm
 from .models import Tenant
 
@@ -53,11 +55,51 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         """ Copy the tenant name to the schema_name and the domain_url fields."""
-        tenant = form.save(commit=False)
+        from siteconfig.models import SiteConfig
+
         # TODO: this is duplication of code in admin.py.  Move this into the Tenant model?  Perhaps as a pre-save hook?
-        tenant.schema_name = tenant.name.replace('-', '_')
-        tenant.domain_url = f"{tenant.name}.{Site.objects.get(id=1).domain}"
-        return super().form_valid(form)
+
+        # Because commit=False does not only result in not creating a record at the database.
+        # It also has for example impact on many-to-many fields in the form.
+        #
+        # When you thus specify commit=False, the ManyToManyFields of the model that are also present in the form,
+        # are not stored in the database either, since at that moment, no primary key for the object exists yet.
+        #
+        # One can of course implement the logic themselves, but the idea of a ModelForm is to remove as much
+        # boilerplate code as possible.
+        form.instance.schema_name = form.instance.name.replace('-', '_')
+        form.instance.domain_url = f"{form.instance.name}.{Site.objects.get(id=1).domain}"
+
+        # save the form and get the response (HttpResponseRedirect)
+        response = super().form_valid(form)
+
+        # saved object (tenant) can be accessed via `object` attribute
+        cleaned_data = form.cleaned_data
+        with tenant_context(self.object):
+            owner = SiteConfig.get().deck_owner or None
+            if owner is None:  # where is the owner?
+                return response
+
+            # otherwise save first / last name
+            owner.first_name = cleaned_data['first_name']
+            owner.last_name = cleaned_data['last_name']
+            owner.save()
+
+            email = cleaned_data['email']
+            if len(email):
+                owner.email = email
+                owner.save()
+
+            from allauth.account.utils import send_email_confirmation
+            if self.request and len(email):
+                send_email_confirmation(
+                    request=self.request,
+                    user=owner,
+                    signup=False,
+                    email=owner.email,
+                )
+
+        return response
 
     def get_success_url(self):
         """ Redirect to the newly created tenant."""
