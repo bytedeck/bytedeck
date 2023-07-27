@@ -6,7 +6,8 @@ from django.core.exceptions import ValidationError
 from django_tenants.test.cases import TenantTestCase
 from queryset_sequence import QuerySetSequence
 
-from utilities.fields import GFKChoiceField
+from utilities.fields import GFKChoiceField, RestrictedFileFormField
+from utilities.models import RestrictedFileField
 
 
 User = get_user_model()
@@ -57,3 +58,33 @@ class GFKChoiceFieldTest(TenantTestCase):
 
         self.assertEqual(f.clean(self._ct_pk(self.user2)).get_full_name(), "Jane Doe")
         self.assertEqual(f.clean(self._ct_pk(self.group1)).name, "Editors")
+
+
+class RestrictedFileFieldTest(TenantTestCase):
+    def setUp(self):
+        self.default_file_field = RestrictedFileField()
+        self.image_file_field = RestrictedFileField(content_types=['image/jpeg', 'image/png'])
+
+    def test_content_type(self):
+        "Ensure the default content type is 'All', and that the content type can be set correctly."
+
+        # ensure default content type is 'All'
+        self.assertEqual(self.default_file_field.content_types, 'All')
+
+        # ensure content type is set correctly
+        self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
+
+
+class RestrictedFileFormFieldTest(TenantTestCase):
+    def setUp(self):
+        self.default_file_field = RestrictedFileFormField()
+        self.image_file_field = RestrictedFileFormField(content_types=['image/jpeg', 'image/png'])
+
+    def test_content_type(self):
+        "Ensure the default content type is 'All', and that the content type can be set correctly."
+
+        # ensure default content type is 'All'
+        self.assertEqual(self.default_file_field.content_types, 'All')
+
+        # ensure content type is set correctly
+        self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
