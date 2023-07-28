@@ -68,7 +68,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         # One can of course implement the logic themselves, but the idea of a ModelForm is to remove as much
         # boilerplate code as possible.
         form.instance.schema_name = form.instance.name.replace('-', '_')
-        form.instance.domain_url = f"{form.instance.name}.{Site.objects.get(id=1).domain}"
+        form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
 
         # save the form and get the response (HttpResponseRedirect)
         response = super().form_valid(form)
@@ -78,18 +78,20 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         with tenant_context(self.object):
             owner = SiteConfig.get().deck_owner or None
             if owner is None:  # where is the owner?
-                return response
+                return response  # noqa
 
             # otherwise save first / last name
             owner.first_name = cleaned_data['first_name']
             owner.last_name = cleaned_data['last_name']
             owner.save()
 
+            # save email address...
             email = cleaned_data['email']
             if len(email):
                 owner.email = email
                 owner.save()
 
+            # ...and send email confirmation message
             from allauth.account.utils import send_email_confirmation
             if self.request and len(email):
                 send_email_confirmation(
