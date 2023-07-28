@@ -108,7 +108,7 @@
           </form>
           {% else %}
             <p><i class="fa fa-ban text-danger"> </i>
-              Sorry Spammy McTrollson, you've been banned from commenting on announcements.  If you would like this privilege back, you can grovel for forgiveness from Mr C.</p>
+              {{ config.banned_from_comments_text }}</p>
           {% endif %}
         </li>
       </ul>

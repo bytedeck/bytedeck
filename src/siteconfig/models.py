@@ -129,6 +129,12 @@ class SiteConfig(models.Model):
         help_text="This text will be inserted when you return a quest without commenting."
     )
 
+    banned_from_comments_text = models.CharField(
+        verbose_name="Banned from Announcement Comments Text", max_length=255,
+        default="You've been banned from commenting on announcements due to inappropriate conduct.",
+        help_text="Whenever a student is banned from commenting on announcements, this text will be displayed in place of the usual comment form."
+    )
+
     outgoing_email_signature = models.TextField(
         verbose_name="Outoging Email Signature", blank=True, max_length=512,
         help_text="Used when your deck sends your announcements and other notifications by email."
