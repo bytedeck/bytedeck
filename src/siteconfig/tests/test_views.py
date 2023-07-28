@@ -176,6 +176,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
             "site_name": "site_name",
             "site_name_short": "site_name_short",
             "access_code": "123456",
+            "banned_from_comments_text": "banned from comments",  # doesn't need to be verbose when checked
             "deck_ai": owner_user.pk,
             "custom_name_for_badge": "badge",
             "custom_name_for_announcement": "announcement",
