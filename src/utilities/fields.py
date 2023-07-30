@@ -10,6 +10,40 @@ from queryset_sequence import QuerySetSequence
 from .widgets import GFKSelect2Widget
 
 
+# common file MIME types to be uploaded by users
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_Types
+
+IMAGE_MIME_TYPES = [
+    'image/jpeg',  # JPEG images
+    'image/png',   # PNG images
+    'image/gif',   # GIF images
+    'image/webp',  # WEBP images
+    'image/tiff',  # TIFF images
+    'image/bmp',   # BMP images
+    'image/svg+xml'  # SVG vector images
+]
+
+VIDEO_MIME_TYPES = [
+    'video/mp4',   # MP4 videos
+    'video/webm',  # WebM videos
+    'video/ogg',   # OGG videos
+    'video/quicktime',  # MOV videos
+    'video/x-msvideo',  # AVI videos
+    'video/x-ms-wmv',  # WMV videos
+    'video/mpeg',  # MPEG videos
+    'video/3gpp',  # 3GP videos
+    'video/3gpp2',  # 3G2 videos
+    'video/x-flv',  # FLV videos
+    'video/x-m4v'  # M4V videos
+]
+
+FILE_MIME_TYPES = {
+    'image': IMAGE_MIME_TYPES,
+    'video': VIDEO_MIME_TYPES,
+    'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES
+}
+
+
 class GFKChoiceIterator(ModelChoiceIterator):
 
     def __iter__(self):

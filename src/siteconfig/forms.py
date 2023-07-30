@@ -52,6 +52,7 @@ class SiteConfigForm(forms.ModelForm):
                 "submission_quick_text",
                 "blank_approval_text",
                 "blank_return_text",
+                "banned_from_comments_text",
                 "outgoing_email_signature",
                 "deck_ai",
                 "color_headers_by_mark",
