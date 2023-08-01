@@ -129,6 +129,12 @@ class SiteConfig(models.Model):
         help_text="This text will be inserted when you return a quest without commenting."
     )
 
+    banned_from_comments_text = models.CharField(
+        verbose_name="Banned from Announcement Comments Text", max_length=255,
+        default="You've been banned from commenting on announcements due to inappropriate conduct.",
+        help_text="Whenever a student is banned from commenting on announcements, this text will be displayed in place of the usual comment form."
+    )
+
     outgoing_email_signature = models.TextField(
         verbose_name="Outoging Email Signature", blank=True, max_length=512,
         help_text="Used when your deck sends your announcements and other notifications by email."
@@ -184,6 +190,13 @@ class SiteConfig(models.Model):
         help_text="By default, if a student has more than the expected XP in their course \
             (for the amount of time that has passed in the semester so far) their mark will show greater than 100%.  \
             Check this if you want to cap marks at 100%. This setting is only relevent if you are using mark percentages."
+    )
+
+    simplified_course_registration = models.BooleanField(
+        default=False,
+        help_text="If this option is enabled, when a student registers for a course they will only have to select fields that have more than one \
+            option. If your deck only has a single course, group, and semester, then the user will automatically be enrolled in the course without \
+            having to submit a form."
     )
 
     # Field to select custom name to change all instances of "announcement" to site-wide

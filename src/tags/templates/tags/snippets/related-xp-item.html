@@ -5,7 +5,6 @@
         <div class="panel-body">
             <ul>
                 {% if view == 'staff' %}
-
                     {% for quest in quests %}
                         <li><a href="{{ quest.get_absolute_url }}">{{ quest }} ({{ quest.xp }} XP)</a></li>
                     {% empty %}

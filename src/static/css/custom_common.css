@@ -736,6 +736,11 @@ h3.comment-heading {
     margin-top: 25px;
 }
 
+.comment-content {
+    /* prevent long urls from breaking out of container or forcing a scrollbar */
+    overflow-wrap: anywhere;
+}
+
 .comment-content img {
     max-width: 100%;
 }

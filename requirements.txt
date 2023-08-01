@@ -5,7 +5,7 @@ ipdb>=0.12
 model_bakery>=1.1,<2.0
 pipdeptree>=0.13.2
 freezegun>=0.3.12
-mock>=2.0,<3.0
+mock>=2.0,<6.0
 flake8>=3.7
 coveralls  # includes coverage
 names

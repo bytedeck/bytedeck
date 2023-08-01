@@ -198,6 +198,7 @@ class TagDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy('tags:list')
 
     def get_context_data(self, **kwargs):
+        kwargs['view'] = 'staff'
         kwargs['quests'] = Quest.objects.filter(tags__id=self.object.id)
         kwargs['badges'] = Badge.objects.filter(tags__id=self.object.id)
         return super().get_context_data(**kwargs)

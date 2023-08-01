@@ -1,26 +1,43 @@
 
-# Hackerspace Changelog
+# Bytedeck Changelog
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
 
+### [1.22.0] 2023-07-31
+ * Feature: Add simplified registration option to SiteConfig
+ * Admin Features:
+   - Admin action on public tenant to send emails to deck owners
+   - Delete old decks with security protection
+ * Optimizations
+   - Major refactor of Students lists to speed up page load times
+   - Refactor of some Quest and Submission pages to speed up page load times
+ * Tweaks:
+   - Refactor status icons on quest list for minor performance improvements
+ * Bugfixes:
+   - Wrap long urls [#1425](https://github.com/bytedeck/bytedeck/issues/1425)
+   - Add back missing quest completion dates on profiles [#1427](https://github.com/bytedeck/bytedeck/issues/1427);
+   - Inconsistant tag name creation [#1282](https://github.com/bytedeck/bytedeck/issues/1282);
+   - Tagg error duplicate key value violates unique constraint [#1351](https://github.com/bytedeck/bytedeck/issues/1351);
+
+
 ### [1.21.2] 2023-07-03 - Summer speed up #1
  * Feature: Campaign lists are now searchable and sortable (via bootstrap-tables)
  * Optimizations
-  - Major refactor of Students lists to speed up page load times
-  - Refactor of some Quest and Submission pages to speed up page load times
+   - Major refactor of Students lists to speed up page load times
+   - Refactor of some Quest and Submission pages to speed up page load times
  * Tweaks:
-  - Organize Quest related items in Admin menu and add Common Info
-  - Reorganize Quests submenu for consistancy with Admin menu items
-  - Clean up mobile layout of content for quest asnd submission previews (accordian expansion)
-  - Indicate skipepd quests in status field of submissions and approvals tabs
+   - Organize Quest related items in Admin menu and add Common Info
+   - Reorganize Quests submenu for consistancy with Admin menu items
+   - Clean up mobile layout of content for quest asnd submission previews (accordian expansion)
+   - Indicate skipepd quests in status field of submissions and approvals tabs
  * Bugfixes:
-  - Skipped quests now save comments
-  - Ignore draft and archived quests when considering Campaign completion; [#1286](https://github.com/bytedeck/bytedeck/issues/1286)
-  - Sort badges by sort_order on profiles [#1411](https://github.com/bytedeck/bytedeck/issues/1411);
-  - Allow deletion of (non-current) semesters with no students [#1418](https://github.com/bytedeck/bytedeck/issues/1418);
-  - Added proper sorting to status column [#1420](https://github.com/bytedeck/bytedeck/issues/1420);
+   - Skipped quests now save comments
+   - Ignore draft and archived quests when considering Campaign completion; [#1286](https://github.com/bytedeck/bytedeck/issues/1286)
+   - Sort badges by sort_order on profiles [#1411](https://github.com/bytedeck/bytedeck/issues/1411);
+   - Allow deletion of (non-current) semesters with no students [#1418](https://github.com/bytedeck/bytedeck/issues/1418);
+   - Added proper sorting to status column [#1420](https://github.com/bytedeck/bytedeck/issues/1420);
 
 
 
@@ -28,14 +45,14 @@ This file chronologically records all notable changes to this website, including
  * Feature: Refactor all quest/submission lists to be searchable and sortable.
  * Feature: Add list of badge assertions to the badge detail page
  * Bugfixes:
-  - Fix display of My Groups button [#1395](https://github.com/bytedeck/bytedeck/issues/1395)
-  - Skipped submissions do no appear in Approved tab [#1400](https://github.com/bytedeck/bytedeck/issues/1400)
-  - fix broken announcement permalinks and comment links [#818](https://github.com/bytedeck/bytedeck/issues/818)
-  - Add missing html elements to SummernoteSafeWidget, including HTML5 media tags
-  - Fix get_banner_image_url error on public domain in some views [#1214](https://github.com/bytedeck/bytedeck/issues/1214)
-  - Refactor Quest.time_expired and date_expired tests and fix buggy test [#1327](https://github.com/bytedeck/bytedeck/issues/1327)
-  - Use whitelabelling for groups in buttons and elsewhere [#393](https://github.com/bytedeck/bytedeck/issues/1393)
-  - Changing deck owner now grants new owner superuser permissions [#1390](https://github.com/bytedeck/bytedeck/issues/1390)
+   - Fix display of My Groups button [#1395](https://github.com/bytedeck/bytedeck/issues/1395)
+   - Skipped submissions do no appear in Approved tab [#1400](https://github.com/bytedeck/bytedeck/issues/1400)
+   - fix broken announcement permalinks and comment links [#818](https://github.com/bytedeck/bytedeck/issues/818)
+   - Add missing html elements to SummernoteSafeWidget, including HTML5 media tags
+   - Fix get_banner_image_url error on public domain in some views [#1214](https://github.com/bytedeck/bytedeck/issues/1214)
+   - Refactor Quest.time_expired and date_expired tests and fix buggy test [#1327](https://github.com/bytedeck/bytedeck/issues/1327)
+   - Use whitelabelling for groups in buttons and elsewhere [#393](https://github.com/bytedeck/bytedeck/issues/1393)
+   - Changing deck owner now grants new owner superuser permissions [#1390](https://github.com/bytedeck/bytedeck/issues/1390)
  * Devops: Improved automated test coverage throughout app
 
 
