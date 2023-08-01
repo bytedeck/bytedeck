@@ -1,8 +1,7 @@
 import json
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
@@ -178,6 +177,7 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         user = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        kwargs['student_registration'] = False
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
 
@@ -197,6 +197,11 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
     form_class = CourseStudentStaffForm
     template_name = 'courses/coursestudent_form.html'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['student_registration'] = False
+        return kwargs
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
         ctx['heading'] = f'Update {self.object.user.username}\'s course'
@@ -207,22 +212,78 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
-class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, CreateView):
+# Student Course Registration View
+class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+
+    # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
+    def test_func(self):
+        return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
+
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
     success_message = "You have been added to the %(course)s course"
 
+    def get(self, request, *args, **kwargs):
+        # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
+        # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
+        simpleregistration = SiteConfig.get().simplified_course_registration
+        form = self.get_form()
+        form_auto_create_condition = (
+            simpleregistration and
+            form.fields['semester'].widget.input_type == 'hidden' and
+            form.fields['block'].widget.input_type == 'hidden' and
+            form.fields['course'].widget.input_type == 'hidden'
+        )
+
+        if form_auto_create_condition:
+            # form_auto_create_condition == True means only 1 active Semester, Block, Course object exists
+            # can get active objects directly with first() and siteconfig.active_semester
+            obj, created = CourseStudent.objects.get_or_create(
+                    user=self.request.user,
+                    semester=SiteConfig.get().active_semester,
+                    block=Block.objects.filter(active=True).first(),
+                    course=Course.objects.filter(active=True).first()
+            )
+
+            # after object has been created, redirect to normal success url and display normal success message
+            # fstring used instead of self.success_message because form context not available
+            if created:
+                messages.success(request, f"You have been added to the {obj.course} Course")
+            return redirect(self.success_url)
+        else:
+            return super().get(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()
-        kwargs['instance'] = CourseStudent(user=self.request.user)
+        # student registration kwarg is an argument passed to simple_registration in forms.py
+        # refer to forms.CourseStudentForm for full context
+        kwargs['student_registration'] = True
+
+        # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
+        # user is always hidden and semester always sets default, so can set both non-conditionally
+        kwargs['instance'] = CourseStudent(user=self.request.user,
+                                           semester=SiteConfig.get().active_semester)
+
+        # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
+        block_qs = Block.objects.filter(active=True)
+        course_qs = Course.objects.filter(active=True)
+
+        if block_qs.count() == 1:
+            kwargs['instance'].block = block_qs.first()
+
+        if course_qs.count() == 1:
+            kwargs['instance'].course = course_qs.first()
+
         return kwargs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
-        ctx['heading'] = 'Join a course'
+
         ctx['submit_btn_value'] = 'Join'
+        ctx['heading'] = 'Join a course'
+
         return ctx
 
 
@@ -275,7 +336,6 @@ class SemesterCreateUpdateFormsetMixin:
     def post(self, *args, **kwargs):
         self.object = self.get_object()
         forms = [self.get_form(), self.get_formset()]
-
         if all(form.is_valid() for form in forms):
             return self.form_valid(*forms)
         return self.form_invalid(*forms)

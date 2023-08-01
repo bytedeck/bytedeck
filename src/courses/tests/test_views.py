@@ -265,89 +265,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
-    def test_CourseStudentUpdate_view(self):
-        """ Staff can update a student's course """
-
-        course_student = baker.make(
-            CourseStudent,
-            user=self.test_student1,
-            course=self.course,
-            block=self.block,
-            semester=SiteConfig.get().active_semester
-        )
-        new_course = baker.make(Course)
-
-        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
-        form_data['course'] = new_course.pk
-
-        self.client.force_login(self.test_teacher)
-        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
-        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
-
-        course_student.refresh_from_db()
-        self.assertEqual(course_student.course.pk, new_course.pk)
-
-    def test_CourseAddStudent_view(self):
-        '''Staff can add a student to a course'''
-
-        # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
-        # and redirects to profiles:profile_detail
-
-        self.client.force_login(self.test_teacher)
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
-
-        add_course_url = reverse('courses:join', args=[self.test_student1.id])
-
-        response = self.client.get(add_course_url)
-        self.assertContains(response, f'Adding a course for {self.test_student1}')
-
-        response = self.client.post(add_course_url, data=self.valid_form_data)
-        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
-        # Student should now be registered in a course
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
-
-        # Now try adding them a second time, should not validate:
-        response = self.client.post(add_course_url, data=self.valid_form_data)
-
-        # invalid form
-        # GRADE field is depercated and no longer used within unique_together
-        # form = response.context['form']
-        # self.assertFalse(form.is_valid())
-        # self.assertEqual(response.status_code, 200)
-        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
-
-        # Change the grade, still fails cus same block in same semester
-        self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
-        response = self.client.post(add_course_url, data=self.valid_form_data)
-        form = response.context['form']
-        self.assertFalse(form.is_valid())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
-
-        # Change the block also, should validate now
-        self.valid_form_data['block'] = baker.make('courses.block').pk
-        response = self.client.post(add_course_url, data=self.valid_form_data)
-        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
-
-    def test_CourseStudentDelete_view(self):
-        """ Teacher should be able to delete a student from a course (StudentCourse object)
-        and should redirect to the student's profile when complete. """
-        self.client.force_login(self.test_teacher)
-        course_student = baker.make(CourseStudent, user=self.test_student1)
-
-        # can access the Delete View
-        response = self.client.get(reverse('courses:coursestudent_delete', args=[course_student.id]))
-        self.assertEqual(response.status_code, 200)
-
-        before_delete_count = CourseStudent.objects.count()
-        response = self.client.post(reverse('courses:coursestudent_delete', args=[course_student.id]))
-        after_delete_count = CourseStudent.objects.count()
-        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
-        self.assertEqual(before_delete_count - 1, after_delete_count)
-
     def test_CourseList_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
@@ -443,8 +360,91 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
             'course': self.course.pk,
         }
 
+    def test_CourseStudentUpdate_view(self):
+        """ Staff can update a student's course """
+
+        course_student = baker.make(
+            CourseStudent,
+            user=self.test_student1,
+            course=self.course,
+            block=self.block,
+            semester=SiteConfig.get().active_semester
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+
+    def test_CourseAddStudent_view(self):
+        '''Staff can add a student to a course'''
+
+        # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
+        # and redirects to profiles:profile_detail
+
+        self.client.force_login(self.test_teacher)
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+        add_course_url = reverse('courses:join', args=[self.test_student1.id])
+
+        response = self.client.get(add_course_url)
+        self.assertContains(response, f'Adding a course for {self.test_student1}')
+
+        response = self.client.post(add_course_url, data=self.valid_form_data)
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
+        # Student should now be registered in a course
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        # Now try adding them a second time, should not validate:
+        response = self.client.post(add_course_url, data=self.valid_form_data)
+
+        # invalid form
+        # GRADE field is depercated and no longer used within unique_together
+        # form = response.context['form']
+        # self.assertFalse(form.is_valid())
+        # self.assertEqual(response.status_code, 200)
+        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
+        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        # Change the grade, still fails cus same block in same semester
+        self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
+        response = self.client.post(add_course_url, data=self.valid_form_data)
+        form = response.context['form']
+        self.assertFalse(form.is_valid())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        # Change the block also, should validate now
+        self.valid_form_data['block'] = baker.make('courses.block').pk
+        response = self.client.post(add_course_url, data=self.valid_form_data)
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
+
+    def test_CourseStudentDelete_view(self):
+        """ Teacher should be able to delete a student from a course (StudentCourse object)
+        and should redirect to the student's profile when complete. """
+        self.client.force_login(self.test_teacher)
+        course_student = baker.make(CourseStudent, user=self.test_student1)
+
+        # can access the Delete View
+        response = self.client.get(reverse('courses:coursestudent_delete', args=[course_student.id]))
+        self.assertEqual(response.status_code, 200)
+
+        before_delete_count = CourseStudent.objects.count()
+        response = self.client.post(reverse('courses:coursestudent_delete', args=[course_student.id]))
+        after_delete_count = CourseStudent.objects.count()
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
+        self.assertEqual(before_delete_count - 1, after_delete_count)
+
     def test_CourseStudentCreate_view(self):
-        '''Student can register themself in a course'''
+        '''Students can register themselves in a course. Illegally accessing the registration view after registering will give an error 403'''
         self.client.force_login(self.test_student1)
 
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
@@ -455,35 +455,95 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Student should now be registered in a course
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
-        # Now try adding them a second time, should not validate:
+        # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+        self.assertEqual(response.status_code, 403)
 
-        # GRADE has been deprecated and is no longer part of a unique requirement
-        # invalid form
-        # form = response.context['form']
-        # self.assertFalse(form.is_valid())
-        # self.assertEqual(response.status_code, 200)
-        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+    def test_CourseStudentCreate__simple_registration_hidden_fields(self):
+        """
+        If simplified_course_registration is enabled in siteconfig, fields in student registration form with only one viable option should be
+        hidden and default to that value
+        """
+        # login test student and assert no courses
+        self.client.force_login(self.test_student1)
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
-        # Change the grade, still fails cus same block in same semester
-        self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
-        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
-        form = response.context['form']
-        self.assertFalse(form.is_valid())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Student Course with this Semester, Group and User already exists')
+        # enable simplified_course_registration in siteconfig
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+
+        # by default, Course/Block have 2 objects defined and will be visible
+        # semester field is always hidden if simple registration = True, because it inherits one value from siteconfig.active_semester
+        self.assertEqual(Course.objects.count(), 2)
+        self.assertEqual(Block.objects.count(), 2)
+        self.assertEqual(Semester.objects.count(), 1)
+
+        # accessing student registration view with all 3 fields hidden will automatically attempt to create/get CourseStudent object and redirect,
+        # so access view in 2 steps to verify fields are hidden as intended
+
+        # set one course object to inactive so only block field is visible
+        toggle_course = Course.objects.first()
+        toggle_course.active = False
+        toggle_course.save()
+
+        # access view and assert course, semester fields are hidden while block is visible
+        response = self.client.get(reverse('courses:create'))
+
+        # select = visible selection field
+        self.assertEqual(response.context['form'].fields['course'].widget.input_type, 'hidden')
+        self.assertEqual(response.context['form'].fields['block'].widget.input_type, 'select')
+        self.assertEqual(response.context['form'].fields['semester'].widget.input_type, 'hidden')
+
+        # re-activate course object, de-activate one block object
+        toggle_course.active = True
+        toggle_course.save()
+        toggle_block = Block.objects.first()
+        toggle_block.active = False
+        toggle_block.save()
+
+        # access view and assert course field is visible while other two are hidden
+        response = self.client.get(reverse('courses:create'))
+
+        # select = visible selection field
+        self.assertEqual(response.context['form'].fields['course'].widget.input_type, 'select')
+        self.assertEqual(response.context['form'].fields['block'].widget.input_type, 'hidden')
+        self.assertEqual(response.context['form'].fields['semester'].widget.input_type, 'hidden')
+
+    def test_CourseStudentCreate__simple_registration_auto_submit(self):
+        """
+        If simplified_course_registration is enabled and all student registration fields are hidden (1 option), accessing CourseStudentCreate view
+        should automatically create corresponding CourseStudent object and redirect to quests page without accessing form
+
+        <<< WIP: illegally re-accessing student registration tab will 403 via a future PR >>>
+        Accessing the registration again through url editing should redirect to quests without creating new object
+        """
+        # login test student and assert no courses
+        self.client.force_login(self.test_student1)
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+        # enable simplified_course_registration in siteconfig
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+
+        # by default, 2 block and course objects exist but we can delete 1 of each because we won't access later
+        Block.objects.first().delete()
+        Course.objects.first().delete()
+
+        # accessing reverse(courses:create) should now automatically create a CourseStudent object (none currently exist) and redirect to quests
+        response = self.client.get(reverse('courses:create'))  # no form data necessary, all fields are hiddeninput with assigned defaults
+
+        # assert redirect to quests page and CourseStudent object creation
+        self.assertRedirects(response, reverse('quests:quests'))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
-        # Change the block also, should validate now
-        self.valid_form_data['block'] = baker.make('courses.block').pk
-        # print(self.valid_form_data)
-        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
-        # form = response.context['form']
-        # print(form)
-        # self.assertFalse(form.is_valid())
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
+        # accessing the registration page a second time (illegally through url editing, etc.) should give 403 permission denied
+        response = self.client.get(reverse('courses:create'))
+
+        # assert permission denied and no new object created
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
 
 class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
