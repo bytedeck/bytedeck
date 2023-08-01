@@ -58,15 +58,6 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         from siteconfig.models import SiteConfig
 
         # TODO: this is duplication of code in admin.py.  Move this into the Tenant model?  Perhaps as a pre-save hook?
-
-        # Because commit=False does not only result in not creating a record at the database.
-        # It also has for example impact on many-to-many fields in the form.
-        #
-        # When you thus specify commit=False, the ManyToManyFields of the model that are also present in the form,
-        # are not stored in the database either, since at that moment, no primary key for the object exists yet.
-        #
-        # One can of course implement the logic themselves, but the idea of a ModelForm is to remove as much
-        # boilerplate code as possible.
         form.instance.schema_name = form.instance.name.replace('-', '_')
         form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
 
