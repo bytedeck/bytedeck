@@ -76,9 +76,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         # saved object (tenant) can be accessed via `object` attribute
         cleaned_data = form.cleaned_data
         with tenant_context(self.object):
-            owner = SiteConfig.get().deck_owner or None
-            if owner is None:  # where is the owner?
-                return response  # noqa
+            owner = SiteConfig.get().deck_owner
 
             # otherwise save first / last name
             owner.first_name = cleaned_data['first_name']
@@ -87,19 +85,17 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
             # save email address...
             email = cleaned_data['email']
-            if len(email):
-                owner.email = email
-                owner.save()
+            owner.email = email
+            owner.save()
 
             # ...and send email confirmation message
             from allauth.account.utils import send_email_confirmation
-            if self.request and len(email):
-                send_email_confirmation(
-                    request=self.request,
-                    user=owner,
-                    signup=False,
-                    email=owner.email,
-                )
+            send_email_confirmation(
+                request=self.request,
+                user=owner,
+                signup=False,
+                email=owner.email,
+            )
 
         return response
 
