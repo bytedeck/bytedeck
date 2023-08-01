@@ -98,8 +98,6 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         form_data = {
             "name": "default",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         response = self.client.post(reverse("tenant:new"), data=form_data)
         self.assertEqual(response.status_code, 200)
@@ -111,8 +109,6 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example",  # incorrect email address
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         response = self.client.post(reverse("tenant:new"), data=form_data)
         self.assertEqual(response.status_code, 200)
@@ -125,8 +121,6 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         response = self.client.post(reverse("tenant:new"), data=form_data)
         self.assertEqual(response.status_code, 302)

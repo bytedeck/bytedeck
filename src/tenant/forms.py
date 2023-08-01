@@ -1,9 +1,6 @@
 from django import forms
 from django.forms import ModelForm
 
-from captcha.fields import ReCaptchaField
-from captcha.widgets import ReCaptchaV2Invisible
-
 from .models import Tenant
 
 
@@ -21,11 +18,9 @@ class TenantForm(ModelForm):
     )
     email = forms.EmailField(required=True)
 
-    captcha = ReCaptchaField(label="", widget=ReCaptchaV2Invisible)
-
     class Meta:
         model = Tenant
-        fields = ["name", "first_name", "last_name", "email", "captcha"]
+        fields = ["name", "first_name", "last_name", "email"]
 
     def clean_name(self):
         name = self.cleaned_data["name"]

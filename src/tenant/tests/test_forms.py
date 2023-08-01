@@ -20,8 +20,6 @@ class TenantFormTest(TenantTestCase):
         data = {
             "name": "default",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
@@ -32,8 +30,6 @@ class TenantFormTest(TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example",  # incorrect email address
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
@@ -44,8 +40,6 @@ class TenantFormTest(TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         form = TenantForm(data)
         self.assertTrue(form.is_valid())
@@ -59,8 +53,6 @@ class TenantFormTest(TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
@@ -74,8 +66,6 @@ class TenantFormTest(TenantTestCase):
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example.com",
-            # bypass captcha
-            "g-recaptcha-response": "PASSED",
         }
         # delete test tenant object without dropping schema
         Tenant.get().delete(force_drop=False)
