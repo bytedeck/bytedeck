@@ -1,22 +1,29 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.forms import ModelForm
 
 from .models import Tenant
+
+User = get_user_model()
 
 
 class TenantForm(ModelForm):
 
     first_name = forms.CharField(
-        max_length=30,
+        max_length=User._meta.get_field("first_name").max_length,
         required=True,
         label="First name",
     )
     last_name = forms.CharField(
-        max_length=30,
+        max_length=User._meta.get_field("last_name").max_length,
         required=True,
         label="Last name",
     )
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(
+        max_length=User._meta.get_field("email").max_length,
+        label="E-mail address",
+        required=True,
+    )
 
     class Meta:
         model = Tenant
