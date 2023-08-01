@@ -5,6 +5,23 @@ This file chronologically records all notable changes to this website, including
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
 
+### [1.22.0] 2023-07-31
+ * Feature: Add simplified registration option to SiteConfig
+ * Admin Features:
+   - Admin action on public tenant to send emails to deck owners
+   - Delete old decks with security protection
+ * Optimizations
+   - Major refactor of Students lists to speed up page load times
+   - Refactor of some Quest and Submission pages to speed up page load times
+ * Tweaks:
+   - Refactor status icons on quest list for minor performance improvements
+ * Bugfixes:
+   - Wrap long urls [#1425](https://github.com/bytedeck/bytedeck/issues/1425)
+   - Add back missing quest completion dates on profiles [#1427](https://github.com/bytedeck/bytedeck/issues/1427);
+   - Inconsistant tag name creation [#1282](https://github.com/bytedeck/bytedeck/issues/1282);
+   - Tagg error duplicate key value violates unique constraint [#1351](https://github.com/bytedeck/bytedeck/issues/1351);
+
+
 ### [1.21.2] 2023-07-03 - Summer speed up #1
  * Feature: Campaign lists are now searchable and sortable (via bootstrap-tables)
  * Optimizations
