@@ -21,7 +21,7 @@ class RestrictedFileField(models.FileField):
     """
 
     def __init__(self, **kwargs):
-        self.content_types = kwargs.pop("content_types", ["text/css"])
+        self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
 
         super().__init__(**kwargs)

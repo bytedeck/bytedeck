@@ -1,32 +1,10 @@
 from crispy_forms.helper import FormHelper
 from crispy_forms import layout
 
-from django.core.exceptions import FieldDoesNotExist
-from django.contrib.contenttypes.fields import GenericForeignKey
-
-
 from utilities.forms import FutureModelForm
 from utilities.fields import AllowedGFKChoiceField
 
 from .models import Prereq
-
-
-def popover_labels(model, field_strings):
-    fields_html = {}
-    for field_string in field_strings:
-        try:
-            field = model._meta.get_field(field_string)
-        except FieldDoesNotExist:
-            continue  # if custom field we skip it
-
-        if type(field) == GenericForeignKey:
-            continue  # if generic foreign key we skip it, it doesn't have these attributes
-
-        html = field.verbose_name
-        if field.help_text != "":
-            html += ' <i class="fa fa-question-circle-o text-info" data-toggle="tooltip" data-placement="top" title="' + field.help_text + '"></i> '
-        fields_html[field.name] = html
-    return fields_html
 
 
 class PrereqGFKChoiceField(AllowedGFKChoiceField):
