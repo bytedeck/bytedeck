@@ -5,6 +5,8 @@ from django.core import signing
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from django.utils.text import slugify
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -205,7 +207,32 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         self.client.post(reverse('tags:create'), data=form_data)
 
-        self.assertTrue(Tag.objects.filter(name=form_data['name']).exists())
+        self.assertTrue(Tag.objects.filter(name=slugify(form_data['name'])).exists())
+
+    def test_CreateView__slug_validation(self):
+        """
+        Invalid slug names provided to Tag CreateView should be rejected
+        validators that must be passed:
+        validate_slug https://docs.djangoproject.com/en/3.2/ref/validators/#validate-slug
+        validate_unique_slug (custom validator, located at tags.forms.validate_unique_slug)
+        """
+
+        # login a teacher to create tags
+        self.client.force_login(self.test_teacher)
+
+        # post to create form with an invalid name to trigger validator 'validate_slug'
+        response = self.client.post(reverse('tags:create'), data={'name': 'invalid name'})
+
+        # assert object is not created and error message displayed
+        self.assertContains(response, 'Enter a valid “slug” consisting of letters, numbers, underscores or hyphens.')
+        self.assertFalse(Tag.objects.filter(name='invalid name').exists())
+
+        # post to create form with non-unique (after slugification) name to trigger validator 'validate_unique_slug'
+        response = self.client.post(reverse('tags:create'), data={'name': 'TEST-TAG'})
+
+        # assert object is not created and error message displayed
+        self.assertContains(response, 'Tag name too similar to existing tag: test-tag')
+        self.assertFalse(Tag.objects.filter(name='TEST-TAG').exists())
 
     def test_UpdateView(self):
         """Make sure update view can change name + update slug"""
@@ -215,7 +242,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.post(reverse('tags:update', args=[self.tag.pk]), data=form_data)
 
         tag = Tag.objects.get(pk=self.tag.pk)  # refresh object
-        self.assertEqual(form_data['name'], tag.name)
+        # Form data is set to lowercase as a part of form submission, final name/slug will be lowercase of what was entered
+        self.assertEqual(form_data['name'].lower(), tag.name)
         self.assertEqual(form_data['name'].lower(), tag.slug)
 
     def test_DeleteView(self):
