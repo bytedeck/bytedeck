@@ -49,7 +49,7 @@ class TenantForm(TenantBaseForm):
     )
     email = forms.EmailField(
         max_length=User._meta.get_field("email").max_length,
-        label="E-mail name",
+        label="E-mail address",
         required=True,
     )
 
