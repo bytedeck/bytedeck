@@ -80,6 +80,7 @@ class MenuItem(models.Model):
 
     def __str__(self):
         target = 'target="_blank"' if self.open_link_in_new_tab else ''
-        return '<a href="{}" {}>' \
+        # append dummy (.menuitem) CSS class, fix #1397
+        return '<a href="{}" {} class="menuitem">' \
                '<i class="fa fa-fw fa-{}"></i>&nbsp;&nbsp;{}' \
                '</a>'.format(self.url, target, self.fa_icon, self.label)
