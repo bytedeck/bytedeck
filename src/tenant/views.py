@@ -6,8 +6,9 @@ from django.db import connection
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
-from django_tenants.utils import get_public_schema_name
+from django.urls import reverse_lazy
 
+from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from .forms import TenantForm
@@ -52,6 +53,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Tenant
     form_class = TenantForm
     template_name = 'tenant/tenant_form.html'
+    login_url = reverse_lazy('admin:login')
 
     def form_valid(self, form):
         """ Copy the tenant name to the schema_name and the domain_url fields."""

@@ -87,9 +87,10 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         Creating new tenant object with valid data, should pass without errors.
         """
         # first case, access /decks/new/ page as anonymous user
-        # should returns 302 (login required)
+        # should returns 302 (login required, note: it's admin/login/ page)
         response = self.client.get(reverse("tenant:new"))
         self.assertEqual(response.status_code, 302)
+        self.assertEqual("{}?next={}".format(reverse("admin:login"), reverse("tenant:new")), response.url)
 
         self.client.force_login(self.superuser)
 
