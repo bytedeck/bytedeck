@@ -119,14 +119,14 @@ class DeleteConfirmationForm(forms.Form):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
+        'schema_name', 'owner_full_name_text', 'owner_email_text', 'last_staff_login',
         'google_signon_enabled',
         'paid_until', 'trial_end_date',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
-    search_fields = ['schema_name', 'owner_full_name', 'owner_email']
+    search_fields = ['schema_name']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
@@ -135,6 +135,39 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
     actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
+
+    @admin.display(description="owner full name")
+    def owner_full_name_text(self, obj):
+        """
+        Returns full name (or username) from SiteConfig().deck_owner object.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return  # skip public schema
+
+        full_name_or_username = None
+        with tenant_context(obj):
+            owner = SiteConfig.get().deck_owner
+            # get the full name of the user, or if none is supplied will return the username
+            full_name_or_username = owner.get_full_name() or owner.username
+        return full_name_or_username
+
+    @admin.display(description="owner email")
+    def owner_email_text(self, obj):
+        """
+        Returns email address (primary and verified) from SiteConfig().deck_owner object.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return  # skip public schema
+
+        email = None
+        with tenant_context(obj):
+            owner = SiteConfig.get().deck_owner
+            # get the email address, but only primary and verified
+            for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                # make sure it's primary email for real
+                if primary_email_address.email == user_email(owner):
+                    email = owner.email
+        return email
 
     def get_actions(self, request):
         """
