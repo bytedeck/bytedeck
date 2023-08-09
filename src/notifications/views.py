@@ -1,5 +1,6 @@
 import json
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -73,9 +74,11 @@ def read(request, id):
                 return HttpResponseRedirect(reverse('notifications:list'))
         else:
             raise Http404
-    except:  # noqa
-        # TODO deal with this bare exception
-        raise HttpResponseRedirect(reverse('notifications:list'))
+
+    # If this view is accessed with an id argument that doesn't match an existing notification, redirect to list view and display error message
+    except Notification.DoesNotExist:
+        messages.error(request, "This notification doesn't exist or has been deleted.")
+        return HttpResponseRedirect(reverse('notifications:list'))
 
 
 @non_public_only_view
