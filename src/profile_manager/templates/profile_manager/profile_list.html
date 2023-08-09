@@ -9,7 +9,19 @@
 {% block head_title %}{% if title %}{{ title }}{% endif %}{% endblock %}
 
 {% block heading %}{{ config.custom_name_for_student }}s
-    {% if request.user.is_staff %}
+
+    <!-- block user list custom title and block object delete/edit buttons -->
+    {% if view_type == VIEW_TYPES.BLOCK %} in {% group_name %}: {{block_object.name}}
+    <a class="btn btn-warning" href="{% url 'courses:block_update' block_object.id %}" role="button" title="Edit this {% group_name %}">
+        <i class="fa fa-edit"></i>
+    </a>
+    <a class="btn btn-danger" href="{% url 'courses:block_delete' block_object.id %}" role="button" title="Delete this {% group_name %}">
+        <i class="fa fa-trash-o"></i>
+    </a>
+    {% endif %}
+    <!-- end of custom block user list header -->
+
+    {% if request.user.is_staff and view_type != VIEW_TYPES.BLOCK %}
         <div class="btn-group">
             <a href="{% url 'profiles:profile_list_current' %}"
             class="btn {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
@@ -28,6 +40,11 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- if template is accessed through block user list, show block description at top of content block -->
+{% if view_type == VIEW_TYPES.BLOCK %}
+{{ block_object.description }}
+{% endif %}
 
 <table data-toggle='table'
 data-sort-name='first'
@@ -70,7 +87,7 @@ data-classes="table table-no-bordered table-hover"
             </th>
             <th data-sortable='true' data-field='blocks'
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
-                {% group_name %}
+                {% group_name %}s
             </th>
             <th data-sortable='true' data-field='courses' data-visible="false">
                 Courses
