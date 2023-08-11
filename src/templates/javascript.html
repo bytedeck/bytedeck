@@ -103,7 +103,8 @@
       // _blank added for comments automatically in python when they are created, so this probabyl only still necessary
       // for in quest/announcement links
       //
-      // exclude dummy (.menuitem) CSS class, fix #1397
+      // exclude dummy (.menuitem) CSS class because these urls will set their own "target" attribute and
+      // should be left untouched
       $("a[href^='http://']:not('.menuitem')").attr("target","_blank");
       $("a[href^='https://']:not('.menuitem')").attr("target","_blank");
       $("a[href^='/media/']").attr("target","_blank");
