@@ -64,6 +64,12 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
         self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
 
+        # Bad id notification read request should redirect to list view
+        self.assertRedirects(
+            response=self.client.get(reverse('notifications:read', args=[999])),
+            expected_url=reverse('notifications:list'),
+        )
+
         self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
             expected_url=reverse('notifications:list'),

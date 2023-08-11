@@ -23,6 +23,7 @@ from django_tenants.utils import tenant_context
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant, TenantDomain
+from tenant.forms import TenantBaseForm
 from tenant.utils import generate_schema_name
 from tenant.tasks import send_email_message
 
@@ -66,31 +67,17 @@ class TenantDomainInline(admin.TabularInline):
         return False
 
 
-class TenantAdminForm(forms.ModelForm):
+class TenantAdminForm(TenantBaseForm):
 
-    class Meta:
-        model = Tenant
-        fields = ['name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
+    class Meta(TenantBaseForm.Meta):
+        fields = TenantBaseForm.Meta.fields + [
+            'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
 
     def clean_name(self):
-        name = self.cleaned_data["name"]
-        # has already validated the model field at this point
-        if name == "public":
-            raise forms.ValidationError("The public tenant is restricted and cannot be edited")
-        elif self.instance.schema_name and self.instance.schema_name != generate_schema_name(name):
+        name = super().clean_name()
+        if self.instance.schema_name and self.instance.schema_name != generate_schema_name(name):
             # if the schema already exists, then can't change the name
-            raise forms.ValidationError("The name cannot be changed after the tenant is created")
-        else:
-            from django_tenants.utils import schema_exists
-
-            # finally, check that there isn't a schema on the db that doesn't have a tenant object
-            # and thus doesn't care about name validation/uniqueness.
-            if not self._meta.model.objects.filter(schema_name=name).exists() and schema_exists(name):
-                raise forms.ValidationError(
-                    f"The schema \"{name}\" already exists in database, and must be "
-                    "deleted manually before creating tenant object with this name.",
-                )
-
+            raise forms.ValidationError("The name cannot be changed after the tenant is created.")
         return name
 
 
