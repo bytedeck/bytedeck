@@ -74,7 +74,7 @@ class MenuItemQueryset(models.QuerySet):
     def get_side_menu_items(self):
         return self.get_visible_items().filter(is_side_menu=True)
 
-    def get_default_side_menu_items(self):
+    def get_or_create_default_side_menu_items(self):
         """
         Create if these items don't exist yet, else return them
         These are the default items which are non-deletable but can be set to visible = False
@@ -86,8 +86,8 @@ class MenuItemQueryset(models.QuerySet):
         if menu_items.count() == len(labels):
             return menu_items
 
-        for menu_item in self.model.SIDE_MENU_ITEMS:
-            self.get_or_create(label=menu_item, defaults=self.model.SIDE_MENU_ITEMS[menu_item])
+        for menu_item, defaults in self.model.SIDE_MENU_ITEMS.items():
+            self.get_or_create(label=menu_item, defaults=defaults)
 
         return self.filter(label__in=labels)
 
