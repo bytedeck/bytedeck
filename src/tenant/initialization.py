@@ -46,7 +46,7 @@ def load_initial_tenant_data():
     from notifications.tasks import create_email_notification_tasks
     create_email_notification_tasks()
 
-    from utiilities.models import MenuItem
+    from utilities.models import MenuItem
     MenuItem.objects.get_or_create_default_side_menu_items()
 
 

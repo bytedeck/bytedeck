@@ -253,6 +253,16 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
 
+    def test_MenuItemDelete_view__default_side_menu_item_cannot_be_deleted(self):
+        """
+        Default Side Menu item cannot be deleted
+        """
+        self.client.force_login(self.test_teacher)
+        menu_item = MenuItem.objects.get(label='Announcements')
+        response = self.client.post(reverse('utilities:menu_item_delete', kwargs={'pk': menu_item.pk}))
+
+        self.assertEqual(response.status_code, 403)
+
 
 class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
