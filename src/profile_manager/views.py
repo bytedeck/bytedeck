@@ -163,16 +163,28 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
         # only allow the users to see their own profiles, or admins
-        profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
-        if profile_user == self.request.user or self.request.user.is_staff:
+        if self.request.user.is_staff:
+            return super().dispatch(*args, **kwargs)
+
+        profile = self.get_object()
+        if profile.user == self.request.user:
             return super().dispatch(*args, **kwargs)
 
         return redirect('quests:quests')
 
+    def get_object(self):
+        pk = self.kwargs.get('pk')
+        if pk is not None:
+            profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
+        else:
+            profile = self.request.user.profile
+
+        return profile
+
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super().get_context_data(**kwargs)
+        profile = self.get_object()
 
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
@@ -201,6 +213,13 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         # context['badge_assertions_dict_items'] = assertion_dict.items()
 
         return context
+
+
+class ProfileDetailOwn(ProfileDetail):
+    """ Provides a single url for users to view their own profile """
+
+    def get_object(self):
+        return self.request.user.profile
 
 
 class ProfileOwnerOrIsStaffMixin:
