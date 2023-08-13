@@ -135,7 +135,7 @@ class MenuItem(models.Model):
         "Portfolio": {
             "label": "Portfolio",
             "fa_icon": "picture-o",
-            "url": "/portfolios/",
+            "url": "/portfolios/detail/",
             "open_link_in_new_tab": False,
             "is_side_menu": True,
             "sort_order": 3
