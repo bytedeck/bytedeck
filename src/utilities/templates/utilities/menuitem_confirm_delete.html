@@ -7,12 +7,22 @@
 
 {% block content %}
     <form action="" method="post">{% csrf_token %}
-      <p>Are you sure you want to delete this menu item?<p>
-      <div class="well">
-        <p>Menu Item Label: {{object.label}}</p>
-        <p>Menu Item ID: {{object.id}}</p>
-      </div>
-      <a href="{% url 'utilities:menu_items' %}" role="button" class="btn btn-info">Cancel</a>
-      <input type="submit" value="Delete" class="btn btn-danger" />
+      {% if object.can_delete %}
+        <p>Are you sure you want to delete this menu item?<p>
+        <div class="well">
+          <p>Menu Item Label: {{object.label}}</p>
+          <p>Menu Item ID: {{object.id}}</p>
+        </div>
+        <a href="{% url 'utilities:menu_items' %}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Delete" class="btn btn-danger" />
+      {% else %}
+        <p>This menu item cannot be delete because it is one of the default items. Update instead</p>
+        <div class="well">
+          <p>Menu Item Label: {{object.label}}</p>
+          <p>Menu Item ID: {{object.id}}</p>
+        </div>
+        <a href="{% url 'utilities:menu_item_update' object.id %}" role="button" class="btn btn-warning">Update</a>
+        <input type="submit" value="Delete" class="btn btn-danger" />
+      {% endif %}
     </form>
 {% endblock %}

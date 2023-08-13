@@ -15,6 +15,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
 from django.template.defaultfilters import capfirst
+from django.core.exceptions import PermissionDenied
 
 from hackerspace_online.decorators import staff_member_required
 
@@ -174,6 +175,14 @@ class MenuItemUpdate(NonPublicOnlyViewMixin, UpdateView):
 class MenuItemDelete(NonPublicOnlyViewMixin, DeleteView):
     model = MenuItem
     success_url = reverse_lazy('utilities:menu_items')
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        if self.object.can_delete():
+            return super().delete(request, *args, **kwargs)
+
+        raise PermissionDenied
 
 
 @method_decorator(staff_member_required, name='dispatch')
