@@ -1,4 +1,5 @@
 {% load static %}
+{% load utility_tags %}
 <!-- modified from http://www.bootply.com/render/96266 -->
 
 <!-- sidebar -->
@@ -67,43 +68,12 @@
         href="{% url 'badges:list' %}">
         <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
       {% endif %}
-    <a id="maps-menu" class="list-group-item
-        {% if '/maps/' in request.path_info %}active{% endif %}"
-       href="{% url 'maps:primary' %}">
-      <i class="fa fa-map-signs fa-fw"></i>&nbsp; Maps
-    </a>
+
  </div>
-
-  <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-secondary">
-    <a id="announcements-menu"
-       class="list-group-item {% if '/announcements/' in request.path_info %}active{% endif %}"
-       href="{% url 'announcements:list' %}">
-      <i class="fa fa-newspaper-o fa-fw"></i>&nbsp;
-      <span class="visible-sm-inline visible-xs-inline visible-md-inline shrinktextmore">Announce...</span>
-      <span class="hidden-sm hidden-xs hidden-md">{{ config.custom_name_for_announcement }}s</span>
-      <span id="announcements-badge" class="badge alert-danger list-group-item-badge "></span>
-    </a>
-
-    <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
-       href="{% url 'profiles:profile_list_current' %}">
-      <i class="fa fa-users fa-fw"></i>&nbsp; {{config.custom_name_for_student}}s
-    </a>
-
-  </div>
 
   {#  Student Menus #}
   {% if request.user.is_authenticated %}
     <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-student">
-      <a id="profile-menu" class="list-group-item
-          {% if '/profiles/' in request.path_info and not '/list/' in request.path_info %}
-          active{% endif %}"
-         href="{% url 'profiles:profile_detail' request.user.profile.id %}">
-        <i class="fa fa-user fa-fw"></i>&nbsp; Profile
-      </a>
-      <a id="portfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
-         href="{% url 'portfolios:detail' request.user.id %}">
-        <i class="fa fa-picture-o fa-fw"></i>&nbsp; Portfolio
-      </a>
     </div>
   {% endif %}
 
@@ -116,7 +86,13 @@
         <span class="hidden-sm hidden-xs hidden-md">Quest Approvals</span>
         <span id="approvals_badge" class="badge alert-danger list-group-item-badge "></span>
       </a>
+
+      <a id="groups-menu" class="list-group-item {% if '/profiles/list/' in request.path_info %}active{% endif %}"
+        href="{% url 'profiles:profile_list_current' %}">
+        <i class="fa fa-users fa-fw"></i>&nbsp; {{config.custom_name_for_student}}s
+      </a>
     </div>
+
   {% endif %}
 
   <!-- COMMON DATA FOR QUEST SUBJECT -->
@@ -124,9 +100,9 @@
     {% if q.common_data %}
       {% include "common_data.html" %}
     {% endif %}
-
   </div>
 
+  {% side_menu_list %}
 </div>
 
 <!-- /sidebar -->

@@ -1,0 +1,12 @@
+<!-- Modular Side Menu Items -->
+<div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-secondary">
+{% for side_menu_item in side_menu_items %}
+  <a id="{{side_menu_item.label}}-menu" class="list-group-item
+      {% if side_menu_item.url in request.path_info %}active{% endif %}"
+        href="{{ side_menu_item.url }}">
+    <i class="fa fa-{{ side_menu_item.fa_icon }} fa-fw"></i>&nbsp; {{ side_menu_item.label }}
+  </a>
+{% endfor %}
+</div>
+
+<a href="{% url 'utilities:menu_items' %}"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a>

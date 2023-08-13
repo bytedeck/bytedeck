@@ -813,7 +813,6 @@ h3 > img#banner {
 .list-group-item.left-side, .list-group-item.right-side {
   margin: 0;
   float: left;
-  border-bottom: none;
 }
 
 .list-group-item.left-side {

@@ -19,6 +19,7 @@
     <th>Url</th>
     <th>Sort Order</th>
     <th>Visible</th>
+    <th>Side Menu</th>
     <th>Action</th>
   </tr>
   {% for object in object_list %}
@@ -28,11 +29,12 @@
     <td><a href="{{ object.url }}">{{ object.url }}</a></td>
     <td>{{ object.sort_order }}</td>
     <td><i class="{{ object.visible | checkcross }}"></i></td>
+    <td><i class="{{ object.is_side_menu | checkcross }}"></i></td>
     <td>
       <a class="btn btn-warning" href="{% url 'utilities:menu_item_update' object.id %}" role="button" title="Edit this menu item">
         <i class="fa fa-edit"></i>
       </a>
-      <a class="btn btn-danger" href="{% url 'utilities:menu_item_delete' object.id %}" role="button" title="Delete this menu item">
+      <a class="btn btn-danger {% if not object.can_delete %}disabled{% endif %}" href="{% url 'utilities:menu_item_delete' object.id %}" role="button" title="Delete this menu item">
         <i class="fa fa-trash-o"></i>
       </a>
     </td>
