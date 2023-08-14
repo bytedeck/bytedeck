@@ -62,8 +62,8 @@ def mark_calculations(request, user_id=None):
     assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
     all_ranges = MarkRange.objects.filter(active=True, courses=None)
 
-    # combine assigned_ranges and all_ranges, then order by min mark
-    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark')
+    # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
+    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
 
     context = {
         'user': user,
