@@ -773,11 +773,14 @@ if DEBUG:
     # Solves an issue where django-debug-toolbar is not showing when running inside a docker container
     # See: https://gist.github.com/douglasmiranda/9de51aaba14543851ca3#gistcomment-2916867
     # get ip address for docker host
-    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
-    for ip in ips:
-        # replace last octet in IP with .1
-        ip = '{}.1'.format(ip.rsplit('.', 1)[0])
-        INTERNAL_IPS.append(ip)
+    try:
+        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+        for ip in ips:
+            # replace last octet in IP with .1
+            ip = '{}.1'.format(ip.rsplit('.', 1)[0])
+            INTERNAL_IPS.append(ip)
+    except (socket.gaierror, socket.herror, socket.timeout) as exc:
+        print(f"Error resolving hostname: {exc}. Defaulting to {INTERNAL_IPS} hosts.")
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
