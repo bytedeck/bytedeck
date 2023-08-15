@@ -7,7 +7,7 @@
 {% block content_first %}{% endblock %}
 {% block heading_inner %}Menu Items
 {% if request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'utilities:menu_item_create' %}" role="button">New</a>
+  <a class="btn btn-primary" href="{% url 'utilities:menu_item_create' %}?is_side_menu={{ is_side_menu }}" role="button">New</a>
 {% endif %}
 {% endblock %}
 
@@ -19,7 +19,6 @@
     <th>Url</th>
     <th>Sort Order</th>
     <th>Visible</th>
-    <th>Side Menu</th>
     <th>Action</th>
   </tr>
   {% for object in object_list %}
@@ -29,9 +28,8 @@
     <td><a href="{{ object.url }}">{{ object.url }}</a></td>
     <td>{{ object.sort_order }}</td>
     <td><i class="{{ object.visible | checkcross }}"></i></td>
-    <td><i class="{{ object.is_side_menu | checkcross }}"></i></td>
     <td>
-      <a class="btn btn-warning" href="{% url 'utilities:menu_item_update' object.id %}" role="button" title="Edit this menu item">
+      <a class="btn btn-warning" href="{% url 'utilities:menu_item_update' object.id %}?is_side_menu={{ is_side_menu }}" role="button" title="Edit this menu item">
         <i class="fa fa-edit"></i>
       </a>
       <a class="btn btn-danger {% if not object.can_delete %}disabled{% endif %}" href="{% url 'utilities:menu_item_delete' object.id %}" role="button" title="Delete this menu item">

@@ -58,13 +58,13 @@ def group_name():
 
 @register.inclusion_tag('utilities/list_of_links.html')
 def menu_list():
-    links = MenuItem.objects.get_main_menu_items()
+    links = MenuItem.objects.get_main_menu_items().get_visible_items()
     return {'links': links}
 
 
 @register.inclusion_tag('utilities/side_menu_items.html', takes_context=True)
 def side_menu_list(context):
-    side_menu_items = MenuItem.objects.get_side_menu_items()
+    side_menu_items = MenuItem.objects.get_side_menu_items().get_visible_items()
     return {'side_menu_items': side_menu_items, 'request': context.request}
 
 

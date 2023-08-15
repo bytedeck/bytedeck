@@ -69,10 +69,10 @@ class MenuItemQueryset(models.QuerySet):
         return self.filter(visible=True)
 
     def get_main_menu_items(self):
-        return self.get_visible_items().filter(is_side_menu=False)
+        return self.filter(is_side_menu=False)
 
     def get_side_menu_items(self):
-        return self.get_visible_items().filter(is_side_menu=True)
+        return self.filter(is_side_menu=True)
 
     def get_or_create_default_side_menu_items(self):
         """
@@ -94,7 +94,7 @@ class MenuItemQueryset(models.QuerySet):
 
 class MenuItem(models.Model):
 
-    label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.", unique=True)
+    label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.")
     fa_icon = models.CharField(max_length=50, default="link",
                                help_text=mark_safe("The Font Awesome icon to display beside the text. E.g. 'star-o'. "
                                                    "Options from <a target='_blank'"
@@ -144,6 +144,9 @@ class MenuItem(models.Model):
 
     class Meta:
         ordering = ["sort_order"]
+        constraints = [
+            models.UniqueConstraint(fields=['label', 'is_side_menu'], name='unique_menu_item_label', deferrable=models.Deferrable.DEFERRED)
+        ]
 
     def __str__(self):
         target = 'target="_blank"' if self.open_link_in_new_tab else ''

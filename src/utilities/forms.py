@@ -153,7 +153,9 @@ class CustomFlatpageForm(FlatpageForm):
 class MenuItemForm(forms.ModelForm):
     class Meta:
         model = MenuItem
-        fields = '__all__'
+        exclude = (
+            'is_side_menu',
+        )
 
         # We are using forms.TextInput() for the URL here since the MenuItem.url is using the
         # URLOrRelativeURLField. The Django then renders this as `<input type="url">` which
@@ -162,3 +164,13 @@ class MenuItemForm(forms.ModelForm):
         widgets = {
             'url': forms.TextInput(),
         }
+
+    def __init__(self, *args, **kwargs):
+        self.is_side_menu = kwargs.pop('is_side_menu', None)
+        super().__init__(*args, **kwargs)
+
+    def save(self, **kwargs):
+        if self.is_side_menu is not None:
+            self.instance.is_side_menu = self.is_side_menu
+
+        return super().save(**kwargs)

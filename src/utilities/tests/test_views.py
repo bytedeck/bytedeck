@@ -259,7 +259,9 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         self.client.force_login(self.test_teacher)
         menu_item = MenuItem.objects.get(label='Announcements')
-        response = self.client.post(reverse('utilities:menu_item_delete', kwargs={'pk': menu_item.pk}))
+
+        url = f"{reverse('utilities:menu_item_delete', kwargs={'pk': menu_item.pk})}?is_side_menu=true"
+        response = self.client.post(url)
 
         self.assertEqual(response.status_code, 403)
 

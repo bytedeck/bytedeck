@@ -26,6 +26,8 @@ from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from django_select2.views import AutoResponseView
 from queryset_sequence import QuerySetSequence
 
+from celery.utils.serialization import strtobool
+
 
 class QuerySetSequenceAutoResponseView(AutoResponseView):
     """
@@ -140,16 +142,42 @@ def videos(request):
     return render(request, 'utilities/videos.html', context)
 
 
+class IsSideMenuMixin:
+    """
+    A mixin for determining if the request is for the side menu or not.
+    """
+
+    def is_side_menu(self):
+        try:
+            return strtobool(self.request.GET.get('is_side_menu'))
+        except TypeError:
+            return False
+
+    def get_context_data(self, **kwargs):
+        context_data = super().get_context_data(**kwargs)
+        context_data['is_side_menu'] = 'true' if self.is_side_menu() else 'false'
+
+        return context_data
+
+    def get_queryset(self):
+        if self.is_side_menu():
+            return MenuItem.objects.get_side_menu_items()
+        return MenuItem.objects.get_main_menu_items()
+
+    def get_success_url(self):
+        url = reverse('utilities:menu_items')
+        return f"{url}?is_side_menu={str(self.is_side_menu()).lower()}" if self.is_side_menu() else url
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class MenuItemList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
+class MenuItemList(NonPublicOnlyViewMixin, LoginRequiredMixin, IsSideMenuMixin, ListView):
     model = MenuItem
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class MenuItemCreate(NonPublicOnlyViewMixin, CreateView):
+class MenuItemCreate(NonPublicOnlyViewMixin, IsSideMenuMixin, CreateView):
     model = MenuItem
     form_class = MenuItemForm
-    success_url = reverse_lazy('utilities:menu_items')
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Create New Menu Item'
@@ -157,12 +185,17 @@ class MenuItemCreate(NonPublicOnlyViewMixin, CreateView):
 
         return super().get_context_data(**kwargs)
 
+    def get_form_kwargs(self, *args, **kwargs):
+        form_kwargs = super().get_form_kwargs(*args, **kwargs)
+        form_kwargs['is_side_menu'] = self.is_side_menu()
+
+        return form_kwargs
+
 
 @method_decorator(staff_member_required, name='dispatch')
-class MenuItemUpdate(NonPublicOnlyViewMixin, UpdateView):
+class MenuItemUpdate(NonPublicOnlyViewMixin, IsSideMenuMixin, UpdateView):
     model = MenuItem
     form_class = MenuItemForm
-    success_url = reverse_lazy('utilities:menu_items')
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Menu Item'
@@ -172,9 +205,8 @@ class MenuItemUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class MenuItemDelete(NonPublicOnlyViewMixin, DeleteView):
+class MenuItemDelete(NonPublicOnlyViewMixin, IsSideMenuMixin, DeleteView):
     model = MenuItem
-    success_url = reverse_lazy('utilities:menu_items')
 
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()

@@ -11,7 +11,11 @@ class MenuItemModelTest(TenantTestCase):
         pass
 
     def test_get_default_side_menu_items(self):
-        side_menus_map = MenuItem.objects.get_or_create_default_side_menu_items().in_bulk(None, field_name='label')
+        side_menus = MenuItem.objects.get_or_create_default_side_menu_items()
+
+        side_menus_map = {}
+        for side_menu in side_menus:
+            side_menus_map[side_menu.label] = side_menu
 
         self.assertEqual(len(side_menus_map), len(MenuItem.SIDE_MENU_ITEMS))
         self.assertEqual(MenuItem.objects.count() - 1, len(side_menus_map))
