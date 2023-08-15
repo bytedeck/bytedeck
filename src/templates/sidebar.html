@@ -15,7 +15,6 @@
     {% include "banner.html" %}
   </h3>
 
-
   {#    Group Menus #}
   <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-main">
     <div class="clearfix dropdown">
@@ -71,6 +70,9 @@
 
  </div>
 
+  {% side_menu_list %}
+
+
   {#  Student Menus #}
   {% if request.user.is_authenticated %}
     <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-student">
@@ -102,7 +104,6 @@
     {% endif %}
   </div>
 
-  {% side_menu_list %}
 </div>
 
 <!-- /sidebar -->
