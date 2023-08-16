@@ -102,8 +102,11 @@
       // Ensure external links and media open in new tabs by adding target="_blank".
       // _blank added for comments automatically in python when they are created, so this probabyl only still necessary
       // for in quest/announcement links
-      $("a[href^='http://']").attr("target","_blank");
-      $("a[href^='https://']").attr("target","_blank");
+      //
+      // exclude dummy (.menuitem) CSS class because these urls will set their own "target" attribute and
+      // should be left untouched
+      $("a[href^='http://']:not('.menuitem')").attr("target","_blank");
+      $("a[href^='https://']:not('.menuitem')").attr("target","_blank");
       $("a[href^='/media/']").attr("target","_blank");
 
       // Enable allowfullscreen on responsive iframes

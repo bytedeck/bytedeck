@@ -11,10 +11,12 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
+from courses.models import Block, CourseStudent
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
+from profile_manager.models import Profile
 
 from hackerspace_online.tests.utils import generate_form_data
 
@@ -50,6 +52,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_current')
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
+        self.assertRedirectsLogin('profiles:profile_list_block', args='1')
 
     def test_all_profile_page_status_codes_for_students(self):
 
@@ -70,6 +73,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('profiles:profile_list')
         self.assert403('profiles:profile_list_inactive')
         self.assert403('profiles:profile_list_staff')
+        self.assert403('profiles:profile_list_block', args='1')
 
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
@@ -94,6 +98,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('profiles:profile_list')
         self.assert200('profiles:profile_list_current')
         self.assert200('profiles:profile_list_staff')
+        self.assert200('profiles:profile_list_block', args='1')
+        # profile_list_block should 404 with invalid pk kwarg, accessed via kwarg dict instead of arg or else bad request raises error
+        self.assert404("profiles:profile_list_block", kwargs={"pk": "999"})
         self.assert200('profiles:profile_list_inactive')
         self.assert200('profiles:tag_chart', args=[s_pk])
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
@@ -395,6 +402,33 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         qs = response.context['object_list']
         self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+
+    def test_profile_list_block__get_queryset(self):
+        """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
+        self.client.force_login(self.test_teacher)
+
+        # make a new empty block object and get user model to test with
+        testblock = baker.make(Block)
+        User = get_user_model()
+
+        # populate block with inactive students, will not add to profile list block because inactive (not in active semester)
+        baker.make(CourseStudent, user=baker.make(User), block=testblock)
+
+        # get object queryset from profile list of the new block and assert empty
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+        testblock_queryset = response.context['object_list']
+        self.assertEqual(testblock_queryset.count(), 0)
+
+        # populate block with active coursestudent objects
+        baker.make(CourseStudent, user=baker.make(User), block=testblock, semester=self.active_sem)
+        baker.make(CourseStudent, user=self.test_student2, block=testblock, semester=self.active_sem)
+
+        # get response and assert two active students in queryset + queryset is correct
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+        testblock_queryset = response.context['object_list']
+        self.assertEqual(testblock_queryset.count(), 2)
+        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
+        self.assertQuerysetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
 
     def test_profile_update_email(self):
         """

@@ -18,7 +18,7 @@ from siteconfig.models import SiteConfig
 from .models import Profile
 from .forms import ProfileForm, UserForm
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent
+from courses.models import CourseStudent, Block
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tags.models import get_user_tags_and_xp
@@ -39,6 +39,7 @@ class ViewTypes:
     CURRENT = 1
     STAFF = 2
     INACTIVE = 3
+    BLOCK = 4
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -101,6 +102,29 @@ class ProfileListCurrent(ProfileList):
     def get_queryset(self):
         profiles_qs = Profile.objects.all_for_active_semester()
         return self.queryset_append(profiles_qs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ProfileListBlock(ProfileList):
+    """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
+    view_type = ViewTypes.BLOCK
+    block_object = None
+
+    def get_queryset(self):
+        """block object is queried via pk kwarg in request from block list view, then a queryset of profiles is generated via relatedmanager"""
+        block_pk = self.kwargs['pk']
+        self.block_object = get_object_or_404(Block, pk=block_pk)
+        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
+        profiles_qs = Profile.objects.all_for_active_semester().filter(user__coursestudent__block=self.block_object)
+        return self.queryset_append(profiles_qs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # block object is queried again to pull name + description data from
+        context["block_object"] = self.block_object
+
+        return context
 
 
 @method_decorator(staff_member_required, name='dispatch')
