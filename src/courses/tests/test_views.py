@@ -7,10 +7,10 @@ from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent, Semester, Rank, ExcludedDate
+from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
+from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
-from courses.forms import SemesterForm, ExcludedDateFormset, CourseStudentStaffForm
 
 import random
 import datetime
@@ -151,6 +151,11 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:end_active_semester')
         self.assertRedirectsLogin('courses:ajax_progress_chart', args=[1])
 
+        self.assertRedirectsLogin('courses:markranges')
+        self.assertRedirectsLogin('courses:markrange_create')
+        self.assertRedirectsLogin('courses:markrange_update', args=[1])
+        self.assertRedirectsLogin('courses:markrange_delete', args=[1])
+
         self.assertRedirectsLogin('courses:semester_list')
         self.assertRedirectsLogin('courses:semester_create')
         self.assertRedirectsLogin('courses:semester_update', args=[1])
@@ -188,6 +193,11 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('courses:end_active_semester')
         self.assert403('courses:coursestudent_delete', args=[1])
 
+        self.assert403('courses:markranges')
+        self.assert403('courses:markrange_create')
+        self.assert403('courses:markrange_update', args=[1])
+        self.assert403('courses:markrange_delete', args=[1])
+
         self.assert403('courses:semester_list')
         self.assert403('courses:semester_create')
         self.assert403('courses:semester_update', args=[1])
@@ -213,6 +223,11 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Redirects, has own test
         # self.assert200('courses:end_active_semester')
+
+        self.assert200('courses:markranges')
+        self.assert200('courses:markrange_create')
+        self.assert200('courses:markrange_update', args=[1])
+        self.assert200('courses:markrange_delete', args=[1])
 
         self.assert200('courses:semester_list')
         self.assert200('courses:semester_create')
@@ -544,6 +559,77 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # assert permission denied and no new object created
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+
+class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
+    """Test module for the MarkRange model's view classes"""
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+
+        # set form data in setUp to be used for posting to create/update forms
+        # manytomany field in MarkRange form prevents generate_form_data from functioning properly so must be set manually
+        self.data = {
+            'name': 'TestMarkRange',
+            'minimum_mark': '72.5',
+            'active': True,
+            'color_light': '#BEFFFA',
+            'color_dark': '#337AB7',
+            'days': '1,2,3,4,5,6,7',
+        }
+
+    def test_MarkRangeList_view(self):
+        """The MarkRange list view's object list should contain all MarkRange objects"""
+
+        # login a teacher
+        self.client.force_login(self.test_teacher)
+
+        # get response from list view and assert all default existing MarkRanges are displayed
+        response = self.client.get(reverse('courses:markranges'))
+        self.assertQuerysetEqual(response.context['object_list'], MarkRange.objects.all())
+
+    def test_MarkRangeCreate_view(self):
+        """Staff users can create new MarkRange objects through the create view form"""
+
+        # login a teacher
+        self.client.force_login(self.test_teacher)
+
+        # post to create form with data created in setUp
+        response = self.client.post(reverse('courses:markrange_create'), data=self.data)
+
+        # assert form redirects to list view and that new MarkRange object exists (creation successful)
+        self.assertRedirects(response, reverse('courses:markranges'))
+        self.assertTrue(MarkRange.objects.filter(name="TestMarkRange").exists())
+
+    def test_MarkRangeUpdate_view(self):
+        """Staff users can edit existing MarkRange objects through the update view form"""
+
+        # login a teacher
+        self.client.force_login(self.test_teacher)
+
+        # post to update form with data created in setUp, updating MarkRange object with id=1
+        response = self.client.post(reverse('courses:markrange_update', args=[1]), data=self.data)
+
+        # assert form redirects to list view and that MarkRange object with id=1 has updated name (update successful)
+        self.assertRedirects(response, reverse('courses:markranges'))
+        self.assertEqual(MarkRange.objects.get(id=1).name, "TestMarkRange")
+
+    def test_MarkRangeDelete_view(self):
+        """Staff users can delete MarkRange objects through the delete view"""
+
+        # login a teacher
+        self.client.force_login(self.test_teacher)
+
+        # assert MarkRange object with id=1 exists prior to deletion
+        self.assertTrue(MarkRange.objects.filter(id=1).exists())
+
+        # post to delete view deleting object with id=1
+        response = self.client.post(reverse('courses:markrange_delete', args=[1]))
+
+        # assert deletion redirectes to list view and that MarkRange object with id=1 doesn't exist (deletion successful)
+        self.assertRedirects(response, reverse('courses:markranges'))
+        self.assertFalse(MarkRange.objects.filter(id=1).exists())
 
 
 class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
