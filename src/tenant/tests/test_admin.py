@@ -167,6 +167,41 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "john@doe.com")
 
+    def test_search_on_custom_fields(self):
+        """
+        Test whether content of custom fields is searchable in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q="
+        )
+        # confirm the search by an empty query returned all (test, public and extra) objects
+        self.assertContains(response, "3 total")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=John+Doe"
+        )
+        # confirm the search returned one object (by full name)
+        self.assertContains(response, "1 result")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=doe.com"
+        )
+        # confirm the search returned one object (by email address)
+        self.assertContains(response, "1 result")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=Taylor+Swift"
+        )
+        # confirm the search returned zero objects (by full name)
+        self.assertContains(response, "0 result")
+
     @patch("tenant.admin.messages.add_message")
     def test_enable_google_signin_admin_without_config(self, mock_add_message):
         """
