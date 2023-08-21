@@ -127,6 +127,12 @@ class QuestForm(forms.ModelForm):
             'Edit Prerequisites</a>' \
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %} '
+
+        questions_btn = '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'questions:list\' object.id %}">' \
+            'Edit Questions</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add questions.">Edit Questions</button>' \
             '{% endif %}'
 
         self.helper = FormHelper()
@@ -134,6 +140,7 @@ class QuestForm(forms.ModelForm):
             HTML(cancel_btn),
             HTML(submit_btn),
             HTML(prereqs_btn),
+            HTML(questions_btn),
             Div(
                 'name',
                 'xp',
