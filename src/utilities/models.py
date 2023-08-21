@@ -72,6 +72,7 @@ class MenuItemQueryset(models.QuerySet):
         return self.filter(is_side_menu=False)
 
     def get_side_menu_items(self):
+        self.get_or_create_default_side_menu_items()
         return self.filter(is_side_menu=True)
 
     def get_or_create_default_side_menu_items(self):
