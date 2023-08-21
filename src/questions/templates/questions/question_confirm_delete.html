@@ -1,0 +1,16 @@
+{% extends "questions/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Delete Question{% endblock %}
+
+{% block content %}
+<form action="" method="post" enctype="multipart/form-data">{% csrf_token %}
+    <p>Are you sure you want to delete this question?</p>
+    <div class="well">
+        <p>Question Instructions: {{  object.instructions }}</p>
+        <p>Question ID: {{ object.id }}</p>
+    </div>
+    <a href="{% url 'questions:list' object.quest.id %}" role="button" class="btn btn-info">Cancel</a>
+    <input type="submit" value="Delete" class="btn btn-danger">
+</form>
+{% endblock %}

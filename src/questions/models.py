@@ -1,4 +1,5 @@
 from django.db import models
+from django.urls import reverse
 
 from comments.models import Comment
 from quest_manager.models import Quest
@@ -121,6 +122,14 @@ class Question(models.Model):
             return last_question.ordinal + 1
         else:  # no questions in this quest yet
             return 1
+
+    def get_absolute_url(self):
+        """Return the URL to the question's update view."""
+        return reverse("questions:update", kwargs={"quest_id": self.quest.id, "pk": self.pk})
+
+    def get_list_url(self):
+        """Return the URL to the question's list view."""
+        return reverse("questions:list", args=[self.quest.pk])
 
 
 class QuestionSubmission(models.Model):
