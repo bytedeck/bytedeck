@@ -41,6 +41,8 @@ urlpatterns += [
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     # quest_manager
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    # questions
+    url(r'^questions/', include('questions.urls')),
     # profile_manager
     url(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
     url(r'^announcements/', include('announcements.urls', namespace='announcements')),
