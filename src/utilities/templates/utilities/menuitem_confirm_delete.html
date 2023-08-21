@@ -1,7 +1,7 @@
 {% extends "utilities/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block head_title %}Menu Items | {% endblock %}
+{% block head_title %}{% if is_side_menu == 'true'%}Side {% endif %}Menu Items | {% endblock %}
 
 {% block heading_inner %}Delete Menu Item {% endblock %}
 
@@ -13,7 +13,7 @@
           <p>Menu Item Label: {{object.label}}</p>
           <p>Menu Item ID: {{object.id}}</p>
         </div>
-        <a href="{% url 'utilities:menu_items' %}" role="button" class="btn btn-info">Cancel</a>
+        <a href="{% url 'utilities:menu_items' %}?is_side_menu={{ is_side_menu }}" role="button" class="btn btn-info">Cancel</a>
         <input type="submit" value="Delete" class="btn btn-danger" />
       {% else %}
         <p>This menu item cannot be delete because it is one of the default items. Update instead</p>
@@ -21,7 +21,7 @@
           <p>Menu Item Label: {{object.label}}</p>
           <p>Menu Item ID: {{object.id}}</p>
         </div>
-        <a href="{% url 'utilities:menu_item_update' object.id %}" role="button" class="btn btn-warning">Update</a>
+        <a href="{% url 'utilities:menu_item_update' object.id %}?is_side_menu={{ is_side_menu }}" role="button" class="btn btn-warning">Update</a>
         <input type="submit" value="Delete" class="btn btn-danger" />
       {% endif %}
     </form>

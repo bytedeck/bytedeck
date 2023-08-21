@@ -685,6 +685,10 @@ margin-bottom on the .pull-right child element of .list-group-item-buttons.
     padding-bottom: 3px;
 }
 
+.list-group.modular-side-menu {
+  margin-bottom: 0;
+}
+
 /***********Submission ********************************/
 
 li.file-link {

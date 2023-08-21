@@ -1,5 +1,5 @@
 <!-- Modular Side Menu Items -->
-<div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-secondary">
+<div class="nav list-group modular-side-menu hidden-xs sidebar-menu" id="lg-menu-secondary">
 {% for side_menu_item in side_menu_items %}
   <a id="{{side_menu_item.label}}-menu" class="list-group-item
       {% if side_menu_item.url in request.path_info %}active{% endif %}"
@@ -8,5 +8,5 @@
   </a>
 {% endfor %}
 </div>
+<a href="{% url 'utilities:menu_items' %}?is_side_menu=true"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Customize this menu</a>
 
-<a href="{% url 'utilities:menu_items' %}?is_side_menu=true"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Edit this list</a>

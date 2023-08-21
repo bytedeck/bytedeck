@@ -1,11 +1,11 @@
 {% extends "utilities/base.html" %}
 {% load utility_tags %}
 
-{% block head_title %}Menu Items | {% endblock %}
+{% block head_title %} {% if is_side_menu == 'true'%}Side {% endif %}Menu Items | {% endblock %}
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading_inner %}Menu Items
+{% block heading_inner %}{% if is_side_menu == 'true'%}Side {% endif %}Menu Items
 {% if request.user.is_staff %}
   <a class="btn btn-primary" href="{% url 'utilities:menu_item_create' %}?is_side_menu={{ is_side_menu }}" role="button">New</a>
 {% endif %}
@@ -32,7 +32,7 @@
       <a class="btn btn-warning" href="{% url 'utilities:menu_item_update' object.id %}?is_side_menu={{ is_side_menu }}" role="button" title="Edit this menu item">
         <i class="fa fa-edit"></i>
       </a>
-      <a class="btn btn-danger {% if not object.can_delete %}disabled{% endif %}" href="{% url 'utilities:menu_item_delete' object.id %}" role="button" title="Delete this menu item">
+      <a class="btn btn-danger {% if not object.can_delete %}disabled{% endif %}" href="{% url 'utilities:menu_item_delete' object.id %}?is_side_menu={{ is_side_menu }}" role="button" title="Delete this menu item">
         <i class="fa fa-trash-o"></i>
       </a>
     </td>
