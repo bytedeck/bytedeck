@@ -224,6 +224,7 @@ MIDDLEWARE = [
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
 ]
 
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
