@@ -271,7 +271,7 @@ class BadgeAssertionManager(models.Manager):
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
         qs = self.get_queryset(False).get_user(user).order_by('badge_id').distinct('badge_id')
-        sorted_qs = sorted(qs, key=lambda x: x.badge.sort_order)
+        sorted_qs = sorted(qs, key=lambda x: x.badge.sort_order or 0)  # sort_order defaults to 0 if not set
         return sorted_qs
 
     def badge_assertions_dict_items(self, user):
