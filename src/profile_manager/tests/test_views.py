@@ -35,7 +35,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        self.test_student1 = User.objects.create_user('test_student', first_name='Test', password=self.test_password)
         self.test_student2 = baker.make(User)
 
         # create semester with pk of default semester
@@ -53,6 +53,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
+        self.assertRedirectsLogin('profiles:profile_own')
 
     def test_all_profile_page_status_codes_for_students(self):
 
@@ -65,7 +66,9 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assert200('profiles:profile_detail', args=[s_pk])
         self.assert200('profiles:profile_update', args=[s_pk])
+        self.assert200('profiles:profile_detail', args=[s_pk])
         self.assert200('profiles:tag_chart', args=[s_pk])
+        self.assert200('profiles:profile_own')
 
         self.assert200('profiles:profile_list_current')
 
@@ -176,6 +179,23 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('profiles:profile_detail', args=[s_pk]))
         self.assertContains(response, 'View your Mark Calculations')
 
+    def test_profile_own__correct_displayed_text(self):
+        """
+        When accessing own profile, the displayed text should be
+            <Name>'s Profile
+        """
+
+        # Login a student
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # View own profile
+        response = self.client.get(reverse('profiles:profile_own'))
+
+        profile_name = f"{self.test_student1.profile.get_preferred_name()}&#x27;s Profile"
+
+        self.assertIn(profile_name, response.content.decode())
+
     def test_student_view_marks_404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.
@@ -279,7 +299,6 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             "email": "new@email.com",
             "first_name": "NEW",
             "last_name": "NEW",
-
             "is_staff": False,
             "is_active": True,
             "is_TA": True,
