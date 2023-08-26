@@ -123,14 +123,16 @@ class DeleteConfirmationForm(forms.Form):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name_text', 'owner_email_text', 'last_staff_login',
-        'google_signon_enabled',
+        'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
+        'owner_email_text', 'owner_email_deprecated',
+        'last_staff_login', 'google_signon_enabled',
         'paid_until', 'trial_end_date',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
-    search_fields = ['schema_name']
+    # DEPRECATED: these fields ("owner_full_name" and "owner_email") will be removed in a future update
+    search_fields = ['schema_name', 'owner_full_name', 'owner_email']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
@@ -155,6 +157,12 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             full_name_or_username = owner.get_full_name() or owner.username
         return full_name_or_username
 
+    @admin.display(description="owner full name (DEPRECATED)")
+    def owner_full_name_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_full_name
+    owner_full_name_deprecated.admin_order_field = "owner_full_name"
+
     @admin.display(description="owner email")
     def owner_email_text(self, obj):
         """
@@ -172,6 +180,12 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 if primary_email_address.email == user_email(owner):
                     email = owner.email
         return email
+
+    @admin.display(description="owner email (DEPRECATED)")
+    def owner_email_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_email
+    owner_email_deprecated.admin_order_field = "owner_email"
 
     def get_search_results(self, request, queryset, search_term):
         """
