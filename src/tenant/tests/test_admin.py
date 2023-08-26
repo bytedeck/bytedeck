@@ -101,18 +101,20 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding trigerring
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-            # create extra tenant for testing purpose
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
             self.extra_tenant.save()
-            domain = self.extra_tenant.get_primary_domain()
-            domain.domain = "extra.localhost"
 
         # update "owner" and add missing email address
         with tenant_context(self.extra_tenant):
@@ -435,18 +437,20 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
                 get_perm(Tenant, get_permission_codename("delete", opts))
             )
 
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding trigerring
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-            # create extra tenant for testing purpose
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
-                name="extra"
+                name="extra",
             )
             self.extra_tenant.save()
-            domain = self.extra_tenant.get_primary_domain()
-            domain.domain = "extra.localhost"
 
         self.client = TenantClient(self.public_tenant)
 
@@ -567,18 +571,20 @@ class TenantAdminActionsTest(TenantTestCase):
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding trigerring
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-            # create extra tenant for testing purpose
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
             self.extra_tenant.save()
-            domain = self.extra_tenant.get_primary_domain()
-            domain.domain = "extra.localhost"
 
         # update "owner" and add missing email address
         with tenant_context(self.extra_tenant):
