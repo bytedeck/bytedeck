@@ -23,7 +23,7 @@
                           // quest/sub id is number at end of html_id
                           var id = parseInt(html_id.match(/\d+$/)[0], 10);
 
-                          var preview_content_selector = "#preview-content-" + id;
+                          var preview_content_selector = `#preview-quest-${id}, #preview-submission-${id}`;
 
                           $(preview_content_selector).html(jsonData[id]);
                       });
@@ -89,7 +89,7 @@
                   var ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/";
               }
 
-              var preview_content_selector = "#preview-content-" + id;
+              var preview_content_selector = `#preview-quest-${id}, #preview-submission-${id}`;
               var hidden_selector = "#status-icon-" + id;
 
               $.ajax({
