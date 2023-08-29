@@ -878,6 +878,18 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertErrorMessage(response)
 
+    def test_complete_no_draft_comment(self):
+        """ When a student tries to complete a quest, their submission should have a draft_comment
+        attribute. If it doesn't the submission is invalid, so they are shown a 404 page.
+        """
+        invalid_sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
+                                 draft_comment=None)
+        response = self.client.post(
+            reverse('quests:complete', args=[invalid_sub.id]),
+            data={'comment_text': "test comment", 'complete': True}
+        )
+        self.assertEqual(response.status_code, 404)
+
     # def test_quest_not_available(self):
     #     """ If a quest is not available to a student, they should not be able to complete it """
     #     # TODO
