@@ -1,0 +1,10 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading %}<i class="fa fa-flag pull-right"></i>{% block heading_inner %} {{ heading }} {% endblock %}{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  {% crispy form form.helper %}
+</form>
+{% endblock %}

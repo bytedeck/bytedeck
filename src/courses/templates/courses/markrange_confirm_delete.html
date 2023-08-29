@@ -1,0 +1,16 @@
+{% extends "courses/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading %}<i class="fa fa-flag pull-right"></i>{% block heading_inner %} Delete Mark Range {% endblock %}{% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this mark range?<p>
+  <div class="well">
+    <p>Name: {{object.name}}</p>
+    <p>Minimum mark: {{object.minimum_mark}}%</p>
+  </div>
+  <a href="{% url 'courses:markranges' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}

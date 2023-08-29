@@ -1,0 +1,62 @@
+{% extends "base_sidebar.html" %}
+
+{% block head_title %}Mark Ranges | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block content_first %}{% endblock %}
+{% block heading %}<i class="fa fa-flag pull-right"></i>Mark Ranges
+    <a class="btn btn-primary" href="{% url 'courses:markrange_create' %}" role="button">New</a>
+{% endblock %}
+
+{% block content %}
+<p>Mark ranges have two uses: they can be used to change the color of the header of your deck when a student reaches a certain mark; and,
+   they will show up as reference lines on the graph in the Mark Calculations page.</p>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Mark</th>
+          <th>Minimum Mark</th>
+          <th>Color</th>
+          <th>Courses</th>
+          <th>Active</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for object in object_list %}
+          <tr {% if not object.active %} class="text-muted" {% endif %}>
+            <td class="text-center"><i class="{{object.fa_icon}} fa-lg fa-fw text-warning"></i></td>
+            <td>{{object.name}}</td>
+            <td>{{object.minimum_mark}}%</td>
+            <td>
+              {% if request.user.profile.dark_theme %}
+                <i class="fa fa-fw fa-circle" style="color:{{object.color_dark}}"></i>
+              {% else %}
+                <i class="fa fa-fw fa-circle" style="color:{{object.color_light}};
+                  text-shadow: -1px 0 #000, 0 1px #000, 1px 0 #000, 0 -1px #000;"></i>
+              {% endif %}
+            </td>
+            <td>
+              {% if object.courses.all %}
+                {{ object.courses.all|join:", " }}
+              {% else %}
+                <p>All</p>
+              {% endif %}
+            </td>
+            <td>{{object.active}}</td>
+            <td>
+              <a class="btn btn-warning" href="{% url 'courses:markrange_update' object.id %}" role="button" title="Edit this mark range">
+                <i class="fa fa-fw fa-edit"></i>
+              </a>
+              <a class="btn btn-danger" href="{% url 'courses:markrange_delete' object.id %}" role="button" title="Delete this mark range"
+                style="margin-left: 3px"><i class="fa fw-fw fa-trash-o"></i>
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+{% endblock %}
+
+{% block js %}{% endblock %}

@@ -19,7 +19,7 @@ from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_b
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
+from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 from django.db.models import Q
@@ -74,6 +74,45 @@ def mark_calculations(request, user_id=None):
         'markranges': markranges,
     }
     return render(request, template_name, context)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeList(NonPublicOnlyViewMixin, ListView):
+    model = MarkRange
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeCreate(NonPublicOnlyViewMixin, CreateView):
+    model = MarkRange
+    form_class = MarkRangeForm
+    success_url = reverse_lazy('courses:markranges')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Mark Range'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeUpdate(NonPublicOnlyViewMixin, UpdateView):
+    model = MarkRange
+    form_class = MarkRangeForm
+    success_url = reverse_lazy('courses:markranges')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Mark Range'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = MarkRange
+    success_url = reverse_lazy('courses:markranges')
 
 
 class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
