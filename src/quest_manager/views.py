@@ -733,7 +733,8 @@ def approve(request, submission_id):
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
-                text=comment_text + comment_text_addition,
+                # wrap comment text in <p> tag so default submission replies and quick replies are formatted correctly
+                text=f"<p>{comment_text}</p>{comment_text_addition}",
                 target=submission,
             )
 
