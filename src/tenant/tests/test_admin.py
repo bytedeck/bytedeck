@@ -102,7 +102,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding trigerring
+            # since "setUp" method run before each test, avoiding triggering
             # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
@@ -438,7 +438,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
             )
 
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding trigerring
+            # since "setUp" method run before each test, avoiding triggering
             # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
@@ -572,7 +572,7 @@ class TenantAdminActionsTest(TenantTestCase):
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding trigerring
+            # since "setUp" method run before each test, avoiding triggering
             # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
