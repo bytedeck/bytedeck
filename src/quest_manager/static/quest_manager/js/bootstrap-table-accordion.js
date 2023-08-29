@@ -24,8 +24,14 @@ function collapseRow($expandedRow, $table) {
   $expandedRow.next().find('td').addClass('collapsing');
   const $detailViewRow = $expandedRow.next();
   const expanded_row_html_id = $expandedRow.attr("id");
-  const expanded_quest_id = parseInt(expanded_row_html_id.match(/\d+$/)[0], 10);
-  const $expanded_hiddenDIV = $detailViewRow.find("#collapse-quest-" + expanded_quest_id);
+  const expanded_object_id = parseInt(expanded_row_html_id.match(/\d+$/)[0], 10);
+  let $expanded_hiddenDIV;
+  // find rows matching "collapse-quest-<id>" or "collapse-submission-<id>"
+  if (expanded_row_html_id.includes("quest")) {
+    $expanded_hiddenDIV = $detailViewRow.find(`#collapse-quest-${expanded_object_id}`);
+  } else {
+    $expanded_hiddenDIV = $detailViewRow.find(`#collapse-submission-${expanded_object_id}`);
+  }
 
   $expanded_hiddenDIV.slideUp(function() {
     // After animation complete, hide the div and append it back to its original parent
@@ -46,10 +52,16 @@ $(document).ready(function () {
     $table.bootstrapTable();
 
     $table.on('expand-row.bs.table', function (e, index, row, $detail) {
-      // Get the row's html id, then extract the last digit (quest id) from it
+      // Get the row's html id, then extract the last digit (quest or submission id) from it
       const row_html_id = row._id;
-      const quest_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
-      const $hiddenDIV = $("#collapse-quest-" + quest_id);
+      const object_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
+      let $hiddenDIV;
+      // find elements matching "collapse-quest-<id>" or "collapse-submission-<id>"
+      if (row_html_id.includes("quest")) {
+        $hiddenDIV = $(`#collapse-quest-${object_id}`);
+      } else {
+        $hiddenDIV = $(`#collapse-submission-${object_id}`);
+      }
 
       // Save the original parent of the hidden div for later use
       $hiddenDIV.data('originalParent', $hiddenDIV.parent());
