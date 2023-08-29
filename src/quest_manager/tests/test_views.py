@@ -26,6 +26,7 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_dat
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from siteconfig.models import SiteConfig
+from comments.models import Comment
 
 User = get_user_model()
 
@@ -408,6 +409,24 @@ class SubmissionViewTests(TenantTestCase):
         response = self.client.get(reverse('quests:drop', args=[s4_pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_drop_deletes_comment_and_submission(self):
+        """Ensure that the draft_comment (foreignkey to Comment object) is deleted
+        when a submission is dropped. Also ensure the QuestSubmission object is deleted."""
+        self.client.force_login(self.test_student1)
+
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        draft_comment_id = draft_comment.id
+        sub = baker.make(QuestSubmission, user=self.test_student1, draft_comment=draft_comment)
+        sub_id = sub.id
+
+        # drop the submission
+        response = self.client.post(reverse('quests:drop', args=[sub.id]))
+        self.assertEqual(response.status_code, 302)
+
+        # check that the draft_comment and submissions were deleted
+        self.assertFalse(Comment.objects.filter(id=draft_comment_id).exists())
+        self.assertFalse(QuestSubmission.objects.filter(id=sub_id).exists())
+
     def test_all_submission_page_status_codes_for_teachers(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -488,13 +507,14 @@ class SubmissionViewTests(TenantTestCase):
         # loging required for this view
         self.client.force_login(self.test_student1)
         quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
                          quest=quest,
-                         draft_text="I am a test draft comment")
-        draft_comment = "Test draft comment"
+                         draft_comment=draft_comment)
+        draft_text = "Test draft comment"
         # Send some draft data via the ajax view, which should save it.
         ajax_data = {
-            'comment': draft_comment,
+            'comment': draft_text,
             'submission_id': sub.id,
         }
 
@@ -507,20 +527,40 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(response.json()['result'], "Draft saved")
 
         sub.refresh_from_db()
-        self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+        self.assertEqual(draft_text, sub.draft_comment.text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+
+    def test_ajax_save_draft_no_submission_draft_comment(self):
+        """If a draft comment is not associated with the submission, then there is no submission in progress,
+        so return 404"""
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        # create a submission with no draft comment
+        sub = baker.make(QuestSubmission, draft_comment=None,
+                         quest=quest)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test",
+                'submission_id': sub.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_save_draft_no_changes(self):
         """Should not save if there are no changes in the draft text"""
         # loging required for this view
         self.client.force_login(self.test_student1)
         quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
                          quest=quest,
-                         draft_text="I am a test draft comment")
-        draft_comment = "I am a test draft comment"
+                         draft_comment=draft_comment)
+        draft_text = "I am a test draft comment"
         # Send the same draft data via the ajax view, which should not save it
         ajax_data = {
-            'comment': draft_comment,
+            'comment': draft_text,
             'submission_id': sub.id,
         }
 
@@ -533,7 +573,27 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(response.json()['result'], "No changes")
 
         sub.refresh_from_db()
-        self.assertEqual(draft_comment, sub.draft_text)
+        self.assertEqual(draft_text, sub.draft_comment.text)
+
+    def test_draft_text_changed_to_draft_comment(self):
+        """BACKWARDS COMPATIBILITY: The old draft_text field was kept around to make it easier to
+        migrate existing data to the new draft_comment field.  This test makes sure that when
+        the submission view is visited, the old draft_text is copied to the new draft_comment field."""
+        # loging required for this view
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_text = "I am a test draft comment"
+        sub = baker.make(QuestSubmission,
+                         quest=quest,
+                         draft_text=draft_text,
+                         user=self.test_student1,
+                         semester=SiteConfig.get().active_semester)
+
+        response = self.client.get(reverse('quests:submission', args=[sub.id]))
+        self.assertEqual(response.status_code, 200)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.draft_comment.text, draft_text)
 
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -556,7 +616,9 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_student)
 
         self.quest = baker.make(Quest, xp=5)
-        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
+        self.draft_comment = baker.make(Comment, text="test draft comment")
+        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
+                              draft_comment=self.draft_comment)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -737,6 +799,18 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(self.sub.is_completed)
 
         self.assertErrorMessage(response)
+
+    def test_complete_no_draft_comment(self):
+        """ When a student tries to complete a quest, their submission should have a draft_comment
+        attribute. If it doesn't the submission is invalid, so they are shown a 404 page.
+        """
+        invalid_sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
+                                 draft_comment=None)
+        response = self.client.post(
+            reverse('quests:complete', args=[invalid_sub.id]),
+            data={'comment_text': "test comment", 'complete': True}
+        )
+        self.assertEqual(response.status_code, 404)
 
     # def test_quest_not_available(self):
     #     """ If a quest is not available to a student, they should not be able to complete it """
