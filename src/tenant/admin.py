@@ -1,3 +1,6 @@
+import operator
+from functools import reduce
+
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
@@ -7,7 +10,9 @@ from django.core.exceptions import PermissionDenied
 from django.contrib.sites.models import Site
 from django.template.response import TemplateResponse
 from django.db import connection, transaction
+from django.db.models import Q, F
 from django.utils.translation import ngettext
+from django.utils.text import smart_split, unescape_string_literal
 from django.contrib.admin.utils import unquote
 from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
@@ -17,8 +22,7 @@ from django.urls import reverse
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from allauth.account.utils import user_email
-from django_tenants.utils import get_public_schema_name
-from django_tenants.utils import tenant_context
+from django_tenants.utils import tenant_context, schema_context, get_public_schema_name
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from siteconfig.models import SiteConfig
@@ -119,13 +123,15 @@ class DeleteConfirmationForm(forms.Form):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
-        'google_signon_enabled',
+        'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
+        'owner_email_text', 'owner_email_deprecated',
+        'last_staff_login', 'google_signon_enabled',
         'paid_until', 'trial_end_date',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
+    # DEPRECATED: these fields ("owner_full_name" and "owner_email") will be removed in a future update
     search_fields = ['schema_name', 'owner_full_name', 'owner_email']
 
     form = TenantAdminForm
@@ -135,6 +141,112 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
     actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
+
+    @admin.display(description="owner full name")
+    def owner_full_name_text(self, obj):
+        """
+        Returns full name (or username) from SiteConfig().deck_owner object.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return  # skip public schema
+
+        full_name_or_username = None
+        with tenant_context(obj):
+            owner = SiteConfig.get().deck_owner
+            # get the full name of the user, or if none is supplied will return the username
+            full_name_or_username = owner.get_full_name() or owner.username
+        return full_name_or_username
+
+    @admin.display(description="owner full name (DEPRECATED)")
+    def owner_full_name_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_full_name
+    owner_full_name_deprecated.admin_order_field = "owner_full_name"
+
+    @admin.display(description="owner email")
+    def owner_email_text(self, obj):
+        """
+        Returns email address (primary and verified) from SiteConfig().deck_owner object.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return  # skip public schema
+
+        email = None
+        with tenant_context(obj):
+            owner = SiteConfig.get().deck_owner
+            # get the email address, but only primary and verified
+            for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                # make sure it's primary email for real
+                if primary_email_address.email == user_email(owner):
+                    email = owner.email
+        return email
+
+    @admin.display(description="owner email (DEPRECATED)")
+    def owner_email_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_email
+    owner_email_deprecated.admin_order_field = "owner_email"
+
+    def get_search_results(self, request, queryset, search_term):
+        """
+        The `get_search_results` method modifies the list of objects displayed into those
+        that match the provided search term. It accepts the request, a queryset that applies
+        the current filters, and the user-provided search term. It returns a tuple containing a
+        queryset modified to implement the search, and a boolean indicating if the results
+        may contain duplicates.
+
+        This method was overridden to perform search on custom fields.
+        """
+        # The default implementation searches the fields named in ModelAdmin.search_fields.
+        queryset, may_have_duplicates = super().get_search_results(request, queryset, search_term)
+
+        # search_term is what you input in admin site
+        if not search_term:
+            return queryset, False
+
+        # getting a list of all schemas, except the public schema name
+        schemas = list(Tenant.objects.all().values_list("schema_name", flat=True))
+        schemas.remove(get_public_schema_name())
+
+        # perform search on custom fields: "owner_full_name", "owner_email"
+        search_fields = ["deck_owner__first_name", "deck_owner__last_name", "deck_owner__username", "deck_owner__email"]
+
+        # you need to take a copy of the list and iterate over it first,
+        # or the iteration will fail with what may be unexpected results.
+        for schema in schemas[:]:
+            with schema_context(schema):
+                orm_lookups = ["%s__icontains" % str(search_field) for search_field in search_fields]
+
+                for bit in smart_split(search_term):  # ["spam", "egg"]
+                    if bit.startswith(('"', "'")) and bit[0] == bit[-1]:
+                        bit = unescape_string_literal(bit)
+                    or_queries = []
+                    for orm_lookup in orm_lookups:
+                        # get the email address, but only primary and verified
+                        if "deck_owner__email" in orm_lookup:
+                            or_queries.append(Q(**{
+                                "deck_owner__emailaddress__verified": True,
+                                "deck_owner__emailaddress__primary": True,
+                                # make sure it's primary email for real
+                                "deck_owner__emailaddress__email__exact": F("deck_owner__email"),
+                                orm_lookup: bit,
+                            }))
+                        else:
+                            or_queries.append(Q(**{orm_lookup: bit}))
+                    qs = SiteConfig.objects.filter(reduce(operator.or_, or_queries))
+
+                # if nothing was found within schema context
+                if not qs.exists():
+                    schemas.remove(schema)
+
+        # return original queryset, OR any new results we found by searching within schema context
+        if len(schemas):
+            queryset |= self.model.objects.filter(schema_name__in=schemas)
+
+        # we must establish if the queryset changes implemented by our search method
+        # may introduce duplicates into the results, and return True in the second
+        # element of the return value.
+        return queryset, True
 
     def get_actions(self, request):
         """
