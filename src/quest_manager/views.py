@@ -980,6 +980,9 @@ def complete(request, submission_id):
         if "complete" not in request.POST and "comment" not in request.POST:
             raise Http404("unrecognized submit button")
 
+        if not submission.draft_comment:  # if no comment, the quest is not complete
+            raise Http404("no comment found")
+
         if (
             submission.quest.xp_can_be_entered_by_students
             and not submission.is_approved
@@ -989,6 +992,8 @@ def complete(request, submission_id):
             form = SubmissionForm(request.POST, request.FILES)
         else:
             form = SubmissionQuickReplyFormStudent(request.POST)
+
+        draft_comment = submission.draft_comment
 
         if form.is_valid():
             comment_text = form.cleaned_data.get("comment_text")
@@ -1013,16 +1018,15 @@ def complete(request, submission_id):
                 xp_requested = form.cleaned_data.get("xp_requested")
                 comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
-            comment_new = Comment.objects.create_comment(
-                user=request.user,
-                path=origin_path,
-                text=f"<p>{comment_text}</p>",
-                target=submission,
-            )
+            # update all comment fields
+            draft_comment.text = f"<p>{comment_text}</p>"
+            draft_comment.target_object_id = submission.id
+            draft_comment.target_object = submission
+            draft_comment.save()
 
             if request.FILES:
                 for afile in request.FILES.getlist("attachments"):
-                    newdoc = Document(docfile=afile, comment=comment_new)
+                    newdoc = Document(docfile=afile, comment=draft_comment)
                     newdoc.save()
 
             if "complete" in request.POST:
@@ -1098,7 +1102,7 @@ def complete(request, submission_id):
 
             notify.send(
                 request.user,
-                action=comment_new,
+                action=draft_comment,
                 target=submission,
                 recipient=submission.user,
                 affected_users=affected_users,
@@ -1107,11 +1111,11 @@ def complete(request, submission_id):
             )
             messages.success(request, msg_text)
             return redirect("quests:quests")
-        else:
+        else:  # form is not valid
             context = {
                 "heading": submission.quest.name,
                 "submission": submission,
-                # "comments": comments,
+                "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
                 "submission_form": form,
                 "anchor": "submission-form-" + str(submission.quest.id),
                 # "reply_comment_form": reply_comment_form,
@@ -1245,12 +1249,17 @@ def ajax_save_draft(request):
         # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        # if there is no draft comment, then the quest is not in progress
+        if not sub.draft_comment:
+            raise Http404("No draft comment found. The quest is not in progress.")
 
-        if sub.draft_text != submission_comment:
-            sub.draft_text = submission_comment
+        draft_comment = sub.draft_comment
+
+        if draft_comment.text != submission_comment:
+            draft_comment.text = submission_comment
             # sub.xp_requested = xp_requested
             response_data["result"] = "Draft saved"
-            sub.save()
+            draft_comment.save()
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
@@ -1276,6 +1285,8 @@ def drop(request, submission_id):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
     if request.method == "POST":
+        if sub.draft_comment:
+            sub.draft_comment.delete()
         sub.delete()
         messages.error(request, ("Quest dropped."))
         return redirect("quests:quests")
@@ -1285,7 +1296,6 @@ def drop(request, submission_id):
 @non_public_only_view
 @login_required
 def submission(request, submission_id=None, quest_id=None):
-    # sub = QuestSubmission.objects.get(id = submission_id)
     try:
         sub = QuestSubmission.objects.get(pk=submission_id)
     except QuestSubmission.DoesNotExist:
@@ -1298,19 +1308,35 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
 
+    draft_comment = sub.draft_comment
+    # if there is no draft comment, create one, and also create a set of QuestionSubmissions
+    if not draft_comment:
+        # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
+        # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
+        text = ""
+        if sub.draft_text:
+            text = sub.draft_text
+        draft_comment = Comment.objects.create_comment(
+            user=request.user,
+            path=sub.get_absolute_url(),
+            text=text,
+            target=None
+        )
+        sub.draft_comment = draft_comment
+        sub.save()
+
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
-        main_comment_form = SubmissionFormStaff(request.POST or None)
+        main_comment_form = SubmissionFormStaff()
     else:
-        initial = {"comment_text": sub.draft_text}
+        initial = {"comment_text": sub.draft_comment.text}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
-            main_comment_form = SubmissionFormCustomXP(
-                request.POST or None, initial=initial, minimum_xp=sub.quest.xp
-            )
+            main_comment_form = SubmissionFormCustomXP(initial=initial,
+                                                       minimum_xp=sub.quest.xp)
         else:
-            main_comment_form = SubmissionForm(request.POST or None, initial=initial)
+            main_comment_form = SubmissionForm(initial=initial)
 
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
@@ -1320,7 +1346,6 @@ def submission(request, submission_id=None, quest_id=None):
         "heading": sub.quest_name(),
         "submission": sub,
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
-        # "comments": comments,
         "submission_form": main_comment_form,
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
