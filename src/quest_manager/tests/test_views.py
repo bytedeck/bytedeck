@@ -2009,7 +2009,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -2101,7 +2101,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, SiteConfig.get().blank_approval_text)
+        self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
 
     def test_approve_with_mutiple_badges_staff_submission_form(self):
         """ Test that multiple badges can be granted from the SubmissionFormStaff form"""
@@ -2204,7 +2204,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -2234,7 +2234,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, SiteConfig.get().blank_return_text)
+        self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_return_text}</p>")
 
     def test_non_existant_submit_button(self):
         """Can this even happen?  Somehow the form was submitted with a button that doesn't exist"""
@@ -2268,7 +2268,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, "(Skipped - You were not granted XP for this quest)")
+        self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
