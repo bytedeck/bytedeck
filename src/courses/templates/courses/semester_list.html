@@ -29,6 +29,7 @@
       <th>Last Day</th>
       <th>Total Days</th>
       <th># Excluded Dates</th>
+      <th># Students</th>
       <th>Closed</th>
       <!-- <th>Active</th> -->
       <th>Action</th>
@@ -41,6 +42,7 @@
       <td>{{ object.last_day }}</td>
       <td>{{ object.num_days }}</td>
       <td>{{ object.excludeddate_set.count }}</td>
+      <td>{{ object.coursestudent_set.count }}</td>
       <td>{{ object.closed }}</td>
       <!-- <td>{% if object == config.active_semester %}True{% else %}False{% endif %}</td> -->
       <td>
