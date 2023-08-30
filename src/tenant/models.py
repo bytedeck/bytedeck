@@ -60,9 +60,14 @@ class Tenant(TenantMixin):
     created_on = models.DateField(auto_now_add=True)
     owner_full_name = models.CharField(
         max_length=255, blank=True, null=True,
-        help_text="The owner of this deck."
+        help_text="DEPRECATED: the full name of the Deck Owner (set in each deck's Site Config) will be used. \
+        This field will be removed in a future update",
     )
-    owner_email = models.EmailField(null=True, blank=True)
+    owner_email = models.EmailField(
+        null=True, blank=True,
+        help_text="DEPRECATED: the verified email address of the Deck Owner (set in each deck's Site Config) will be used. \
+        This field will be removed in a future update",
+    )
     max_active_users = models.SmallIntegerField(
         default=5,
         help_text="The maximum number of users that can be active on this deck; -1 = unlimited."

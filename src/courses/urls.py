@@ -39,6 +39,12 @@ urlpatterns = [
     path('ajax/marks_bar_chart/<int:user_id>/', views.Ajax_MarkDistributionChart.as_view(), name='mark_distribution_chart'),
     path('ajax/tag_progress_chart/<int:user_id>/', views.Ajax_TagChart.as_view(), name='ajax_tag_progress_chart'),
 
+    # MarkRanges
+    path('markranges/', views.MarkRangeList.as_view(), name='markranges'),
+    path('markranges/create/', views.MarkRangeCreate.as_view(), name='markrange_create'),
+    path('markranges/<pk>/edit/', views.MarkRangeUpdate.as_view(), name='markrange_update'),
+    path('markranges/<pk>/delete/', views.MarkRangeDelete.as_view(), name='markrange_delete'),
+
     # Course
     path('list/', views.CourseList.as_view(), name='course_list'),
     path('create/', views.CourseCreate.as_view(), name='course_create'),

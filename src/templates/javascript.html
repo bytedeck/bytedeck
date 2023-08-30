@@ -31,7 +31,7 @@
       //Update quests awaiting approval badge
       $.ajax({
         type: "POST",
-        url: "{% url 'quests:ajax' %}",
+        url: "{% url 'quests:ajax_submission_count' %}",
         data: {
           csrfmiddlewaretoken: "{{ csrf_token }}",
         },

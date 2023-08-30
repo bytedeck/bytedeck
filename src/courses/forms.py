@@ -1,12 +1,44 @@
 from django import forms
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout
-from crispy_forms.bootstrap import Div
+from crispy_forms.layout import HTML, Div, Layout
+from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DateTimePickerInput, TimePickerInput
 
-from .models import Block, Course, CourseStudent, Semester, ExcludedDate
+from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+
+
+class MarkRangeForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['courses'].help_text = MarkRange._meta.get_field('courses').help_text + " Hold down “Control”, or “Command” on a Mac, to \
+            select more than one."
+        self.helper = FormHelper()
+        self.helper.layout = Layout(
+            Div(
+                'name',
+                'minimum_mark',
+                'active',
+                Accordion(
+                    AccordionGroup(
+                        "Advanced",
+                        'color_light',
+                        'color_dark',
+                        'days',
+                        'courses',
+                        active=False,
+                        template="crispy_forms/bootstrap3/accordion-group.html"
+                    ),
+                )
+            ),
+            HTML('<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/>'),
+            HTML('<a href="{% url "courses:markranges" %}" role="button" class="btn btn-danger">Cancel</a>')
+        )
+
+    class Meta:
+        model = MarkRange
+        fields = ['name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days', 'courses']
 
 
 class CourseStudentForm(forms.ModelForm):

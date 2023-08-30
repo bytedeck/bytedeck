@@ -76,8 +76,12 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding triggering
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
         self.client = TenantClient(self.public_tenant)

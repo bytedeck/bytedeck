@@ -59,7 +59,7 @@ class MarkRange(models.Model):
     courses = models.ManyToManyField(
         "courses.course",
         blank=True,
-        help_text="Which courses this field is relevant to; If left blank it will apply to all courses."
+        help_text="Which courses this Mark Range will be used for; if left blank it will apply to all courses."
     )
 
     objects = MarkRangeManager()

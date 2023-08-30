@@ -554,7 +554,13 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
-        max_len = 44  # max label length in characters
+        # set max label length in characters
+        # object labels with large xp values require a shorter name length so all values when combined comply with max label length
+        if hasattr(obj, 'xp'):
+            max_len = 46 - len(str(obj.xp))
+        else:
+            max_len = 44
+
         post = ""
         pre = ""
         if type(obj) is Badge:
