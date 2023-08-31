@@ -20,6 +20,8 @@
 {% endblock %}
 
 {% block js %}
+
+{# Add FontAwesome Icon Preview while typing #}
 <script>
   $('#div_id_fa_icon').append(
     '<span class="help-block">Preview: <span id="id_fa_icon_preview" class="fa fa-2x fa-fw fa-{{ form.instance.fa_icon }}"></span></span>'
