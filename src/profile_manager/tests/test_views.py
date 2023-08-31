@@ -65,6 +65,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         s2_pk = self.test_student2.profile.pk
 
         self.assert200('profiles:profile_detail', args=[s_pk])
+        self.assert200('profiles:profile_detail')
         self.assert200('profiles:profile_update', args=[s_pk])
         self.assert200('profiles:profile_detail', args=[s_pk])
         self.assert200('profiles:tag_chart', args=[s_pk])
