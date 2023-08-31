@@ -4,11 +4,11 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading_inner %}Campaigns
+{% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %}Campaigns
 {% if request.user.is_staff %}
   <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
 {% endif %}
-{% endblock %}
+{% endblock %}{% endblock %}
 
 {% block content %}
 <p>This page is visible to staff only.</p>

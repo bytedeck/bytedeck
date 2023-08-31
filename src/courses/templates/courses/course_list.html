@@ -4,11 +4,11 @@
 {% block head %}{% endblock %}
 
 {% block content_first %}{% endblock %}
-{% block heading_inner %}Courses
+{% block heading %}<i class="fa fa-book pull-right"></i>{% block heading_inner %}Courses
 {% if request.user.is_staff %}
   <a class="btn btn-primary" href="{% url 'courses:course_create' %}" role="button">New</a>
 {% endif %}
-{% endblock %}
+{% endblock %}{% endblock %}
 
 {% block content %}
 <p>This page is visible to staff only.</p>
