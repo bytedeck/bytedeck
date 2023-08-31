@@ -3,7 +3,7 @@
 {% if questions %}
 <table class="table table-striped">
   <thead>
-      <tr>
+    <tr>
       <th class="col-sm-1 col-xs-2 col-icon">Type</th>
       <th class="col-sm-2 col-xs-4">Instructions</th>
       <th class="col-sm-1 col-xs-2 col-icon">Required</th>
@@ -12,7 +12,7 @@
       <th class="col-sm-1 col-xs-2 col-icon">Marker Notes</th>
       <th class="col-sm-1 col-xs-2 col-icon">Action</th>
       {% endif %}
-      </tr>
+    </tr>
   </thead>
   <tbody>
     {% for question in questions %}
@@ -47,10 +47,10 @@
         <td>
           {% if question.marker_notes %}
           <a data-toggle="popover"
-            data-trigger="hover"
-            data-placement="auto"
-            title="Marker's Notes"
-            data-content="{{ question.marker_notes }}">
+             data-trigger="hover"
+             data-placement="auto"
+             title="Marker Notes"
+             data-content="{{ question.marker_notes }}">
             <i class="fa fa-fw fa-lg fa-info-circle"></i>
           </a>
           {% else %}

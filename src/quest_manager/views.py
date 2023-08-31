@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from hackerspace_online.decorators import staff_member_required
 
@@ -30,6 +31,11 @@ from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
+from questions.models import QuestionSubmission
+from questions.forms import (
+    QuestionSubmissionFormsetFactory
+)
+from utilities.fields import FILE_MIME_TYPES
 from .forms import (
     QuestForm,
     SubmissionForm,
@@ -38,9 +44,14 @@ from .forms import (
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     TAQuestForm,
-    CommonDataForm,
+    CommonDataForm
 )
-from .models import Quest, QuestSubmission, Category, CommonData
+from .models import (
+    Quest,
+    QuestSubmission,
+    Category,
+    CommonData
+)
 
 User = get_user_model()
 
@@ -967,6 +978,8 @@ def complete(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
 
+    questions = submission.quest.question_set.all()
+
     # http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
     if request.method == "POST":
         # for some reason Summernote is submitting the form in the background when an image is added or
@@ -974,7 +987,6 @@ def complete(request, submission_id):
         # https://github.com/summernote/django-summernote/issues/362
         if "complete" not in request.POST and "comment" not in request.POST:
             raise Http404("unrecognized submit button")
-
         if not submission.draft_comment:  # if no comment, the quest is not complete
             raise Http404("no comment found")
 
@@ -989,8 +1001,13 @@ def complete(request, submission_id):
             form = SubmissionQuickReplyFormStudent(request.POST)
 
         draft_comment = submission.draft_comment
+        question_submission_formset = QuestionSubmissionFormsetFactory(
+            request.POST, request.FILES,
+            instance=draft_comment,
+            queryset=QuestionSubmission.objects.filter(comment=draft_comment)
+        )
 
-        if form.is_valid():
+        if form.is_valid() and (question_submission_formset.is_valid() or questions.count() == 0):
             comment_text = form.cleaned_data.get("comment_text")
             if not comment_text:
                 if submission.quest.verification_required and not request.FILES:
@@ -1018,6 +1035,8 @@ def complete(request, submission_id):
             draft_comment.target_object_id = submission.id
             draft_comment.target_object = submission
             draft_comment.save()
+
+            question_submission_formset.save()
 
             if request.FILES:
                 for afile in request.FILES.getlist("attachments"):
@@ -1112,6 +1131,7 @@ def complete(request, submission_id):
                 "submission": submission,
                 "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
                 "submission_form": form,
+                "question_formset": question_submission_formset,
                 "anchor": "submission-form-" + str(submission.quest.id),
                 # "reply_comment_form": reply_comment_form,
             }
@@ -1250,11 +1270,66 @@ def ajax_save_draft(request):
 
         draft_comment = sub.draft_comment
 
+        question_subs = QuestionSubmission.objects.filter(comment=draft_comment)
+        question_updates = 0
+
+        # just loop through the number of questions and match them with their question subs
+        # instead of trying to directly loop through the question subs. This is because the
+        # questions sent through ajax are not guaranteed to be in the same order as the
+        # question subs from the database
+        for i in range(len(question_subs)):
+
+            # since question submissions are retrieved and stored in the same order,
+            # we should be able to access them directly by their index
+            # the JSON structure of the question data in request.POST is:
+            # {
+            # "questions[0][index]": "0",
+            # "questions[0][response_text]": "test",
+            # "questions[1][index]": "1",
+            # "questions[1][response_file,
+            # "questions[0][response_text]": "test",
+            # "questions[1][index]": "1",
+            # "questions[1][response_file]": <InMemoryUploadedFile: test.txt (text/plain)>,
+            # ...
+            # }
+            # note that the files must be accessed through request.FILES
+            index = request.POST.get(f"questions[{i}][index]")
+            if index and index != 'NaN':
+                index = int(index)
+                question_sub = question_subs[index]
+                old_updates = question_updates
+
+                if question_sub.question.type == 'short_answer' or question_sub.question.type == 'long_answer':
+                    response_text = request.POST.get(f"questions[{i}][response_text]")
+                    if response_text and response_text != question_sub.response_text:
+                        question_sub.response_text = response_text
+                        question_updates += 1
+                elif question_sub.question.type == 'file_upload':
+
+                    response_file = request.FILES.get(f"questions[{i}][response_file]")
+                    if isinstance(response_file, InMemoryUploadedFile):
+                        question_type = question_sub.question.allowed_file_type
+                        allowed_mimes = FILE_MIME_TYPES[question_type]
+                        content_type = response_file.content_type
+                        # only save allowed file types
+                        if content_type in allowed_mimes:
+                            question_sub.response_file = response_file
+                            question_updates += 1
+
+                # only update if there were changes
+                if question_updates > old_updates:
+                    question_sub.save()
+
+        submission_changed = False
         if draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
             # sub.xp_requested = xp_requested
-            response_data["result"] = "Draft saved"
             draft_comment.save()
+            submission_changed = True
+
+        # if there were changes to the submission or any of the questions, then return a success message
+        if submission_changed or question_updates:
+            response_data["result"] = "Draft saved"
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
@@ -1303,6 +1378,8 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
 
+    questions = sub.quest.question_set.all()
+
     draft_comment = sub.draft_comment
     # if there is no draft comment, create one, and also create a set of QuestionSubmissions
     if not draft_comment:
@@ -1317,12 +1394,22 @@ def submission(request, submission_id=None, quest_id=None):
             text=text,
             target=None
         )
-        sub.draft_comment = draft_comment
-        sub.save()
+        if not request.user.is_staff:
+            QuestionSubmission.objects.bulk_create([
+                    QuestionSubmission(
+                        question=question,
+                        comment=draft_comment,
+                    )
+                    for question in questions
+            ])
+
+            sub.draft_comment = draft_comment
+            sub.save()
 
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff()
+        question_formset = None
     else:
         initial = {"comment_text": sub.draft_comment.text}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
@@ -1333,15 +1420,20 @@ def submission(request, submission_id=None, quest_id=None):
         else:
             main_comment_form = SubmissionForm(initial=initial)
 
+        question_formset = QuestionSubmissionFormsetFactory(
+            instance=draft_comment,
+            queryset=QuestionSubmission.objects.filter(comment=draft_comment)
+        )
+
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
-    # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest_name(),
         "submission": sub,
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         "submission_form": main_comment_form,
+        "question_formset": question_formset,
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
     }
