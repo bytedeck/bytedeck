@@ -824,6 +824,27 @@ h3 > img#banner {
   width: 80%;
 }
 
+
+/********* Main Menu *************/
+#lg-menu-main > div:first-child * {
+  border-bottom: 0;
+}
+
+#lg-menu-main > div:last-child * {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+
+}
+
+#lg-menu-main > div:last-child > .list-group-item {
+  border-bottom-left-radius: 4px;
+}
+
+
+#lg-menu-main > div:last-child > div > a {
+  border-bottom-right-radius: 4px;
+}
+
 .list-group-item.right-side {
   width: 20%;
   border-top-right-radius: 4px;
