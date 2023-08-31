@@ -180,12 +180,11 @@ class MenuItemCreate(NonPublicOnlyViewMixin, IsSideMenuMixin, CreateView):
     form_class = MenuItemForm
 
     def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Create New Menu Item'
+        kwargs['submit_btn_value'] = 'Create'
 
         if self.is_side_menu():
             kwargs['heading'] = 'Create New Side Menu Item'
-        else:
-            kwargs['heading'] = 'Create New Menu Item'
-        kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
 
@@ -202,11 +201,11 @@ class MenuItemUpdate(NonPublicOnlyViewMixin, IsSideMenuMixin, UpdateView):
     form_class = MenuItemForm
 
     def get_context_data(self, **kwargs):
+        kwargs['heading'] = 'Update Menu Item'
+        kwargs['submit_btn_value'] = 'Update'
+
         if self.is_side_menu():
             kwargs['heading'] = 'Update Side Menu Item'
-        else:
-            kwargs['heading'] = 'Update Menu Item'
-        kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
 

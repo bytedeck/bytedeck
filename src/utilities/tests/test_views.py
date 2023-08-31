@@ -20,6 +20,7 @@ from utilities.models import MenuItem
 from utilities.fields import GFKChoiceField
 from utilities.widgets import GFKSelect2Widget
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from model_bakery import baker
 
 User = get_user_model()
 
@@ -252,6 +253,25 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
         leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
+
+    def test_IsSideMenuMixin_is_side_menu__TypeError(self):
+        self.client.force_login(self.test_teacher)
+        url = f"{reverse('utilities:menu_items')}?is_side_menu=qqqqqqq"
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_MenuItemDelete_view__can_delete_object(self):
+        self.client.force_login(self.test_teacher)
+        menu_item = baker.make(MenuItem, is_side_menu=True, url='/profiles/own/')
+
+        url = f"{reverse('utilities:menu_item_delete', kwargs={'pk': menu_item.pk})}?is_side_menu=true"
+        response = self.client.post(url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+
+        with self.assertRaises(MenuItem.DoesNotExist):
+            MenuItem.objects.get(pk=menu_item.pk)
 
     def test_MenuItemDelete_view__default_side_menu_item_cannot_be_deleted(self):
         """
