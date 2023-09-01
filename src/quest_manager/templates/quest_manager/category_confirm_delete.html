@@ -1,7 +1,7 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Delete Campaign {% endblock %}
+{% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %}Delete Campaign {% endblock %}{% endblock %}
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
