@@ -1,0 +1,72 @@
+<!-- mobile main (left side) drop-down menu items -->
+<div id="mobile-main-menu-dropdown" class="navbar-collapse collapse navbar-left">
+    <ul class="nav navbar-nav main-menu-dropdown">
+        {% if request.user.is_authenticated %}
+        <li>
+            <a title="Quests" href="{% url 'quests:quests' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-shield fa-fw"></i>
+                    <span class="">Quests</span>
+                </div>
+                <div class="hidden-xs">
+                    <i class="fa fa-shield fa-fw"></i>
+                </div>
+            </a>
+        </li>
+        <li>
+            <a title="Badges" href="{% url 'badges:list' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-certificate fa-fw"></i>
+                    <span>Badges</span>
+                </div>
+                <div class="hidden-xs">
+                    <i class="fa fa-certificate fa-fw"></i>
+                </div>
+            </a>
+        </li>
+        <hr class="visible-xs">
+
+        {% for side_menu_item in side_menu_items %}
+        <li>
+            <a title="{{ side_menu_item.label }}" href="{{ side_menu_item.url }}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-{{ side_menu_item.fa_icon }} fa-fw"></i>
+                    <span>{{ side_menu_item.label }}</span>
+                </div>
+                <div class="hidden-xs">
+                  <i class="fa fa-{{ side_menu_item.fa_icon }} fa-fw"></i>
+                </div>
+            </a>
+        </li>
+
+        {% endfor %}
+        <li class="visible-xs-block text-center">
+          <a title="Customize this menu" href="{% url 'utilities:menu_items' %}?is_side_menu=true">
+            <i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Customize this menu</a>
+        </li>
+
+        <hr class="visible-xs">
+
+        <li class="visible-xs-block">
+            <a title="Students" href="{% url 'profiles:profile_list_current' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-users fa-fw"></i>
+                    <span>Students</span>
+                </div>
+            </a>
+        </li>
+        {% if request.user.is_staff %}
+        <li class="visible-xs-block">
+            <a title="Approvals" href="{% url 'quests:approvals' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-shield fa-rotate-180 fa-fw"></i>
+                    <span>Approvals</span>
+                </div>
+            </a>
+        </li>
+        {% endif %}
+        {% endif %}
+    </ul>
+</div>
+
+
