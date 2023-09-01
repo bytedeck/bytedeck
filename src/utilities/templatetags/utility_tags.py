@@ -71,7 +71,7 @@ def side_menu_list(context):
 @register.inclusion_tag('utilities/side_menu_items_navbar.html', takes_context=True)
 def side_menu_list_navbar(context):
     side_menu_items = MenuItem.objects.get_side_menu_items().get_visible_items()
-    return {'side_menu_items': side_menu_items, 'request': context.request}
+    return {'side_menu_items': side_menu_items, 'request': context.request if 'request' in context else None}
 
 
 @register.filter
