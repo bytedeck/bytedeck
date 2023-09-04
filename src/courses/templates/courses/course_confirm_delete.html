@@ -1,7 +1,7 @@
 {% extends "courses/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %} Delete Course {% endblock %}
+{% block heading %}<i class="fa fa-book pull-right"></i>{% block heading_inner %} Delete Course {% endblock %}{% endblock %}
 
 {% block content %}
 {% if not populated %}

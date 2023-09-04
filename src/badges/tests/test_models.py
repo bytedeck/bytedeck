@@ -149,22 +149,32 @@ class BadgeAssertionManagerTest(TenantTestCase):
         self.assertNotIn(user3, qs)
 
     def test_all_for_user_distinct(self):
-        """ Test that BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions
-        that are distinct on the badge, and sorted by badge.sort_order"""
+        """
+        BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions assigned to a user
+        that are distinct by badge, and sorted by badge.sort_order
 
-        badge1 = baker.make(Badge, sort_order=2)
+        Badge objects without a defined sort_order value should default to sort_order = 0
+        """
+
+        # create badges to assign to user
+        badge1 = baker.make(Badge)  # sort order should default to 0 when not set
         badge2 = baker.make(Badge, sort_order=1)
+        badge3 = baker.make(Badge, sort_order=2)
 
         # give the student two of badge1
         badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge1)
-        baker.make(BadgeAssertion, user=self.student, badge=badge1)
-        # and one of badge2
+        baker.make(BadgeAssertion, user=self.student, badge=badge1)  # should not be returned by all_for_user_distinct so not stored in a variable
+
+        # one of badge2
         badge_assertion2 = baker.make(BadgeAssertion, user=self.student, badge=badge2)
 
-        # this should only return two, not the duplicate badge_assertion of badge1
+        # and one of badge3
+        badge_assertion3 = baker.make(BadgeAssertion, user=self.student, badge=badge3)
+
+        # this should only return three, not the duplicate badge_assertion of badge1
         # and they should be sorted by badge.sort_order
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-        self.assertQuerysetEqual(qs, [badge_assertion2, badge_assertion])
+        self.assertQuerysetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
 
 
 class BadgeAssertionTestModel(TenantTestCase):

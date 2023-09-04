@@ -40,12 +40,13 @@ class CustomSignupForm(SignupFormAccessCodeValidatorMixin, SignupForm):
     access_code = forms.CharField(
         max_length=128,
         label='Access Code',
-        help_text='Enter the access code provided to you by your teacher.'
+        help_text='Enter the access code provided to you by your instructor.'
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['username'].help_text = 'Username is not case sensitive'
+        self.fields['email'].help_text = 'Providing and verifying an email address will allow you to reset your own password'
 
 
 class CustomSocialAccountSignupForm(SignupFormAccessCodeValidatorMixin, socialaccount_forms.SignupForm):

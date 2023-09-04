@@ -3,7 +3,7 @@
 
 {% block head_title %}Campaigns | {% endblock %}
 
-{% block heading_inner %} {{ object.title }} Campaign{% endblock %}
+{% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %} {{ object.title }} Campaign{% endblock %}{% endblock %}
 
 {% block content %}
     {% if request.user.is_staff %}

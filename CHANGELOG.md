@@ -4,6 +4,32 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.23.0] 2023-09-04
+* Feature:
+  - Pages for creating, editing, and listing Mark Ranges (appears in Admin menu if when "Use mark percentages" feature is enabled in a deck's Site Config)
+* Tweaks:
+  - Add column showing number of students on Group/Block list page, and hyperlink to Group detail page.
+  - Add column showing number of students in acourses in a semester.
+* Bugfixes:
+  - Internal server error when reading notifications sometimes [#1446](https://github.com/bytedeck/bytedeck/issues/1446)
+  - non-relative menu links always open in a new tab regardless of setting [#1397](https://github.com/bytedeck/bytedeck/issues/1397)
+  - Don't render duplicate mark ranges in Mark Calculations graph legend [#1242](https://github.com/bytedeck/bytedeck/issues/1242)
+  - Provide proper error message when uploading too much text [#1350](https://github.com/bytedeck/bytedeck/issues/1350)
+  - Badges without a sort order break profile page [#1342](https://github.com/bytedeck/bytedeck/issues/1342)
+  - Quest and submission ID conflicts in list views [#1466](https://github.com/bytedeck/bytedeck/pull/1466)
+  - Calendar button sometimes doesn't add additional exclude dates [#1416](https://github.com/bytedeck/bytedeck/issues/1416)
+  - Too long name of Quest and large XP value causes map generation to fail [#929](https://github.com/bytedeck/bytedeck/issues/929)
+  - Only load quest details for quests listed in the active tab [#1467](https://github.com/bytedeck/bytedeck/issues/1467)
+  - Fix formatting of default replies/comments [#1235](https://github.com/bytedeck/bytedeck/issues/1235)
+  - Missing icons [#1132](https://github.com/bytedeck/bytedeck/issues/1132)
+* Devops:
+  - filterable QuerySetSequence in GFK Select Field/Widget [#1472](https://github.com/bytedeck/bytedeck/issues/1472)
+  - Wrap INTERNAL_IPS getter inside try/except [#1463](https://github.com/bytedeck/bytedeck/pull/1463)
+* Bytedeck Admin:
+  - Expansion of the New Deck form allows entry of deck owner email and name, sets this to the deck owner profile, and sends verification email.
+  - Tenant list view shows deck owner info from the deck itself
+
+
 
 ### [1.22.0] 2023-07-31
  * Feature: Add simplified registration option to SiteConfig
