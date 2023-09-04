@@ -48,17 +48,17 @@
         </li>
         {% endif %}
 
+        {% if request.user.is_staff %}
         <hr class="visible-xs">
 
         <li class="visible-xs-block">
             <a title="Students" href="{% url 'profiles:profile_list_current' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
                     <i class="fa fa-users fa-fw"></i>
-                    <span>Students</span>
+                    <span>{{ config.custom_name_for_student }}</span>
                 </div>
             </a>
         </li>
-        {% if request.user.is_staff %}
         <li class="visible-xs-block">
             <a title="Approvals" href="{% url 'quests:approvals' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
