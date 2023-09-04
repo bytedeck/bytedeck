@@ -8,4 +8,7 @@
   </a>
 {% endfor %}
 </div>
+
+{% if request.user.is_staff %}
 <a href="{% url 'utilities:menu_items' %}?is_side_menu=true" class="hidden-xs" style="text-decoration: none; color: #777;"><i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Customize this menu</a>
+{% endif %}

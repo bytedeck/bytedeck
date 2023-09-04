@@ -64,13 +64,24 @@ def menu_list():
 
 @register.inclusion_tag('utilities/side_menu_items.html', takes_context=True)
 def side_menu_list(context):
+    """
+    Display the modular menu items in the sidebar (left)
+    """
     side_menu_items = MenuItem.objects.get_side_menu_items().get_visible_items()
     return {'side_menu_items': side_menu_items, 'request': context.request}
 
 
 @register.inclusion_tag('utilities/side_menu_items_navbar.html', takes_context=True)
 def side_menu_list_navbar(context):
+    """
+    Display the modular menu items in the navbar (top)
+    """
     side_menu_items = MenuItem.objects.get_side_menu_items().get_visible_items()
+
+    # Need add the request to the context to check if the user is authenticated
+    # A check is needed because a test case is failing and it doesn't have the request in the context
+    # See: src/hackerspace_online/tests/test_middleware.py::RequestDataTooBigMiddlewareTestCase
+    #                ::test_request_data_too_big_exception_without_requestdatatoobig_middleware
     return {'side_menu_items': side_menu_items, 'request': context.request if 'request' in context else None}
 
 

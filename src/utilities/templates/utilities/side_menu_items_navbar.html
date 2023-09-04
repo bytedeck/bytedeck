@@ -40,10 +40,13 @@
         </li>
 
         {% endfor %}
+
+        {% if request.user.is_staff %}
         <li class="visible-xs-block text-center">
           <a title="Customize this menu" href="{% url 'utilities:menu_items' %}?is_side_menu=true">
             <i class="fa fa-fw fa-pencil"></i>&nbsp;&nbsp;Customize this menu</a>
         </li>
+        {% endif %}
 
         <hr class="visible-xs">
 
@@ -65,7 +68,7 @@
             </a>
         </li>
         {% endif %}
-        {% endif %}
+      {% endif %}
     </ul>
 </div>
 
