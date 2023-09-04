@@ -1,17 +1,21 @@
 {% extends "base_no_sidebar.html" %}
 {% load i18n %}
 
-{% block head_title %}{% trans "Sign In" %} | {% endblock %}
+{% block head_title %}{% trans "Sign Up" %} | {% endblock %}
 
+{% block heading %}Account Merge?<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 {% block content %}
 
   <p>
-    {% blocktrans %}
-      We noticed another account with username <strong>{{ other_account_username }}</strong> is also using
-      <strong>{{ email_address }}</strong> in their profile, but they have not verified the email address to that account.
-      Would you like to merge the existing <strong>{{ other_account_username }}</strong> account with this one?
-      If you choose No, then <strong>{{ email_address }}</strong> will be removed from <strong>{{ other_account_username }}</strong> user profile.
-    {% endblocktrans %}
+    We noticed another account with username <strong>{{ other_account_username }}</strong> is currently using
+    <strong>{{ email_address }}</strong> in their profile, but they have not verified the email address to that account.
+  </p>
+  <p>
+    Would you like to use <strong>{{ email_address }}</strong> to sign in to the <strong>{{ other_account_username }}</strong> account?
+  </p>
+  <p>
+    If you choose No, then <strong>{{ email_address }}</strong> will be removed from the <strong>{{ other_account_username }}</strong>
+    user profile and you will be prompted to create a new account with this email address.
   </p>
 
   <form method="post">

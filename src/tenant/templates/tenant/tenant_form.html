@@ -15,7 +15,7 @@
   <body>
   <div class="container" style="max-width: 960px;">
     <h3>Create New Deck</h3>
-    <form method="post">{% csrf_token %}
+    <form id="form" method="post">{% csrf_token %}
         {{ form | crispy }}
         <input id="submitBtn" type="submit" value="Create">
     </form>
@@ -45,7 +45,7 @@
 
   <script>
     var progressModal = new bootstrap.Modal(document.getElementById('modalProgress'))
-    document.getElementById("submitBtn").addEventListener("click", function(){
+    document.getElementById("form").addEventListener("submit", function(){
       // Allow a delay before showing the progress bar.  This prevents it from flashing up when the form invalidates.
       setTimeout(function() {
         // set the new deck url in the title

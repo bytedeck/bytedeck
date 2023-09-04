@@ -93,19 +93,116 @@ class PublicTenantTestAdminPublic(TenantTestCase):
 
     def setUp(self):
         # create the public schema
-        self.public_tenant = Tenant(
-            schema_name='public',
-            name='public'
-        )
-
+        self.public_tenant = Tenant(schema_name="public", name="public")
+        self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         with tenant_context(self.public_tenant):
-            # Hack to create the public tenant without trigerring the signals
+            # create superuser account
+            self.superuser = User.objects.create_superuser(
+                username="admin",
+                password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
+            )
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding triggering
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
-            self.public_tenant.domains.create(domain='test.com', is_primary=True)
+            # create domain object manually, since we avoided triggering the signals
+            self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-        super().setUp()
-        self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
+            self.extra_tenant = Tenant(
+                schema_name="extra",
+                name="extra",
+            )
+            self.extra_tenant.save()
+
+        # update "owner" and add missing email address
+        with tenant_context(self.extra_tenant):
+            config = SiteConfig.get()
+            if config.deck_owner is not None and not config.deck_owner.email:
+                # using different name/email to test fallback feature
+                config.deck_owner.first_name = "John"
+                config.deck_owner.last_name = "Doe"
+                config.deck_owner.save()
+                # make email address verified and primary (done via allauth)
+                email_address = EmailAddress.objects.add_email(
+                    request=None, user=config.deck_owner, email="john@doe.com")
+                email_address.set_as_primary()
+                email_address.verified = True
+                email_address.save()
+
+        self.client = TenantClient(self.public_tenant)
+
+    def test_owner_full_name_text_column(self):
+        """
+        Test whether content of custom column "owner_full_name_text" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "John Doe")
+
+    def test_owner_email_text_column(self):
+        """
+        Test whether content of custom column "owner_email_text" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "john@doe.com")
+
+    def test_search_on_custom_fields(self):
+        """
+        Test whether content of custom fields is searchable in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q="
+        )
+        # confirm the search by an empty query returned all (test, public and extra) objects
+        self.assertContains(response, "3 total")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=John+Doe"
+        )
+        # confirm the search returned one object (by full name)
+        self.assertContains(response, "1 result")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=doe.com"
+        )
+        # confirm the search returned one object (by email address)
+        self.assertContains(response, "1 result")
+
+        response = self.client.get(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=Taylor+Swift"
+        )
+        # confirm the search returned zero objects (by full name)
+        self.assertContains(response, "0 result")
 
     @patch("tenant.admin.messages.add_message")
     def test_enable_google_signin_admin_without_config(self, mock_add_message):
@@ -340,18 +437,20 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
                 get_perm(Tenant, get_permission_codename("delete", opts))
             )
 
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding triggering
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-            # create extra tenant for testing purpose
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
-                name="extra"
+                name="extra",
             )
             self.extra_tenant.save()
-            domain = self.extra_tenant.get_primary_domain()
-            domain.domain = "extra.localhost"
 
         self.client = TenantClient(self.public_tenant)
 
@@ -472,18 +571,20 @@ class TenantAdminActionsTest(TenantTestCase):
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
+            # Hack to create the public tenant without triggering the signals,
+            # since "setUp" method run before each test, avoiding triggering
+            # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
+            # create domain object manually, since we avoided triggering the signals
             self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
-            # create extra tenant for testing purpose
+            # create a "real" (like superuser do in admin) tenant object for testing purpose
             self.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
             self.extra_tenant.save()
-            domain = self.extra_tenant.get_primary_domain()
-            domain.domain = "extra.localhost"
 
         # update "owner" and add missing email address
         with tenant_context(self.extra_tenant):

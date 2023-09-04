@@ -6,7 +6,10 @@ from django.db import connection
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
+from django.urls import reverse_lazy
+
 from django_tenants.utils import get_public_schema_name
+from django_tenants.utils import tenant_context
 
 from .forms import TenantForm
 from .models import Tenant
@@ -50,14 +53,44 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Tenant
     form_class = TenantForm
     template_name = 'tenant/tenant_form.html'
+    login_url = reverse_lazy('admin:login')
 
     def form_valid(self, form):
         """ Copy the tenant name to the schema_name and the domain_url fields."""
-        tenant = form.save(commit=False)
+        from siteconfig.models import SiteConfig
+
         # TODO: this is duplication of code in admin.py.  Move this into the Tenant model?  Perhaps as a pre-save hook?
-        tenant.schema_name = tenant.name.replace('-', '_')
-        tenant.domain_url = f"{tenant.name}.{Site.objects.get(id=1).domain}"
-        return super().form_valid(form)
+        form.instance.schema_name = form.instance.name.replace('-', '_')
+        form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
+
+        # save the form and get the response (HttpResponseRedirect)
+        response = super().form_valid(form)
+
+        # saved object (tenant) can be accessed via `object` attribute
+        cleaned_data = form.cleaned_data
+        with tenant_context(self.object):
+            owner = SiteConfig.get().deck_owner
+
+            # otherwise save first / last name
+            owner.first_name = cleaned_data['first_name']
+            owner.last_name = cleaned_data['last_name']
+            owner.save()
+
+            # save email address...
+            email = cleaned_data['email']
+            owner.email = email
+            owner.save()
+
+            # ...and send email confirmation message
+            from allauth.account.utils import send_email_confirmation
+            send_email_confirmation(
+                request=self.request,
+                user=owner,
+                signup=False,
+                email=owner.email,
+            )
+
+        return response
 
     def get_success_url(self):
         """ Redirect to the newly created tenant."""

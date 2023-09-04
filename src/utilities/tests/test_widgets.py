@@ -4,6 +4,7 @@ import string
 import collections
 
 from django import forms
+from django.db.models import Q
 from django.core import signing
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
@@ -134,6 +135,21 @@ class TestGFKSelect2Widget(TenantTestCase):
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
+        result = widget.filter_queryset(group.name)
+        assert result.exists()
+
+    def test_queryset_is_filterable(self):
+        group = self.groups[0]
+
+        queryset = QuerySetSequence(Group.objects.filter(~Q(name__icontains=group.name)))
+        widget = GFKSelect2Widget(
+            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
+        result = widget.filter_queryset(group.name)
+        assert not result.exists()
+
+        queryset = QuerySetSequence(Group.objects.filter(Q(name__icontains=group.name)))
+        widget = GFKSelect2Widget(
+            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
         result = widget.filter_queryset(group.name)
         assert result.exists()
 

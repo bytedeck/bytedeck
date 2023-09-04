@@ -4,7 +4,6 @@
 
 {% block head %}
     <!-- need these loaded first for date-time picker and summernote widgets to work -->
-    <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
     {{ form.media }}
 {% endblock %}
 
@@ -104,11 +103,9 @@
     }
 
     // https://stackoverflow.com/a/42453540
-    $('body').on('focus',".datetimepickerinput", function(){
-        backup = {"showClose": true, "showClear": true, "showTodayButton": true, "format": "YYYY-MM-DD"};
-        data = cached_datepicker_data ? cached_datepicker_data : backup;
-        $(this).datetimepicker(data);
-    });
+    $("body").on("DOMNodeInserted", function (e) {
+        $("[data-dp-config]:not([disabled])").djangoDatetimePicker();
+    })
 
     function RemoveForm(index) {
         var fieldContainer = document.getElementById(`form-${index}-container`);

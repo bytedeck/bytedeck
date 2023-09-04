@@ -733,7 +733,8 @@ def approve(request, submission_id):
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
-                text=comment_text + comment_text_addition,
+                # wrap comment text in <p> tag so default submission replies and quick replies are formatted correctly
+                text=f"<p>{comment_text}</p>{comment_text_addition}",
                 target=submission,
             )
 
@@ -1324,17 +1325,15 @@ def submission(request, submission_id=None, quest_id=None):
 
 @non_public_only_view
 @login_required
-def ajax(request):
+def ajax_submission_count(request):
+    """Returns the number of submissions awaiting approval for the current user
+    This is used to update the number beside the "Approvals" button in the navbar"""
     if request.is_ajax() and request.method == "POST":
         submission_count = QuestSubmission.objects.all_awaiting_approval(
             teacher=request.user
         ).count()
-        sub_data = {
-            "count": submission_count,
-        }
-        json_data = json.dumps(sub_data)
 
-        return HttpResponse(json_data, content_type="application/json")
+        return JsonResponse(data={"count": submission_count})
     else:
         raise Http404
 
