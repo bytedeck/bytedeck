@@ -167,7 +167,14 @@ class MenuItemForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.is_side_menu = kwargs.pop('is_side_menu', None)
+
         super().__init__(*args, **kwargs)
+
+        instance = kwargs.get('instance')
+
+        # Prevent label from being edited if it is from the defaults
+        if instance and not instance.can_edit():
+            self.fields['label'].disabled = True
 
     def save(self, **kwargs):
         if self.is_side_menu is not None:

@@ -156,6 +156,15 @@ class MenuItem(models.Model):
             f'<i class="fa fa-fw fa-{self.fa_icon}"></i>&nbsp;&nbsp;{self.label}</a>'
         )
 
+    def can_edit(self):
+        """
+        Returns True if this menu item can be edited.
+        """
+        if self.label in self.SIDE_MENU_ITEMS:
+            return False
+
+        return True
+
     def can_delete(self):
         """
         Returns True if this menu item can be deleted.
