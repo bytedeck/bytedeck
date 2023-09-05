@@ -112,7 +112,7 @@ class MenuItem(models.Model):
         "Maps": {
             "label": "Maps",
             "fa_icon": "map-signs",
-            "url": "/maps/",
+            "url": "/maps/primary/",
             "open_link_in_new_tab": False,
             "is_side_menu": True,
             "sort_order": 0
