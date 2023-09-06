@@ -439,6 +439,18 @@ class QuestManager(models.Manager):
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
+    """
+    A model representing a Quest.
+
+    A Quest in this context is an assignment or task that the student must complete.
+    It contains several options for controlling how and when the quest is visible and completed.
+
+    IsAPrereqMixin: Requires that the condition_met_as_prerequisite method be implemented,
+                    allowing this to function as a prerequisite to other quests.
+    HasPrereqsMixin: provides functionalities related to having prerequisites.
+    TagsModelMixin: provides tagging functionalities.
+    XPItem: A quest grants XP to the user when completed. This mixin provides the XP related functionalities.
+    """
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -865,7 +877,12 @@ class QuestSubmission(models.Model):
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
+    # BACKWARDS COMPATIBILITY: keep draft_text as to not wipe existing draft comments
     draft_text = models.TextField(null=True, blank=True)
+    # while the user is working on their submission, this will store the comment that we will
+    # post when they submit. If this field currently stores a comment, we know that they are
+    # currently working on a submission.
+    draft_comment = models.ForeignKey(Comment, null=True, on_delete=models.SET_NULL)
     xp_requested = models.PositiveIntegerField(
         default=0,
         help_text='The number of XP you are requesting for this submission.'
@@ -907,7 +924,8 @@ class QuestSubmission(models.Model):
         # when calculating repeatable quests
         if self.first_time_completed is None:
             self.first_time_completed = self.time_completed
-        self.draft_text = None  # clear draft stuff
+        self.draft_text = None  # BACKWARDS COMPATIBILITY: remove draft text
+        self.draft_comment = None  # clear draft stuff
         self.xp_requested = xp_requested
         self.save()
 

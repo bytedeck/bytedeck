@@ -1,0 +1,78 @@
+{% extends 'comments/comments.html' %}
+{% load comment_tags %}
+
+{% block additional_content %}
+{% if comment.questionsubmission_set.all %}
+        <!-- Question Submission Detail View  -->
+        <details>
+          <!--arrow is rotated 90 degrees when opened -->
+          <summary class="btn btn-default btn-xs">
+            <i class="fa fa-fw fa-chevron-down hidden"></i>
+            <i class="fa fa-fw fa-chevron-right"></i>
+            <span>Question Submissions</span>
+          </summary>
+          <table class="table table-striped table-bordered comment-question-table">
+            <thead>
+              <tr>
+                <th>Instructions</th>
+                <th>Response</th>
+                {% if request.user.is_staff %}
+                <th>Solution</th>
+                <th>Marker Notes</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+                {% for q_sub in comment.questionsubmission_set.all %}
+                <tr>
+                  <td>{{ q_sub.question.instructions|default:'-' }}</td>
+                  {% if q_sub.question.type == 'file_upload' %}
+                    {% if q_sub.response_file %}
+                      <td><a href="{{ q_sub.response_file.url }}">{{ q_sub.response_file|filename }}</a></td>
+                    {% else %}
+                      <td>-</td>
+                    {% endif %}
+                  {% else %}
+                    <td>{{ q_sub.response_text|default:'-' }}</td>
+                  {% endif %}
+                  {% if request.user.is_staff %}
+                    {% if q_sub.question.type == 'file_upload' %}
+                      {% if q_sub.question.solution_file %}
+                        <td><a href="{{ q_sub.question.solution_file.url }}">{{ q_sub.question.solution_file|filename }}</a></td>
+                      {% else %}
+                        <td>-</td>
+                      {% endif %}
+                    {% else %}
+                      <td>{{ q_sub.question.solution_text|default:'-' }}</td>
+                    {% endif %}
+                    <td>
+                      <a title="Marker Notes"
+                         data-toggle="popover"
+                         data-placement="auto"
+                         data-trigger="hover"
+                         data-content="{{ q_sub.question.marker_notes }}">
+                          <i class="fa fa-fw fa-lg fa-info-circle"></i>
+                      </button>
+                    </td>
+                  {% endif %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </details>
+        <!-- End Question Submission Detail View -->
+      {% endif %}
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function () {
+    // enable popovers
+    $('[data-toggle="popover"]').popover();
+    // rotate arrow when details is opened
+    $('details > summary').on('click', function () {
+        $(this).find('i').toggleClass('hidden');
+    });
+});
+</script>
+{% endblock %}

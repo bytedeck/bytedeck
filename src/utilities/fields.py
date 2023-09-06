@@ -37,10 +37,24 @@ VIDEO_MIME_TYPES = [
     'video/x-m4v'  # M4V videos
 ]
 
+AUDIO_MIME_TYPES = [
+    'audio/mpeg',  # MP3 audio
+    'audio/ogg',   # OGG audio
+    'audio/wav',   # WAV audio
+    'audio/webm',  # WebM audio
+    'audio/aac',   # AAC audio
+    'audio/x-aiff',  # AIFF audio
+    'audio/x-ms-wma',  # WMA audio
+    'audio/x-m4a'  # M4A audio
+    'audio/flac',  # FLAC audio
+]
+
 FILE_MIME_TYPES = {
     'image': IMAGE_MIME_TYPES,
     'video': VIDEO_MIME_TYPES,
-    'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES
+    'audio': AUDIO_MIME_TYPES,
+    'image or video': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
+    'all': 'All'
 }
 
 

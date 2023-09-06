@@ -87,3 +87,25 @@
   </div>
 </div>
 {% endif %}
+{% if quest.question_set.all %}
+<div id="question-list-{{quest.id}}" class="panel panel-primary">
+  <div class="panel-heading">
+    <h3 class="panel-title">Questions</h3>
+  </div>
+  <div class="panel-body">
+    {% with quest.question_set.all as questions %}
+      {% include 'questions/snippets/question_table.html' %}
+    {% endwith %}
+  </div>
+</div>
+{% endif %}
+
+{% block js %}
+<script>
+    // initialize popover
+    $(document).ready(function(){
+        $('[data-toggle="popover"]').popover();
+        $('[data-toggle="tooltip"]').tooltip();
+    });
+</script>
+{% endblock %}
