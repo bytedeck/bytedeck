@@ -18,16 +18,27 @@ class CytoscapeGFKChoiceFieldTest(TenantTestCase):
 
         self.assertEqual(dynamically_loaded_models, [qs.model for qs in f.queryset.get_querysets()])
 
-    def test_queryset_is_filterable(self):
+    def test_queryset_objects_was_excluded(self):
+        """ Test to see if objects "in use" are being excluded from queryset"""
         from djcytoscape.forms import CytoscapeGFKChoiceField
 
+        # get first object of first allowed initial content types and use it as "initial_object"
         content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
-        obj = content_type.model_class().objects.first()
+        initial_object = content_type.model_class().objects.first()
 
+        # Calling the CytoscapeGFKChoiceField() class constructor creates, initializes
+        # and returns a new instance of the class.
+        #
+        # First, Python calls .__new__() and then .__init__(), resulting in a new and fully
+        # initialized intance of CytoscapeGFKChoiceField.
         f = CytoscapeGFKChoiceField()
-        self.assertIn(obj, [o for qs in f.queryset.get_querysets() for o in qs])
+        # initial_object is *not* in use, should be *included* in queryset
+        self.assertIn(initial_object, [o for qs in f.queryset.get_querysets() for o in qs])
 
-        CytoScape.generate_map(obj, "test")
+        # generate new map using "initial_object" object
+        CytoScape.generate_map(initial_object, "test")
 
+        # call the class to construct an object (again)
         f = CytoscapeGFKChoiceField()
-        self.assertNotIn(obj, [o for qs in f.queryset.get_querysets() for o in qs])
+        # initial_object is *already* in use, should be *excluded* from queryset
+        self.assertNotIn(initial_object, [o for qs in f.queryset.get_querysets() for o in qs])

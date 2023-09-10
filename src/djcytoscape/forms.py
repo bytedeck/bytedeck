@@ -21,12 +21,16 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
     """
 
     def __init__(self, *args, **kwargs):
+        # Initialize the new instance of CytoscapeGFKChoiceField,
+        # inherits features and methods from AllowedGFKChoiceField.
         super().__init__(*args, **kwargs)
 
         queryset_models = []
+        # get previously initialized "queryset" class attribute and apply custom filtering
         for qs in self.queryset.get_querysets():
             model = qs.model
-            # Do not use Quest, Rank or Badge as an initial object, if it is already an intitial object for another map
+            # do not use Quest, Rank or Badge as an initial object,
+            # if it is already an intitial object for another map
             queryset_models.append(
                 model.objects.exclude(
                     pk__in=CytoScape.objects.filter(
@@ -34,7 +38,7 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
                     ).values_list('initial_object_id', flat=True)
                 )
             )
-        # Aggregate querysets
+        # aggregate querysets
         self.queryset = QuerySetSequence(*queryset_models)
 
     def get_allowed_model_classes(self):
