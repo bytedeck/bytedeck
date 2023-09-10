@@ -32,7 +32,8 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
             # do not use Quest, Rank or Badge as an initial object,
             # if it is already an intitial object for another map
             queryset_models.append(
-                model.objects.exclude(
+                # use existing queryset, with all previously applied filtering and custom queries
+                qs.exclude(
                     pk__in=CytoScape.objects.filter(
                         initial_content_type=ContentType.objects.get_for_model(model),
                     ).values_list('initial_object_id', flat=True)
