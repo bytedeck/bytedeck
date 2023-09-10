@@ -20,14 +20,11 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
         what the dynamically loaded list would have produced
     """
 
-    def __init__(self, *args, **kwargs):
-        # Initialize the new instance of CytoscapeGFKChoiceField,
-        # inherits features and methods from AllowedGFKChoiceField.
-        super().__init__(*args, **kwargs)
-
+    def overridden_querysetsequence(self, querysetsequence: QuerySetSequence) -> QuerySetSequence:
+        """Apply custom filtering and returns overridden QuerySetSequence instance"""
         queryset_models = []
-        # get previously initialized "queryset" class attribute and apply custom filtering
-        for qs in self.queryset.get_querysets():
+        # get previously initialized "querysetsequence" and apply custom filtering
+        for qs in querysetsequence.get_querysets():
             model = qs.model
             # do not use Quest, Rank or Badge as an initial object,
             # if it is already an intitial object for another map
@@ -40,7 +37,7 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
                 )
             )
         # aggregate querysets
-        self.queryset = QuerySetSequence(*queryset_models)
+        return QuerySetSequence(*queryset_models)
 
     def get_allowed_model_classes(self):
         model_classes = [
