@@ -1,6 +1,8 @@
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 
+from queryset_sequence import QuerySetSequence
+
 from utilities.forms import FutureModelForm
 from utilities.fields import AllowedGFKChoiceField
 
@@ -17,6 +19,25 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
         So instead provide a hard coded list which is checked during testing to ensure it matches
         what the dynamically loaded list would have produced
     """
+
+    def overridden_querysetsequence(self, querysetsequence: QuerySetSequence) -> QuerySetSequence:
+        """Apply custom filtering and returns overridden QuerySetSequence instance"""
+        queryset_models = []
+        # get previously initialized "querysetsequence" and apply custom filtering
+        for qs in querysetsequence.get_querysets():
+            model = qs.model
+            # do not use Quest, Rank or Badge as an initial object,
+            # if it is already an intitial object for another map
+            queryset_models.append(
+                # use existing queryset, with all previously applied filtering and custom queries
+                qs.exclude(
+                    pk__in=CytoScape.objects.filter(
+                        initial_content_type=ContentType.objects.get_for_model(model),
+                    ).values_list('initial_object_id', flat=True)
+                )
+            )
+        # aggregate querysets
+        return QuerySetSequence(*queryset_models)
 
     def get_allowed_model_classes(self):
         model_classes = [

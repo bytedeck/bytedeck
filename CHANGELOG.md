@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.23.1] 2023-09-10 Just bugs
+* Bugfixes:
+  - Creating maps with duplicate initial objects results in error [#1370](https://github.com/bytedeck/bytedeck/issues/1370
+  - Fix submissions table column widths
+  - Fix CSS bug that removed first column of tables in accordion
+
+
+
 ### [1.23.0] 2023-09-04
 * Feature:
   - Pages for creating, editing, and listing Mark Ranges (appears in Admin menu if when "Use mark percentages" feature is enabled in a deck's Site Config)
