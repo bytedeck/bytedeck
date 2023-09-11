@@ -14,7 +14,7 @@
             </a>
         </li>
         <li>
-            <a title="{{ config.custom_name_for_tag }}s" href="{% url 'badges:list' %}">
+            <a title="{{ config.custom_name_for_badge }}s" href="{% url 'badges:list' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
                     <i class="fa fa-certificate fa-fw"></i>
                     <span>{{ config.custom_name_for_badge }}s</span>
@@ -36,7 +36,7 @@
             </a>
         </li>
         <li>
-            <a title="Maps" href="{% url 'announcements:list' %}">
+            <a title="{{ config.custom_name_for_announcement }}s" href="{% url 'announcements:list' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
                     <i class="fa fa-newspaper-o fa-fw"></i>
                     <span>{{ config.custom_name_for_announcement }}s</span>
