@@ -14,13 +14,35 @@
             </a>
         </li>
         <li>
-            <a title="Badges" href="{% url 'badges:list' %}">
+            <a title="{{ config.custom_name_for_tag }}s" href="{% url 'badges:list' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
                     <i class="fa fa-certificate fa-fw"></i>
-                    <span>Badges</span>
+                    <span>{{ config.custom_name_for_badge }}s</span>
                 </div>
                 <div class="hidden-xs">
                     <i class="fa fa-certificate fa-fw"></i>
+                </div>
+            </a>
+        </li>
+        <li>
+            <a title="Maps" href="{% url 'djcytoscape:primary' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-map-signs fa-fw"></i>
+                    <span>Maps</span>
+                </div>
+                <div class="hidden-xs">
+                    <i class="fa fa-map-signs fa-fw"></i>
+                </div>
+            </a>
+        </li>
+        <li>
+            <a title="Maps" href="{% url 'announcements:list' %}">
+                <div class="navbar-mobile-dropdown-item visible-xs-block">
+                    <i class="fa fa-newspaper-o fa-fw"></i>
+                    <span>{{ config.custom_name_for_announcement }}s</span>
+                </div>
+                <div class="hidden-xs">
+                    <i class="fa fa-newspaper-o fa-fw"></i>
                 </div>
             </a>
         </li>
@@ -55,7 +77,7 @@
             <a title="Students" href="{% url 'profiles:profile_list_current' %}">
                 <div class="navbar-mobile-dropdown-item visible-xs-block">
                     <i class="fa fa-users fa-fw"></i>
-                    <span>{{ config.custom_name_for_student }}</span>
+                    <span>{{ config.custom_name_for_student }}s</span>
                 </div>
             </a>
         </li>

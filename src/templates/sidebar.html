@@ -5,10 +5,6 @@
 <!-- sidebar -->
 
 <div id="sidebar_menu">
-{#  <ul class="nav sidebar-menu-nav">#}
-{#    <li><a href="#" data-toggle="offcanvas" class="visible-xs text-center"><i class="fa fa-chevron-right fa-fw"></i></a>#}
-{#    </li>#}
-{#  </ul>#}
 
   <!--so logo margins align with main div headings-->
   <h3 class="hidden-xs">
@@ -17,7 +13,7 @@
 
   {#    Group Menus #}
   <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-main">
-    <div class="clearfix dropdown">
+    <div class="clearfix dropdown"> <!-- Quest Button and Dropdown-->
      <a id="quests-menu" class="list-group-item left-side
         {% if '/quests/' in request.path_info and not '/approvals/' in request.path_info and not '/inprogress/' in request.path_info and not '/drafts/' in request.path_info%}active{% endif %}"
        href="{% url 'quests:quests' %}"><i class="fa fa-shield fa-fw"></i>&nbsp; Quests</a>
@@ -43,30 +39,36 @@
         </ul>
       </div>
     </div>
-      {% if request.user.is_staff %}
-        <div class="clearfix dropdown">
-            <a id="badges-menu"
-              class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
-              href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s</a>
-
-            <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
-              <a id="badges-menu-dropdown"
-                class="list-group-item right-side dropdown-toggle text-center"
-                data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
-                <i class="fa fa-ellipsis-v fa-fw"></i></a>
-              <ul class="dropdown-menu dropdown-menu-right">
-                <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }} Types</a></li>
-                <!-- don't forget to add dividers when adding more menu items
-                <li role="separator" class="divider"></li> -->
-              </ul>
-            </div>
-        </div>
-      {% else %}
+    {% if request.user.is_staff %}
+    <div class="clearfix dropdown">
         <a id="badges-menu"
-        class="list-group-item {% if '/badges/' in request.path_info %}active{% endif %}"
-        href="{% url 'badges:list' %}">
-        <i class="fa fa-certificate fa-fw"></i>&nbsp; Badges</a>
-      {% endif %}
+          class="list-group-item left-side {% if '/badges/' in request.path_info and not '/types/' in request.path_info %}active{% endif %}"
+          href="{% url 'badges:list' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s</a>
+
+        <div id="dropdown-button-wrapper"> <!-- isolates dropdown button highlight -->
+          <a id="badges-menu-dropdown"
+            class="list-group-item right-side dropdown-toggle text-center"
+            data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+            <i class="fa fa-ellipsis-v fa-fw"></i></a>
+          <ul class="dropdown-menu dropdown-menu-right">
+            <li><a href="{% url 'badges:badge_types' %}"><i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }} Types</a></li>
+            <!-- don't forget to add dividers when adding more menu items
+            <li role="separator" class="divider"></li> -->
+          </ul>
+        </div>
+    </div>
+    {% else %}
+    <a id="badges-menu"
+      class="list-group-item {% if '/badges/' in request.path_info %}active{% endif %}"
+      href="{% url 'badges:list' %}">
+      <i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s
+    </a>
+    {% endif %}
+    <a id="announcements-menu"
+      class="list-group-item {% if '/announcement/' in request.path_info %}active{% endif %}"
+      href="{% url 'announcements:list' %}">
+      <i class="fa fa-newspaper-o fa-fw"></i>&nbsp; {{ config.custom_name_for_announcement }}s
+    </a>
 
  </div>
 

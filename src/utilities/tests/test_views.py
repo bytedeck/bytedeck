@@ -275,10 +275,12 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_MenuItemDelete_view__default_side_menu_item_cannot_be_deleted(self):
         """
-        Default Side Menu item cannot be deleted
+        Default Side Menu items cannot be deleted
         """
+        key = list(MenuItem.SIDE_MENU_ITEMS)[0]  # get the first one so tests don't break when specific labels are changed
+        label = MenuItem.SIDE_MENU_ITEMS[key]['label']  # key and it's label should be the same, but get label just in case
         self.client.force_login(self.test_teacher)
-        menu_item = MenuItem.objects.get(label='Announcements')
+        menu_item = MenuItem.objects.get(label=label)
 
         url = f"{reverse('utilities:menu_item_delete', kwargs={'pk': menu_item.pk})}?is_side_menu=true"
         response = self.client.post(url)
