@@ -35,8 +35,8 @@
 =============================================*/
 
 /* Hiding the first column to clean up the table presentation */
-.accordian-table thead>tr>th.detail,
-.accordian-table tbody>tr:not(.detail-view)>td:first-of-type {
+table.accordian-table>thead>tr>th.detail,
+table.accordian-table>tbody>tr:not(.detail-view)>td:first-of-type {
   display: none;
 }
 
