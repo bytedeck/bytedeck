@@ -136,6 +136,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn("Please Confirm Your E-mail Address", mail.outbox[0].subject)
         # expecting to see john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+        # expecting to see correct domain name in confirmation link
+        self.assertIn('http://default.localhost/accounts/confirm-email/', mail.outbox[0].body)
 
         owner = SiteConfig.get().deck_owner or None
         self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
