@@ -20,6 +20,8 @@ ALLOWED_TAGS += [
     "dl",
     "dt",
     "dd",
+    "th"
+    "caption",
     # Bootstrap Blockquotes
     "footer",
     "cite",
@@ -79,4 +81,5 @@ STYLES += [
     "text-decoration",
     "text-indent",
     "width",
+    "scope",
 ]
