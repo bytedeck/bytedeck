@@ -31,10 +31,14 @@ class RequestDataTooBigMiddleware:
         RequestDataTooBig exception. Check here explicitly if that will happen.
         """
         try:
-            _ = request.body
+            if request.method == "POST":
+                if request.content_type in ["", "text/plain", "application/json"]:
+                    # touch the body so that we have access to it in process_response
+                    _ = request.body
+                else:
+                    _ = request.POST
         except RequestDataTooBig:
             # if the size of the request (excluding any file uploads) exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE.
-
             msg = (
                 "This requests exceeds the maximum size of {}. This is likely caused by"
                 " one of the text fields contains too much data, either from text (including whitespace)"
@@ -45,7 +49,7 @@ class RequestDataTooBigMiddleware:
 
             # generate a more sensible response and redirect back
             messages.add_message(request, messages.ERROR, msg)
-            return HttpResponseRedirect(request.build_absolute_uri())
+            return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/"))
 
         # ...as if nothing has happened
         return self.get_response(request)
