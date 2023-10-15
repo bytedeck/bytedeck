@@ -143,6 +143,7 @@ class NotificationTasksTests(TenantTestCase):
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 1)
 
+
 class CreateEmailNotificationTasksTest(TenantTestCase):
     """ Tests of the create_email_notification_tasks() method"""
 
