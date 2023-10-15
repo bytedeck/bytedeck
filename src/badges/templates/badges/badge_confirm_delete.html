@@ -1,14 +1,14 @@
 {% extends "badges/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Delete Badge {% endblock %}
+{% block heading_inner %}Delete {{ config.custom_name_for_badge }} {% endblock %}
 
 {% block content %}
 <form action="" method="post">{% csrf_token %}
-  <p>Are you sure you want to delete this badge? This badge will be removed from all users that have earned it. This action is irreversible.<p>
+  <p>Are you sure you want to delete this {{ config.custom_name_for_badge }}? This {{ config.custom_name_for_badge }} will be removed from all users that have earned it. This action is irreversible.<p>
   <div class="well">
-    <p>Badge Name: {{object.name}}</p>
-    <p>Badge ID: {{object.id}}</p>
+    <p>{{ config.custom_name_for_badge }} Name: {{object.name}}</p>
+    <p>{{ config.custom_name_for_badge }} ID: {{object.id}}</p>
   </div>
   <a href="{% url 'badges:list' %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />

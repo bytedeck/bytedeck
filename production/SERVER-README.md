@@ -30,7 +30,7 @@ docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'
 
 ### Production deployment steps
 - Step 1: Go to application directory: ``/usr/share/nginx/hackerspace``
-- Step 2: Set WUID and WGID variables: 
+- Step 2: Set WUID and WGID variables:
 ```shell script
     $ export WUID=<user_id>
     $ export WGID=<group_id>

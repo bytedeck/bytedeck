@@ -1,0 +1,17 @@
+{% comment %} Hidden column to allow sorting by time since quest completion {% endcomment %}
+{% comment %} Uses same logic defined in `quest_manager/snippets/submitted_status.html` for getting the submission time {% endcomment %}
+{% if s.is_approved %}
+  {{s.time_approved|date:"U"}}
+{% elif s.is_awaiting_approval %}
+  {{s.time_completed|date:"U"}}
+{% elif s.is_returned %}
+  {% if s.time_returned %}
+    {{s.time_returned|date:"U"}}
+  {% else %}
+    {% comment %} If this quest was returned an unknown time ago, assume it was a very long time ago {% endcomment %}
+    0
+  {% endif %}
+{% else %}
+  {% comment %} If the quest is currently in progress, get the timestamp for now {% endcomment %}
+  {% now "U" %}
+{% endif %}

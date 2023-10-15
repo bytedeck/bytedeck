@@ -1,35 +1,36 @@
 {% extends "base_no_sidebar.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 {% load i18n %}
-{% load account %}
+{% load account socialaccount %}
 
 {% block head_title %}{% trans "Sign In" %} | {% endblock %}
 
 {% block heading %}{% trans "Sign In" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 
 {% block content %}
-  {% if socialaccount.providers %}
-    <p>{% blocktrans with site.name as site_name %}Please sign in with one
-    of your existing third party accounts. Or, <a href="{{ signup_url }}">sign up</a>
-    for a {{ site_name }} account and sign in below:{% endblocktrans %}</p>
+  {% comment %}
+    Conditions are setup this way because checking socialaccount_providers returns a list of strings based on the INSTALLED_APPS
+    If you look at the get_providers tag, it returns all social account providers whether it is configured or not
+  {% endcomment %}
+  {% get_providers as socialaccount_providers %}
 
-    <div class="socialaccount_ballot">
+  {% if socialaccount_providers|length > 0 and config.enable_google_signin %}
+    <p>{% blocktrans %} Sign in via: {% endblocktrans %}</p>
+      <div class="socialaccount_ballot">
+        {% include "socialaccount/snippets/login_extra.html" %}
+        <p>
+          <a href="{% provider_login_url 'google' process='login' %}" class="">
+            <img src="{% static 'img/btn_google_signin_dark_normal_web.png' %}" alt="Google Sign-In" />
+          </a>
+        </p>
+      </div>
 
-      <ul class="socialaccount_providers">
-        {% include "socialaccount/snippets/provider_list.html" with process="login" %}
-      </ul>
-
-      <div class="login-or">{% trans 'or' %}</div>
-
-    </div>
-
-  {% include "socialaccount/snippets/login_extra.html" %}
-
-  {% else %}
-    <p>{% blocktrans %}If you have not created an account yet, then please
-    <a href="{{ signup_url }}">sign up</a> first.{% endblocktrans %}</p>
+      <p class="login-or">{% trans 'or' %}</p>
   {% endif %}
 
+  <p>{% blocktrans %}Sign in with your username and password. If you have not created an account yet, then please
+    <a href="{{ signup_url }}">sign up</a> first.{% endblocktrans %}</p>
   <form class="login" method="POST" action="{% url 'account_login' %}">
     {% csrf_token %}
     {{ form|crispy }}

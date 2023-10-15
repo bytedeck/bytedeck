@@ -1,27 +1,36 @@
+from allauth.socialaccount.models import SocialLogin
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Prefetch
 from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView
 
 from hackerspace_online.decorators import staff_member_required
+from siteconfig.models import SiteConfig
 
 from .models import Profile
 from .forms import ProfileForm, UserForm
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent
+from courses.models import CourseStudent, Block
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tags.models import get_user_tags_and_xp
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from django.contrib.auth.forms import SetPasswordForm
+
+from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.helpers import _complete_social_login
+
+User = get_user_model()
 
 
 class ViewTypes:
@@ -30,6 +39,7 @@ class ViewTypes:
     CURRENT = 1
     STAFF = 2
     INACTIVE = 3
+    BLOCK = 4
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -38,7 +48,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     # this will determine which button will be active in self.template_name
     # also if view_type=ViewTypes.STAFF will render a different partial template
-    view_type = ViewTypes.LIST  
+    view_type = ViewTypes.LIST
 
     def test_func(self):
         return self.request.user.is_staff
@@ -46,11 +56,18 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     def queryset_append(self, profiles_qs):
         profiles_qs = profiles_qs.select_related('user__portfolio')
 
-        for profile in profiles_qs:
-            profile.blocks_value = profile.blocks()
-            profile.courses = profile.current_courses().values_list('course__title', flat=True)
-            profile.mark_value = profile.mark()
-            profile.last_submission_completed_value = profile.last_submission_completed()
+        # this prefetch prevents runnaway queries when looping through profiles in list view
+        # in Profile_list.html it is used to get courses via:
+        #  {% for course in object.user.coursestudent_set.all %}{{ course.course.title }}...etc
+        # and blocks via
+        #  {% for course in object.user.coursestudent_set.all %}{{ course.block }}...etc
+        profiles_qs = profiles_qs.prefetch_related(
+            Prefetch(
+                'user__coursestudent_set',
+                queryset=CourseStudent.objects.filter(semester=SiteConfig.get().active_semester).select_related('course', 'block'),
+            )
+        )
+
         return profiles_qs
 
     def get_queryset(self):
@@ -65,7 +82,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        return super(ProfileList, self).dispatch(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
 
 class ProfileListCurrent(ProfileList):
@@ -85,6 +102,29 @@ class ProfileListCurrent(ProfileList):
     def get_queryset(self):
         profiles_qs = Profile.objects.all_for_active_semester()
         return self.queryset_append(profiles_qs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ProfileListBlock(ProfileList):
+    """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
+    view_type = ViewTypes.BLOCK
+    block_object = None
+
+    def get_queryset(self):
+        """block object is queried via pk kwarg in request from block list view, then a queryset of profiles is generated via relatedmanager"""
+        block_pk = self.kwargs['pk']
+        self.block_object = get_object_or_404(Block, pk=block_pk)
+        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
+        profiles_qs = Profile.objects.all_for_active_semester().filter(user__coursestudent__block=self.block_object)
+        return self.queryset_append(profiles_qs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # block object is queried again to pull name + description data from
+        context["block_object"] = self.block_object
+
+        return context
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -125,14 +165,14 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         # only allow the users to see their own profiles, or admins
         profile_user = get_object_or_404(Profile, pk=self.kwargs.get('pk')).user
         if profile_user == self.request.user or self.request.user.is_staff:
-            return super(ProfileDetail, self).dispatch(*args, **kwargs)
+            return super().dispatch(*args, **kwargs)
 
         return redirect('quests:quests')
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
-        context = super(ProfileDetail, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
 
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
@@ -163,7 +203,17 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         return context
 
 
-class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
+class ProfileOwnerOrIsStaffMixin:
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        profile_user = self.get_object().user
+        if profile_user == self.request.user or self.request.user.is_staff:
+            return super().dispatch(*args, **kwargs)
+        raise Http404("Sorry, this profile isn't yours!")
+
+
+class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateView):
     model = Profile
     profile_form_class = ProfileForm
     user_form_class = UserForm
@@ -180,19 +230,11 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
 
         return forms
 
-    @method_decorator(login_required)
-    def dispatch(self, *args, **kwargs):
-        profile_user = self.get_object().user
-        if profile_user == self.request.user or self.request.user.is_staff:
-            return super(ProfileUpdate, self).dispatch(*args, **kwargs)
-        else:
-            raise Http404("Sorry, this profile isn't yours!")
-
     def post(self, request, *args, **kwargs):
         forms = self.get_forms()
 
         # check if all form instances are valid else ...
-        if all([form.is_valid() for form in forms]):
+        if all(form.is_valid() for form in forms):
             return self.form_valid(forms)
         return self.form_invalid(forms)
 
@@ -213,6 +255,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
     def get_profile_form(self):
         form_kwargs = super().get_form_kwargs()
         form_kwargs['instance'] = self.get_object()
+        form_kwargs['request'] = self.request
 
         return self.profile_form_class(**form_kwargs)
 
@@ -229,7 +272,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, UpdateView):
             form.save()
 
         return HttpResponseRedirect(self.get_success_url())
-    
+
     def get_success_url(self):
         return reverse("profiles:profile_detail", args=[self.get_object().pk])
 
@@ -244,7 +287,7 @@ class ProfileUpdateOwn(ProfileUpdate):
 class PasswordReset(FormView):
     form_class = SetPasswordForm
     template_name = 'profile_manager/password_change_form.html'
-    
+
     def get_instance(self):
         model_pk = self.kwargs['pk']
         return get_user_model().objects.get(pk=model_pk)
@@ -255,14 +298,14 @@ class PasswordReset(FormView):
         if user.is_staff:
             return HttpResponseForbidden("Staff users are forbidden")
         return super().dispatch(*args, **kwargs)
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.get_instance().profile
 
         context['heading'] = "Changing " + profile.user.get_username() + "'s Password"
         context['submit_btn_value'] = "Update"
-        
+
         return context
 
     def get_form(self):
@@ -276,6 +319,44 @@ class PasswordReset(FormView):
         return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
+class ProfileResendEmailVerification(
+    NonPublicOnlyViewMixin,
+    ProfileOwnerOrIsStaffMixin,
+    DetailView
+):
+
+    model = Profile
+
+    def get(self, request, *args, **kwargs):
+
+        profile = self.get_object()
+        user = profile.user
+
+        email_address = EmailAddress.objects.filter(email=user.email).first()
+
+        # This is for handling a user that has previously added an email address but has no EmailAddress
+        user_has_email = bool(user.email or email_address)
+
+        # This condition exists in case a user with an empty User.email tries to access this URL
+        if not user_has_email:
+            messages.error(request, "User does not have an email")
+            return redirect_to_previous_page(request)
+
+        # This condition exists in case an already verified user tries to access this URL
+        if email_address and email_address.verified:
+            messages.info(request, "Your email address has already been verified.")
+            return redirect_to_previous_page(request)
+
+        send_email_confirmation(
+            request=request,
+            user=user,
+            signup=False,
+            email=user.email,
+        )
+
+        return redirect_to_previous_page(request)
+
+
 class TagChart(NonPublicOnlyViewMixin, TemplateView):
     template_name = 'profile_manager/tag_chart.html'
 
@@ -283,6 +364,57 @@ class TagChart(NonPublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["user"] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
         return context
+
+
+@non_public_only_view
+def oauth_merge_account(request):
+
+    merge_with_user_id = request.session.get('merge_with_user_id')
+    user = get_object_or_404(User, id=merge_with_user_id)
+
+    if request.method == "POST":
+
+        merge_account = request.POST.get('submit') == 'yes'
+
+        # The socialaccount_sociallogin must've been removed from the session
+        # or there is no user to merge with so we don't have anything else to do...
+        if not merge_with_user_id:
+            return redirect('account_login')
+
+        if merge_account:
+            # Remove the merge_with_user_id and socialaccount_sociallogin from the session object
+            # since we don't want to pollute it
+
+            request.session.pop('merge_with_user_id')
+            socialaccount_data = request.session.pop('socialaccount_sociallogin', None)
+            sociallogin = SocialLogin.deserialize(socialaccount_data)
+            sociallogin.connect(request, user)
+
+            # Automatically verify email during account merge
+            try:
+                email_address = EmailAddress.objects.get(email=user.email)
+            except EmailAddress.DoesNotExist:
+                email_address = EmailAddress(email=user.email)
+
+            email_address.user = user
+            email_address.verified = True
+            email_address.primary = True
+            email_address.save()
+
+            return _complete_social_login(request, sociallogin)
+        else:
+            # Remove the email from that user
+            user.emailaddress_set.filter(email=user.email).delete()
+            user.email = ''
+            user.save()
+
+            return redirect('socialaccount_signup')
+
+    context = {
+        'other_account_username': user.username,
+        'email_address': user.email,
+    }
+    return render(request, 'socialaccount/merge.html', context)
 
 
 @non_public_only_view

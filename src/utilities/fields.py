@@ -10,6 +10,40 @@ from queryset_sequence import QuerySetSequence
 from .widgets import GFKSelect2Widget
 
 
+# common file MIME types to be uploaded by users
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_Types
+
+IMAGE_MIME_TYPES = [
+    'image/jpeg',  # JPEG images
+    'image/png',   # PNG images
+    'image/gif',   # GIF images
+    'image/webp',  # WEBP images
+    'image/tiff',  # TIFF images
+    'image/bmp',   # BMP images
+    'image/svg+xml'  # SVG vector images
+]
+
+VIDEO_MIME_TYPES = [
+    'video/mp4',   # MP4 videos
+    'video/webm',  # WebM videos
+    'video/ogg',   # OGG videos
+    'video/quicktime',  # MOV videos
+    'video/x-msvideo',  # AVI videos
+    'video/x-ms-wmv',  # WMV videos
+    'video/mpeg',  # MPEG videos
+    'video/3gpp',  # 3GP videos
+    'video/3gpp2',  # 3G2 videos
+    'video/x-flv',  # FLV videos
+    'video/x-m4v'  # M4V videos
+]
+
+FILE_MIME_TYPES = {
+    'image': IMAGE_MIME_TYPES,
+    'video': VIDEO_MIME_TYPES,
+    'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES
+}
+
+
 class GFKChoiceIterator(ModelChoiceIterator):
 
     def __iter__(self):
@@ -140,7 +174,10 @@ class AllowedGFKChoiceField(GFKChoiceField):
             # django_content_type (e.g. sqlite)
             pass
 
-        super().__init__(QuerySetSequence(*[x.objects.all() for x in model_classes]), *args, **kwargs)
+        querysetsequence = self.overridden_querysetsequence(
+            QuerySetSequence(*[x.objects.all() for x in model_classes])
+        )
+        super().__init__(querysetsequence, *args, **kwargs)
 
         search_fields = {}
         for qs in self.queryset.get_querysets():
@@ -156,6 +193,14 @@ class AllowedGFKChoiceField(GFKChoiceField):
         raise NotImplementedError(
             '%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__
         )
+
+    def overridden_querysetsequence(self, querysetsequence: QuerySetSequence) -> QuerySetSequence:
+        """
+        Returns overridden QuerySetSequence instance.
+
+        Called inside __init__(), subclass should override for any actions to run.
+        """
+        return querysetsequence
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit

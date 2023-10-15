@@ -3,7 +3,7 @@
 
 {% block head_title %}Campaigns | {% endblock %}
 
-{% block heading_inner %} {{ object.title }} Campaign{% endblock %}
+{% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %} {{ object.title }} Campaign{% endblock %}{% endblock %}
 
 {% block content %}
     {% if request.user.is_staff %}
@@ -25,4 +25,10 @@
     {% else %}
         <p>The campaign you're trying to reach is currently unavailable. Please contact your teacher if this comes as a surprise.</p>
     {% endif %}
+{% endblock %}
+
+{% block js%}
+  {{ block.super }}
+
+  {% include "quest_manager/ajax_content_loading.html" %}
 {% endblock %}

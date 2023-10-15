@@ -25,7 +25,7 @@ class BadgeAssertionFormTest(TenantTestCase):
             'do_not_grant_xp': True,
         }
         form = BadgeAssertionForm(data=form_data)
-        self.assertTrue(form.is_valid)   
+        self.assertTrue(form.is_valid)
 
     def test_bulk_badge_assertion_form(self):
         form_data = {

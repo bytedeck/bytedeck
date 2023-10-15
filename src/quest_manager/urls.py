@@ -25,7 +25,7 @@ urlpatterns = [
     # url(r'^create/$', views.quest_create, name='quest_create'),
 
     # Ajax
-    url(r'^ajax/$', views.ajax, name='ajax'),
+    url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
     url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
     url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
@@ -41,7 +41,6 @@ urlpatterns = [
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^available/$', views.quest_list, name='quests'),
     url(r'^available/$', views.quest_list, name='available'),
-    url(r'^available2/$', views.quest_list2, name='available2'),
     url(r'^available/all/$', views.quest_list, name='available_all'),
     url(r'^inprogress/$', views.quest_list, name='inprogress'),
     url(r'^completed/$', views.quest_list, name='completed'),
@@ -90,7 +89,6 @@ urlpatterns = [
     # Flagged submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
-    # url(r'^submission/flagged/$', views.flagged_submissions, name='flagged'),
 
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),

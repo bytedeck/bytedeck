@@ -5,6 +5,8 @@ from django.core import signing
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from django.utils.text import slugify
+
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
@@ -102,7 +104,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_page_status_code__teacher(self):
         """Make sure the everything is accessible to teachers"""
         self.client.force_login(self.test_teacher)
-        
+
         self.assert200('tags:list')
         self.assert200('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
         self.assert200('tags:detail_staff', args=[self.tag.pk])
@@ -113,14 +115,14 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_ListView(self):
         """Make sure list view displays all tags correctly"""
         baker.make(Tag, _quantity=5)
-        
+
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('tags:list'))
 
         object_list = response.context['object_list']
 
         self.assertEqual(Tag.objects.count(), len(object_list))
-        
+
         for model_obj, ctx_obj in zip(Tag.objects.all(), object_list):
             self.assertEqual(model_obj.pk, ctx_obj.pk)
 
@@ -162,7 +164,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Make sure detail view displays related quest/badges correctly.
             Students should only have access to quest and badges they have completed/earned
-        """ 
+        """
         # generate quests + badges and link to tag
         quest_set = baker.make('quest_manager.quest', xp=1, _quantity=5)
         badge_set = baker.make('badges.badge', xp=1, _quantity=5)
@@ -171,13 +173,13 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # only assign first set element from quest and badge to user
         # make 2 submission/assertion to check if total xp is calculated correctly
-        for i in range(2):
-            baker.make( 
+        for _i in range(2):
+            baker.make(
                 'quest_manager.questsubmission',
-                quest=quest_set[0], 
-                user=self.test_student, 
-                is_completed=True, 
-                is_approved=True, 
+                quest=quest_set[0],
+                user=self.test_student,
+                is_completed=True,
+                is_approved=True,
                 semester=SiteConfig().get().active_semester,
             )
             baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
@@ -205,7 +207,32 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         self.client.post(reverse('tags:create'), data=form_data)
 
-        self.assertTrue(Tag.objects.filter(name=form_data['name']).exists())
+        self.assertTrue(Tag.objects.filter(name=slugify(form_data['name'])).exists())
+
+    def test_CreateView__slug_validation(self):
+        """
+        Invalid slug names provided to Tag CreateView should be rejected
+        validators that must be passed:
+        validate_slug https://docs.djangoproject.com/en/3.2/ref/validators/#validate-slug
+        validate_unique_slug (custom validator, located at tags.forms.validate_unique_slug)
+        """
+
+        # login a teacher to create tags
+        self.client.force_login(self.test_teacher)
+
+        # post to create form with an invalid name to trigger validator 'validate_slug'
+        response = self.client.post(reverse('tags:create'), data={'name': 'invalid name'})
+
+        # assert object is not created and error message displayed
+        self.assertContains(response, 'Enter a valid “slug” consisting of letters, numbers, underscores or hyphens.')
+        self.assertFalse(Tag.objects.filter(name='invalid name').exists())
+
+        # post to create form with non-unique (after slugification) name to trigger validator 'validate_unique_slug'
+        response = self.client.post(reverse('tags:create'), data={'name': 'TEST-TAG'})
+
+        # assert object is not created and error message displayed
+        self.assertContains(response, 'Tag name too similar to existing tag: test-tag')
+        self.assertFalse(Tag.objects.filter(name='TEST-TAG').exists())
 
     def test_UpdateView(self):
         """Make sure update view can change name + update slug"""
@@ -215,7 +242,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.post(reverse('tags:update', args=[self.tag.pk]), data=form_data)
 
         tag = Tag.objects.get(pk=self.tag.pk)  # refresh object
-        self.assertEqual(form_data['name'], tag.name)
+        # Form data is set to lowercase as a part of form submission, final name/slug will be lowercase of what was entered
+        self.assertEqual(form_data['name'].lower(), tag.name)
         self.assertEqual(form_data['name'].lower(), tag.slug)
 
     def test_DeleteView(self):

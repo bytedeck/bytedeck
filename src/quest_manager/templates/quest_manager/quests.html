@@ -5,10 +5,25 @@
     > completed (tab_quests_submission.html)
     > past courses (tab_quests_submission.html)
     > drafts (tab_quests_available.html)
+
+Each tab has an HTML table loaded into it, and each row in the table is a quest.
+It is important to note that each row in the “Available” tab represents a Quest object,
+while each row in the “In Progress”/”Completed” tabs are QuestSubmission objects.
+
+After the page loads, AJAX is used to insert all of the preview content into the quests.
+Several AJAX endpoints can be used depending on the tab. This is handled in
+`ajax_content_loading.html`. A whole bunch of conditions are used to ensure content
+is only loaded into the currently active tab.
+
+This content is inserted into a hidden DOM location, and whenever a quest is clicked,
+the preview content is inserted underneath the quest row. And when the preview content
+is collapsed, the content is sent back to the hidden location, and the quest row goes
+back to its original look.
 -->
 
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
+{% load static %}
 
 {% block heading_inner %} {{ heading }}
   {% if request.user.is_staff or request.user.profile.is_TA %}
@@ -116,7 +131,11 @@
 {% endblock %}
 
 {% block js %}
+  {% comment %} Include from quest_manager/base.html {% endcomment %}
+  {{ block.super }}
+
   {% with quests_available_page=True %}
     {% include "quest_manager/ajax_content_loading.html" %}
   {% endwith %}
+
 {% endblock %}

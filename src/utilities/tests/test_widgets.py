@@ -4,6 +4,7 @@ import string
 import collections
 
 from django import forms
+from django.db.models import Q
 from django.core import signing
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
@@ -55,7 +56,7 @@ class TestGFKSelect2Widget(TenantTestCase):
         )
 
     def _ct_pk(self, obj):
-        return '{}-{}'.format(ContentType.objects.get_for_model(obj).pk, obj.pk)
+        return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
     def test_initial_data(self):
         group = self.groups[0]
@@ -137,13 +138,32 @@ class TestGFKSelect2Widget(TenantTestCase):
         result = widget.filter_queryset(group.name)
         assert result.exists()
 
+    def test_queryset_is_filterable(self):
+        group = self.groups[0]
+
+        queryset = QuerySetSequence(Group.objects.filter(~Q(name__icontains=group.name)))
+        widget = GFKSelect2Widget(
+            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
+        result = widget.filter_queryset(group.name)
+        assert not result.exists()
+
+        queryset = QuerySetSequence(Group.objects.filter(Q(name__icontains=group.name)))
+        widget = GFKSelect2Widget(
+            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
+        result = widget.filter_queryset(group.name)
+        assert result.exists()
+
     def test_ajax_view_registration(self):
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
-        response = self.client.get(url, data=dict(field_id=signing.dumps(id(widget)), term=group.name))
+        data = {
+            'field_id': signing.dumps(id(widget)),
+            'term': group.name
+        }
+        response = self.client.get(url, data=data)
         assert response.status_code == 200, response.content
         data = json.loads(response.content.decode('utf-8'))
         assert data['results']

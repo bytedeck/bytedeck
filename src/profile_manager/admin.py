@@ -27,7 +27,7 @@ def migrate_names_to_user_model(modeladmin, request, queryset):
             profile.user.first_name = profile.first_name
         if hasattr(profile, 'last_name') and profile.last_name:
             profile.user.last_name = profile.last_name
-        
+
         profile.user.save()
 
     messages.success(request, "Complete")

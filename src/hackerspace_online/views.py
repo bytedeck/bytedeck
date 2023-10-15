@@ -10,7 +10,7 @@ from allauth.account.views import PasswordResetFromKeyView, PasswordResetView
 from django_tenants.utils import get_public_schema_name
 
 from siteconfig.models import SiteConfig
-from tenant.views import PublicOnlyViewMixin, non_public_only_view
+from tenant.views import PublicOnlyViewMixin, NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import CustomResetPasswordForm, PublicContactForm
 
@@ -76,12 +76,14 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
         return reverse('home')
 
 
-class CustomPasswordResetView(PasswordResetView):
+# apply `NonPublicOnlyViewMixin` mixin, fix #1214
+class CustomPasswordResetView(NonPublicOnlyViewMixin, PasswordResetView):
 
     form_class = CustomResetPasswordForm
 
 
-class CustomPasswordResetFromKeyView(PasswordResetFromKeyView):
+# apply `NonPublicOnlyViewMixin` mixin, fix #1214
+class CustomPasswordResetFromKeyView(NonPublicOnlyViewMixin, PasswordResetFromKeyView):
     success_url = reverse_lazy('account_login')
 
 

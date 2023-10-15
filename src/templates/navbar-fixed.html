@@ -54,10 +54,11 @@
             <div class="visible-xs-inline navbar-mobile-xp-container">
                 <ul class="nav navbar-nav navbar-mobile-xp">
                     <li>
-                        {% comment %} # DISABLE MARKS {% endcomment %}
-                        {% comment %} <a href="{% url 'courses:marks' request.user.id %}" {% endcomment %}
-                        <a href="#" title="The Mark Calculations page is currently disabled, sorry!"
-                        class="navbar-text-large-container">XP:
+                        {% url 'courses:marks' request.user.id as marks_url %}
+                        <a
+                          href="{% if config.display_marks_calculation %} {{ marks_url }} {% else %}#{% endif %}"
+                          title="View your marks calculation"
+                           class="navbar-text-large-container">XP:
                             <span class="navbar-text-large"> {{ request.user.profile.xp_cached }}</span>
                         </a>
                     </li>
@@ -220,7 +221,7 @@
                         <img class="navbar-avatar" src="{{ request.user.profile.get_avatar_url }}">{{ request.user }}
                     </a><!-- removes whitespace
                  --></li>
-                
+
                 {% if not request.user.is_staff %}
                 <li>
                     <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
@@ -229,7 +230,7 @@
                     </a>
                 </li>
                 {% endif %}
-                
+
                 <li id="extras-menu" class="dropdown">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown"
                        role="button" aria-haspopup="true" aria-expanded="false">

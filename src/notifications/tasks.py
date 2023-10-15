@@ -1,4 +1,3 @@
-from __future__ import absolute_import, unicode_literals
 import json
 
 from django.urls import reverse
@@ -45,7 +44,7 @@ def get_notification_emails(root_url):
 def generate_notification_email(user, root_url):
     """Generate an email notification from user"""
     html_template = get_template('notifications/email_notifications.html')
-    subject = '{} Notifications'.format(SiteConfig.get().site_name_short)
+    subject = f'{SiteConfig.get().site_name_short} Notifications'
     to_email_address = user.email
     unread_notifications = Notification.objects.all_unread(user)
     submissions_awaiting_approval = None

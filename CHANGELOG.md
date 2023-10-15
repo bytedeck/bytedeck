@@ -1,8 +1,124 @@
 
-# Hackerspace Changelog
+# Bytedeck Changelog
 This file chronologically records all notable changes to this website, including new features, tweaks, and bug fixes.
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
+
+### [1.23.1] 2023-09-10 Just bugs
+* Bugfixes:
+  - Creating maps with duplicate initial objects results in error [#1370](https://github.com/bytedeck/bytedeck/issues/1370
+  - Fix submissions table column widths
+  - Fix CSS bug that removed first column of tables in accordion
+
+
+
+### [1.23.0] 2023-09-04
+* Feature:
+  - Pages for creating, editing, and listing Mark Ranges (appears in Admin menu if when "Use mark percentages" feature is enabled in a deck's Site Config)
+* Tweaks:
+  - Add column showing number of students on Group/Block list page, and hyperlink to Group detail page.
+  - Add column showing number of students in acourses in a semester.
+* Bugfixes:
+  - Internal server error when reading notifications sometimes [#1446](https://github.com/bytedeck/bytedeck/issues/1446)
+  - non-relative menu links always open in a new tab regardless of setting [#1397](https://github.com/bytedeck/bytedeck/issues/1397)
+  - Don't render duplicate mark ranges in Mark Calculations graph legend [#1242](https://github.com/bytedeck/bytedeck/issues/1242)
+  - Provide proper error message when uploading too much text [#1350](https://github.com/bytedeck/bytedeck/issues/1350)
+  - Badges without a sort order break profile page [#1342](https://github.com/bytedeck/bytedeck/issues/1342)
+  - Quest and submission ID conflicts in list views [#1466](https://github.com/bytedeck/bytedeck/pull/1466)
+  - Calendar button sometimes doesn't add additional exclude dates [#1416](https://github.com/bytedeck/bytedeck/issues/1416)
+  - Too long name of Quest and large XP value causes map generation to fail [#929](https://github.com/bytedeck/bytedeck/issues/929)
+  - Only load quest details for quests listed in the active tab [#1467](https://github.com/bytedeck/bytedeck/issues/1467)
+  - Fix formatting of default replies/comments [#1235](https://github.com/bytedeck/bytedeck/issues/1235)
+  - Missing icons [#1132](https://github.com/bytedeck/bytedeck/issues/1132)
+* Devops:
+  - filterable QuerySetSequence in GFK Select Field/Widget [#1472](https://github.com/bytedeck/bytedeck/issues/1472)
+  - Wrap INTERNAL_IPS getter inside try/except [#1463](https://github.com/bytedeck/bytedeck/pull/1463)
+* Bytedeck Admin:
+  - Expansion of the New Deck form allows entry of deck owner email and name, sets this to the deck owner profile, and sends verification email.
+  - Tenant list view shows deck owner info from the deck itself
+
+
+
+### [1.22.0] 2023-07-31
+ * Feature: Add simplified registration option to SiteConfig
+ * Admin Features:
+   - Admin action on public tenant to send emails to deck owners
+   - Delete old decks with security protection
+ * Optimizations
+   - Major refactor of Students lists to speed up page load times
+   - Refactor of some Quest and Submission pages to speed up page load times
+ * Tweaks:
+   - Refactor status icons on quest list for minor performance improvements
+ * Bugfixes:
+   - Wrap long urls [#1425](https://github.com/bytedeck/bytedeck/issues/1425)
+   - Add back missing quest completion dates on profiles [#1427](https://github.com/bytedeck/bytedeck/issues/1427);
+   - Inconsistant tag name creation [#1282](https://github.com/bytedeck/bytedeck/issues/1282);
+   - Tagg error duplicate key value violates unique constraint [#1351](https://github.com/bytedeck/bytedeck/issues/1351);
+
+
+### [1.21.2] 2023-07-03 - Summer speed up #1
+ * Feature: Campaign lists are now searchable and sortable (via bootstrap-tables)
+ * Optimizations
+   - Major refactor of Students lists to speed up page load times
+   - Refactor of some Quest and Submission pages to speed up page load times
+ * Tweaks:
+   - Organize Quest related items in Admin menu and add Common Info
+   - Reorganize Quests submenu for consistancy with Admin menu items
+   - Clean up mobile layout of content for quest asnd submission previews (accordian expansion)
+   - Indicate skipepd quests in status field of submissions and approvals tabs
+ * Bugfixes:
+   - Skipped quests now save comments
+   - Ignore draft and archived quests when considering Campaign completion; [#1286](https://github.com/bytedeck/bytedeck/issues/1286)
+   - Sort badges by sort_order on profiles [#1411](https://github.com/bytedeck/bytedeck/issues/1411);
+   - Allow deletion of (non-current) semesters with no students [#1418](https://github.com/bytedeck/bytedeck/issues/1418);
+   - Added proper sorting to status column [#1420](https://github.com/bytedeck/bytedeck/issues/1420);
+
+
+
+### [1.21.1] 2023-06-17
+ * Feature: Refactor all quest/submission lists to be searchable and sortable.
+ * Feature: Add list of badge assertions to the badge detail page
+ * Bugfixes:
+   - Fix display of My Groups button [#1395](https://github.com/bytedeck/bytedeck/issues/1395)
+   - Skipped submissions do no appear in Approved tab [#1400](https://github.com/bytedeck/bytedeck/issues/1400)
+   - fix broken announcement permalinks and comment links [#818](https://github.com/bytedeck/bytedeck/issues/818)
+   - Add missing html elements to SummernoteSafeWidget, including HTML5 media tags
+   - Fix get_banner_image_url error on public domain in some views [#1214](https://github.com/bytedeck/bytedeck/issues/1214)
+   - Refactor Quest.time_expired and date_expired tests and fix buggy test [#1327](https://github.com/bytedeck/bytedeck/issues/1327)
+   - Use whitelabelling for groups in buttons and elsewhere [#393](https://github.com/bytedeck/bytedeck/issues/1393)
+   - Changing deck owner now grants new owner superuser permissions [#1390](https://github.com/bytedeck/bytedeck/issues/1390)
+ * Devops: Improved automated test coverage throughout app
+
+
+### [1.21.0] 2023-05-30
+* New feature: Deack owners can upload a custom JacaScript file and custom CSS Stylesheet unqiue to their decks (Admin > Site Configuration > Advanced)
+* Whitelabelling for Announcements, Students, and Badges (Admin > Site Configuration)
+* Quest list refactored to use bootstrap-table for sort and search features.
+* Bugfixes:
+  - Fix figure and figcaption in Safe Summernote Widget.
+  - Pluralize bug [#1366](https://github.com/bytedeck/bytedeck/issues/1366)
+  - Alphabetical Maps list [#1346](https://github.com/bytedeck/bytedeck/issues/1346)
+  - XP button doesn't work on mobile [#1283](https://github.com/bytedeck/bytedeck/issues/1283)
+  - Runaway whitespace bug [#771](https://github.com/bytedeck/bytedeck/issues/771), [#889](https://github.com/bytedeck/bytedeck/issues/771),[#1357](https://github.com/bytedeck/bytedeck/issues/771)
+* Devops:
+  - Improvements and updates to development envronment setup and contributing guidelines
+  - Fix docker network for pg-admin container
+  - Codecov CI
+
+
+### [1.20.0] 2023-04-16
+* New feature: Users can now sign in or sign up using their Google/Gmail account via OAuth2.  This feature must be specifically requested for a deck as it requires manually registering the deck's url with Google.
+* New feature: Summernote Advanced WYSIWYG widget allows scripts to run.  Currently implemented on the Quest Description, Submission Details, and Instructor Notes fields.  Indicated with a red CodeView button when hovered.
+* Email authentication.  Users will now be reminded on login to verify their email addresses by clicking the verification link sent to the email address they enter in their profile.  Users can resend the verification link from their profile.  Unverified emails will be ignored when sending notifications or announcements.  This only affects user who do not register with Google Sign In unless they change the email address in their profile.
+* Set login session expiry to 8 weeks (when you tick "Remember Me")
+* Bugfixes:
+  - Summernote "Safe" widget properly escapes HTML and strips script tags.
+  - Archived quests should not apopear in maps [#1291](https://github.com/bytedeck/bytedeck/issues/1291)
+* Devops:
+  - Bump build pipeline to use Ubuntu 20.04
+  - Add missing migration check to build and pre-commit hooks
+  - Pre-commit hooks run on entire codebase
+  - Upgrade dependancies
 
 
 ### [1.19.4] 2023-03-20

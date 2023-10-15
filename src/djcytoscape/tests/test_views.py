@@ -86,7 +86,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # These will need their own tests:
         # self.assert200('djcytoscape:regenerate', args=[self.map.id])
         # self.assert200('djcytoscape:regenerate_all')
-    
+
     def test_ScapeGenerateMap__POST(self):
         """ Assert a teacher can generate a map using ScapeGenerateMapView """
         from djcytoscape.forms import GenerateQuestMapForm
@@ -98,17 +98,17 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         object_ = content_type.model_class().objects.first()
 
         form_data = generate_form_data(model_form=GenerateQuestMapForm, name='New Name')
-        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'}) 
+        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'})
 
         # check if map name exists
         self.assertFalse(CytoScape.objects.filter(name='New Name').exists())
 
         # response tests
         response = self.client.post(reverse('djcytoscape:generate_unseeded'), data=form_data)
-        
+
         # assert map exists
         self.assertTrue(CytoScape.objects.filter(name='New Name').exists())
-        
+
         # assert values are the same as form data values
         map_ = CytoScape.objects.get(name='New Name')
         self.assertEqual(map_.initial_content_type, content_type)
@@ -126,9 +126,9 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # generate form data
         content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
         object_ = content_type.model_class().objects.first()
-        
+
         form_data = generate_form_data(model_form=QuestMapForm, name='Updated Name')
-        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'}) 
+        form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'})
 
         # response tests
         response = self.client.post(reverse('djcytoscape:update', args=[self.map.pk]), data=form_data)
@@ -136,7 +136,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # assert map exists
         self.assertTrue(CytoScape.objects.filter(name='Updated Name').exists())
-        
+
         # assert values are updated
         map_ = CytoScape.objects.get(name='Updated Name')
         self.assertEqual(map_.initial_content_type, content_type)

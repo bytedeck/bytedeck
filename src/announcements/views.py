@@ -17,6 +17,7 @@ from hackerspace_online.decorators import staff_member_required
 from comments.forms import CommentForm
 from comments.models import Comment
 from notifications.signals import notify
+from siteconfig.models import SiteConfig
 from tenant.utils import get_root_url
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -70,19 +71,13 @@ def comment(request, ann_id):
                 verb=note_verb,
                 icon=icon,
             )
-            messages.success(request, ("Announcement " + note_verb))
+            messages.success(request, (f"{SiteConfig.get().custom_name_for_announcement} " + note_verb))
             return redirect(origin_path)
         else:
             messages.error(request, "There was an error with your comment.")
             return redirect(origin_path)
     else:
         raise Http404
-
-
-@non_public_only_view
-@login_required
-def list2(request, ann_id=None):
-    return list(request, ann_id, template='announcements/list2.html')
 
 
 @non_public_only_view
@@ -161,7 +156,7 @@ def copy(request, ann_id):
 
     context = {
         "title": "",
-        "heading": "Copy an Announcement",
+        "heading": f"Copy another {SiteConfig.get().custom_name_for_announcement}",
         "form": form,
         "submit_btn_value": "Create",
     }
@@ -189,25 +184,25 @@ class Create(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateView):
         if not new_announcement.draft:
             send_notifications.apply_async(args=[self.request.user.id, new_announcement.id], queue='default')
 
-        return super(Create, self).form_valid(form)
+        return super().form_valid(form)
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:
-            return "Draft Announcement created."
+            return f"Draft {SiteConfig.get().custom_name_for_announcement} created."
         else:
-            return "New Announcement published and broadcast to students!"
+            return f"New {SiteConfig.get().custom_name_for_announcement} published and broadcast to {SiteConfig.get().custom_name_for_student}s!"
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(Create, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         # Add in a QuerySet of all the books
-        context['heading'] = "Create New Announcement"
+        context['heading'] = f"Create New {SiteConfig.get().custom_name_for_announcement}"
         context['submit_btn_value'] = "Save"
         return context
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(Create, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 class Update(NonPublicOnlyViewMixin, SuccessMessageMixin, UpdateView):
@@ -217,9 +212,9 @@ class Update(NonPublicOnlyViewMixin, SuccessMessageMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
-        context = super(Update, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         # Add in a QuerySet of all the books
-        context['heading'] = "Edit Announcement"
+        context['heading'] = f"Edit {SiteConfig.get().custom_name_for_announcement}"
         context['submit_btn_value'] = "Update"
         return context
 
@@ -227,13 +222,13 @@ class Update(NonPublicOnlyViewMixin, SuccessMessageMixin, UpdateView):
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:
-            return "Draft Announcement updated."
+            return f"Draft {SiteConfig.get().custom_name_for_announcement} updated."
         else:
-            return "Announcement updated but NOT (re-)broadcasted to students."
+            return f"{SiteConfig.get().custom_name_for_announcement} updated but NOT (re-)broadcasted to {SiteConfig.get().custom_name_for_student}s."
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(Update, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
 
 class Delete(NonPublicOnlyViewMixin, DeleteView):
@@ -243,4 +238,4 @@ class Delete(NonPublicOnlyViewMixin, DeleteView):
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):
-        return super(Delete, self).dispatch(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)

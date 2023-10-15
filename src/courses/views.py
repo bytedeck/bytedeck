@@ -1,8 +1,7 @@
 import json
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
@@ -20,7 +19,7 @@ from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_b
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
+from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
 from django.db.models import Q
@@ -63,8 +62,8 @@ def mark_calculations(request, user_id=None):
     assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
     all_ranges = MarkRange.objects.filter(active=True, courses=None)
 
-    # combine assigned_ranges and all_ranges, then order by min mark
-    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark')
+    # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
+    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
 
     context = {
         'user': user,
@@ -75,6 +74,45 @@ def mark_calculations(request, user_id=None):
         'markranges': markranges,
     }
     return render(request, template_name, context)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeList(NonPublicOnlyViewMixin, ListView):
+    model = MarkRange
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeCreate(NonPublicOnlyViewMixin, CreateView):
+    model = MarkRange
+    form_class = MarkRangeForm
+    success_url = reverse_lazy('courses:markranges')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Create New Mark Range'
+        kwargs['submit_btn_value'] = 'Create'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeUpdate(NonPublicOnlyViewMixin, UpdateView):
+    model = MarkRange
+    form_class = MarkRangeForm
+    success_url = reverse_lazy('courses:markranges')
+
+    def get_context_data(self, **kwargs):
+
+        kwargs['heading'] = 'Update Mark Range'
+        kwargs['submit_btn_value'] = 'Update'
+
+        return super().get_context_data(**kwargs)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class MarkRangeDelete(NonPublicOnlyViewMixin, DeleteView):
+    model = MarkRange
+    success_url = reverse_lazy('courses:markranges')
 
 
 class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
@@ -150,6 +188,14 @@ class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
+    success_message = "Course deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -170,6 +216,7 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         user = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        kwargs['student_registration'] = False
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
 
@@ -189,6 +236,11 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
     form_class = CourseStudentStaffForm
     template_name = 'courses/coursestudent_form.html'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['student_registration'] = False
+        return kwargs
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
         ctx['heading'] = f'Update {self.object.user.username}\'s course'
@@ -199,22 +251,78 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
-class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, CreateView):
+# Student Course Registration View
+class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+
+    # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
+    def test_func(self):
+        return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
+
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
     success_message = "You have been added to the %(course)s course"
 
+    def get(self, request, *args, **kwargs):
+        # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
+        # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
+        simpleregistration = SiteConfig.get().simplified_course_registration
+        form = self.get_form()
+        form_auto_create_condition = (
+            simpleregistration and
+            form.fields['semester'].widget.input_type == 'hidden' and
+            form.fields['block'].widget.input_type == 'hidden' and
+            form.fields['course'].widget.input_type == 'hidden'
+        )
+
+        if form_auto_create_condition:
+            # form_auto_create_condition == True means only 1 active Semester, Block, Course object exists
+            # can get active objects directly with first() and siteconfig.active_semester
+            obj, created = CourseStudent.objects.get_or_create(
+                    user=self.request.user,
+                    semester=SiteConfig.get().active_semester,
+                    block=Block.objects.filter(active=True).first(),
+                    course=Course.objects.filter(active=True).first()
+            )
+
+            # after object has been created, redirect to normal success url and display normal success message
+            # fstring used instead of self.success_message because form context not available
+            if created:
+                messages.success(request, f"You have been added to the {obj.course} Course")
+            return redirect(self.success_url)
+        else:
+            return super().get(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()
-        kwargs['instance'] = CourseStudent(user=self.request.user)
+        # student registration kwarg is an argument passed to simple_registration in forms.py
+        # refer to forms.CourseStudentForm for full context
+        kwargs['student_registration'] = True
+
+        # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
+        # user is always hidden and semester always sets default, so can set both non-conditionally
+        kwargs['instance'] = CourseStudent(user=self.request.user,
+                                           semester=SiteConfig.get().active_semester)
+
+        # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
+        block_qs = Block.objects.filter(active=True)
+        course_qs = Course.objects.filter(active=True)
+
+        if block_qs.count() == 1:
+            kwargs['instance'].block = block_qs.first()
+
+        if course_qs.count() == 1:
+            kwargs['instance'].course = course_qs.first()
+
         return kwargs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
-        ctx['heading'] = 'Join a course'
+
         ctx['submit_btn_value'] = 'Join'
+        ctx['heading'] = 'Join a course'
+
         return ctx
 
 
@@ -236,6 +344,27 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+    model = Semester
+    success_url = reverse_lazy('courses:semester_list')
+    success_message = "Semester deleted."
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
+        context["registrations"] = registrations
+        return context
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
+
+
 class SemesterCreateUpdateFormsetMixin:
     formset_class = ExcludedDateFormset
 
@@ -246,8 +375,7 @@ class SemesterCreateUpdateFormsetMixin:
     def post(self, *args, **kwargs):
         self.object = self.get_object()
         forms = [self.get_form(), self.get_formset()]
-
-        if all([form.is_valid() for form in forms]):
+        if all(form.is_valid() for form in forms):
             return self.form_valid(*forms)
         return self.form_invalid(*forms)
 
@@ -321,7 +449,7 @@ class SemesterActivate(View):
     def get(self, request, *args, **kwargs):
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
-        siteconfig = SiteConfig.objects.get()
+        siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
         siteconfig.save()
 
@@ -341,7 +469,7 @@ class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Create New {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Create'
 
         return super().get_context_data(**kwargs)
@@ -355,7 +483,7 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
 
-        kwargs['heading'] = f'Update {SiteConfig.objects.get().custom_name_for_group}'
+        kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Update'
 
         return super().get_context_data(**kwargs)
@@ -365,6 +493,14 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Block
     success_url = reverse_lazy('courses:block_list')
+    success_message = "Block deleted."
+
+    def get_success_url(self) -> str:
+        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
+        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
+        """
+        messages.success(self.request, self.success_message)
+        return super().get_success_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -471,7 +607,7 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
             tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
         """
         # grab dataset
-        user_mark = self.user.profile.mark() or 0  # can be nonetype
+        user_mark = self.user.profile.mark_cached or 0  # can be nonetype
         student_marks = Semester.get_student_mark_list(Semester, students_only=True)
         # only remove user's mark from student_marks if user is part of active sem
         if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():

@@ -2,7 +2,7 @@
 {% load crispy_forms_tags %}
 {% load notification_tags %}
 
-{% block heading_inner %}Announcements
+{% block heading_inner %}{{ config.custom_name_for_announcement }}s
 {% if request.user.is_authenticated and request.user.is_staff %}
   <div class="btn-group">
     <a class="btn {% if not archived %}btn-primary{% else %}btn-default{% endif %}" href="{% url 'announcements:list' %}" role="button">Current</a>
@@ -13,7 +13,7 @@
 {% endblock %}
 
 {% block content %}
-{% if archived %}<p>This page if visible to staff only.</p>{% endif %}
+{% if archived %}<p>This page is visible to staff only.</p>{% endif %}
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div id="{{object.id}}"
@@ -108,7 +108,7 @@
           </form>
           {% else %}
             <p><i class="fa fa-ban text-danger"> </i>
-              Sorry Spammy McTrollson, you've been banned from commenting on announcements.  If you would like this privilege back, you can grovel for forgiveness from Mr C.</p>
+              {{ config.banned_from_comments_text }}</p>
           {% endif %}
         </li>
       </ul>
@@ -139,6 +139,7 @@
 
 
 {% block js %}
+  <!-- Copy permalink to clipboard when menu item is clicked -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
   <script>
     const permalinks = document.querySelectorAll('.permalink');
@@ -161,19 +162,37 @@
       $(e.trigger).attr('title', 'Copy permalink').tooltip('fixTitle');
     });
 
-    // https://stackoverflow.com/a/37406402/3788603
-    $('.announcement-dropdown .dropdown-toggle').click(function(e) {
+    // Menus on the accordian headers
+    $('.announcement-dropdown .dropdown-toggle, .announcement-dropdown .dropdown-menu').click(function(e) {
+      // Prevent accordian expansion when clicking menus
       e.stopPropagation();
+      // Close all accordian menus
       $('.announcement-dropdown.open').removeClass('open');
+      // Only open THIS accordian menu
       $(this).closest('.dropdown').toggleClass('open');
     });
 
-    $('.announcement--delete, .announcement--edit, .announcement--copy').click(function(e) {
-      e.stopPropagation();
-      $('.announcement-dropdown.open').removeClass('open');
-      $(this).closest('.dropdown').toggleClass('open');
-    });
+    // Expand accordion based presence of a django active_id
+    {% if active_id %}
+    // E.g. announcements/1/ should expand the panel with id=collapse1
+    // /1/#comment-3 should expand panel 1 and jump to comment with id=comment-3
+    $(document).ready(function() {
+      // Check if a hash value is present in the URL
+      // if (window.location.hash) {
+        // Get the hash value
+        // var hash = window.location.hash.substr(1);
 
+        // Find the corresponding accordion element and expand it
+        $accordionElement = $('#collapse{{active_id}}');
+        $accordionElement.collapse('show');
+
+        // Find the accordion heading and panel, and add the "active" class
+        $accordionElement.prev('.panel-heading').addClass('active');
+        $accordionElement.addClass('in').attr('aria-expanded', 'true');
+
+      // }
+    });
+    {% endif %}
 
   </script>
 {% endblock %}

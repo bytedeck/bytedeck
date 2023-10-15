@@ -154,20 +154,20 @@ class ProfileTestModel(TenantTestCase):
         """ By default a new user has a rank"""
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
-    
+
     def test_mark__no_courses(self):
         """A student not in any current courses should return None"""
         # the test profile shouldn't be in any courses yet, but sanity check here
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
-    
+
     @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__single_course(self, mock_current_courses):     
+    def test_mark__single_course(self, mock_current_courses):
         mock_coursestudent = Mock()
         mock_coursestudent.calc_mark.return_value = 125
         mock_current_courses.return_value = [mock_coursestudent]
         self.assertEqual(self.profile.mark(), 125)
-    
+
     @patch('profile_manager.models.Profile.current_courses')
     def test_mark__multiple_courses(self, mock_current_courses):
         mock_coursestudent1 = Mock()

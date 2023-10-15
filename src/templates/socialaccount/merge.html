@@ -1,0 +1,28 @@
+{% extends "base_no_sidebar.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign Up" %} | {% endblock %}
+
+{% block heading %}Account Merge?<i class="pull-right fa fa-sign-in"></i>{% endblock %}
+{% block content %}
+
+  <p>
+    We noticed another account with username <strong>{{ other_account_username }}</strong> is currently using
+    <strong>{{ email_address }}</strong> in their profile, but they have not verified the email address to that account.
+  </p>
+  <p>
+    Would you like to use <strong>{{ email_address }}</strong> to sign in to the <strong>{{ other_account_username }}</strong> account?
+  </p>
+  <p>
+    If you choose No, then <strong>{{ email_address }}</strong> will be removed from the <strong>{{ other_account_username }}</strong>
+    user profile and you will be prompted to create a new account with this email address.
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button class="btn btn-primary" type="submit" name="submit" value="yes">{% trans "Yes" %}</button>
+    <button class="btn btn-default" type="submit" name="submit" value="no">{% trans "No" %}</button>
+  </form>
+{% endblock %}
+
+

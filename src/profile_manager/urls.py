@@ -13,6 +13,7 @@ app_name = 'profile_manager'
 urlpatterns = [
     url(r'^list/all/$', views.ProfileList.as_view(), name='profile_list'),
     url(r'^list/current/$', views.ProfileListCurrent.as_view(), name='profile_list_current'),
+    url(r'^list/block/(?P<pk>[0-9]+)/$', views.ProfileListBlock.as_view(), name='profile_list_block'),
     url(r'^list/staff/$', views.ProfileListStaff.as_view(), name='profile_list_staff'),
     url(r'^list/inactive/$', views.ProfileListInactive.as_view(), name='profile_list_inactive'),
     url(r'^tour/$', views.tour_complete, name='tour_complete'),
@@ -25,7 +26,9 @@ urlpatterns = [
     url(r'^edit/own/$', views.ProfileUpdateOwn.as_view(), name='profile_edit_own'),
     path('chart/<pk>/', views.TagChart.as_view(), name='tag_chart'),
 
+    path('oauth-merge-account/', views.oauth_merge_account, name='oauth_merge_account'),
     path('password/change/<int:pk>/', views.PasswordReset.as_view(), name='change_password'),
+    path('<pk>/resend-email-verification/', views.ProfileResendEmailVerification.as_view(), name='profile_resend_email_verification'),
 
     # Examples
     # Template View Example

@@ -84,7 +84,7 @@ class HasPrereqsMixin:
         (content_type/model) ObjectName
         """
         content_type = ContentType.objects.get_for_model(self).name
-        return f"({content_type}) {str(self)}" 
+        return f"({content_type}) {str(self)}"
 
 
 class IsAPrereqMixin:
@@ -100,7 +100,7 @@ class IsAPrereqMixin:
     2. if the model does not have a name field, then override the autocomplete_search_fields()  and dal_autocomplete_search_fields methods
      (see implementation below)
     3. implement the `condition_met_as_prerequisite(user, num_required)` method to the model class
-    
+
     """
 
     def condition_met_as_prerequisite(self, user, num_required):
@@ -141,14 +141,14 @@ class IsAPrereqMixin:
                     if parent_obj.active:
                         reliant_objects.append(parent_obj)
                 else:
-                    reliant_objects.append(parent_obj)     
+                    reliant_objects.append(parent_obj)
         if sort:
             reliant_objects = sorted(reliant_objects, key=str)
         return reliant_objects
 
     @staticmethod
     def autocomplete_search_fields():
-        """ 
+        """
         To help with the prerequisite choices:
         https://django-grappelli.readthedocs.io/en/latest/customization.html#autocomplete-lookups
         override this static method in the class to choose different search fields
@@ -382,14 +382,14 @@ class Prereq(IsAPrereqMixin, models.Model):
         "This value will only be meaningful for certain kinds of prereq objects such as repeatable quests, or badges."
     )
     prereq_invert = models.BooleanField(
-        default=False, verbose_name="NOT", 
+        default=False, verbose_name="NOT",
         help_text="This prerequisite is considered complete if they do NOT meet the criteria."
     )
 
     # an optional alternate prerequisite object and options
     or_prereq_content_type = models.ForeignKey(
         ContentType, related_name='or_prereq_item',
-        verbose_name="OR Type of Prerequisite", 
+        verbose_name="OR Type of Prerequisite",
         blank=True, null=True,
         on_delete=models.SET_NULL,
         limit_choices_to=limit_prereq_choices
@@ -561,6 +561,8 @@ class PrereqAllConditionsMet(models.Model):
             return json.loads(self.ids)
         return PrereqAllConditionsMet.ids.default
 
-    def set_ids(self, id_list=[]):
+    def set_ids(self, id_list=None):
+        if id_list is None:
+            id_list = []
         self.ids = str(id_list)
         self.save()

@@ -3,7 +3,7 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django_celery_beat.models import PeriodicTask
-from mock import patch
+from unittest.mock import patch
 
 from model_bakery import baker
 from django_tenants.test.cases import TenantTestCase
@@ -92,8 +92,7 @@ class NotificationTasksTests(TenantTestCase):
         self.assertEqual(type(email), EmailMultiAlternatives)
         self.assertEqual(email.to, [self.test_student1.email])
         # Default deck short name is "Deck"
-        print(email.subject)
-        self.assertEquals(email.subject, "Deck Notifications")
+        self.assertEqual(email.subject, "Deck Notifications")
 
         # https://stackoverflow.com/questions/62958111/how-to-display-html-content-of-an-emailmultialternatives-mail-object
         html_content = email.alternatives[0][0]
@@ -143,7 +142,6 @@ class NotificationTasksTests(TenantTestCase):
 
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 1)
-
 
 class CreateEmailNotificationTasksTest(TenantTestCase):
     """ Tests of the create_email_notification_tasks() method"""

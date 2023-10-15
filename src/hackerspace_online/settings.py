@@ -57,6 +57,7 @@ SHARED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
@@ -99,8 +100,13 @@ TENANT_APPS = (
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
 
+    'django.contrib.sites',  # required inside TENANT_APPS for allauth to work
+
     'hackerspace_online',
+
+    # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     'taggit',
 
@@ -123,7 +129,7 @@ TENANT_APPS = (
 INSTALLED_APPS = (
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
-    
+
     'django_tenants',
     'tenant.apps.TenantConfig',
 
@@ -144,7 +150,7 @@ INSTALLED_APPS = (
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    # 'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.google',
     # 'allauth.socialaccount.providers.facebook',
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
@@ -152,6 +158,7 @@ INSTALLED_APPS = (
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
+    'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
     'captcha',
@@ -217,6 +224,7 @@ MIDDLEWARE = [
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
 ]
 
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
@@ -455,7 +463,7 @@ GRAPPELLI_CLEAN_INPUT_TYPES = False
 
 DEFAULT_SUPERUSER_USERNAME = env('DEFAULT_SUPERUSER_USERNAME')
 DEFAULT_SUPERUSER_PASSWORD = env('DEFAULT_SUPERUSER_PASSWORD')
-DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='admin@example.com')
+DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='')
 
 
 # TENANTS ###############################################################
@@ -465,6 +473,7 @@ TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
 TENANT_DEFAULT_ADMIN_USERNAME = env('TENANT_DEFAULT_ADMIN_USERNAME')
 TENANT_DEFAULT_ADMIN_PASSWORD = env('TENANT_DEFAULT_ADMIN_PASSWORD')
+TENANT_DEFAULT_ADMIN_EMAIL = env('TENANT_DEFAULT_ADMIN_EMAIL', default='')
 
 TENANT_DEFAULT_OWNER_USERNAME = env('TENANT_DEFAULT_OWNER_USERNAME')
 TENANT_DEFAULT_OWNER_PASSWORD = env('TENANT_DEFAULT_OWNER_PASSWORD')
@@ -510,15 +519,20 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # AllAuth Configuration
-# SOCIALACCOUNT_PROVIDERS = \
-#     {'facebook':
-#          {'SCOPE': ['email', 'public_profile'],
-#           'AUTH_PARAMS': {'auth_type': 'reauthenticate'},
-#           'METHOD': 'oauth2',
-#           # 'LOCALE_FUNC': 'path.to.callable',
-#           'VERIFIED_EMAIL': False,
-#           'VERSION': 'v2.3'}
-#      }
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'offline',
+            # https://developers.google.com/identity/openid-connect/openid-connect#prompt
+            'prompt': 'select_account',
+        },
+        'OAUTH_PKCE_ENABLED': True,
+    }
+}
 
 # https://django-allauth.readthedocs.org/en/latest/configuration.html
 LOGIN_REDIRECT_URL = '/'
@@ -539,13 +553,13 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # Determines the expiration date of email confirmation mails (# of days).
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
-ACCOUNT_EMAIL_VERIFICATION = None  # (=”optional”)
+ACCOUNT_EMAIL_VERIFICATION = "optional"
 # Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
 # the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified
 # e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
-# ACCOUNT_DEFAULT_HTTP_PROTOCOL  #(=”http”)
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv("ACCOUNT_DEFAULT_HTTP_PROTOCOL", "http" if DEBUG else "https")
 # The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only –
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
@@ -561,6 +575,24 @@ ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True  # (=False)
 #  on password change. (Django 1.7+)
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGIN_URL  # (=”/”)
 ACCOUNT_PRESERVE_USERNAME_CASING = False
+ACCOUNT_UNIQUE_EMAIL = True
+
+# The maximum amount of email addresses a user can associate to his account.
+# It is safe to change this setting for an already running project –
+# it will not negatively affect users that already exceed the allowed amount.
+# Note that if you set the maximum to 1, users will not be able to change their
+# email address as they are unable to add the new address,
+# followed by removing the old address.
+# Uses the `allauth.account.models.EmailAddress`
+ACCOUNT_MAX_EMAIL_ADDRESSES = 2
+
+
+SOCIALACCOUNT_AUTO_SIGNUP = False
+SOCIALACCOUNT_FORMS = {
+    'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
+}
+SOCIALACCOUNT_EMAIL_REQUIRED = True
+SOCIALACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomSocialAccountAdapter"
 
 
 #################################
@@ -618,7 +650,6 @@ SUMMERNOTE_CONFIG = {
             # You have to include theme file in 'css' or 'css_for_inplace' before using it.
             'theme': 'monokai',
         },
-
     },
 
     # Need authentication while uploading attachments.
@@ -742,11 +773,14 @@ if DEBUG:
     # Solves an issue where django-debug-toolbar is not showing when running inside a docker container
     # See: https://gist.github.com/douglasmiranda/9de51aaba14543851ca3#gistcomment-2916867
     # get ip address for docker host
-    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
-    for ip in ips:
-        # replace last octet in IP with .1
-        ip = '{}.1'.format(ip.rsplit('.', 1)[0])
-        INTERNAL_IPS.append(ip)
+    try:
+        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+        for ip in ips:
+            # replace last octet in IP with .1
+            ip = '{}.1'.format(ip.rsplit('.', 1)[0])
+            INTERNAL_IPS.append(ip)
+    except (socket.gaierror, socket.herror, socket.timeout) as exc:
+        print(f"Error resolving hostname: {exc}. Defaulting to {INTERNAL_IPS} hosts.")
 
     # DEBUG TOOLBAR
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
@@ -771,6 +805,8 @@ if DEBUG:
         'debug_toolbar.panels.signals.SignalsPanel',
         'debug_toolbar.panels.logging.LoggingPanel',
         'debug_toolbar.panels.redirects.RedirectsPanel',
+        'debug_toolbar.panels.profiling.ProfilingPanel',
+        'debug_toolbar.panels.history.HistoryPanel',
     ]
 
     # DEBUG_TOOLBAR_CONFIG = {

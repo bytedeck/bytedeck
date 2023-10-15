@@ -37,6 +37,16 @@ def default_trial_end_date():
 
 
 class Tenant(TenantMixin):
+    # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
+    #
+    # make sure it set to False (mandatory for ByteDeck project)
+    auto_drop_schema = False
+    """
+    USE THIS WITH CAUTION!
+    Set this flag to true on a parent class if you want the schema to be
+    automatically deleted if the tenant row gets deleted.
+    """
+
     # tenant = Tenant(domain_url='test.localhost', schema_name='test', name='Test')
     name = models.CharField(
         max_length=62,  # max length of a postgres schema name is 62
@@ -50,9 +60,14 @@ class Tenant(TenantMixin):
     created_on = models.DateField(auto_now_add=True)
     owner_full_name = models.CharField(
         max_length=255, blank=True, null=True,
-        help_text="The owner of this deck."
+        help_text="DEPRECATED: the full name of the Deck Owner (set in each deck's Site Config) will be used. \
+        This field will be removed in a future update",
     )
-    owner_email = models.EmailField(null=True, blank=True)
+    owner_email = models.EmailField(
+        null=True, blank=True,
+        help_text="DEPRECATED: the verified email address of the Deck Owner (set in each deck's Site Config) will be used. \
+        This field will be removed in a future update",
+    )
     max_active_users = models.SmallIntegerField(
         default=5,
         help_text="The maximum number of users that can be active on this deck; -1 = unlimited."
@@ -73,7 +88,7 @@ class Tenant(TenantMixin):
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys
-    # instead tehy have to be found within the tenant's context / schema
+    # instead they have to be found within the tenant's context / schema
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
         help_text="This is a cached field: the number of staff users, plus the number student users currently \
@@ -93,6 +108,11 @@ class Tenant(TenantMixin):
     last_staff_login = models.DateTimeField(
         blank=True, null=True,
         help_text="This is a cached field: the last time a staff user logged in to the deck."
+    )
+
+    google_signon_enabled = models.BooleanField(
+        default=False,
+        help_text="This is a cached field: Whether Google signon has been enabled for this deck."
     )
     # END CALCULATED / CACHED FIELDS ##################################
 
@@ -114,7 +134,16 @@ class Tenant(TenantMixin):
         self.total_user_count = self.get_total_user_count()
         self.quest_count = self.get_quest_count()
         self.last_staff_login = self.get_last_staff_login()
+        self.google_signon_enabled = self.get_google_signon_enabled()
         self.save()
+
+    def get_google_signon_enabled(self):
+        """
+        Returns whether Google signon has been enabled for this tenant by accessing the tenant's SiteConfig option
+        """
+        SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
+        site_config = SiteConfig.get()
+        return site_config.enable_google_signin
 
     def get_total_user_count(self):
         """
@@ -168,9 +197,9 @@ class Tenant(TenantMixin):
 
         domain_url = self.get_primary_domain().domain
         if 'localhost' in domain_url:  # Development
-            return "http://{}:8000".format(domain_url)
+            return f"http://{domain_url}:8000"
         else:  # Production
-            return "https://{}".format(domain_url)
+            return f"https://{domain_url}"
 
     @classmethod
     def get(cls):

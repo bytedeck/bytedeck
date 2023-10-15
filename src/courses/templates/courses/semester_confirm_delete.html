@@ -1,0 +1,36 @@
+{% extends "courses/base.html" %}
+
+{% block head_title %}Semesters | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block heading_inner %} Delete Semester {% endblock %}
+
+{% block content %}
+    <div class="well">
+        <p>Semester ID: {{object.id}}</p>
+        <p>First Day: {{object.first_day}}</p>
+        <p>Last Day: {{object.last_day}}</p>
+    </div>
+
+    {% if object.closed %}
+    <p class="text-danger"><b>Unable to delete Semester as it has been closed.</b></p>
+    {% elif object == config.active_semester %}
+    <p class="text-danger"><b>Unable to delete Semester as it is currently the active semester.</b></p>
+    {% elif registrations %}
+    <p class="text-danger"><b>Unable to delete Semester as it has students registered in courses.</b></p>
+    <h3>Registered Students: </h3>
+    <ol>
+        {% for registration in registrations %}
+        <li>{{ registration }}</li>
+        {% endfor %}
+    </ol>
+
+    {% else %}
+    <form action="" method="post">{% csrf_token %}
+        <p>Are you sure you want to delete this Semester?<p>
+
+        <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Delete" class="btn btn-danger" />
+    </form>
+    {% endif %}
+{% endblock %}

@@ -21,7 +21,7 @@ class RestrictedFileField(models.FileField):
     """
 
     def __init__(self, **kwargs):
-        self.content_types = kwargs.pop("content_types", ["text/css"])
+        self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
 
         super().__init__(**kwargs)
@@ -80,6 +80,6 @@ class MenuItem(models.Model):
 
     def __str__(self):
         target = 'target="_blank"' if self.open_link_in_new_tab else ''
-        return '<a href="{0}" {1}>' \
-               '<i class="fa fa-fw fa-{2}"></i>&nbsp;&nbsp;{3}' \
+        return '<a href="{}" {} class="menuitem">' \
+               '<i class="fa fa-fw fa-{}"></i>&nbsp;&nbsp;{}' \
                '</a>'.format(self.url, target, self.fa_icon, self.label)
