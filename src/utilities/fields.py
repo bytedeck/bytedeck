@@ -174,7 +174,10 @@ class AllowedGFKChoiceField(GFKChoiceField):
             # django_content_type (e.g. sqlite)
             pass
 
-        super().__init__(QuerySetSequence(*[x.objects.all() for x in model_classes]), *args, **kwargs)
+        querysetsequence = self.overridden_querysetsequence(
+            QuerySetSequence(*[x.objects.all() for x in model_classes])
+        )
+        super().__init__(querysetsequence, *args, **kwargs)
 
         search_fields = {}
         for qs in self.queryset.get_querysets():
@@ -190,6 +193,14 @@ class AllowedGFKChoiceField(GFKChoiceField):
         raise NotImplementedError(
             '%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__
         )
+
+    def overridden_querysetsequence(self, querysetsequence: QuerySetSequence) -> QuerySetSequence:
+        """
+        Returns overridden QuerySetSequence instance.
+
+        Called inside __init__(), subclass should override for any actions to run.
+        """
+        return querysetsequence
 
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
