@@ -17,6 +17,8 @@ from django.contrib.admin.utils import unquote
 from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
 from django.utils.translation import gettext as _
+from django.utils.html import format_html
+from django.utils.formats import date_format
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
@@ -126,7 +128,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
         'owner_email_text', 'owner_email_deprecated',
         'last_staff_login', 'google_signon_enabled',
-        'paid_until', 'trial_end_date',
+        'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
@@ -186,6 +188,28 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """This field will be removed in a future update"""
         return obj.owner_email
     owner_email_deprecated.admin_order_field = "owner_email"
+
+    @admin.display(description="paid until", ordering="paid_until")
+    def paid_until_text(self, obj):
+        """Returns htmlized value of `paid_until` field"""
+        if not obj.paid_until:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.paid_until,
+            date_format(obj.paid_until, use_l10n=True),
+        )
+
+    @admin.display(description="trial end date", ordering="trial_end_date")
+    def trial_end_date_text(self, obj):
+        """Returns htmlized value of `trial_end_date` field"""
+        if not obj.trial_end_date:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.trial_end_date,
+            date_format(obj.trial_end_date, use_l10n=True),
+        )
 
     def get_search_results(self, request, queryset, search_term):
         """
