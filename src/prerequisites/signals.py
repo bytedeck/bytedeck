@@ -33,8 +33,17 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
         return
 
     list_of_models = ('BadgeAssertion', 'QuestSubmission', 'CourseStudent')
+
     if sender.__name__ in list_of_models:
         # TODO Since the cache is only for quests (as prereq parent object), only need to send for affected quests, not ALL quests?
+
+        # To prevent triggering update_quest_conditions_for_user more than once,
+        # we check if the QuestSubmission is complete and approved.
+        # When both conditions are met, that would be the only time we want to update available quests
+        # for the user.
+        if isinstance(instance, QuestSubmission) and (instance.is_completed is False or instance.is_approved is False):
+            return
+
         update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
 
 
