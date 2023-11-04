@@ -1,5 +1,6 @@
 # With help from https://stackoverflow.com/questions/6498488/testing-admin-modeladmin-in-django
 from unittest.mock import patch
+from datetime import date
 
 from django.conf import settings
 from django.contrib import admin
@@ -114,6 +115,8 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 schema_name="extra",
                 name="extra",
             )
+            self.extra_tenant.paid_until = date(2032, 1, 1)
+            self.extra_tenant.trial_end_date = date(2022, 1, 1)
             self.extra_tenant.save()
 
         # update "owner" and add missing email address
@@ -168,6 +171,42 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         self.assertEqual(response.status_code, 200)
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "john@doe.com")
+
+    def test_paid_until_text_column(self):
+        """
+        Test whether content of htmlized column "paid_until_text" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
+
+    def test_trial_end_date_text_column(self):
+        """
+        Test whether content of htmlized column "trial_end_date" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
     def test_search_on_custom_fields(self):
         """
