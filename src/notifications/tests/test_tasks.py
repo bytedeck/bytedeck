@@ -71,6 +71,10 @@ class NotificationTasksTests(TenantTestCase):
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 2)
 
+    def test_email_notifications_to_users_on_all_schemas(self):
+        task_result = tasks.email_notification_to_users_on_all_schemas.apply()
+        self.assertTrue(task_result.successful())
+
     def test_email_notifications_to_users(self):
         task_result = tasks.email_notifications_to_users_on_schema.apply(
             kwargs={
