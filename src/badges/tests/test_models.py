@@ -157,9 +157,9 @@ class BadgeAssertionManagerTest(TenantTestCase):
         """
 
         # create badges to assign to user
-        badge1 = baker.make(Badge)  # sort order should default to 0 when not set
-        badge2 = baker.make(Badge, sort_order=1)
-        badge3 = baker.make(Badge, sort_order=2)
+        badge1 = baker.make(Badge, name='Badge 0')  # sort order should default to 0 when not set
+        badge2 = baker.make(Badge, name='Badge 1', sort_order=1)
+        badge3 = baker.make(Badge, name='Badge 2', sort_order=2)
 
         # give the student two of badge1
         badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge1)

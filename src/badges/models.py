@@ -270,7 +270,8 @@ class BadgeAssertionManager(models.Manager):
         This only works in a postgresql database, but the app is designed around postgres
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
-        qs = self.get_queryset(False).select_related('badge', 'badge__badge_type').get_user(user).order_by('badge_id').distinct('badge_id')
+        qs = self.get_queryset(False).prefetch_related('badge', 'badge__badge_type').get_user(user).order_by('badge_id').distinct('badge_id')
+
         sorted_qs = sorted(qs, key=lambda x: [(x.badge.badge_type.sort_order or 0), (x.badge.sort_order or 0)])  # sort_order defaults to 0 if not set
 
         return sorted_qs
