@@ -101,7 +101,7 @@
         <i class="fa fa-user fa-fw"></i>&nbsp; Profile
       </a>
       <a id="portfolio-menu" class="list-group-item {% if '/portfolios/' in request.path_info %}active{% endif %}"
-         href="{% url 'portfolios:detail' request.user.id %}">
+         href="{% url 'portfolios:current_user' %}">
         <i class="fa fa-picture-o fa-fw"></i>&nbsp; Portfolio
       </a>
     </div>
