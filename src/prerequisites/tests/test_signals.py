@@ -65,6 +65,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
         """
         Updating a quest_submission (when completing a quest) should trigger a signal
         """
+        self.quest_submission.is_approved = True
         self.quest_submission.is_completed = True
         self.quest_submission.save()
         self.assertEqual(task.call_count, 1)
