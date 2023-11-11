@@ -599,7 +599,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub), repr(sub2)], ordered=False)
 
     def test_for_teachers_only__with_deleted_quest(self):
-        """for_teachers_only shouldn't break if a submission's quest has been deleted"""
+        """for_teachers_only QuestSubmissions should be deleted for that quest if it is deleted"""
 
         self.quest = baker.make(Quest)
         self.active_semester = baker.make(Semester)
@@ -612,19 +612,8 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
         self.quest.delete()
         qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
 
-        # Add another submission from a different block, but this time the quest should notify the teacher
-        quest2 = baker.make(Quest, specific_teacher_to_notify=self.teacher)
-        sub2 = baker.make(QuestSubmission, semester=self.active_semester, quest=quest2)
-        qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>', repr(sub2)], ordered=False)
-
-        # Delete this one too, shouldn't crash!
-        quest2.delete()
-        qs = QuestSubmission.objects.all()
-        # Only has the first deleted sub, because the second one no longer has a quest.specific_teacher_to_notify, so not included.
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
+        self.assertTrue(qs.count() == 0)
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)

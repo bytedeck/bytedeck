@@ -247,7 +247,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "There are currently no new quest available to you!")
 
         # Only hidden quests #################################################
-
+        Quest.objects.all().delete()
         # add a new quest available to the user
         quest = baker.make(Quest, name="hide me")
         # but adding a new quest won't make it appear in their available list, because the available list is cached
@@ -261,6 +261,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Now hide it
         user.profile.hide_quest(quest.id)
         self.assertEqual(user.profile.num_hidden_quests(), 1)  # Sanity check that the quest is hidden
+
         self.assertFalse(Quest.objects.get_available(user).exists())  # Should not show up here cus hidden
         response = self.client.get(url)
         self.assertContains(response, "You have no new quests available")
