@@ -9,23 +9,54 @@
 
         // https://stackoverflow.com/a/4017627/2700631
         $('table#result_list tbody tr').each(function() {
-            $max_users_cell = $(this).children('td.field-max_active_users')
-            max_users = Number($max_users_cell.text());
+            $max_users_cell = $(this).children('td.field-max_active_users');
+            $active_users_cell = $(this).children('td.field-active_user_count');
 
-            $active_users_cell = $(this).children('td.field-active_user_count')
+            max_users = Number($max_users_cell.text());
             active_users = Number($active_users_cell.text());
             if (active_users > max_users && max_users > -1) {  // -1 indicates unlimited
                 $active_users_cell.css('background-color', 'gold');
                 $max_users_cell.css('background-color', 'gold');
             }
 
-            // paid_until = $(this).children('td.field-paid_until').text();
-            // trial_end = $(this).children('td.field-trial_end_date').text();
+            // get current date
+            var now = new Date("{% now "Y-m-d" %}");
 
-            // console.log(paid_until);
-            // console.log(trial_end);
-
-
+            // public tenant list expiry date highlights
+            $paid_until_cell = $(this).children('td.field-paid_until_text');
+            if ($paid_until_cell.children('span').attr("data-date")) {
+                var paid_until = new Date($paid_until_cell.children('span').attr("data-date"));
+                // highlight green if current date is < date
+                if (now < paid_until) {
+                    $paid_until_cell.css('background-color', 'lime');
+                }
+                if (now >= paid_until) {
+                    // now - paid_until returns difference in milliseconds, then convert it to days
+                    var days = Number(new Date(now - paid_until) / 1000 / 60 / 60 / 24);
+                    // highlighted red if current date > 30 days AFTER the date
+                    if (days > 30) {
+                        $paid_until_cell.css('background-color', 'tomato');
+                    }
+                    else {
+                        // highlighted yellow if current date is 0-30 days AFTER the date
+                        $paid_until_cell.css('background-color', 'gold');
+                    }
+                }
+            }
+            $trial_end_cell = $(this).children('td.field-trial_end_date_text');
+            if ($trial_end_cell.children('span').attr("data-date")) {
+                var trial_end = new Date($trial_end_cell.children('span').attr("data-date"));
+                // highlight green if current date < trial end date
+                if (now < trial_end) {
+                    $trial_end_cell.css('background-color', 'lime');
+                }
+                if (now > trial_end) {
+                    // highlight yellow if current date > trial end date AND paid until date is None
+                    if (!$paid_until_cell.children('span').attr("data-date")) {
+                        $trial_end_cell.css('background-color', 'gold');
+                    }
+                }
+            }
         });
     });
 })(django.jQuery);

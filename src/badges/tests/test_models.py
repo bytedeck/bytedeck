@@ -151,15 +151,15 @@ class BadgeAssertionManagerTest(TenantTestCase):
     def test_all_for_user_distinct(self):
         """
         BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions assigned to a user
-        that are distinct by badge, and sorted by badge.sort_order
+        that are distinct by badge, and sorted by badge.badge_type.sort_order, badge.sort_order
 
         Badge objects without a defined sort_order value should default to sort_order = 0
         """
 
         # create badges to assign to user
-        badge1 = baker.make(Badge)  # sort order should default to 0 when not set
-        badge2 = baker.make(Badge, sort_order=1)
-        badge3 = baker.make(Badge, sort_order=2)
+        badge1 = baker.make(Badge, name='Badge 0')  # sort order should default to 0 when not set
+        badge2 = baker.make(Badge, name='Badge 1', sort_order=1)
+        badge3 = baker.make(Badge, name='Badge 2', sort_order=2)
 
         # give the student two of badge1
         badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge1)
@@ -175,6 +175,30 @@ class BadgeAssertionManagerTest(TenantTestCase):
         # and they should be sorted by badge.sort_order
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
         self.assertQuerysetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
+
+    def test_all_for_user_distinct__badge_type_order_correct(self):
+        """
+        This test is the same with test_all_for_user_distinct, except that this test checks
+        that the badges are sorted by badge_type.sort_order, badge.sort_order.
+        """
+
+        # create badges to assign to user but with badge_type in reverse order
+        badge1 = baker.make(Badge, name='Badge 0', badge_type__sort_order=2)
+        badge2 = baker.make(Badge, name='Badge 1', badge_type__sort_order=1, sort_order=1)
+        badge3 = baker.make(Badge, name='Badge 2', badge_type__sort_order=0, sort_order=2)
+
+        # give the student two of badge1
+        badge_assertion = baker.make(BadgeAssertion, user=self.student, badge=badge1)
+        baker.make(BadgeAssertion, user=self.student, badge=badge1)  # should not be returned by all_for_user_distinct so not stored in a variable
+
+        # one of badge2
+        badge_assertion2 = baker.make(BadgeAssertion, user=self.student, badge=badge2)
+
+        # and one of badge3
+        badge_assertion3 = baker.make(BadgeAssertion, user=self.student, badge=badge3)
+
+        qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
+        self.assertQuerysetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
 
 
 class BadgeAssertionTestModel(TenantTestCase):

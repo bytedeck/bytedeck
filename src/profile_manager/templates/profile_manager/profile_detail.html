@@ -24,9 +24,15 @@
           role="button"><i class="fa fa-line-chart"></i></a>
       {% endif %}
 
-      <a class= "btn btn-success" title="View your Portfolio"
-        href="{% url 'portfolios:detail' object.user.id %}"
-        role="button"><i class="fa fa-picture-o"></i></a>
+      {% if request.user == object.user %}
+        <a class= "btn btn-success" title="View your Portfolio"
+          href="{% url 'portfolios:current_user' %}"
+          role="button"><i class="fa fa-picture-o"></i></a>
+      {% else %}
+        <a class= "btn btn-success" title="View their Portfolio"
+          href="{% url 'portfolios:detail' object.user_id %}"
+          role="button"><i class="fa fa-picture-o"></i></a>
+      {% endif %}
     </div>
 {% endblock %}
 

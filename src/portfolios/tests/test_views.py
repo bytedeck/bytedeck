@@ -158,6 +158,8 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(Portfolio.objects.filter(user=user).exists())
 
         self.client.force_login(user)
+
+        self.assert200('portfolios:detail', args=[user.pk])
         self.assert200('portfolios:current_user')
 
         # accessing the detail page above should have created the portfolio
