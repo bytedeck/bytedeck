@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -25,6 +26,8 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         confirmations are sent outside of the request context `request`
         can be `None` here.
         """
+        # clear the ``Site`` object cache
+        Site.objects.clear_cache()
         url = reverse("account_confirm_email", args=[emailconfirmation.key])
         ret = build_absolute_uri(request=None, location=url)
         return ret
