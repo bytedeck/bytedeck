@@ -196,6 +196,22 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertIn(profile_name, response.content.decode())
 
+    def test_profile_detail__returns_correct_profile(self):
+        """
+        When accessing another profile as a staff, the correct profile should be returned
+        """
+
+        # Login a student
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        # View another profile
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student2.profile.pk]))
+
+        profile_name = f"{self.test_student2.profile.get_preferred_name()}&#x27;s Profile"
+
+        self.assertIn(profile_name, response.content.decode())
+
     def test_student_view_marks_404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.
