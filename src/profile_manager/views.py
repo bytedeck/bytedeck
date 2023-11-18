@@ -174,12 +174,11 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
 
     def get_object(self):
         pk = self.kwargs.get('pk')
-        profile = self.request.user.profile
-
         if pk is not None:
             profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
+            return profile
 
-        return profile
+        raise Http404
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
