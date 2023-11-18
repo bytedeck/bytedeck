@@ -36,6 +36,6 @@ urlpatterns = [
     # url(r'^example/$', TemplateView.as_view(template_name='example.html'), name='example'),
     # Function based view example, same as above
     # url(r'^example/$', 'views.example', name='example'),
-    # ex: /profile/25/
+    # example: /profile/25/
     # url(r'^(?P<profile_id>[0-9]+)/$', views.profile, name='profile'),
 ]
