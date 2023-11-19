@@ -30,7 +30,7 @@ def send_notifications(user_id, announcement_id):
     )
 
 
-def get_users_to_email():
+def get_users_to_email_for_announcements():
     students_to_email = list(
         CourseStudent.objects.all_users_for_active_semester()
                              .filter(emailaddress__verified=True, emailaddress__primary=True)
@@ -43,6 +43,7 @@ def get_users_to_email():
                     .filter(emailaddress__verified=True, emailaddress__primary=True)
                     .filter(profile__get_announcements_by_email=True)
                     .exclude(email='')
+                    .exclude(email__isnull=True)
                     .values_list('email', flat=True))
 
     users_to_email = list(set(students_to_email + teachers_to_email))
@@ -67,7 +68,7 @@ def send_announcement_emails(content, root_url, absolute_url):
         subject,
         body=text_content,
         to=['contact@bytedeck.com'],
-        bcc=get_users_to_email(),
+        bcc=get_users_to_email_for_announcements(),
     )
     email_msg.attach_alternative(html_content, "text/html")
     email_msg.send()

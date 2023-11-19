@@ -12,7 +12,7 @@ from model_bakery import baker
 
 from announcements import tasks
 from announcements.models import Announcement
-from announcements.tasks import get_users_to_email
+from announcements.tasks import get_users_to_email_for_announcements
 from courses.models import Course, CourseStudent
 from siteconfig.models import SiteConfig
 
@@ -79,7 +79,7 @@ class AnnouncementTasksTests(TenantTestCase):
                            user=user,
                            course=course,
                            semester=semester)
-        emails = get_users_to_email()
+        emails = get_users_to_email_for_announcements()
 
         # Everyone is unverified so this should be 0
         self.assertEqual(len(emails), 0)
@@ -91,7 +91,7 @@ class AnnouncementTasksTests(TenantTestCase):
         for user_obj in User.objects.filter(email__isnull=False).exclude(email=''):
             EmailAddress.objects.create(user=user_obj, email=user_obj.email, verified=True, primary=True)
 
-        emails = get_users_to_email()
+        emails = get_users_to_email_for_announcements()
 
         self.assertEqual(len(emails), 12 if settings.TENANT_DEFAULT_OWNER_EMAIL else 11)  # 11 + deck owner = 12
 
