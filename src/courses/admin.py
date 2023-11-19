@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
-from .models import Semester, ExcludedDate, DateType, Block, CourseStudent, Course, Rank, Grade, MarkRange
+from .models import Semester, ExcludedDate, Block, CourseStudent, Course, Rank, Grade, MarkRange
 
 
 class ExcludedDateInline(admin.TabularInline):
@@ -51,7 +51,6 @@ admin.site.register(Rank, RankAdmin)
 admin.site.register(Block, BlockAdmin)
 admin.site.register(Grade, GradeAdmin)
 admin.site.register(Course, CourseAdmin)
-admin.site.register(DateType, DataTypeAdmin)
 admin.site.register(Semester, SemesterAdmin)
 admin.site.register(MarkRange, MarkRangeAdmin)
 admin.site.register(CourseStudent, CourseStudentAdmin)
