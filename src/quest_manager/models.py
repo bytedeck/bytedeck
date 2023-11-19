@@ -565,6 +565,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         # utilize existing code in QuestQuerySet method not_expired()
         return not Quest.objects.filter(id=self.id).not_expired().exists()
 
+    def remove_as_prereq(self):
+        """
+        When a quest is archived, remove it from all prerequisite lists
+        """
+        if self.archived:
+            self.prereq_prereq.all().delete()
+
 
 # QuestSubmission ###############################################
 
