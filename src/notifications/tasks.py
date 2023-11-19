@@ -10,6 +10,8 @@ from django_tenants.utils import get_tenant_model
 
 from hackerspace_online.celery import app
 from quest_manager.models import QuestSubmission
+
+from courses.models import CourseStudent
 # from celery import shared_task
 
 from siteconfig.models import SiteConfig
@@ -28,8 +30,29 @@ def email_notifications_to_users(root_url):
     # send_email_notification_tenant.delay(root_url)
 
 
+def get_users_to_email_for_notifications():
+    students_to_email = list(
+        CourseStudent.objects.all_users_for_active_semester()
+                             .filter(emailaddress__verified=True, emailaddress__primary=True)
+                             .filter(profile__get_notifications_by_email=True)
+                             .exclude(email='')
+                             .values_list('email', flat=True))
+
+    teachers_to_email = list(
+        User.objects.filter(is_staff=True)
+                    .filter(emailaddress__verified=True, emailaddress__primary=True)
+                    .filter(profile__get_notifications_by_email=True)
+                    .exclude(email='')
+                    .exclude(email__isnull=True)
+                    .values_list('email', flat=True))
+
+    users_to_email = list(set(students_to_email + teachers_to_email))
+
+    return users_to_email
+
+
 def get_notification_emails(root_url):
-    users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
+    users_to_email = User.objects.filter(email__in=get_users_to_email_for_notifications())
 
     notification_emails = []
 
