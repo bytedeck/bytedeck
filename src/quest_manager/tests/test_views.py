@@ -25,7 +25,10 @@ from courses.models import Block
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from quest_manager.forms import QuestForm
 from siteconfig.models import SiteConfig
+
+from hackerspace_online.tests.utils import model_to_form_data
 
 User = get_user_model()
 
@@ -1037,6 +1040,36 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+    def test_archive_quest__removes_quest_from_prereqs(self):
+        """
+        Test where archiving a quest removes itself from being a prerequisite of other objects.
+        """
+
+        quest_as_prereq = baker.make(Quest, name="Requirement for other quest")
+
+        self.client.force_login(self.test_teacher)
+        self.minimal_valid_form_data['new_quest_prerequisite'] = quest_as_prereq.id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge').id
+        response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertEqual(new_quest.prereqs().count(), 2)
+
+        form_data = model_to_form_data(quest_as_prereq, QuestForm)
+        form_data['archived'] = True
+
+        # Archive the quest_as_prereq
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_as_prereq.pk}),
+            data=form_data
+        )
+
+        quest_as_prereq.refresh_from_db()
+        self.assertTrue(quest_as_prereq.archived)
+
+        # Because the quest was archived, there should be 1 less prereq
+        self.assertEqual(new_quest.prereqs().count(), 1)
 
     # TODO
     # TAs should not be able to make a quest visible_to_students
