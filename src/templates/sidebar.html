@@ -64,12 +64,6 @@
       <i class="fa fa-certificate fa-fw"></i>&nbsp; {{ config.custom_name_for_badge }}s
     </a>
     {% endif %}
-    <a id="announcements-menu"
-      class="list-group-item {% if '/announcement/' in request.path_info %}active{% endif %}"
-      href="{% url 'announcements:list' %}">
-      <i class="fa fa-newspaper-o fa-fw"></i>&nbsp; {{ config.custom_name_for_announcement }}s
-    </a>
-
  </div>
 
   {% side_menu_list %}
