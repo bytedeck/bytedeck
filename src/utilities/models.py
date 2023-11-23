@@ -109,6 +109,22 @@ class MenuItem(models.Model):
     objects = MenuItemQueryset.as_manager()
 
     SIDE_MENU_ITEMS = {
+        "Maps": {
+            "label": "Maps",
+            "fa_icon": "map-signs",
+            "url": "/maps/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 0
+        },
+        "Announcements": {
+            "label": "Announcements",
+            "fa_icon": "newspaper-o",
+            "url": "/announcements/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 1
+        },
         "Profile": {
             "label": "Profile",
             "fa_icon": "user",
