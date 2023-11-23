@@ -23,6 +23,7 @@ urlpatterns = [
     url(r'^(?P<profile_id>[0-9]+)/comment_ban_toggle/$', views.comment_ban_toggle, name='comment_ban_toggle'),
     url(r'^(?P<profile_id>[0-9]+)/comment_ban/$', views.comment_ban, name='comment_ban'),
     url(r'^(?P<pk>[0-9]+)/edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
+    url(r'^own/$', views.ProfileDetailOwn.as_view(), name='profile_own'),
     url(r'^edit/own/$', views.ProfileUpdateOwn.as_view(), name='profile_edit_own'),
     path('chart/<pk>/', views.TagChart.as_view(), name='tag_chart'),
 
@@ -35,6 +36,6 @@ urlpatterns = [
     # url(r'^example/$', TemplateView.as_view(template_name='example.html'), name='example'),
     # Function based view example, same as above
     # url(r'^example/$', 'views.example', name='example'),
-    # ex: /profile/25/
+    # example: /profile/25/
     # url(r'^(?P<profile_id>[0-9]+)/$', views.profile, name='profile'),
 ]

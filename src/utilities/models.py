@@ -63,6 +63,36 @@ class VideoResource(models.Model):
         return self.title + ": " + str(self.video_file)
 
 
+class MenuItemQueryset(models.QuerySet):
+
+    def get_visible_items(self):
+        return self.filter(visible=True)
+
+    def get_main_menu_items(self):
+        return self.filter(is_side_menu=False)
+
+    def get_side_menu_items(self):
+        self.get_or_create_default_side_menu_items()
+        return self.filter(is_side_menu=True)
+
+    def get_or_create_default_side_menu_items(self):
+        """
+        Create if these items don't exist yet, else return them
+        These are the default items which are non-deletable but can be set to visible = False
+        """
+
+        labels = list(self.model.SIDE_MENU_ITEMS.keys())
+        menu_items = self.filter(label__in=labels)
+
+        if menu_items.count() == len(labels):
+            return menu_items
+
+        for menu_item, defaults in self.model.SIDE_MENU_ITEMS.items():
+            self.get_or_create(label=menu_item, defaults=defaults)
+
+        return self.filter(label__in=labels)
+
+
 class MenuItem(models.Model):
 
     label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.")
@@ -74,12 +104,72 @@ class MenuItem(models.Model):
     open_link_in_new_tab = models.BooleanField()
     sort_order = models.IntegerField(default=0, help_text="Lowest will be at the top.")
     visible = models.BooleanField(default=True)
+    is_side_menu = models.BooleanField(default=False, help_text="If true, this will be displayed in the side menu")
+
+    objects = MenuItemQueryset.as_manager()
+
+    SIDE_MENU_ITEMS = {
+        "Maps": {
+            "label": "Maps",
+            "fa_icon": "map-signs",
+            "url": "/maps/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 0
+        },
+        "Announcements": {
+            "label": "Announcements",
+            "fa_icon": "newspaper-o",
+            "url": "/announcements/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 1
+        },
+        "Profile": {
+            "label": "Profile",
+            "fa_icon": "user",
+            "url": "/profiles/own/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 2
+        },
+        "Portfolio": {
+            "label": "Portfolio",
+            "fa_icon": "picture-o",
+            "url": "/portfolios/detail/",
+            "open_link_in_new_tab": False,
+            "is_side_menu": True,
+            "sort_order": 3
+        },
+    }
 
     class Meta:
-        ordering = ["sort_order"]
+        ordering = ["sort_order", "label"]
+        constraints = [
+            models.UniqueConstraint(fields=['label', 'is_side_menu'], name='unique_menu_item_label', deferrable=models.Deferrable.DEFERRED)
+        ]
 
     def __str__(self):
         target = 'target="_blank"' if self.open_link_in_new_tab else ''
-        return '<a href="{}" {} class="menuitem">' \
-               '<i class="fa fa-fw fa-{}"></i>&nbsp;&nbsp;{}' \
-               '</a>'.format(self.url, target, self.fa_icon, self.label)
+        return (
+            f'<a href="{self.url}" {target} class="menuitem">'
+            f'<i class="fa fa-fw fa-{self.fa_icon}"></i>&nbsp;&nbsp;{self.label}</a>'
+        )
+
+    def can_edit(self):
+        """
+        Returns True if this menu item can be edited.
+        """
+        if self.label in self.SIDE_MENU_ITEMS:
+            return False
+
+        return True
+
+    def can_delete(self):
+        """
+        Returns True if this menu item can be deleted.
+        """
+        if self.label in self.SIDE_MENU_ITEMS:
+            return False
+
+        return True

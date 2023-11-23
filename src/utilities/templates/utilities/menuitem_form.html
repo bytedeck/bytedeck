@@ -1,7 +1,7 @@
 {% extends "utilities/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block head_title%} Menu Items | {% endblock%}
+{% block head_title%} {% if is_side_menu == 'true'%}Side {% endif %}Menu Items | {% endblock%}
 
 {% block heading_inner %} {{ heading }}{% endblock %}
 
@@ -12,9 +12,24 @@
 
             {{ form|crispy }}
 
-            <a href="{% url 'utilities:menu_items' %}" role="button" class="btn btn-danger">Cancel</a>
+            <a href="{% url 'utilities:menu_items' %}?is_side_menu={{ is_side_menu }}" role="button" class="btn btn-danger">Cancel</a>
             <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/>
         </form>
 
     </div>
+{% endblock %}
+
+{% block js %}
+
+{# Add FontAwesome Icon Preview while typing #}
+<script>
+  $('#div_id_fa_icon').append(
+    '<span class="help-block">Preview: <span id="id_fa_icon_preview" class="fa fa-2x fa-fw fa-{{ form.instance.fa_icon }}"></span></span>'
+  );
+
+  $('#id_fa_icon').keyup(function() {
+    const newClass = "fa fa-2x fa-fw fa-" + $(this).val();
+    $('#id_fa_icon_preview').attr("class", newClass);
+  });
+</script>
 {% endblock %}
