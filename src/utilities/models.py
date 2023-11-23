@@ -128,7 +128,7 @@ class MenuItem(models.Model):
     }
 
     class Meta:
-        ordering = ["sort_order"]
+        ordering = ["sort_order", "label"]
         constraints = [
             models.UniqueConstraint(fields=['label', 'is_side_menu'], name='unique_menu_item_label', deferrable=models.Deferrable.DEFERRED)
         ]
