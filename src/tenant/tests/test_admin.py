@@ -1,5 +1,6 @@
 # With help from https://stackoverflow.com/questions/6498488/testing-admin-modeladmin-in-django
 from unittest.mock import patch
+from datetime import date
 
 from django.conf import settings
 from django.contrib import admin
@@ -114,6 +115,8 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 schema_name="extra",
                 name="extra",
             )
+            self.extra_tenant.paid_until = date(2032, 1, 1)
+            self.extra_tenant.trial_end_date = date(2022, 1, 1)
             self.extra_tenant.save()
 
         # update "owner" and add missing email address
@@ -168,6 +171,42 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         self.assertEqual(response.status_code, 200)
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "john@doe.com")
+
+    def test_paid_until_text_column(self):
+        """
+        Test whether content of htmlized column "paid_until_text" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
+
+    def test_trial_end_date_text_column(self):
+        """
+        Test whether content of htmlized column "trial_end_date" is present in admin list view or not.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # assert the content of custom column is present on changelist page
+        self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
     def test_search_on_custom_fields(self):
         """
@@ -586,7 +625,21 @@ class TenantAdminActionsTest(TenantTestCase):
             )
             self.extra_tenant.save()
 
-        # update "owner" and add missing email address
+        # update "owner" and add *unverified* email address
+        with tenant_context(self.tenant):
+            config = SiteConfig.get()
+            if config.deck_owner is not None and not config.deck_owner.email:
+                # using different name/email to test fallback feature
+                config.deck_owner.first_name = "Jane"
+                config.deck_owner.last_name = "Doe"
+                config.deck_owner.save()
+                # add *unverified* email address (done via allauth)
+                email_address = EmailAddress.objects.add_email(
+                    request=None, user=config.deck_owner, email="jane@doe.com")
+                email_address.set_as_primary()
+                email_address.save()
+
+        # update "owner" and add *verified* email address
         with tenant_context(self.extra_tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
@@ -609,9 +662,97 @@ class TenantAdminActionsTest(TenantTestCase):
     def tearDown(self):
         app.conf.task_always_eager = self.old_celery_always_eager
 
-    def test_model_admin_send_email_message_action(self):
+    def test_model_admin_message_unverified_action(self):
         """
-        The send_email_message action on public tenant sends emails to selected tenant "owners".
+        The message_unverified action on public tenant sends emails to selected tenant "owners",
+        using both *verified* and *unverified* email addresses.
+        """
+        # first case, access /admin/tenant/ page as anonymous user
+        # should returns 302 (login required)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.superuser)
+
+        # second case, access /admin/tenant/ page as authenticated superuser
+        # should returns 200 (ok)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+
+        # third case, select tenants and execute "message_unverified" action
+        # should returns 200 (intermediate page)
+        action_data = {
+            # trying to send message on multiple tenants (public, test and extra),
+            # one is *verified* (extra), other not (tenant)
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
+            "action": "message_unverified",
+            "index": 0,
+        }
+        response = self.client.post(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")), action_data
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response, TemplateResponse)
+        self.assertContains(
+            response, "Send email to multiple users"
+        )
+        self.assertContains(response, "<h1>Write your message here</h1>")
+        # two objects were selected (tenant and extra)
+        self.assertContains(response, ACTION_CHECKBOX_NAME, count=2)
+
+        # fourth case, complete "intermediate" page/form
+        # should returns 302 (redirect back to "changelist" page)
+        compose_confirmation_data = {
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
+            "action": "message_unverified",
+            # submit intermediate form (subject and message)
+            "subject": "Greetings from a TenantAdmin action",
+            "message": "Lorem ipsum dolor sit amet..",
+            # click "confirmation" button
+            "post": "yes",  # confirm form
+        }
+        response = self.client.post(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")), compose_confirmation_data
+        )
+        self.assertEqual(response.status_code, 302)
+        # check mailbox after submitting form
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Greetings from a TenantAdmin action")
+        # expecting to see recipients in BCC list
+        self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+        # two objects were selected (tenant and extra), and both are valid recipient
+        self.assertIn(
+            f"{self.tenant.name} - Jane Doe <jane@doe.com>", mail.outbox[0].bcc,
+        )
+        self.assertIn(
+            f"{self.extra_tenant.name} - John Doe <john@doe.com>", mail.outbox[0].bcc,
+        )
+
+        # fifth case, without any *verified* recipiets
+        # should returns 200 (intermediate page)
+        action_data = {
+            # trying to send message on multiple tenants (public and tenant),
+            # but without any *verified* recipients
+            ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk],
+            "action": "message_unverified",
+            "index": 0,
+        }
+        response = self.client.post(
+            reverse("admin:{}_{}_changelist".format("tenant", "tenant")), action_data
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response, TemplateResponse)
+        self.assertContains(
+            response, "Send email to multiple users"
+        )
+        self.assertContains(response, "<h1>Write your message here</h1>")
+        # one *unverified* object was selected (tenant)
+        self.assertContains(response, ACTION_CHECKBOX_NAME, count=1)
+
+    def test_model_admin_message_verified_action(self):
+        """
+        The message_verified action on public tenant sends emails to selected tenant "owners",
+        using *verified* only email addresses.
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
@@ -631,7 +772,7 @@ class TenantAdminActionsTest(TenantTestCase):
             # trying to send message on multiple tenants (public, test and extra),
             # but only one is legit (extra)
             ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
-            "action": "message_selected",
+            "action": "message_verified",
             "index": 0,
         }
         response = self.client.post(
@@ -650,7 +791,7 @@ class TenantAdminActionsTest(TenantTestCase):
         # should returns 302 (redirect back to "changelist" page)
         compose_confirmation_data = {
             ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk, self.extra_tenant.pk],
-            "action": "message_selected",
+            "action": "message_verified",
             # submit intermediate form (subject and message)
             "subject": "Greetings from a TenantAdmin action",
             "message": "Lorem ipsum dolor sit amet..",
@@ -667,7 +808,9 @@ class TenantAdminActionsTest(TenantTestCase):
         # expecting to see recipients in BCC list
         self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
         # two objects were selected (test and extra), but only one valid recipient
-        self.assertEqual(mail.outbox[0].bcc, ["extra - John Doe <john@doe.com>"])
+        self.assertEqual(mail.outbox[0].bcc, [
+            f"{self.extra_tenant.name} - John Doe <john@doe.com>",
+        ])
 
         # fifth case, no recipients found
         # should returns 302 (redirect back to "changelist" page) and show error message
@@ -675,7 +818,7 @@ class TenantAdminActionsTest(TenantTestCase):
             # trying to send message on multiple tenants (public and test),
             # but without any valid recipients
             ACTION_CHECKBOX_NAME: [self.public_tenant.pk, self.tenant.pk],
-            "action": "message_selected",
+            "action": "message_verified",
             "index": 0,
         }
         url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))

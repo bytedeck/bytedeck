@@ -17,6 +17,8 @@ from django.contrib.admin.utils import unquote
 from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
 from django.utils.translation import gettext as _
+from django.utils.html import format_html
+from django.utils.formats import date_format
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
@@ -26,10 +28,12 @@ from django_tenants.utils import tenant_context, schema_context, get_public_sche
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 from siteconfig.models import SiteConfig
-from tenant.models import Tenant, TenantDomain
-from tenant.forms import TenantBaseForm
-from tenant.utils import generate_schema_name
-from tenant.tasks import send_email_message
+
+from .models import Tenant, TenantDomain
+from .forms import TenantBaseForm
+from .utils import generate_schema_name
+from .tasks import send_email_message
+
 
 User = get_user_model()
 
@@ -126,7 +130,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
         'owner_email_text', 'owner_email_deprecated',
         'last_staff_login', 'google_signon_enabled',
-        'paid_until', 'trial_end_date',
+        'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
@@ -140,7 +144,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
+    actions = ['message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
 
     @admin.display(description="owner full name")
     def owner_full_name_text(self, obj):
@@ -186,6 +190,28 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """This field will be removed in a future update"""
         return obj.owner_email
     owner_email_deprecated.admin_order_field = "owner_email"
+
+    @admin.display(description="paid until", ordering="paid_until")
+    def paid_until_text(self, obj):
+        """Returns htmlized value of `paid_until` field"""
+        if not obj.paid_until:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.paid_until,
+            date_format(obj.paid_until, use_l10n=True),
+        )
+
+    @admin.display(description="trial end date", ordering="trial_end_date")
+    def trial_end_date_text(self, obj):
+        """Returns htmlized value of `trial_end_date` field"""
+        if not obj.trial_end_date:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.trial_end_date,
+            date_format(obj.trial_end_date, use_l10n=True),
+        )
 
     def get_search_results(self, request, queryset, search_term):
         """
@@ -361,10 +387,19 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
         return self.render_delete_form(request, context)
 
-    @admin.action(description="Send an email message to all owners for the selected tenant(s)")
-    def message_selected(self, request, queryset):
+    @admin.action(description="Send an email message to *all* owners for the selected tenant(s)")
+    def message_unverified(modeladmin, request, queryset):
+        """Send an email message to *all* owners for selected tenant(s)."""
+        return modeladmin.message_selected(request, queryset, verified=False)
+
+    @admin.action(description="Send an email message to *verified* only owners for the selected tenant(s)")
+    def message_verified(modeladmin, request, queryset):
+        """Send an email message to *verified* only owners for selected tenant(s)."""
+        return modeladmin.message_selected(request, queryset, verified=True)
+
+    def message_selected(modeladmin, request, queryset, verified=True):
         """
-        Send an email message to all owners for selected tenant(s).
+        Send an email message to either *all* or *verified* only owners for selected tenant(s).
 
         This action first displays an intermediate page which shows compose message form and
         a list of all recipients.
@@ -372,7 +407,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         Next, it send email message to all selected users and redirects back to the change list.
         """
         # get a list of selected tenant(s), excluding public schema
-        objects = self.model.objects.filter(
+        objects = modeladmin.model.objects.filter(
             pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
         ).exclude(schema_name=get_public_schema_name())
 
@@ -386,9 +421,11 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 # get the full name of the user, or if none is supplied will return the username
                 full_name_or_username = owner.get_full_name() or owner.username
 
-                # get the email address, but only primary and verified
                 email = ""
-                for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                for primary_email_address in EmailAddress.objects.filter(user=owner):
+                    # get the email address, but only primary and verified
+                    if verified and not (primary_email_address.verified and primary_email_address.primary):
+                        continue
                     # make sure it's primary email for real
                     if primary_email_address.email == user_email(owner):
                         email = owner.email
@@ -399,7 +436,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # Create a message informing the user that the recipients were not found
         # and return a redirect to the admin index page.
         if not len(recipient_list):
-            self.message_user(request, "No recipients found.", messages.WARNING)
+            modeladmin.message_user(request, "No recipients found.", messages.WARNING)
             # return None to display the change list page again.
             return None
 
@@ -423,7 +460,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 )
 
                 # show alert that everything is cool
-                self.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
+                modeladmin.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
 
                 # return None to display the change list page again.
                 return None
@@ -437,23 +474,23 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # AdminForm is not usually used directly by developers, but can be used by libraries that want to
         # extend the forms within the Django Admin.
         adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
-        media = self.media + adminform.media
+        media = modeladmin.media + adminform.media
 
-        request.current_app = self.admin_site.name
+        request.current_app = modeladmin.admin_site.name
 
         # we need to create a template of intermediate page with form
         return TemplateResponse(
             request,
             "admin/tenant/tenant/message_selected_compose.html",
             context={
-                **self.admin_site.each_context(request),
+                **modeladmin.admin_site.each_context(request),
                 "title": "Write your message here",
                 "adminform": adminform,
                 "subtitle": None,
                 "recipient_list": recipient_list,
                 "queryset": objects,
                 # building proper breadcrumb in admin
-                "opts": self.model._meta,
+                "opts": modeladmin.model._meta,
                 "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
                 "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
                 "media": media,

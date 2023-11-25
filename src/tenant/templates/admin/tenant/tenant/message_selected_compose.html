@@ -80,7 +80,7 @@
             {% for obj in queryset %}
                 <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk|unlocalize }}">
             {% endfor %}
-            <input type="hidden" name="action" value="message_selected" />
+            <input type="hidden" name="action" value="{{ request.POST.action|default:"message_verified" }}" />
             <input type="hidden" name="post" value="yes">
             <ul>
                 <li class="grp-float-left"><a href="." class="grp-button grp-cancel-link">{% trans "No, take me back" %}</a></li>
