@@ -335,13 +335,6 @@ class Semester(models.Model):
         return mark_list
 
 
-class DateType(models.Model):
-    date_type = models.CharField(max_length=50, unique=True)
-
-    def __str__(self):
-        return self.date_type
-
-
 class BlockManager(models.Manager):
 
     def grouped_teachers_blocks(self):
@@ -383,7 +376,6 @@ class Block(IsAPrereqMixin, models.Model):
 
 class ExcludedDate(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
-    date_type = models.ForeignKey(DateType, on_delete=models.SET_NULL, blank=True, null=True)
     date = models.DateField(unique=True)
     label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
 
