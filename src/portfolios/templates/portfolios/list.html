@@ -6,7 +6,7 @@
 {% block content %}
 
     <p><a class="btn btn-primary"
-          href="{% url 'portfolios:detail' request.user.id %}">View Your Portfolio</a></p>
+          href="{% url 'portfolios:current_user' %}">View Your Portfolio</a></p>
 
     <!-- <table class="table table-striped"> -->
     <table data-toggle='table'

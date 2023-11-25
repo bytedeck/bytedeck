@@ -47,10 +47,14 @@ def generate_notification_email(user, root_url):
     subject = f'{SiteConfig.get().site_name_short} Notifications'
     to_email_address = user.email
     unread_notifications = Notification.objects.all_unread(user)
+    submissions_awaiting_approval = None
+
     if user.is_staff:
         submissions_awaiting_approval = QuestSubmission.objects.all_awaiting_approval(teacher=user)
-    else:
-        submissions_awaiting_approval = None
+
+    # Do not generate email notification for users that are not currently enrolled
+    if not user.is_staff and not user.profile.has_current_course:
+        return None
 
     if unread_notifications or submissions_awaiting_approval:
         text_content = str(unread_notifications)

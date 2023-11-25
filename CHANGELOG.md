@@ -4,9 +4,23 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.23.2] 2023-09-10 Many bugs squashed
+* Bugfixes:
+  - Fix sort order of Badge Types [#1484](https://github.com/bytedeck/bytedeck/issues/1484)
+  - Fix error when accessing notifications list [#1527](https://github.com/bytedeck/bytedeck/issues/1527)
+  - Do not allow auto-publish on archived announcements [#1216](https://github.com/bytedeck/bytedeck/issues/1216)
+  - Fix new user portfolio creation [#1496](https://github.com/bytedeck/bytedeck/issues/1496)
+  - Prevent duplicate calculation of avaialable quests (waste of resources) [#1405](https://github.com/bytedeck/bytedeck/issues/1405)
+  - Trigger mark re-calculation daily [#1500](https://github.com/bytedeck/bytedeck/issues/1500)
+  - Prevent notification emails from being sent to inactive students[#1206](https://github.com/bytedeck/bytedeck/issues/1206)
+  - Fix bug preventing uploads of more than 2MB (should be 16 MB) [#1486](https://github.com/bytedeck/bytedeck/issues/1486)
+  - Add `th`, `caption`, and `scope` to allowable tags in Summernote Safe Widget[#1487](https://github.com/bytedeck/bytedeck/issues/1487)
+  - Remove unused DateType model that was causing errors in some decks [#1241](https://github.com/bytedeck/bytedeck/issues/1241)
+
+
 ### [1.23.1] 2023-09-10 Just bugs
 * Bugfixes:
-  - Creating maps with duplicate initial objects results in error [#1370](https://github.com/bytedeck/bytedeck/issues/1370
+  - Creating maps with duplicate initial objects results in error [#1370](https://github.com/bytedeck/bytedeck/issues/1370)
   - Fix submissions table column widths
   - Fix CSS bug that removed first column of tables in accordion
 

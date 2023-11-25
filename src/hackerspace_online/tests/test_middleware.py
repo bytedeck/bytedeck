@@ -105,3 +105,17 @@ class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
         messages = list(get_messages(response.wsgi_request))
         self.assertEqual(len(messages), 1)  # bingo!
         self.assertIn("requests exceeds the maximum size", str(messages[0]))
+
+    @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
+    def test_request_data_too_big_exception_with_requestdatatoobig_middleware_skip_FILES(self):
+        """
+        Custom middleware should handle uploaded files gracefully by simply skipping them
+        """
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        # trying to upload the file...
+        f = SimpleUploadedFile("file.txt", b"lorem ipsum dolor sit amet..", content_type="text/plain")
+        response = self.client.post(reverse("empty"), data={"file": f}, format="multipart")
+        # should receive an empty response (ok) as if nothing has happened
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
