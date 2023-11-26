@@ -64,7 +64,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
         form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
 
         # save the form and get the response (HttpResponseRedirect)
-        self.object = form.save()
+        response = super().form_valid(form)
 
         # saved object (tenant) can be accessed via `object` attribute
         cleaned_data = form.cleaned_data
@@ -81,7 +81,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.email = email
             owner.save()
 
-            response = HttpResponseRedirect(self.get_success_url())
+            return HttpResponseRedirect(self.get_success_url())
 
         return response
 
