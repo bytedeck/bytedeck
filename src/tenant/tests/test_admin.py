@@ -249,7 +249,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         response = self.client.get(
             reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=doe.com"
         )
-        # confirm the search returned one object (by email address)
+        # confirm the search returned two objects (by email address, both verified and unverified)
         self.assertContains(response, "2 result")
 
         response = self.client.get(
