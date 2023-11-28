@@ -10,6 +10,8 @@ from courses.models import Semester
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from django_tenants.test.cases import TenantTestCase
+from unittest.mock import patch
+
 
 User = get_user_model()
 
@@ -461,6 +463,39 @@ class QuestManagerTest(TenantTestCase):
                     ['Quest-not-started', 'Welcome to ByteDeck!'],
                     ordered=False
                 )
+
+    @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
+    def test_get_available__student_outside_course(self, mock_task):
+        """
+        Test that newly created quests are available for students outside the course
+        event if they registered before the quest was created.
+        """
+
+        # Create the user first
+        new_student = baker.make(User, username='new_student', is_staff=False)
+
+        # Ensure that the student is not in any courses
+        # and there is only one available Welcome Quest at the moment
+        self.assertFalse(new_student.profile.has_current_course)
+        self.assertEqual(Quest.objects.get_available(new_student).count(), 1)
+
+        # And then create a new quest
+        new_quest = baker.make(Quest, name="Quest, anew!", available_outside_course=True)
+
+        self.assertTrue(new_quest.available_outside_course)
+        self.assertTrue(mock_task.called)
+        self.assertEqual(mock_task.call_count, 1)
+        self.assertEqual(mock_task.call_args.kwargs['kwargs']['quest_id'], new_quest.id)
+
+        # For some reason, update_conditions_for_quest.apply_async is called
+        # but it didn't do anything so we'll need to call it manually.
+        # Probably has to do something with it being a celery task.
+        from prerequisites.tasks import update_conditions_for_quest
+        update_conditions_for_quest(quest_id=new_quest.id, start_from_user_id=1)
+
+        # Now the student should be able to see the new quest even if they are not in any courses
+        # and just registered
+        self.assertEqual(Quest.objects.get_available(new_student).count(), 2)
 
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
