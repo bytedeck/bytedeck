@@ -8,6 +8,7 @@ from allauth.account.models import EmailAddress
 from allauth.exceptions import ImmediateHttpResponse
 from allauth.utils import build_absolute_uri
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from django_tenants.utils import get_tenant_model
 
 User = get_user_model()
 
@@ -28,9 +29,12 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         """
         # clear the ``Site`` object cache
         Site.objects.clear_cache()
-        url = reverse("account_confirm_email", args=[emailconfirmation.key])
-        ret = build_absolute_uri(request=None, location=url)
-        return ret
+
+        # get current tenant object...
+        tenant = get_tenant_model().get()
+        # ...and use it to build absolute uri
+        location = ''.join((tenant.get_root_url(), reverse("account_confirm_email", args=[emailconfirmation.key])))
+        return build_absolute_uri(request=None, location=location)
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
