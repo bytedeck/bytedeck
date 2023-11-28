@@ -43,9 +43,6 @@ def load_initial_tenant_data():
     create_initial_badges()
     create_orientation_campaign()
 
-    from notifications.tasks import create_email_notification_tasks
-    create_email_notification_tasks()
-
 
 def set_initial_icons(object_list):
     """

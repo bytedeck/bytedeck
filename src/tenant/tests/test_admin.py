@@ -119,6 +119,20 @@ class PublicTenantTestAdminPublic(TenantTestCase):
             self.extra_tenant.trial_end_date = date(2022, 1, 1)
             self.extra_tenant.save()
 
+        # update "owner" and add *unverified* email address
+        with tenant_context(self.tenant):
+            config = SiteConfig.get()
+            if config.deck_owner is not None and not config.deck_owner.email:
+                # using different name/email to test fallback feature
+                config.deck_owner.first_name = "Jane"
+                config.deck_owner.last_name = "Doe"
+                config.deck_owner.save()
+                # add *unverified* email address (done via allauth)
+                email_address = EmailAddress.objects.add_email(
+                    request=None, user=config.deck_owner, email="jane@doe.com")
+                email_address.set_as_primary()
+                email_address.save()
+
         # update "owner" and add missing email address
         with tenant_context(self.extra_tenant):
             config = SiteConfig.get()
@@ -169,8 +183,9 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         # should returns 200 (ok)
         response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
         self.assertEqual(response.status_code, 200)
-        # assert the content of custom column is present on changelist page
-        self.assertContains(response, "john@doe.com")
+        # assert the content of custom column is present on changelist page (both verified and unverified emails)
+        self.assertContains(response, "john@doe.com")  # verified email
+        self.assertContains(response, "jane@doe.com")  # unverified email
 
     def test_paid_until_text_column(self):
         """
@@ -234,8 +249,8 @@ class PublicTenantTestAdminPublic(TenantTestCase):
         response = self.client.get(
             reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=doe.com"
         )
-        # confirm the search returned one object (by email address)
-        self.assertContains(response, "1 result")
+        # confirm the search returned two objects (by email address, both verified and unverified)
+        self.assertContains(response, "2 result")
 
         response = self.client.get(
             reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=Taylor+Swift"
