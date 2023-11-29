@@ -11,7 +11,9 @@ def invalidate_profile_xp_cache_in_all_schemas():
     """
     for tenant in get_tenant_model().objects.exclude(schema_name="public"):
         with tenant_context(tenant):
-            invalidate_profile_xp_cache_on_schema.delay()
+            invalidate_profile_xp_cache_on_schema.apply_async(queue='default')
+
+    return "Scheduled invalidate_profile_xp_cache_on_schema for all schemas"
 
 
 @app.task(name="profile_manager.tasks.invalidate_profile_xp_cache_on_schema")
@@ -21,5 +23,8 @@ def invalidate_profile_xp_cache_on_schema():
     """
 
     profiles_qs = Profile.objects.all_for_active_semester()
+
     for profile in profiles_qs:
         profile.xp_invalidate_cache()
+
+    return f"Successfully invalidated {profiles_qs.count()} profiles."

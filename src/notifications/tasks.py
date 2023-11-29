@@ -20,7 +20,9 @@ def email_notification_to_users_on_all_schemas():
     for tenant in get_tenant_model().objects.exclude(schema_name='public'):
         with tenant_context(tenant):
             root_url = tenant.get_root_url()
-            email_notifications_to_users_on_schema.delay(root_url)
+            email_notifications_to_users_on_schema.apply_async(args=[root_url], queue='default')
+
+    return "Scheduled email_notifications_to_users_on_schema for all schemas"
 
 
 @app.task(name='notifications.tasks.email_notifications_to_users_on_schema')
@@ -30,6 +32,8 @@ def email_notifications_to_users_on_schema(root_url):
     connection = mail.get_connection()
     connection.send_messages(notification_emails)
     # send_email_notification_tenant.delay(root_url)
+
+    return f"Sent {len(notification_emails)} notification emails"
 
 
 def get_notification_emails(root_url):
