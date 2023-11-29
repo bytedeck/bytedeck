@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
 
-from profile_manager.tasks import invalidate_profile_cache_in_all_schemas
+from profile_manager.tasks import invalidate_profile_xp_cache_in_all_schemas
 from profile_manager.models import Profile
 
 from siteconfig.models import SiteConfig
@@ -46,7 +46,7 @@ class ProfleTasksTests(TenantTestCase):
             self.assertEqual(user.profile.mark_cached, 100)
 
         # Run the task for recalculating the current xp
-        invalidate_profile_cache_in_all_schemas.apply()
+        invalidate_profile_xp_cache_in_all_schemas.apply()
 
         for profile in Profile.objects.all_for_active_semester():
             self.assertEqual(profile.xp_cached, 0)

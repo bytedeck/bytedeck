@@ -1,8 +1,5 @@
-import json
-from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
-from django_celery_beat.models import PeriodicTask
 from unittest.mock import patch
 
 from model_bakery import baker
@@ -10,7 +7,7 @@ from django_tenants.test.cases import TenantTestCase
 
 from notifications import tasks
 from notifications.models import Notification
-from notifications.tasks import create_email_notification_tasks, generate_notification_email, get_notification_emails
+from notifications.tasks import generate_notification_email, get_notification_emails
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -74,8 +71,12 @@ class NotificationTasksTests(TenantTestCase):
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 2)
 
+    def test_email_notifications_to_users_on_all_schemas(self):
+        task_result = tasks.email_notification_to_users_on_all_schemas.apply()
+        self.assertTrue(task_result.successful())
+
     def test_email_notifications_to_users(self):
-        task_result = tasks.email_notifications_to_users.apply(
+        task_result = tasks.email_notifications_to_users_on_schema.apply(
             kwargs={
                 "root_url": "https://test.com",
             }
@@ -142,36 +143,3 @@ class NotificationTasksTests(TenantTestCase):
 
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 1)
-
-
-class CreateEmailNotificationTasksTest(TenantTestCase):
-    """ Tests of the create_email_notification_tasks() method"""
-
-    def setUp(self):
-        self.app = apps.get_app_config('notifications')
-
-    def test_task_is_created_with_new_tenant(self):
-        """ The email notifcation task should be created in ready() on when the app starts up
-        BUT DOES NOT HAPPEN ON TEST DB!
-        This is because the ready() method runs on the default db, before django knows it is testing.
-        https://code.djangoproject.com/ticket/22002
-        However, we also call the method when initializing a new tenant in
-        tenant.initialization.load_initial_tenant_data()
-        """
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-
-        # ready is idempotent, doesn't cause problems running it again, doesn't create a new task:
-        self.app.ready()
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-
-    def test_create_email_notification_tasks(self):
-        """ A task should have been created for the test tenant"""
-        create_email_notification_tasks()
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-        task = tasks.first()
-        self.assertEqual(task.headers, json.dumps({"_schema_name": "test"}))
-        self.assertTrue(task.enabled)
-        self.assertFalse(task.one_off)
