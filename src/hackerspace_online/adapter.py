@@ -1,10 +1,14 @@
+from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
+from django.shortcuts import redirect
+from django.urls import reverse
+
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.models import EmailAddress
 from allauth.exceptions import ImmediateHttpResponse
-
+from allauth.utils import build_absolute_uri
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
-from django.contrib.auth import get_user_model
-from django.shortcuts import redirect
+from django_tenants.utils import get_tenant_model
 
 User = get_user_model()
 
@@ -14,6 +18,23 @@ class CustomAccountAdapter(DefaultAccountAdapter):
     def clean_username(self, username, shallow=False):
         username = super().clean_username(username, shallow)
         return username.lower()
+
+    def get_email_confirmation_url(self, request, emailconfirmation):
+        """
+        Constructs the email confirmation (activation) url.
+
+        *Note* that if you have architected your system such that email
+        confirmations are sent outside of the request context `request`
+        can be `None` here.
+        """
+        # clear the ``Site`` object cache
+        Site.objects.clear_cache()
+
+        # get current tenant object...
+        tenant = get_tenant_model().get()
+        # ...and use it to build absolute uri
+        location = ''.join((tenant.get_root_url(), reverse("account_confirm_email", args=[emailconfirmation.key])))
+        return build_absolute_uri(request=None, location=location)
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):

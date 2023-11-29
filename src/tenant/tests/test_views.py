@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
 from django.test import RequestFactory
 
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
@@ -136,6 +137,11 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn("Please Confirm Your E-mail Address", mail.outbox[0].subject)
         # expecting to see john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+        # expecting to see correct domain name in confirmation link and make sure link is correct
+        email_address = EmailAddress.objects.get(email="john.doe@example.com")
+        key = EmailConfirmationHMAC(email_address).key
+        confirmation_link = "".join(["http://default.localhost:8000", reverse("account_confirm_email", args=[key])])
+        self.assertIn(confirmation_link, mail.outbox[0].body)
 
         owner = SiteConfig.get().deck_owner or None
         self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
