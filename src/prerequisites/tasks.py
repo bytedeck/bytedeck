@@ -146,6 +146,15 @@ def update_quest_conditions_all_users(self, start_from_user_id):
     for uid in users:
         update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
 
+    # Perform a recursive call to start the next chunk of users
+    # It gets the last user id in the list users[-1] and continues the next chunk with the next user id (+1).
+    # For example if the chunk size is 5 users,
+    # This method will first run
+    #    update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
+    # on the first 5 usersr in the list e.g. [1, 2, 3, 4, 5].
+    # Then, this code gets the next user id by taking the last id in the list (5)
+    # and adding one (6) and then recursively calling itself starting with user
+    # id = 6.
     if users:
         user = User.objects.filter(id__gte=users[-1] + 1).values('id').first()
         user and self.apply_async(args=[user['id']], queue='default', countdown=5)
