@@ -32,10 +32,16 @@ app.conf.beat_schedule = {
     "Send daily email of notifications to all schemas": {
         "task": "notifications.tasks.email_notification_to_users_on_all_schemas",
         "schedule": crontab(minute=0, hour=5),
+        "options": {
+            "queue": "default",
+        }
     },
     "Invalidate Profile XP Cache for all schemas daily task": {
         "task": "profile_manager.tasks.invalidate_profile_xp_cache_in_all_schemas",
         "schedule": crontab(minute=0, hour=0),
+        "options": {
+            "queue": "default",
+        }
     },
 }
 
