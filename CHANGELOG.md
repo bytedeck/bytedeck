@@ -4,7 +4,18 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.23.2] 2023-09-10 Many bugs squashed
+### [1.23.3] 2023-11-28
+* Optimizations:
+  - Upgrade celery-beat and tenant-schemas-celery dependancies and refactor periodic task creation [#1510](https://github.com/bytedeck/bytedeck/issues/1510)
+
+* Bugfixes:
+  - When a quest is deleted, delete all submissions of it as well, instead of having them hang around like zombies [#1488](https://github.com/bytedeck/bytedeck/issues/1488)
+  - Fix: quest available outside course and no prereqs doesn't appear for an existing student without a course [#957](https://github.com/bytedeck/bytedeck/issues/957)
+  - Fix: Email verfication link on new deck creation [#1492](https://github.com/bytedeck/bytedeck/issues/1492)
+  - Add queue when running celery tasks... so they actually run [#1540](https://github.com/bytedeck/bytedeck/issues/1540)
+
+
+### [1.23.2] 2023-11-24 Many bugs squashed
 * Bugfixes:
   - Fix sort order of Badge Types [#1484](https://github.com/bytedeck/bytedeck/issues/1484)
   - Fix error when accessing notifications list [#1527](https://github.com/bytedeck/bytedeck/issues/1527)
