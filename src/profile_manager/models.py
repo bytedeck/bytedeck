@@ -97,6 +97,7 @@ class ProfileManager(models.Manager):
             User.objects.filter(is_staff=True)
                         .filter(verified_emails)
                         .exclude(empty_emails)
+                        .filter(email_filter)
         )
 
         # Merge the two querysets and remove duplicates

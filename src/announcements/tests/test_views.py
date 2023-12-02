@@ -184,7 +184,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         form = AnnouncementForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertEqual(form.errors['archived'], ['Cannot auto publish and archive an Announcement at the same time.'])
+        self.assertEqual(form.errors['auto_publish'], ['An Announcement that is archived cannot be auto published.'])
+        # self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
     def test_comment_on_announcement_by_student(self):
         # log in a student

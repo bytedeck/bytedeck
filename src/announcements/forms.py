@@ -44,6 +44,6 @@ class AnnouncementForm(forms.ModelForm):
             self.add_error("datetime_released", forms.ValidationError('An Announcement that is auto published cannot have a past release date.'))
 
         if auto_publish and archived:
-            self.add_error("archived", forms.ValidationError('Cannot auto publish and archive an Announcement at the same time.'))
+            self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
         return data
