@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from bs4.formatter import HTMLFormatter
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
 from quest_manager.models import Quest
@@ -9,6 +9,12 @@ from quest_manager.models import Quest
 @receiver(pre_save, sender=Quest)
 def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
+
+
+@receiver(post_save, sender=Quest)
+def handle_quest_archived(sender, instance, **kwargs):
+    if instance.archived:
+        instance.remove_as_prereq()
 
 
 def tidy_html(markup, fix_runaway_newlines=False):

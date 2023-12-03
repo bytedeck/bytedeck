@@ -161,9 +161,6 @@ class QuestFormViewMixin:
         super_response = super().form_valid(form)
         self.set_new_prereqs(form)
 
-        if form.cleaned_data.get("archived") is True:
-            self.object.remove_as_prereq()
-
         return super_response
 
     def set_new_prereqs(self, form):
