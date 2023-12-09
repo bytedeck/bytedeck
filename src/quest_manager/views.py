@@ -46,6 +46,7 @@ User = get_user_model()
 
 
 def is_staff_or_TA(user):
+    print(user, "***************************************************")
     if user.is_staff:
         return True
 
@@ -243,7 +244,7 @@ class QuestCopy(QuestCreate):
         return kwargs
 
 
-class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
+class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
     model = Quest
     context_object_name = "quest"
     template_name = "quest_manager/summary.html"
@@ -255,7 +256,10 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context = super().get_context_data(**kwargs)
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
-        latest_submission_time = subs.latest("time_approved").time_approved
+        if subs:
+            latest_submission_time = subs.latest("time_approved").time_approved
+        else:
+            latest_submission_time = None
         count_total = subs.count()
         subs = subs.filter(time_returned=None)
         count_first_time = subs.count()

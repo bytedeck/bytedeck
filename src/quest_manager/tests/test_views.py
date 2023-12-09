@@ -110,6 +110,9 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
 
+        # summary stats
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 403)
+
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
@@ -134,6 +137,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
+
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
 
     def test_start(self):
         # log in a student from setUp
