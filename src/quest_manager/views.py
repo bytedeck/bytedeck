@@ -256,6 +256,7 @@ class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
         context = super().get_context_data(**kwargs)
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
+        subs = QuestSubmission.objects.all_approved(quest=self.object, active_semester_only=False)
         if subs:
             latest_submission_time = subs.latest("time_approved").time_approved
         else:
