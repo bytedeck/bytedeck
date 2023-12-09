@@ -255,6 +255,7 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context = super().get_context_data(**kwargs)
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
+        latest_submission_time = subs.latest("time_approved").time_approved
         count_total = subs.count()
         subs = subs.filter(time_returned=None)
         count_first_time = subs.count()
@@ -266,6 +267,7 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context["count_total"] = count_total
         context["count_first_time"] = count_first_time
         context["percent_returned"] = percent_returned
+        context["latest_submission_time"] = latest_submission_time
 
         return context
 
