@@ -46,7 +46,6 @@ User = get_user_model()
 
 
 def is_staff_or_TA(user):
-    print(user, "***************************************************")
     if user.is_staff:
         return True
 
@@ -347,7 +346,7 @@ def ajax_summary_histogram(request, pk):
             "histogram_labels": histogram_labels[:-1].tolist(),
             "count": size,
             "mean": mean,
-            "percentile_50": int(np.median(np_data)),
+            "percentile_50": int(np.median(np_data)) if size else None,
             "percentile_25": int(np_data[size // 4]) if size else None,
             "percentile_75": int(np_data[size * 3 // 4]) if size else None,
         }

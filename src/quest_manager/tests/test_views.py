@@ -139,6 +139,16 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
 
         self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 404)  # Ajax only
+        response = self.client.get(
+            reverse('quests:ajax_summary_histogram', args=[q_pk]),
+            data={
+                "min": 0,
+                "max": 100,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_start(self):
         # log in a student from setUp
