@@ -22,7 +22,7 @@ class NotificationTasksTests(TenantTestCase):
         self.sem = SiteConfig.get().active_semester
         self.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', email="student@email.com")
-        self.test_student2 = baker.make(User)
+        self.test_student2 = baker.make(User, email="student2@email.com")
 
         self.ai_user, _ = User.objects.get_or_create(
             pk=SiteConfig.get().deck_ai.pk,
@@ -36,40 +36,58 @@ class NotificationTasksTests(TenantTestCase):
 
     def test_get_notification_emails(self):
         """ Test that the correct list of notification emails are generated"""
-        root_url = 'https://test.com'
+        root_url = f'https://{self.get_test_tenant_domain()}'
 
-        # 1 notifications to start
+        # 0 notifications to start
         emails = get_notification_emails(root_url)
         self.assertEqual(type(emails), list)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
+
+        course = baker.make('courses.Course')
+        semester = SiteConfig.get().active_semester
 
         # Create a notification for student 1, but they have emails turned off by default
         notification1 = baker.make(Notification, recipient=self.test_student1)
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
 
-        # Turn on notification emails for student1, now it should appear
+        # Turn on notification emails for student1, now it should appear and add them to the list of emails
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.create(user=self.test_student1, email=self.test_student1.email, verified=True, primary=True)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=course, semester=semester)
         self.test_student1.profile.get_notifications_by_email = True
         self.test_student1.profile.save()
-        emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
 
-        # Turn on notification emails for student2, should still only be 1 + deck_owner
+        emails = get_notification_emails(root_url)
+
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+
+        # Turn on notification emails for student2, should still only be 1 (from the test_student1)
+        EmailAddress.objects.create(user=self.test_student2, email=self.test_student2.email, verified=True, primary=True)
+        baker.make('courses.CourseStudent', user=self.test_student2, course=course, semester=semester)
         self.test_student2.profile.get_notifications_by_email = True
         self.test_student2.profile.save()
-        emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
 
-        # Make a bunch of notifications for student2, so now we should have 2 emails + deck_owner
+        emails = get_notification_emails(root_url)
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+
+        # Make a bunch of notifications for student2, so now we should have 2 emails
         baker.make(Notification, recipient=self.test_student2, _quantity=10)
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 3)
 
-        # mark the original notification as read, so only student2 email now + deck_owner
+        self.assertEqual(len(emails), 2)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+        self.assertEqual(emails[1].to, [self.test_student2.email])
+
+        # mark the original notification as read, so only student2 email now
         notification1.unread = False
         notification1.save()
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student2.email])
 
     def test_email_notifications_to_users_on_all_schemas(self):
         task_result = tasks.email_notification_to_users_on_all_schemas.apply()
@@ -129,10 +147,10 @@ class NotificationTasksTests(TenantTestCase):
     def test_does_not_generate_email_for_inactive_students(self):
         root_url = 'https://test.com'
 
-        # 1 notifications to start
+        # 0 notifications to start
         emails = get_notification_emails(root_url)
         self.assertEqual(type(emails), list)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
 
         # Create a noficiation for 1 student that has no course but have emails turned on
         inactive_student = baker.make(User)
@@ -141,5 +159,6 @@ class NotificationTasksTests(TenantTestCase):
         inactive_student.profile.get_notifications_by_email = True
         inactive_student.profile.save()
 
+        # Should not get email because they are not enrolled in any courses
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)

@@ -8,6 +8,8 @@ from django_tenants.utils import get_tenant_model, tenant_context
 from hackerspace_online.celery import app
 from quest_manager.models import QuestSubmission
 
+from profile_manager.models import Profile
+
 from siteconfig.models import SiteConfig
 
 from .models import Notification
@@ -37,7 +39,7 @@ def email_notifications_to_users_on_schema(root_url):
 
 
 def get_notification_emails(root_url):
-    users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
+    users_to_email = Profile.objects.get_mailing_list(for_notification_email=True)
 
     notification_emails = []
 

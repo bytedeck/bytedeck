@@ -83,7 +83,7 @@ def create_users():
     # BYTEDECK ADMIN
     User.objects.create_superuser(
         username=settings.TENANT_DEFAULT_ADMIN_USERNAME,
-        email='admin@example.com',
+        email=settings.TENANT_DEFAULT_ADMIN_EMAIL,
         password=settings.TENANT_DEFAULT_ADMIN_PASSWORD
     )
     # OWNER OF THE DECK
