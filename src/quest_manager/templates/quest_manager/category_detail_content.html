@@ -27,49 +27,51 @@
 </div>
 
 {% if category_displayed_quests %}
-  <table id="accordion-available"
-         class="accordian-table"
-         data-classes="table table-hover"
-         data-toggle="table"
-         data-detail-view="true"
-         data-search="true">
-    <thead>
-      <tr class="panel-heading">
-        <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
-        <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
-        <th class="col-sm-1 col-xs-2 text-right" data-field="xp" data-sortable="true">XP</th>
-        <th class="col-sm-1 hidden-xs text-center" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
-        <th class="col-sm-2 hidden-xs" data-field="status_icons"><!-- status_icons --></th>
-      </tr>
-    </thead>
-    <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
+  <div id="available">
+    <table id="accordion-available"
+          class="accordian-table"
+          data-classes="table table-hover"
+          data-toggle="table"
+          data-detail-view="true"
+          data-search="true">
+      <thead>
+        <tr class="panel-heading">
+          <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
+          <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
+          <th class="col-sm-1 col-xs-2 text-right" data-field="xp" data-sortable="true">XP</th>
+          <th class="col-sm-1 hidden-xs text-center" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+          <th class="col-sm-2 hidden-xs" data-field="status_icons"><!-- status_icons --></th>
+        </tr>
+      </thead>
+      <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
 
-      {% for q in category_displayed_quests %}
-        <tr class="accordian-trigger panel-title
-            {% if not q.visible_to_students %}danger
-            {% elif q.expired %}warning
-            {% else %}default{% endif %}
-            {% if q.id == active_q_id %} active {% endif %}"
-            role="tab"
-            aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
-            aria-controls="collapse-quest-{{q.id}}"
-            {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
-            id="heading-quest-{{q.id}}"
-        >
-          <!-- COLUMNS -->
-          <td class="col-sm-1 col-xs-2 col-icon">
-            <img class="img-responsive panel-title-img img-rounded"
-              src="{{ q.get_icon_url }}" alt="icon"/>
-          </td>
-          <td class="col-sm-5 col-xs-8">{{q.name}}</td>
-          <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}</td>
-          <td class="col-sm-1 hidden-xs text-center"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
-          <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
-        </tr> <!-- accordian -->
+        {% for q in category_displayed_quests %}
+          <tr class="accordian-trigger panel-title
+              {% if not q.visible_to_students %}danger
+              {% elif q.expired %}warning
+              {% else %}default{% endif %}
+              {% if q.id == active_q_id %} active {% endif %}"
+              role="tab"
+              aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
+              aria-controls="collapse-quest-{{q.id}}"
+              {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
+              id="heading-quest-{{q.id}}"
+          >
+            <!-- COLUMNS -->
+            <td class="col-sm-1 col-xs-2 col-icon">
+              <img class="img-responsive panel-title-img img-rounded"
+                src="{{ q.get_icon_url }}" alt="icon"/>
+            </td>
+            <td class="col-sm-5 col-xs-8">{{q.name}}</td>
+            <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}</td>
+            <td class="col-sm-1 hidden-xs text-center"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
+            <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
+          </tr> <!-- accordian -->
 
-      {% endfor %} <!-- for each quest -->
-    </tbody>
-  </table>
+        {% endfor %} <!-- for each quest -->
+      </tbody>
+    </table>
+  </div> <!-- #available -->
 
   {% for q in category_displayed_quests %}
     {% comment %}

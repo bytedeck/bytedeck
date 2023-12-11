@@ -28,7 +28,7 @@
       {% for badge in badge_type.badge_set.all %}
           {% if request.user.is_staff or badge.active %}
           <div class="col-sm-3 col-md-2 col-badge hidden-xs"> {# only use popover on wider screens #}
-            <a {% include 'badges/snippets/badge_popover.html' %} >
+            <a {% include 'badges/snippets/badge_popover.html' %} href="{{badge.get_absolute_url}}">
               {% include 'badges/snippets/badge_icon.html' %}
             </a>
           </div>

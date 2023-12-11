@@ -11,6 +11,8 @@ from allauth.account.utils import user_email
 from allauth.account.models import EmailAddress
 from django_tenants.models import DomainMixin, TenantMixin
 
+from hackerspace_online import settings
+
 User = get_user_model()
 
 
@@ -207,10 +209,10 @@ class Tenant(TenantMixin):
 
     def get_last_staff_login(self):
         """
-        Returns the last time a staff member loggin in to the tenant.
+        Returns the last time a staff member loggin in to the tenant. Excludes teh deck admin account which is owned by ByteDeck
         """
-
-        last_staff_logged_in = User.objects.filter(last_login__isnull=False).filter(is_staff=True).order_by('-last_login').first()
+        staff = User.objects.filter(last_login__isnull=False).filter(is_staff=True).exclude(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        last_staff_logged_in = staff.order_by('-last_login').first()
 
         if last_staff_logged_in:
             return last_staff_logged_in.last_login

@@ -4,6 +4,22 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+
+### [1.23.4] 2023-12-10
+* Tweak:
+  - Simplify Badge popups by removing all the buttons and providing info only.  Now when you click a badge, it will take you to the badge detail page (which most users probably don't even know exists).  Specific badges that were granted to a student can still be revoked through the user's profile (same as before: click the badge on their profile page, then in the list of badges granted to the user, hit the delete button beside the one you want to revoke.)
+* Bugfixes:
+  - Only send announcement and notification emails to users with verified email addresses (to prevent bounceback and other rejection issues) [#1374](https://github.com/bytedeck/bytedeck/issues/1374)
+  - Quest accordions not loading in Campaign detail view [#1512](https://github.com/bytedeck/bytedeck/issues/1512)
+  - Remove default admin email address on new tenants
+  - Fix latest submission time on Quest Summary (experimental) page [#1542](https://github.com/bytedeck/bytedeck/issues/1542)
+  - Fix access permission for Quest Summary page (should have been staff and TAs only)
+  - Fix Quest Summary page to only include approved submissions in queryset.
+  - Fix Quest Summary page NaN error when 0 completed quests
+* Bytedeck Admin:
+  - Exclude admin user from a tenant's "last staff login" date.
+
+
 ### [1.23.3] 2023-11-28
 * Optimizations:
   - Upgrade celery-beat and tenant-schemas-celery dependancies and refactor periodic task creation [#1510](https://github.com/bytedeck/bytedeck/issues/1510)

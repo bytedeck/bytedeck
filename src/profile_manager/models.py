@@ -63,8 +63,49 @@ class ProfileManager(models.Manager):
         qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
 
-    def get_mailing_list(self):
-        return self.get_queryset().announcement_email()
+    def get_mailing_list(
+        self,
+        as_emails_list=False,
+        for_announcement_email=False,
+        for_notification_email=False,
+    ):
+        """
+        :param as_emails_list: If True, return a list of emails instead of a queryset of users
+        :param for_announcement_email: If True, only return users who want announcements by email
+        :param for_notification_email: If True, only return users who want notifications by email
+        """
+
+        email_filter = models.Q()
+
+        if for_announcement_email:
+            email_filter &= models.Q(profile__get_announcements_by_email=True)
+
+        if for_notification_email:
+            email_filter &= models.Q(profile__get_notifications_by_email=True)
+
+        empty_emails = models.Q(email='') | models.Q(email__isnull=True)
+        verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True)
+
+        students_to_email = (
+            CourseStudent.objects.all_users_for_active_semester()
+                                 .filter(verified_emails)
+                                 .exclude(empty_emails)
+                                 .filter(email_filter)
+        )
+
+        teachers_to_email = (
+            User.objects.filter(is_staff=True)
+                        .filter(verified_emails)
+                        .exclude(empty_emails)
+                        .filter(email_filter)
+        )
+
+        # Merge the two querysets and remove duplicates
+        users_to_email = (students_to_email | teachers_to_email).distinct()
+        if as_emails_list:
+            return list(users_to_email.values_list('email', flat=True))
+
+        return users_to_email
 
     def all_visible(self):
         return self.get_queryset().visible()
