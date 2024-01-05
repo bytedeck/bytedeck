@@ -146,3 +146,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         owner = SiteConfig.get().deck_owner or None
         self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
         self.assertEqual(owner.email, "john.doe@example.com")
+
+        # check that the username was set to firstname.lastname (instead of "owner")
+        self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
+        # check that the  password was set to firstname-deckname-lastname (instead of "password")
+        self.assertEqual(owner.check_password("john-default-doe"), True)
