@@ -11,6 +11,9 @@ from django.urls import reverse_lazy
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
+from allauth.account.utils import user_username, send_email_confirmation
+from allauth.account.adapter import get_adapter
+
 from siteconfig.models import SiteConfig
 
 from .forms import TenantForm
@@ -76,6 +79,14 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.last_name = cleaned_data['last_name']
             owner.save()
 
+            # set the owner's username to first_name.last_name (instead of "owner")
+            #
+            # ``generate_unique_username`` method returns a unique username from the combination of strings
+            # present in txts (first argument) iterable, for reference:
+            # https://docs.allauth.org/en/latest/account/advanced.html#creating-and-populating-user-instances
+            user_username(owner, get_adapter().generate_unique_username([
+                ".".join([owner.first_name, owner.last_name])]))
+
             # save email address
             email = cleaned_data['email']
             owner.email = email
@@ -99,7 +110,6 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             # ...and send email confirmation message
             with tenant_context(self.object):
                 owner = SiteConfig.get().deck_owner
-                from allauth.account.utils import send_email_confirmation
                 send_email_confirmation(
                     request=request,
                     user=owner,
