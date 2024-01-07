@@ -77,6 +77,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('announcements:update', args=[1])
         self.assert403('announcements:copy', args=[1])
         self.assert403('announcements:publish', args=[1])
+        self.assert403('announcements:archived')
 
     def test_all_announcement_page_status_codes_for_teachers(self):
         # log in a teacher
