@@ -690,7 +690,16 @@ margin-bottom on the .pull-right child element of .list-group-item-buttons.
     padding-bottom: 3px;
 }
 
-/***********Submission ********************************/
+/***********Submission and QUESTS ********************************/
+
+.quest-icon-description {
+    min-width: 50%; /* prevent floating buttons from squashing description text */
+}
+
+.submission-buttons-other-top {
+    padding-left: 5px;
+    padding-bottom: 5px;
+}
 
 li.file-link {
     margin-bottom: 5px;
