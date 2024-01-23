@@ -535,7 +535,7 @@ td.notification-icons .fa-stack {
  ********************************************/
 
 .note-btn {
-    /* prevent different size buttons https://github.com/bytedeck/bytedeck/issues/1550
+    /* prevent different size buttons https://github.com/bytedeck/bytedeck/issues/1550 */
     min-height: 31px;
 }
 
