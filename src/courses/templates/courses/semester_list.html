@@ -77,7 +77,7 @@
 
 <script>
   $('body').on('click', '#end-semester', function(e) {
-      if(!confirm("Are you sure?")) {
+      if(!confirm("WARNING!  Once a semester is closed, it can't be re-opened. It will archive all announcements, and delete any in-progress submissions. Are you sure you want to do this?")) {
           e.preventDefault();
           return;
       }
