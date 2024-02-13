@@ -1,8 +1,11 @@
 import functools
 
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import get_template
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.sites.models import Site
 from django.db import connection
+from django.dispatch import receiver
 from django.http import Http404, HttpResponseRedirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
@@ -13,8 +16,11 @@ from django_tenants.utils import tenant_context
 
 from allauth.account.utils import user_username, send_email_confirmation
 from allauth.account.adapter import get_adapter
+from allauth.account.signals import email_confirmed
+from allauth.account.models import EmailConfirmationHMAC
 
 from siteconfig.models import SiteConfig
+from utilities.html import textify
 
 from .forms import TenantForm
 from .models import Tenant
@@ -79,7 +85,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.last_name = cleaned_data['last_name']
             owner.save()
 
-            # set the owner's username to first_name.last_name (instead of "owner")
+            # set the owner's username to firstname.lastname (instead of "owner")
             #
             # ``generate_unique_username`` method returns a unique username from the combination of strings
             # present in txts (first argument) iterable, for reference:
@@ -127,3 +133,30 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     def get_success_url(self):
         """ Redirect to the newly created tenant."""
         return self.object.get_root_url()
+
+
+@receiver(email_confirmed, sender=EmailConfirmationHMAC)
+def email_confirmed_handler(email_address, **kwargs):
+    # Once the owner user has verified the email for the first time,
+    # send an email with instructions for how to log in with the username and password.
+    user = email_address.user
+
+    # just verified email for a first time and never been logged into app before
+    if user.last_login is not None:
+        return
+    if user.is_staff is not True:
+        return
+
+    # generate "welcome" email for new user
+    msg = get_template("tenant/email/welcome.txt").render(context={
+        "user": user,
+    })
+
+    # sending a text and HTML content combination
+    email = EmailMultiAlternatives(
+        f"Welcome to {SiteConfig.get().site_name_short}!",
+        body=textify(msg),  # convert msg to plain text, using textify utility
+        to=[user.email],
+    )
+    email.attach_alternative(msg, "text/html")
+    email.send()
