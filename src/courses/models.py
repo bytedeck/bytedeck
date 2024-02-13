@@ -512,8 +512,9 @@ class CourseStudent(models.Model):
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
     # grade is deprecated, shouldn't be used anywhere any more
     grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)
-    xp_adjustment = models.IntegerField(default=0)
-    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
+    xp_adjustment = models.IntegerField(default=0, help_text="A one-time adjustment to the the user's XP for this course.")
+    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True,
+                                             help_text="An optional reminder why an XP Adjustment was provided.")
     final_xp = models.PositiveIntegerField(blank=True, null=True)
     final_grade = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
