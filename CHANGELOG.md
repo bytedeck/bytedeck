@@ -5,7 +5,6 @@ This file chronologically records all notable changes to this website, including
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
 ### [1.23.5] 2023-12-10
-# Summarize changes shown in commits since last version update
 * Bugfixes:
   - Prevent submission buttons from covering text on small/mobile widths; closes [#1218](https://github.com/bytedeck/bytedeck/issues/1218)
   - Make archived announcements inaccessible to students [#1483](https://github.com/bytedeck/bytedeck/issues/1483)
