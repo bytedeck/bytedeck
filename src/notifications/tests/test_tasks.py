@@ -1,8 +1,5 @@
-import json
-from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
-from django_celery_beat.models import PeriodicTask
 from unittest.mock import patch
 
 from model_bakery import baker
@@ -10,7 +7,7 @@ from django_tenants.test.cases import TenantTestCase
 
 from notifications import tasks
 from notifications.models import Notification
-from notifications.tasks import create_email_notification_tasks, generate_notification_email, get_notification_emails
+from notifications.tasks import generate_notification_email, get_notification_emails
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -25,7 +22,7 @@ class NotificationTasksTests(TenantTestCase):
         self.sem = SiteConfig.get().active_semester
         self.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', email="student@email.com")
-        self.test_student2 = baker.make(User)
+        self.test_student2 = baker.make(User, email="student2@email.com")
 
         self.ai_user, _ = User.objects.get_or_create(
             pk=SiteConfig.get().deck_ai.pk,
@@ -39,43 +36,65 @@ class NotificationTasksTests(TenantTestCase):
 
     def test_get_notification_emails(self):
         """ Test that the correct list of notification emails are generated"""
-        root_url = 'https://test.com'
+        root_url = f'https://{self.get_test_tenant_domain()}'
 
-        # 1 notifications to start
+        # 0 notifications to start
         emails = get_notification_emails(root_url)
         self.assertEqual(type(emails), list)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
+
+        course = baker.make('courses.Course')
+        semester = SiteConfig.get().active_semester
 
         # Create a notification for student 1, but they have emails turned off by default
         notification1 = baker.make(Notification, recipient=self.test_student1)
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
 
-        # Turn on notification emails for student1, now it should appear
+        # Turn on notification emails for student1, now it should appear and add them to the list of emails
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.create(user=self.test_student1, email=self.test_student1.email, verified=True, primary=True)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=course, semester=semester)
         self.test_student1.profile.get_notifications_by_email = True
         self.test_student1.profile.save()
-        emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
 
-        # Turn on notification emails for student2, should still only be 1 + deck_owner
+        emails = get_notification_emails(root_url)
+
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+
+        # Turn on notification emails for student2, should still only be 1 (from the test_student1)
+        EmailAddress.objects.create(user=self.test_student2, email=self.test_student2.email, verified=True, primary=True)
+        baker.make('courses.CourseStudent', user=self.test_student2, course=course, semester=semester)
         self.test_student2.profile.get_notifications_by_email = True
         self.test_student2.profile.save()
-        emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
 
-        # Make a bunch of notifications for student2, so now we should have 2 emails + deck_owner
+        emails = get_notification_emails(root_url)
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+
+        # Make a bunch of notifications for student2, so now we should have 2 emails
         baker.make(Notification, recipient=self.test_student2, _quantity=10)
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 3)
 
-        # mark the original notification as read, so only student2 email now + deck_owner
+        self.assertEqual(len(emails), 2)
+        self.assertEqual(emails[0].to, [self.test_student1.email])
+        self.assertEqual(emails[1].to, [self.test_student2.email])
+
+        # mark the original notification as read, so only student2 email now
         notification1.unread = False
         notification1.save()
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 2)
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].to, [self.test_student2.email])
+
+    def test_email_notifications_to_users_on_all_schemas(self):
+        task_result = tasks.email_notification_to_users_on_all_schemas.apply()
+        self.assertTrue(task_result.successful())
 
     def test_email_notifications_to_users(self):
-        task_result = tasks.email_notifications_to_users.apply(
+        task_result = tasks.email_notifications_to_users_on_schema.apply(
             kwargs={
                 "root_url": "https://test.com",
             }
@@ -128,10 +147,10 @@ class NotificationTasksTests(TenantTestCase):
     def test_does_not_generate_email_for_inactive_students(self):
         root_url = 'https://test.com'
 
-        # 1 notifications to start
+        # 0 notifications to start
         emails = get_notification_emails(root_url)
         self.assertEqual(type(emails), list)
-        self.assertEqual(len(emails), 1)
+        self.assertEqual(len(emails), 0)
 
         # Create a noficiation for 1 student that has no course but have emails turned on
         inactive_student = baker.make(User)
@@ -140,38 +159,6 @@ class NotificationTasksTests(TenantTestCase):
         inactive_student.profile.get_notifications_by_email = True
         inactive_student.profile.save()
 
+        # Should not get email because they are not enrolled in any courses
         emails = get_notification_emails(root_url)
-        self.assertEqual(len(emails), 1)
-
-
-class CreateEmailNotificationTasksTest(TenantTestCase):
-    """ Tests of the create_email_notification_tasks() method"""
-
-    def setUp(self):
-        self.app = apps.get_app_config('notifications')
-
-    def test_task_is_created_with_new_tenant(self):
-        """ The email notifcation task should be created in ready() on when the app starts up
-        BUT DOES NOT HAPPEN ON TEST DB!
-        This is because the ready() method runs on the default db, before django knows it is testing.
-        https://code.djangoproject.com/ticket/22002
-        However, we also call the method when initializing a new tenant in
-        tenant.initialization.load_initial_tenant_data()
-        """
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-
-        # ready is idempotent, doesn't cause problems running it again, doesn't create a new task:
-        self.app.ready()
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-
-    def test_create_email_notification_tasks(self):
-        """ A task should have been created for the test tenant"""
-        create_email_notification_tasks()
-        tasks = PeriodicTask.objects.filter(task='notifications.tasks.email_notifications_to_users')
-        self.assertEqual(tasks.count(), 1)
-        task = tasks.first()
-        self.assertEqual(task.headers, json.dumps({"_schema_name": "test"}))
-        self.assertTrue(task.enabled)
-        self.assertFalse(task.one_off)
+        self.assertEqual(len(emails), 0)

@@ -243,7 +243,7 @@ class QuestCopy(QuestCreate):
         return kwargs
 
 
-class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
+class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
     model = Quest
     context_object_name = "quest"
     template_name = "quest_manager/summary.html"
@@ -255,6 +255,11 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context = super().get_context_data(**kwargs)
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
+        subs = QuestSubmission.objects.all_approved(quest=self.object, active_semester_only=False)
+        if subs:
+            latest_submission_time = subs.latest("time_approved").time_approved
+        else:
+            latest_submission_time = None
         count_total = subs.count()
         subs = subs.filter(time_returned=None)
         count_first_time = subs.count()
@@ -266,6 +271,7 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context["count_total"] = count_total
         context["count_first_time"] = count_first_time
         context["percent_returned"] = percent_returned
+        context["latest_submission_time"] = latest_submission_time
 
         return context
 
@@ -340,7 +346,7 @@ def ajax_summary_histogram(request, pk):
             "histogram_labels": histogram_labels[:-1].tolist(),
             "count": size,
             "mean": mean,
-            "percentile_50": int(np.median(np_data)),
+            "percentile_50": int(np.median(np_data)) if size else None,
             "percentile_25": int(np_data[size // 4]) if size else None,
             "percentile_75": int(np_data[size * 3 // 4]) if size else None,
         }

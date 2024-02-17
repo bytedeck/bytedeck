@@ -7,7 +7,11 @@ from django.db import models
 from django.utils.timezone import timedelta
 from django.contrib.auth import get_user_model
 
+from allauth.account.utils import user_email
+from allauth.account.models import EmailAddress
 from django_tenants.models import DomainMixin, TenantMixin
+
+from hackerspace_online import settings
 
 User = get_user_model()
 
@@ -89,6 +93,15 @@ class Tenant(TenantMixin):
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys
     # instead they have to be found within the tenant's context / schema
+    owner_full_name_cached = models.CharField(
+        max_length=255, blank=True, null=True, editable=False,
+        help_text="This is a cached field: the full name of the Deck Owner (set in each deck's Site Config) will be used."
+    )
+    owner_email_cached = models.EmailField(
+        null=True, blank=True, editable=False,
+        help_text="This is a cached field: the verified email address of the Deck Owner (set in each deck's Site Config) will be used."
+    )
+
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
         help_text="This is a cached field: the number of staff users, plus the number student users currently \
@@ -130,12 +143,39 @@ class Tenant(TenantMixin):
         """
         Updates the cached fields for the tenant so Django Admin displays the latest values.
         """
+        self.owner_full_name_cached = self.get_owner_full_name_cached()
+        self.owner_email_cached = self.get_owner_email_cached()
         self.active_user_count = self.get_active_user_count()
         self.total_user_count = self.get_total_user_count()
         self.quest_count = self.get_quest_count()
         self.last_staff_login = self.get_last_staff_login()
         self.google_signon_enabled = self.get_google_signon_enabled()
         self.save()
+
+    def get_owner_full_name_cached(self):
+        """
+        Returns full name (or username) from SiteConfig().deck_owner object.
+        """
+        SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
+        owner = SiteConfig.get().deck_owner
+
+        # get the full name of the user, or if none is supplied will return the username
+        return owner.get_full_name() or owner.username
+
+    def get_owner_email_cached(self):
+        """
+        Returns all known email addresses (verified or not) from SiteConfig().deck_owner object.
+        """
+        SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
+        owner = SiteConfig.get().deck_owner
+
+        email = None
+        # get all known email addresses, verified or not
+        for email_address in EmailAddress.objects.filter(user=owner):
+            # make sure it's primary email for real
+            if email_address.email == user_email(owner):
+                email = owner.email
+        return email
 
     def get_google_signon_enabled(self):
         """
@@ -169,10 +209,10 @@ class Tenant(TenantMixin):
 
     def get_last_staff_login(self):
         """
-        Returns the last time a staff member loggin in to the tenant.
+        Returns the last time a staff member loggin in to the tenant. Excludes teh deck admin account which is owned by ByteDeck
         """
-
-        last_staff_logged_in = User.objects.filter(last_login__isnull=False).filter(is_staff=True).order_by('-last_login').first()
+        staff = User.objects.filter(last_login__isnull=False).filter(is_staff=True).exclude(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        last_staff_logged_in = staff.order_by('-last_login').first()
 
         if last_staff_logged_in:
             return last_staff_logged_in.last_login

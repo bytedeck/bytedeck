@@ -10,6 +10,7 @@ from courses.models import CourseStudent
 from hackerspace_online.celery import app
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
+from profile_manager.models import Profile
 
 User = get_user_model()
 
@@ -30,26 +31,6 @@ def send_notifications(user_id, announcement_id):
     )
 
 
-def get_users_to_email():
-    students_to_email = list(
-        CourseStudent.objects.all_users_for_active_semester()
-                             .filter(emailaddress__verified=True, emailaddress__primary=True)
-                             .filter(profile__get_announcements_by_email=True)
-                             .exclude(email='')
-                             .values_list('email', flat=True))
-
-    teachers_to_email = list(
-        User.objects.filter(is_staff=True)
-                    .filter(emailaddress__verified=True, emailaddress__primary=True)
-                    .filter(profile__get_announcements_by_email=True)
-                    .exclude(email='')
-                    .values_list('email', flat=True))
-
-    users_to_email = list(set(students_to_email + teachers_to_email))
-
-    return users_to_email
-
-
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
     siteconfig = SiteConfig.get()
@@ -67,7 +48,7 @@ def send_announcement_emails(content, root_url, absolute_url):
         subject,
         body=text_content,
         to=['contact@bytedeck.com'],
-        bcc=get_users_to_email(),
+        bcc=Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True),
     )
     email_msg.attach_alternative(html_content, "text/html")
     email_msg.send()

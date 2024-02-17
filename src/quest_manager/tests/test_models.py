@@ -465,12 +465,6 @@ class SubmissionTestModel(TenantTestCase):
     def test_submission_url(self):
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_submission_without_quest(self):
-        # creating a submission without a quest, null=True so no Quest created.
-        sub = baker.make(QuestSubmission)
-        self.assertIsNone(sub.quest)
-        self.assertIsNotNone(str(sub))
-
     def test_submission_mark_completed(self):
         draft_text = "Draft words"
         user = baker.make(User)

@@ -110,6 +110,9 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
 
+        # summary stats
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 403)
+
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
@@ -134,6 +137,18 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
+
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 404)  # Ajax only
+        response = self.client.get(
+            reverse('quests:ajax_summary_histogram', args=[q_pk]),
+            data={
+                "min": 0,
+                "max": 100,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_start(self):
         # log in a student from setUp
@@ -247,7 +262,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "There are currently no new quest available to you!")
 
         # Only hidden quests #################################################
-
+        Quest.objects.all().delete()
         # add a new quest available to the user
         quest = baker.make(Quest, name="hide me")
         # but adding a new quest won't make it appear in their available list, because the available list is cached
@@ -261,6 +276,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Now hide it
         user.profile.hide_quest(quest.id)
         self.assertEqual(user.profile.num_hidden_quests(), 1)  # Sanity check that the quest is hidden
+
         self.assertFalse(Quest.objects.get_available(user).exists())  # Should not show up here cus hidden
         response = self.client.get(url)
         self.assertContains(response, "You have no new quests available")

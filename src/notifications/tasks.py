@@ -1,16 +1,14 @@
-import json
-
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import get_template
-from django.utils import timezone
-from django_tenants.utils import get_tenant_model
+from django_tenants.utils import get_tenant_model, tenant_context
 
 from hackerspace_online.celery import app
 from quest_manager.models import QuestSubmission
-# from celery import shared_task
+
+from profile_manager.models import Profile
 
 from siteconfig.models import SiteConfig
 
@@ -19,17 +17,29 @@ from .models import Notification
 User = get_user_model()
 
 
-@app.task(name='notifications.tasks.email_notifications_to_users')
-def email_notifications_to_users(root_url):
+@app.task(name='notifications.tasks.email_notification_to_users_on_all_schemas')
+def email_notification_to_users_on_all_schemas():
+    for tenant in get_tenant_model().objects.exclude(schema_name='public'):
+        with tenant_context(tenant):
+            root_url = tenant.get_root_url()
+            email_notifications_to_users_on_schema.apply_async(args=[root_url], queue='default')
+
+    return "Scheduled email_notifications_to_users_on_schema for all schemas"
+
+
+@app.task(name='notifications.tasks.email_notifications_to_users_on_schema')
+def email_notifications_to_users_on_schema(root_url):
 
     notification_emails = get_notification_emails(root_url)
     connection = mail.get_connection()
     connection.send_messages(notification_emails)
     # send_email_notification_tenant.delay(root_url)
 
+    return f"Sent {len(notification_emails)} notification emails"
+
 
 def get_notification_emails(root_url):
-    users_to_email = User.objects.filter(profile__get_notifications_by_email=True)
+    users_to_email = Profile.objects.get_mailing_list(for_notification_email=True)
 
     notification_emails = []
 
@@ -72,64 +82,3 @@ def generate_notification_email(user, root_url):
         return email_msg
     else:
         return None
-
-
-def create_email_notification_tasks():
-    """Create a scheduled beat tasks for each tenant, so that emails are sent out.  The tasks themselves are
-    saved on the public schema
-
-    THIS METHOD MUST REMAIN IDEMPOTENT, so that it can be run multiple times without errors
-    """
-
-    # https://docs.djangoproject.com/en/3.2/ref/applications/#django.apps.AppConfig.ready
-    # Can't import models at the module level, so need to import in the method.
-    from django_celery_beat.models import CrontabSchedule, PeriodicTask
-
-    minute = 0
-
-    for tenant in get_tenant_model().objects.exclude(schema_name='public'):
-
-        # Bump each one by 1 minute, to spread out the tasks.
-        email_notifications_schedule, _ = CrontabSchedule.objects.get_or_create(
-            minute=minute,
-            hour='5',
-            day_of_week='*',
-            day_of_month='*',
-            month_of_year='*',
-            timezone=timezone.get_current_timezone()
-        )
-
-        minute += 1
-
-        task_name = f'Send daily email of notifications for schema {tenant.schema_name}',
-        # PeriodicTask doesn't have an update_or_create() method for some reason, so do it long way
-        # https://github.com/celery/django-celery-beat/issues/106
-
-        defaults = {
-            'crontab': email_notifications_schedule,
-            'task': 'notifications.tasks.email_notifications_to_users',
-            'queue': 'default',
-            'kwargs': json.dumps({  # beat needs json serializable args, so make sure they are
-                'root_url': tenant.get_root_url(),
-            }),
-            # Inject the schema name into the task's header, as that's where tenant-schema-celery
-            # will be looking for it to ensure it is tenant aware
-            'headers': json.dumps({
-                '_schema_name': tenant.schema_name,
-            }),
-            'one_off': False,
-            'enabled': True,
-        }
-
-        try:
-            task = PeriodicTask.objects.get(name=task_name)
-            for key, value in defaults.items():
-                setattr(task, key, value)
-            task.save()
-        except PeriodicTask.DoesNotExist:
-            new_values = {'name': task_name}
-            new_values.update(defaults)
-            task = PeriodicTask(**new_values)
-            task.save()
-
-        # End manual update_or_create() ############

@@ -10,6 +10,8 @@ from courses.models import Semester
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from django_tenants.test.cases import TenantTestCase
+from unittest.mock import patch
+
 
 User = get_user_model()
 
@@ -462,6 +464,39 @@ class QuestManagerTest(TenantTestCase):
                     ordered=False
                 )
 
+    @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
+    def test_get_available__student_outside_course(self, mock_task):
+        """
+        Test that newly created quests are available for students outside the course
+        event if they registered before the quest was created.
+        """
+
+        # Create the user first
+        new_student = baker.make(User, username='new_student', is_staff=False)
+
+        # Ensure that the student is not in any courses
+        # and there is only one available Welcome Quest at the moment
+        self.assertFalse(new_student.profile.has_current_course)
+        self.assertEqual(Quest.objects.get_available(new_student).count(), 1)
+
+        # And then create a new quest
+        new_quest = baker.make(Quest, name="Quest, anew!", available_outside_course=True)
+
+        self.assertTrue(new_quest.available_outside_course)
+        self.assertTrue(mock_task.called)
+        self.assertEqual(mock_task.call_count, 1)
+        self.assertEqual(mock_task.call_args.kwargs['kwargs']['quest_id'], new_quest.id)
+
+        # For some reason, update_conditions_for_quest.apply_async is called
+        # but it didn't do anything so we'll need to call it manually.
+        # Probably has to do something with it being a celery task.
+        from prerequisites.tasks import update_conditions_for_quest
+        update_conditions_for_quest(quest_id=new_quest.id, start_from_user_id=1)
+
+        # Now the student should be able to see the new quest even if they are not in any courses
+        # and just registered
+        self.assertEqual(Quest.objects.get_available(new_student).count(), 2)
+
     def make_test_quests_and_submissions_stack(self):
         """  Creates 6 quests with related submissions
         Quest                   sub     .completed   .semester
@@ -599,7 +634,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [repr(self.sub), repr(sub2)], ordered=False)
 
     def test_for_teachers_only__with_deleted_quest(self):
-        """for_teachers_only shouldn't break if a submission's quest has been deleted"""
+        """for_teachers_only QuestSubmissions should be deleted for that quest if it is deleted"""
 
         self.quest = baker.make(Quest)
         self.active_semester = baker.make(Semester)
@@ -612,19 +647,8 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
         self.quest.delete()
         qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
 
-        # Add another submission from a different block, but this time the quest should notify the teacher
-        quest2 = baker.make(Quest, specific_teacher_to_notify=self.teacher)
-        sub2 = baker.make(QuestSubmission, semester=self.active_semester, quest=quest2)
-        qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>', repr(sub2)], ordered=False)
-
-        # Delete this one too, shouldn't crash!
-        quest2.delete()
-        qs = QuestSubmission.objects.all()
-        # Only has the first deleted sub, because the second one no longer has a quest.specific_teacher_to_notify, so not included.
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), ['<QuestSubmission: [DELETED QUEST]>'])
+        self.assertTrue(qs.count() == 0)
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)

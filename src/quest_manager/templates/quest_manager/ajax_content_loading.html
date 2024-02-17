@@ -21,6 +21,7 @@
                           var html_id = $(this).attr('id');
                           // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
                           // quest/sub id is number at end of html_id
+                          // html_id will be in format "heading-quest-42", so need to get the 42, which is the quest.id
                           var id = parseInt(html_id.match(/\d+$/)[0], 10);
 
                           var preview_content_selector = `#preview-quest-${id}, #preview-submission-${id}`;
@@ -88,6 +89,7 @@
             var html_id = $(this).attr('id')
             // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
             // quest/sub id is number at end of html_id
+            // html_id will be in format "heading-quest-42", so need to get the 42, which is the quest.id
             var id = parseInt(html_id.match(/\d+$/)[0], 10);
 
             // get ajax url based on tab
