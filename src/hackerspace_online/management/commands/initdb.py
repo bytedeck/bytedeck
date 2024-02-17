@@ -31,7 +31,7 @@ class Command(BaseCommand):
             connections['default'].cursor()
         except OperationalError:
             self.stdout.write("I can't connect to the database.  Are you sure it's running?")
-            self.stdout.write("Try `docker-compose up -d db` then give it a few seconds to boot up")
+            self.stdout.write("Try `docker compose up -d db` then give it a few seconds to boot up")
             self.stdout.write(self.style.NOTICE("Bailing..."))
             return
 

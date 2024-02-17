@@ -10,7 +10,7 @@ Save us all some time and frustration by working through these steps carefully, 
 You can run tests either locally, or through the web container:
 1. This will run all the project's tests and if successful, will also check the code style using flake8 (make sure you're in your virtual environment):
    * using venv: `python src/manage.py test src && flake8 src`
-   * using docker: `docker-compose exec web bash -c "python src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+   * using docker: `docker compose exec web bash -c "python src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
 1. Tests take too long, but you can speed them up a number of ways:
    * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
      `python src/manage.py test src --parallel --failfast`
@@ -20,18 +20,18 @@ You can run tests either locally, or through the web container:
 1. This project uses git pre-commit hooks, set up with the Python "[pre-commit](https://pre-commit.com/)" module. These hooks trigger a series of checks every time a new commit is made. They ensure that the code is formatted correctly, and some even auto-correct certain simple issues. However, we don't have pre-commit hooks for running our Django tests, so the full test suite must still be ran separately. All pre-commit hooks are defined in the [.pre-commit-config.yaml](.pre-commit-config.yaml) file. Note that if auto-corrections are made, the commit won't complete, and you'll need to run the commit command again. It can also be helpful to run these hooks manually to ensure you have everything setup correctly:
 
    * using venv: `pre-commit run`
-   * using docker: `docker-compose exec web bash -c "pre-commit run"`
+   * using docker: `docker compose exec web bash -c "pre-commit run"`
 
    Note: Running pre-commit hooks manually is generally used for troubleshooting or setup verification, and is not a required step in the normal development workflow.
 ### Further Development
 After you've got everything set up, you can just run the whole project with:
-`docker-compose up`
+`docker compose up`
 
 And stop it with:
-`docker-compose down`
+`docker compose down`
 
 or to run in a local venv (assuming you have activated it), start all the docker services in the background (-d) except web, then run the django server locally:
-1. `docker-compose up -d db redis celery celery-beat -d`
+1. `docker compose up -d db redis celery celery-beat -d`
 1. `python src/manage.py runserver`
 
 ### First time only:
@@ -47,10 +47,10 @@ or to run in a local venv (assuming you have activated it), start all the docker
 1. Write code!
 1. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
    * venv: `python src/manage.py test src --failfast --parallel && flake8 src`
-   * docker: `docker-compose exec web bash -c "python src/manage.py test src --failfast --parallel && flake8 src"`
+   * docker: `docker compose exec web bash -c "python src/manage.py test src --failfast --parallel && flake8 src"`
 1. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number. Note that if your development environment is running inside of docker and not a Python virtual environment, the pre-commit hooks won't run properly. For this reason, you will be required to run your commit command inside of docker:
    - venv: `git commit -am "Useful description of your changes; Closes #123"`
-   - docker: `docker-compose exec web bash -c "git commit -m 'Useful description of your changes; Closes #123'"` (ensure the commit message is enclosed in single and not double quotes)
+   - docker: `docker compose exec web bash -c "git commit -m 'Useful description of your changes; Closes #123'"` (ensure the commit message is enclosed in single and not double quotes)
 1. Repeat steps 4-9 above until the feature/issue is completed.
 1. If you make mistakes during the commit process, or want to change or edit commits, [here's a great guide](http://sethrobertson.github.io/GitFixUm/fixup.html).
 1. Make sure your develop branch is up to date again and rebase onto any changes that have been made upstream since you started the branch: `git pull upstream develop --rebase`  (this command joins several steps: updating your local develop branch, and then rebasing your current feature branch on top of the updated develop branch)
@@ -81,9 +81,9 @@ or to run in a local venv (assuming you have activated it), start all the docker
 
 To verify the test coverage of your additions, you can run coverage during testing; for example, if I made a modification in the Notifications app:
 1. Run the notifications tests with coverage:
-`docker-compose exec web bash -c "coverage run --source=src ./src/manage.py test src/notifications"`
+`docker compose exec web bash -c "coverage run --source=src ./src/manage.py test src/notifications"`
 1. Generate html for the test coverage:
-`docker-compose exec web bash -c "coverage html"`
+`docker compose exec web bash -c "coverage html"`
 1. View the test coverage by opening `/htmlcov/index.html` in your browser and navigating to your code
 1. Confirm that all logical branches of your codes is covered.  Here's an example of missing test coverage:
 ![image](https://user-images.githubusercontent.com/10604391/209511048-3c3e5035-71d3-4cd3-9c8f-894af9d85475.png)
@@ -119,7 +119,7 @@ We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/ha
 ### Advanced / Optional: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
 1. Run the pg-admin container:
-`docker-compose up pg-admin`
+`docker compose up pg-admin`
 2. Log in:
    - url: [localhost:8080](http://localhost:8080)
    - email: admin@admin.com

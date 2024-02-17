@@ -4,7 +4,7 @@ version: '2.2'
 #
 # FOR DOCKER_COMPOSE SETTINGS SPECIFIC TO DEVELOPMENT
 #
-# run automatically with `docker-compose up` on top of the the settings in docker-compose.yml
+# run automatically with `docker compose up` on top of the the settings in docker-compose.yml
 #
 # docker-compose.overide.yml
 # https://docs.docker.com/compose/extends/
@@ -45,7 +45,7 @@ services:
 
   web:
     stdin_open: true
-    tty: true   # Enabled together with stdin_open so it won't raise an error when we are in pdb mode. Attach using `docker attach $(docker-compose ps -q web)`
+    tty: true   # Enabled together with stdin_open so it won't raise an error when we are in pdb mode. Attach using `docker attach $(docker compose ps -q web)`
     environment:
       POSTGRES_HOST: db  # takes precendent over .env file
       REDIS_HOST: redis  # takes precendent over .env file
