@@ -4,6 +4,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.23.5] 2023-12-10
+# Summarize changes shown in commits since last version update
+* Bugfixes:
+  - Prevent submission buttons from covering text on small/mobile widths; closes [#1218](https://github.com/bytedeck/bytedeck/issues/1218)
+  - Make archived announcements inaccessible to students [#1483](https://github.com/bytedeck/bytedeck/issues/1483)
+  - Add template to error page for inactive accounts [#1553](https://github.com/bytedeck/bytedeck/issues/1553)
+  - Confirmation not displaying when closing a semester [#1563](https://github.com/bytedeck/bytedeck/issues/1563)
+* Code cleanup:
+  - Refactor project to use docker compose v2
+  - Remove name field from Profile model (not used) [#1549](https://github.com/bytedeck/bytedeck/issues/1549)
+  - Remove old Grade field from course form [#1230](https://github.com/bytedeck/bytedeck/issues/1230)
 
 ### [1.23.4] 2023-12-10
 * Tweak:
