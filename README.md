@@ -18,16 +18,16 @@ The instructions assume you are using Ubuntu (or another Debian based linux dist
 
 #### Installing Docker
 
-Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
-https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
+Follow the instructions the for installing Docker Engine.
+https://docs.docker.com/engine/install/, if using Ubuntu and you don't want Docker Desktop, you can install just the enginge from their repository: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
 
 By the end, you should be able to run docker's test image:
 `$ sudo docker run hello-world`
 
-#### Install docker-compose
-`sudo apt install docker-compose`
+As a sanity check, make sure docker compose works too:
+`$ docker compose --version`
 
-Add yourself to the docker group:
+If you can't run docker without sudo, you can try adding yourself to the docker group (is this still needed? I don't think so)
 `sudo usermod -aG docker $USER`
 
 #### Make sure you have Python3.8
