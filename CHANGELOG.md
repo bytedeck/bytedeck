@@ -4,7 +4,44 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.23.2] 2023-09-10 Many bugs squashed
+### [1.23.5] 2023-12-10
+* Bugfixes:
+  - Prevent submission buttons from covering text on small/mobile widths; closes [#1218](https://github.com/bytedeck/bytedeck/issues/1218)
+  - Make archived announcements inaccessible to students [#1483](https://github.com/bytedeck/bytedeck/issues/1483)
+  - Add template to error page for inactive accounts [#1553](https://github.com/bytedeck/bytedeck/issues/1553)
+  - Confirmation not displaying when closing a semester [#1563](https://github.com/bytedeck/bytedeck/issues/1563)
+* Code cleanup:
+  - Refactor project to use docker compose v2
+  - Remove name field from Profile model (not used) [#1549](https://github.com/bytedeck/bytedeck/issues/1549)
+  - Remove old Grade field from course form [#1230](https://github.com/bytedeck/bytedeck/issues/1230)
+
+### [1.23.4] 2023-12-10
+* Tweak:
+  - Simplify Badge popups by removing all the buttons and providing info only.  Now when you click a badge, it will take you to the badge detail page (which most users probably don't even know exists).  Specific badges that were granted to a student can still be revoked through the user's profile (same as before: click the badge on their profile page, then in the list of badges granted to the user, hit the delete button beside the one you want to revoke.)
+* Bugfixes:
+  - Only send announcement and notification emails to users with verified email addresses (to prevent bounceback and other rejection issues) [#1374](https://github.com/bytedeck/bytedeck/issues/1374)
+  - Quest accordions not loading in Campaign detail view [#1512](https://github.com/bytedeck/bytedeck/issues/1512)
+  - Remove default admin email address on new tenants
+  - Fix latest submission time on Quest Summary (experimental) page [#1542](https://github.com/bytedeck/bytedeck/issues/1542)
+  - Fix access permission for Quest Summary page (should have been staff and TAs only)
+  - Fix Quest Summary page to only include approved submissions in queryset.
+  - Fix Quest Summary page NaN error when 0 completed quests
+* Bytedeck Admin:
+  - Exclude admin user from a tenant's "last staff login" date.
+
+
+### [1.23.3] 2023-11-28
+* Optimizations:
+  - Upgrade celery-beat and tenant-schemas-celery dependancies and refactor periodic task creation [#1510](https://github.com/bytedeck/bytedeck/issues/1510)
+
+* Bugfixes:
+  - When a quest is deleted, delete all submissions of it as well, instead of having them hang around like zombies [#1488](https://github.com/bytedeck/bytedeck/issues/1488)
+  - Fix: quest available outside course and no prereqs doesn't appear for an existing student without a course [#957](https://github.com/bytedeck/bytedeck/issues/957)
+  - Fix: Email verfication link on new deck creation [#1492](https://github.com/bytedeck/bytedeck/issues/1492)
+  - Add queue when running celery tasks... so they actually run [#1540](https://github.com/bytedeck/bytedeck/issues/1540)
+
+
+### [1.23.2] 2023-11-24 Many bugs squashed
 * Bugfixes:
   - Fix sort order of Badge Types [#1484](https://github.com/bytedeck/bytedeck/issues/1484)
   - Fix error when accessing notifications list [#1527](https://github.com/bytedeck/bytedeck/issues/1527)

@@ -18,16 +18,16 @@ The instructions assume you are using Ubuntu (or another Debian based linux dist
 
 #### Installing Docker
 
-Follow the instructions the for installing Docker CE (community edition, i.e. free edition) using the repository:
-https://docs.docker.com/install/linux/docker-ce/ubuntu/#install-using-the-repository
+Follow the instructions the for installing Docker Engine.
+https://docs.docker.com/engine/install/, if using Ubuntu and you don't want Docker Desktop, you can install just the enginge from their repository: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
 
 By the end, you should be able to run docker's test image:
 `$ sudo docker run hello-world`
 
-#### Install docker-compose
-`sudo apt install docker-compose`
+As a sanity check, make sure docker compose works too:
+`$ docker compose --version`
 
-Add yourself to the docker group:
+If you can't run docker without sudo, you can try adding yourself to the docker group (is this still needed? I don't think so)
 `sudo usermod -aG docker $USER`
 
 #### Make sure you have Python3.8
@@ -67,10 +67,10 @@ This will create your docker containers and initialize the database by running m
 1. Copy the example environment file to the one you'll be using. Docker-compose and django will both be looking for a .env files with various settings that you can customize.  If you are not running the app locally (e.g. production), then be sure to set DOMAIN_ROOT to the FQDN.
 `cp .env.example .env`
 1. Build the containers (db, redis, celery, and celery-beat):
-`docker-compose build`
+`docker compose build`
 1. Start the postgres database container (db) in the background/daemonized (-d)
-`docker-compose up -d db`
-1. OPTIONAL: For development, we can run the django app in a local virtual environment (venv) instead of using the web container, however if this gives you any issues, just run everything in a container with docker-compose (explained below)
+`docker compose up -d db`
+1. OPTIONAL: For development, we can run the django app in a local virtual environment (venv) instead of using the web container, however if this gives you any issues, just run everything in a container with docker compose (explained below)
    1. Create a python virtual environment (we'll put ours in a venv directory):
    `python -m venv venv --prompt bytedeck`
    1. Enter the virtual environment:
@@ -81,27 +81,27 @@ This will create your docker containers and initialize the database by running m
    `python -m pip install -r requirements.txt`
 1. Initialize pre-commit:
    * Using venv: `pre-commit install`
-   * Using docker: `docker-compose run web bash -c "pre-commit install"`
+   * Using docker: `docker compose run web bash -c "pre-commit install"`
 1. Run a management command to run initial migrations, create the public tenant, superuser, and some other stuff:
    * using venv: `python src/manage.py initdb`
-   * using docker: `docker-compose run web bash -c "python src/manage.py initdb"`
+   * using docker: `docker compose run web bash -c "python src/manage.py initdb"`
 1. Now run the django development server:
    * using venv: `python src/manage.py runserver`
-   * using docker: `docker-compose up web`
+   * using docker: `docker compose up web`
 1. You should now get the page at http://localhost:8000.  Note that the ip/url output by the django server, `0.0.0.0` will not work in this project, because our multitenant architecture requires a domain name, so you need to use `localhost` instead.
 1. And you should be able to log in to the admin site at http://localhost:8000/admin/
    - user: admin
    - password: password (this is defined in the .env file under DEFAULT_SUPERUSER_PASSWORD)
 
 1. Run redis, celery and celery-beat containers (you can run in the background too if you want with `-d`, but you won't see any errors if they come up).  the db container should already be running:
-`docker-compose up -d redis celery celery-beat`
+`docker compose up -d redis celery celery-beat`
 1. To view errors in the containers when they are running in the background, you can use:
-`docker-compose logs -f`
+`docker compose logs -f`
 
 ### Creating a Tenant
 If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
 
-0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker-compose up web` (and ignore the link it tells you to access the page)
+0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker compose up web` (and ignore the link it tells you to access the page)
 1. Go to django admin at http://localhost:8000/admin/ (this is known as the Public tenant, it's where we can control all the other sites or tenants)
 2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
 3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
@@ -124,7 +124,7 @@ New tenants will come with some basic initial data already installed, but if you
     ```
 
     You can also do this from docker with:
-    `docker-compose exec web bash -c "python src/manage.py tenant_command shell"`
+    `docker compose exec web bash -c "python src/manage.py tenant_command shell"`
 
 2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
 3. use Ctrl + D or `exit()` to close the Python shell.

@@ -68,6 +68,15 @@ def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **k
         update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
+@receiver(post_save, sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quests_available_outside_course")
+def update_cache_triggered_by_quests_available_outside_course(sender, instance, created, update_fields, *args, **kwargs):
+    """
+    Handle a specific case where available quests is not updated if the Quest is available outside a course
+    """
+    if instance.available_outside_course:
+        update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.id, 'start_from_user_id': 1}, queue='default')
+
+
 @receiver([post_save, post_delete], sender=Prereq, dispatch_uid="prerequisites.signals.update_cache_triggered_by_prereq")
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,

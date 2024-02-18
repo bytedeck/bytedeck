@@ -846,7 +846,7 @@ class QuestSubmissionManager(models.Manager):
 
 
 class QuestSubmission(models.Model):
-    quest = models.ForeignKey(Quest, on_delete=models.SET_NULL, null=True)
+    quest = models.ForeignKey(Quest, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user", on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField(default=1,
                                           help_text='indicating submissions beyond the first for repeatable quests')

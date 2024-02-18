@@ -66,7 +66,7 @@ _Note: scheman_name_to_dump_in is same as tenant's name._
 
 ### Accessing the django shell
 
-`docker-compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "python src/manage.py tenant_command shell"`
+`docker compose -f docker-compose.aws.yml -f docker-compose.prod.aws.yml exec web bash -c "python src/manage.py tenant_command shell"`
 
 
 ### Deleting a Tenant

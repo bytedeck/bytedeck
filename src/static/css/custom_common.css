@@ -534,6 +534,11 @@ td.notification-icons .fa-stack {
  *
  ********************************************/
 
+.note-btn {
+    /* prevent different size buttons https://github.com/bytedeck/bytedeck/issues/1550 */
+    min-height: 31px;
+}
+
 .panel-summernote, .list-group-item-summernote {
     padding: 0px;
     border-radius: 0px;
@@ -685,7 +690,16 @@ margin-bottom on the .pull-right child element of .list-group-item-buttons.
     padding-bottom: 3px;
 }
 
-/***********Submission ********************************/
+/***********Submission and QUESTS ********************************/
+
+.quest-icon-description {
+    min-width: 50%; /* prevent floating buttons from squashing description text */
+}
+
+.submission-buttons-other-top {
+    padding-left: 5px;
+    padding-bottom: 5px;
+}
 
 li.file-link {
     margin-bottom: 5px;

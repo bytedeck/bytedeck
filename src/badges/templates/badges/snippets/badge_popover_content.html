@@ -36,27 +36,3 @@ Prerequisites:
 {% endfor %}
 </small></ol>
 {% endif %} {# if assertions #}
-
-{% if request.user.is_staff %} {# staff can manage badges from popup #}
-<div class='btn-group block' role='group'>
-  <a class='btn btn-warning' title='Edit' href='{% url "badges:badge_update" badge.id %}' role='button'>
-    <i class='fa fa-edit'></i>
-  </a>
-  <a class='btn btn-primary' title='Copy' href='{% url "badges:badge_copy" badge.id %}' role='button'>
-    <i class='fa fa-copy'></i>
-  </a>
-  <a class='btn btn-danger' title='Delete' href='{% url "badges:badge_delete" badge.id %}' role='button'>
-    <i class='fa fa-trash-o'></i>
-  </a>
-</div>
-<div class='btn-group block pull-right' role='group'>
-  <a class='btn btn-success' title='Grant to a student'
-    href='{% url "badges:grant" badge.id 0 %}' role='button'>
-    <i class='fa fa-user'></i>
-  </a>
-  <a class='btn btn-success' title='Bulk grant to multiple student'
-    href='{% url "badges:bulk_grant_badge" badge.id %}' role='button'>
-    <i class='fa fa-users'></i>
-  </a>
-</div>
-{% endif %} {# if staff #}

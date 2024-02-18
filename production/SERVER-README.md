@@ -13,7 +13,7 @@
 
 **Note, when media uploads and static files volumes of the application's container are mapped to host, the application container by default runs on root user, and the files created on the mounts will automatically become root ownership files, which will not be accessible from browser requests.**
 
-**To override this phenomenon user's $UID and $GID is explicitly passed on `web` service of docker-compose so that the files created under the process are owned by that $UID and $GID. This are set by**
+**To override this phenomenon user's $UID and $GID is explicitly passed on `web` service of docker compose so that the files created under the process are owned by that $UID and $GID. This are set by**
 ```shell script
     $ export WUID=<user_id>
     $ export WGID=<group_id>
@@ -37,9 +37,9 @@ docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'
 ```
 _`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run container with_
 
-- Step 3: Check the status of containers by ``docker-compose ps``
-- Step 4: To deploy changes, use ``docker-compose down`` then ``git pull``
-- Step 5: Run the application using ``docker-compose build && docker-compose up -d``
+- Step 3: Check the status of containers by ``docker compose ps``
+- Step 4: To deploy changes, use ``docker compose down`` then ``git pull``
+- Step 5: Run the application using ``docker compose build && docker compose up -d``
 
 
 ### Workflow
