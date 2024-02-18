@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import Max, Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.contrib.contenttypes.fields import GenericRelation
 
 from django.dispatch import receiver
 from django.db.models.signals import post_save
@@ -172,6 +173,18 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     # time_expired = models.TimeField(blank=True, null=True, help_text= 'only used if date_expired is blank')
     # minimum_XP = models.PositiveIntegerField(blank=True, null=True)
     # maximum_XP = models.PositiveIntegerField(blank=True, null=True)
+
+    prereq_parent = GenericRelation(Prereq,
+                                    content_type_field='parent_content_type',
+                                    object_id_field='parent_object_id')
+
+    prereq_prereq = GenericRelation(Prereq,
+                                    content_type_field='prereq_content_type',
+                                    object_id_field='prereq_object_id')
+
+    prereq_or_prereq = GenericRelation(Prereq,
+                                       content_type_field='or_prereq_content_type',
+                                       object_id_field='or_prereq_object_id')
 
     objects = BadgeManager()
 

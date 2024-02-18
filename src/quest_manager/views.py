@@ -160,6 +160,7 @@ class QuestFormViewMixin:
         # Save the object so we can add prereqs to it
         super_response = super().form_valid(form)
         self.set_new_prereqs(form)
+
         return super_response
 
     def set_new_prereqs(self, form):

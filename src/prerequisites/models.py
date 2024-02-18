@@ -24,6 +24,16 @@ class HasPrereqsMixin:
                 else:
                     Prereq.add_simple_prereq(self, prereq_object)
 
+    def remove_as_prereq(self):
+        """
+        Removes this object as a prerequisite to any other object.
+        """
+        self.prereq_prereq.all().delete()
+        self.prereq_or_prereq.all().update(
+            or_prereq_object_id=None,
+            or_prereq_content_type=None,
+        )
+
     def clear_all_prereqs(self):
         """ Removes all pre-requisite requirements from this parent object """
         num_deleted = self.prereqs().delete()
