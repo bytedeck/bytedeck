@@ -33,7 +33,8 @@ services:
       args:
         WUID: $WUID
         WGID: $WGID
-    #volumes:
+    volumes:
+        - /etc/letsencrypt:/etc/letsencrypt
     #   - static_data:/var/www/bytedeck/static
     #   - socket_data:/bytedeck-volume
     #   - media_data:/var/www/bytedeck/media/
