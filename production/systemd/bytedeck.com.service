@@ -8,8 +8,8 @@ After=docker.service
 [Service]
 User=ubuntu
 Group=docker
-# Client Env Vars
-Environment=WGID=999
+# Client Env Vars, UID and GID for the `ubuntu` user
+Environment=WGID=1000
 Environment=WUID=1000
 Type=oneshot
 RemainAfterExit=yes
