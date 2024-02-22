@@ -58,8 +58,8 @@ class ProfileFormTest(TenantTestCase):
         but entering it server side shouldn't break the form.
         """
         form = ProfileForm(instance=self.user.profile, data={'email': 'notanemail', 'grad_year': Profile.get_grad_year_choices()[0][0]})
-        form.is_valid()
-        self.assertIn("Enter a valid email address", form.errors["email"])
+        self.assertFalse(form.is_valid())
+        self.assertIn("Enter a valid email address.", form.errors["email"])
 
     def test_clean_email__invalid_domain(self):
         """ Mock the NXDOMAIN error from non-existant domains, email field should raise a ValidationError """
