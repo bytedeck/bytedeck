@@ -15,7 +15,6 @@ from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from allauth.account.utils import user_username, send_email_confirmation
-from allauth.account.adapter import get_adapter
 from allauth.account.signals import email_confirmed
 from allauth.account.models import EmailConfirmationHMAC
 
@@ -86,12 +85,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.save()
 
             # set the owner's username to firstname.lastname (instead of "owner")
-            #
-            # ``generate_unique_username`` method returns a unique username from the combination of strings
-            # present in txts (first argument) iterable, for reference:
-            # https://docs.allauth.org/en/latest/account/advanced.html#creating-and-populating-user-instances
-            user_username(owner, get_adapter().generate_unique_username([
-                ".".join([owner.first_name, owner.last_name])]))
+            user_username(owner, f"{owner.first_name}.{owner.last_name}")
 
             # set the owner's password to firstname-deckname-lastname
             owner.set_password("-".join([owner.first_name, self.object.name, owner.last_name]).lower())
