@@ -138,7 +138,8 @@ def email_confirmed_handler(email_address, **kwargs):
     # just verified email for a first time and never been logged into app before
     if user.last_login is not None:
         return
-    if user.is_staff is not True:
+    # somehow user is not a deck owner
+    if not (user.pk == SiteConfig.get().deck_owner.pk):
         return
 
     # generate "welcome" email for new user
