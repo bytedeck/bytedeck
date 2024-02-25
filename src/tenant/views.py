@@ -134,16 +134,17 @@ def email_confirmed_handler(email_address, **kwargs):
     # Once the owner user has verified the email for the first time,
     # send an email with instructions for how to log in with the username and password.
     user = email_address.user
+    config = SiteConfig.get()
 
     # just verified email for a first time and never been logged into app before
     if user.last_login is not None:
         return
     # somehow user is not a deck owner
-    if not (user.pk == SiteConfig.get().deck_owner.pk):
+    if not (user.pk == config.deck_owner.pk):
         return
 
     subject = get_template("tenant/email/welcome_subject.txt").render(context={
-        "config": SiteConfig.get(),
+        "config": config,
         "user": user,
     })
     # email subject *must not* contain newlines
@@ -151,7 +152,7 @@ def email_confirmed_handler(email_address, **kwargs):
 
     # generate "welcome" email for new user
     msg = get_template("tenant/email/welcome_message.txt").render(context={
-        "config": SiteConfig.get(),
+        "config": config,
         "user": user,
     })
 
