@@ -142,14 +142,22 @@ def email_confirmed_handler(email_address, **kwargs):
     if not (user.pk == SiteConfig.get().deck_owner.pk):
         return
 
+    subject = get_template("tenant/email/welcome_subject.txt").render(context={
+        "config": SiteConfig.get(),
+        "user": user,
+    })
+    # email subject *must not* contain newlines
+    subject = "".join(subject.splitlines())
+
     # generate "welcome" email for new user
-    msg = get_template("tenant/email/welcome.txt").render(context={
+    msg = get_template("tenant/email/welcome_message.txt").render(context={
+        "config": SiteConfig.get(),
         "user": user,
     })
 
     # sending a text and HTML content combination
     email = EmailMultiAlternatives(
-        f"Welcome to {SiteConfig.get().site_name_short}!",
+        subject,
         body=textify(msg),  # convert msg to plain text, using textify utility
         to=[user.email],
     )
