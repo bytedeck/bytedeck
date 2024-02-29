@@ -203,13 +203,26 @@ class AllowedGFKChoiceField(GFKChoiceField):
         return querysetsequence
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+
+    allow_multiple_selected = True
+
+    def __init__(self, *args, **kwargs):
+        # Not sure why setting allow_multiple_selected = True doesn't work by itself.
+        # Django docs don't say that attrs={'multiple': True} is also needed.
+
+        # Make sure attrs dict exists, then set multiple to True so we can select more than one
+        kwargs.setdefault('attrs', {})['multiple'] = True
+        super().__init__(*args, **kwargs)
+
+
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 class RestrictedFileFormField(forms.FileField):
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
         file = super().clean(data, initial)
