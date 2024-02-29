@@ -240,3 +240,15 @@ class RestrictedFileFormField(forms.FileField):
             pass
 
         return data
+
+
+class RestrictedMultiFileFormField(RestrictedFileFormField):
+    """Adds multi-file upload capability to the RestrictedFileFormField
+
+    To use this the form will need to deal with the files as suggested in
+    https://docs.djangoproject.com/en/4.2/topics/http/file-uploads/#uploading-multiple-files
+
+    """
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
