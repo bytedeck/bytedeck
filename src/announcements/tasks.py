@@ -44,14 +44,19 @@ def send_announcement_emails(content, root_url, absolute_url):
         'config': siteconfig,
         'profile_edit_url': reverse('profiles:profile_edit_own')
     })
+
+    profile_emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
+
     email_msg = EmailMultiAlternatives(
         subject,
         body=text_content,
         to=['contact@bytedeck.com'],
-        bcc=Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True),
+        bcc=profile_emails,
     )
     email_msg.attach_alternative(html_content, "text/html")
     email_msg.send()
+
+    return profile_emails
     # print("Sending {} announcement emails.".format(len(users_to_email)))
 
 
