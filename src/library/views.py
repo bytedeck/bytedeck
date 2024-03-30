@@ -32,7 +32,7 @@ def import_quest_to_current_deck(request, quest_import_id):
     if request.method == 'GET':
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
-        return render(request, 'library/import_quest.html', {'quest': quest})
+        return render(request, 'library/confirm_import_quest.html', {'quest': quest})
 
     elif request.method == 'POST':
 
