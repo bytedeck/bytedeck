@@ -400,6 +400,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_tab_active = False
     past_tab_active = False
     drafts_tab_active = False
+    library_tab_active = False
     remove_hidden = True
 
     active_quest_id = 0
@@ -418,6 +419,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         past_tab_active = True
     elif "/drafts/" in request.path_info:
         drafts_tab_active = True
+    elif "/library" in request.path_info:
+        library_tab_active = True
     else:
         available_tab_active = True
         if "/all/" in request.path_info:
@@ -503,6 +506,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_tab_active": completed_tab_active,
         "past_tab_active": past_tab_active,
         "drafts_tab_active": drafts_tab_active,
+        "library_tab_active": library_tab_active,
         "quick_reply_form": quick_reply_form,
     }
     return render(request, template, context)
