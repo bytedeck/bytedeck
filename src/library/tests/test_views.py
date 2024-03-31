@@ -1,3 +1,4 @@
+import uuid
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -88,6 +89,13 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(len(response.context['library_quests']), non_library_quest_count)
 
+    def test_import_non_existing_quest_to_current_deck(self):
+
+        url = reverse('library_quests:import_quest', args=[str(uuid.uuid4())])
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
     def test_import_library_to_current_deck(self):
         """
         Add test that checks if the import quest to current deck view works
@@ -101,6 +109,10 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
             Quest.objects.get(import_id=library_quest.import_id)
 
         url = reverse('library_quests:import_quest', args=[library_quest.import_id])
+
+        # Test the confirmation page
+        response = self.client.get(url)
+
         # Make a request to import the quest
         response = self.client.post(url)
         self.assertRedirects(response, reverse('library_quests:library_quest_list'))
