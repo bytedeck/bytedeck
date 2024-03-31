@@ -40,6 +40,8 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         # Delete the library tenant after all tests are done
         cls.library_tenant.delete(force_drop=True)
 
+        assert not schema_exists(cls.library_tenant.schema_name)
+
     @classmethod
     def get_library_tenant_domain(cls):
         return f'{cls.get_library_schema_name()}.test.com'
