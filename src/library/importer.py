@@ -19,10 +19,12 @@ def import_quests_to(*, destination_schema, quest_import_ids):
     with schema_context(destination_schema):
         res = QuestResource().import_data(export_data, dry_run=dry_run)
 
-        # Set visible_to_students to False for imported quests
-        # since the imported quests will be orphans
         object_ids = []
         for row in res.rows:
-            object_ids.append(row.object_id)
+            if row.new_record:
+                object_ids.append(row.object_id)
+        # Set visible_to_students to False for imported quests
+        # since the imported quests will be orphans
         Quest.objects.filter(pk__in=object_ids).update(visible_to_students=False)
+
     return res
