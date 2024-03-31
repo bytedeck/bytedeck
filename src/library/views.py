@@ -50,22 +50,3 @@ def import_quest_to_current_deck(request, quest_import_id):
             messages.success(request, f"Successfully imported '{quest.name}' to your deck.")
 
     return redirect('library:library_quest_list')
-
-
-def import_quest_to_current_deck_bulk(request):
-    """
-    This will import current a quest to the current deck
-
-    Must provide a list of quest_import_ids
-    """
-
-    quest_import_ids = request.POST.get('quest_import_ids')
-
-    if request.method == 'POST':
-        dest_schema = connection.schema_name
-        with library_schema_context():
-            result = import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_import_ids)
-
-            messages.success(request, f"Successfully imported {result.total_rows} quest(s) to your deck.")
-
-            return redirect('library:library_quest_list')
