@@ -61,6 +61,7 @@ class SiteConfigForm(forms.ModelForm):
                 "display_marks_calculation",
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
+                "enable_shared_library",
                 "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",

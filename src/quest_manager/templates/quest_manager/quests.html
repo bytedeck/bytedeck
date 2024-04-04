@@ -78,12 +78,14 @@ back to its original look.
       </li>
     {% endif %}
 
-    {% if request.user.profile.is_TA or request.user.is_staff %}
-      <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
-        <a href="{% url 'library:library_quest_list' %}">
-          Library
-        </a>
-      </li>
+    {% if config.enable_shared_library %}
+      {% if request.user.profile.is_TA or request.user.is_staff %}
+        <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
+          <a href="{% url 'library:library_quest_list' %}">
+            Library
+          </a>
+        </li>
+      {% endif %}
     {% endif %}
   </ul>
   <!-- Tab panes -->
@@ -135,11 +137,13 @@ back to its original look.
       </div>
     {% endif %}
 
-    {% if request.user.profile.is_TA or request.user.is_staff %}
-      <div role="tabpanel"
-         class="tab-pane fade {% if library_tab_active %}in active{% endif %}" id="library">
-        {% include 'library/tab_library_quests.html' %}
-      </div>
+    {% if config.enable_shared_library %}
+      {% if request.user.profile.is_TA or request.user.is_staff %}
+        <div role="tabpanel"
+          class="tab-pane fade {% if library_tab_active %}in active{% endif %}" id="library">
+          {% include 'library/tab_library_quests.html' %}
+        </div>
+      {% endif %}
     {% endif %}
 
   </div>
