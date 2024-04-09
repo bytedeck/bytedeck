@@ -135,6 +135,7 @@ def email_confirmed_handler(email_address, **kwargs):
     # send an email with instructions for how to log in with the username and password.
     user = email_address.user
     config = SiteConfig.get()
+    tenant = Tenant.get()
 
     # just verified email for a first time and never been logged into app before
     if user.last_login is not None:
@@ -145,6 +146,7 @@ def email_confirmed_handler(email_address, **kwargs):
 
     subject = get_template("tenant/email/welcome_subject.txt").render(context={
         "config": config,
+        "tenant": tenant,
         "user": user,
     })
     # email subject *must not* contain newlines
@@ -153,6 +155,7 @@ def email_confirmed_handler(email_address, **kwargs):
     # generate "welcome" email for new user
     msg = get_template("tenant/email/welcome_message.txt").render(context={
         "config": config,
+        "tenant": tenant,
         "user": user,
     })
 
