@@ -225,22 +225,32 @@ class RestrictedFileFormField(forms.FileField):
         super().__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
-        file = super().clean(data, initial)
-        try:
-            content_type = file.content_type
-            if self.content_types == "All" or content_type in self.content_types:
-                if file.size > self.max_upload_size:
-                    raise ValidationError('Max filesize is {}. Current filesize {}'.format(
-                        filesizeformat(self.max_upload_size), filesizeformat(file.size))
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            result = [single_file_clean(d, initial) for d in data]
+        else:
+            result = [single_file_clean(data, initial)]
+
+        for file in result:
+            try:
+                content_type = file.content_type
+                if self.content_types == "All" or content_type in self.content_types:
+                    if file.size > self.max_upload_size:
+                        raise ValidationError(
+                            "Max filesize is {}. Current filesize {}".format(
+                                filesizeformat(self.max_upload_size),
+                                filesizeformat(file.size),
+                            )
+                        )
+                else:
+                    raise ValidationError(
+                        "Filetype not supported. Acceptable filetypes are: %s"
+                        % (str(self.content_types))
                     )
-            else:
-                raise ValidationError('Filetype not supported. Acceptable filetypes are: %s' % (
-                    str(self.content_types)))
-        except AttributeError:
-            pass
-
-        return data
-
+            except AttributeError as e:
+                pass
+       
+        return result
 
 class RestrictedMultiFileFormField(RestrictedFileFormField):
     """Adds multi-file upload capability to the RestrictedFileFormField
