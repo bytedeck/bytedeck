@@ -224,33 +224,37 @@ class RestrictedFileFormField(forms.FileField):
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
         super().__init__(*args, **kwargs)
 
+    def validate_file(self, file):
+        try:
+            content_type = file.content_type
+            if self.content_types == "All" or content_type in self.content_types:
+                if file.size > self.max_upload_size:
+                    raise ValidationError(
+                        "Max filesize is {}. Current filesize {}".format(
+                            filesizeformat(self.max_upload_size),
+                            filesizeformat(file.size),
+                        )
+                    )
+            else:
+                raise ValidationError(
+                    "Filetype not supported. Acceptable filetypes are: %s"
+                    % (str(self.content_types))
+                )
+        except AttributeError:
+            pass
+
     def clean(self, data, initial=None):
         single_file_clean = super().clean
         if isinstance(data, (list, tuple)):
-            result = [single_file_clean(d, initial) for d in data]
+            files = [single_file_clean(d, initial) for d in data]
         else:
-            result = [single_file_clean(data, initial)]
+            files = [single_file_clean(data, initial)]
 
-        for file in result:
-            try:
-                content_type = file.content_type
-                if self.content_types == "All" or content_type in self.content_types:
-                    if file.size > self.max_upload_size:
-                        raise ValidationError(
-                            "Max filesize is {}. Current filesize {}".format(
-                                filesizeformat(self.max_upload_size),
-                                filesizeformat(file.size),
-                            )
-                        )
-                else:
-                    raise ValidationError(
-                        "Filetype not supported. Acceptable filetypes are: %s"
-                        % (str(self.content_types))
-                    )
-            except AttributeError as e:
-                pass
-       
-        return result
+        for file in files:
+            self.validate_file(file)
+
+        return files if isinstance(data, (list, tuple)) else files[0]
+
 
 class RestrictedMultiFileFormField(RestrictedFileFormField):
     """Adds multi-file upload capability to the RestrictedFileFormField
