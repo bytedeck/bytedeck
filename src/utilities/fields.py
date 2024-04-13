@@ -224,22 +224,36 @@ class RestrictedFileFormField(forms.FileField):
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
         super().__init__(*args, **kwargs)
 
-    def clean(self, data, initial=None):
-        file = super().clean(data, initial)
+    def validate_file(self, file):
         try:
             content_type = file.content_type
             if self.content_types == "All" or content_type in self.content_types:
                 if file.size > self.max_upload_size:
-                    raise ValidationError('Max filesize is {}. Current filesize {}'.format(
-                        filesizeformat(self.max_upload_size), filesizeformat(file.size))
+                    raise ValidationError(
+                        "Max filesize is {}. Current filesize {}".format(
+                            filesizeformat(self.max_upload_size),
+                            filesizeformat(file.size),
+                        )
                     )
             else:
-                raise ValidationError('Filetype not supported. Acceptable filetypes are: %s' % (
-                    str(self.content_types)))
+                raise ValidationError(
+                    "Filetype not supported. Acceptable filetypes are: %s"
+                    % (str(self.content_types))
+                )
         except AttributeError:
             pass
 
-        return data
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            files = [single_file_clean(d, initial) for d in data]
+        else:
+            files = [single_file_clean(data, initial)]
+
+        for file in files:
+            self.validate_file(file)
+
+        return files if isinstance(data, (list, tuple)) else files[0]
 
 
 class RestrictedMultiFileFormField(RestrictedFileFormField):
