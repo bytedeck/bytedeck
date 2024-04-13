@@ -1,0 +1,1 @@
+Welcome to {{ config.site_name_short }}!
