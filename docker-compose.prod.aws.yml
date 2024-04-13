@@ -1,4 +1,4 @@
-version: '2.2'
+version: "2.2"
 
 ###############################################################################
 #
@@ -12,20 +12,30 @@ version: '2.2'
 
 services:
   web:
-    command: bash -c "cd /app/src/ &&
-                      python manage.py migrate_schemas --shared &&
-                      python manage.py migrate_schemas --executor=multiprocessing &&
-                      python manage.py collectstatic --noinput &&
-                      uwsgi --ini uwsgi.aws.ini"
+    build:
+      context: .
+      dockerfile: ./production/Dockerfile
+    command: /start-django
     volumes:
       - .:/app
       # - static_data:/app/src/static  # use static dir as a fallback for hardcoded urls hitting app directly
       # - media_data:/app/media
       # - socket_data:/bytedeck-volume
     user: $WUID:$WGID
+    entrypoint: /entrypoint
 
   celery:
+    build:
+      context: .
+      dockerfile: ./production/Dockerfile
     user: $WUID:$WGID
+    entrypoint: /celery-entrypoint
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: ./production/Dockerfile
+    entrypoint: /celery-entrypoint
 
   nginx:
     build:
@@ -34,7 +44,7 @@ services:
         WUID: $WUID
         WGID: $WGID
     volumes:
-        - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt
     #   - static_data:/var/www/bytedeck/static
     #   - socket_data:/bytedeck-volume
     #   - media_data:/var/www/bytedeck/media/
@@ -46,10 +56,8 @@ services:
     user: $WUID:$WGID
     networks:
       - backend-network
-
 # volumes:
 #  static_data:       # commenting static_data volume as collectstatic cmd picking this up instead of S3 for STATIC_ROOT.
 #  socket_data:
 #  media_data:
-
 

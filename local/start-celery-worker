@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+cd src
+celery -A hackerspace_online worker -l info -c 1 -Q default

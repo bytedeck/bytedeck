@@ -17,6 +17,8 @@ RUN apt-get update \
 
 RUN pip install pylint
 
+RUN apt-get install -y wait-for-it
+
 # Install git, process tools, lsb-release (common in install instructions for CLIs)
 RUN apt-get install -y git procps lsb-release
 
@@ -70,8 +72,30 @@ RUN python3 -m pip install -r requirements.txt
 
 # Set working directory for subsequent RUN ADD COPY CMD instructions
 COPY . /app/
-WORKDIR /app/
 
+COPY ./local/docker-entrypoint /entrypoint
+RUN sed -i 's/\r$//g' /entrypoint
+RUN chmod +x /entrypoint
+
+COPY ./local/celery-entrypoint /celery-entrypoint
+RUN sed -i 's/\r$//g' /celery-entrypoint
+RUN chmod +x /celery-entrypoint
+
+COPY ./local/start-django /start-django
+RUN sed -i 's/\r$//g' /start-django
+RUN chmod +x /start-django
+
+COPY ./local/start-celery-worker /start-celeryworker
+RUN sed -i 's/\r$//g' /start-celeryworker
+RUN chmod +x /start-celeryworker
+
+COPY ./local/start-celery-beat /start-celerybeat
+RUN sed -i 's/\r$//g' /start-celerybeat
+RUN chmod +x /start-celerybeat
+
+WORKDIR /app
+
+ENTRYPOINT ["/entrypoint"]
 
 #### More from https://github.com/Microsoft/vscode-remote-try-python ##
 

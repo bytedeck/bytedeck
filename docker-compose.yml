@@ -1,4 +1,4 @@
-version: '2.2'
+version: "2.2"
 
 ###############################################################################
 #
@@ -10,7 +10,6 @@ version: '2.2'
 ################################################################################
 
 services:
-
   web:
     build:
       context: .
@@ -34,8 +33,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
-    command: bash -c "cd src &&
-                      celery -A hackerspace_online worker -l info -c 3 -Q default"
+    command: /start-celeryworker
     volumes:
       - .:/app
     networks:
@@ -46,8 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
-    command: bash -c "cd src &&
-                      celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    command: /start-celerybeat
     volumes:
       - .:/app
     networks:
