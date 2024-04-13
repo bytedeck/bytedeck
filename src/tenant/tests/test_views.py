@@ -8,13 +8,14 @@ from django.shortcuts import reverse
 from django.test import RequestFactory
 
 from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+from allauth.account.adapter import get_adapter
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-from tenant.views import non_public_only_view, public_only_view
+from tenant.views import non_public_only_view, public_only_view, email_confirmed_handler
 from tenant.models import Tenant
 from siteconfig.models import SiteConfig
 
@@ -146,3 +147,34 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         owner = SiteConfig.get().deck_owner or None
         self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
         self.assertEqual(owner.email, "john.doe@example.com")
+
+        # check that the username was set to firstname.lastname (instead of "owner")
+        self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
+        # check that the  password was set to firstname-deckname-lastname (instead of "password")
+        self.assertEqual(owner.check_password("john-default-doe"), True)
+
+        # manually verify email
+        email_address_obj = owner.emailaddress_set.get(email="john.doe@example.com")
+        get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
+
+        # clear the outbox from outdated messages
+        mail.outbox.clear()
+
+        # confirming the email/account and receiving welcome email
+        email_confirmed_handler(email_address=email_address_obj)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Welcome to Deck!", mail.outbox[0].subject)
+        # expecting to see the same john.doe@example.com as recipient
+        self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+
+        # ... make sure only non-logged users receives "welcome" email
+        self.client.force_login(owner)
+
+        # clear the outbox from outdated messages
+        mail.outbox.clear()
+
+        # trying to confirm email after being logged into app...
+        email_confirmed_handler(email_address=email_address_obj)
+        # expect to receive nothing...
+        self.assertEqual(len(mail.outbox), 0)
