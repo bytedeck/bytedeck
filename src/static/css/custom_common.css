@@ -692,6 +692,21 @@ margin-bottom on the .pull-right child element of .list-group-item-buttons.
 
 /***********Submission and QUESTS ********************************/
 
+hr.tight {
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+hr.tighter {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+hr.tightest {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
 .quest-icon-description {
     min-width: 50%; /* prevent floating buttons from squashing description text */
 }
