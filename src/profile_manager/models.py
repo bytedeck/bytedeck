@@ -65,6 +65,7 @@ class ProfileManager(models.Manager):
 
     def get_mailing_list(
         self,
+        *,
         as_emails_list=False,
         for_announcement_email=False,
         for_notification_email=False,
@@ -84,7 +85,7 @@ class ProfileManager(models.Manager):
             email_filter &= models.Q(profile__get_notifications_by_email=True)
 
         empty_emails = models.Q(email='') | models.Q(email__isnull=True)
-        verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True)
+        verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
         students_to_email = (
             CourseStudent.objects.all_users_for_active_semester()
