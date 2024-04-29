@@ -34,6 +34,7 @@ class SiteConfigForm(forms.ModelForm):
             self.fields['deck_owner'].disabled = True
 
         self.fields['enable_google_signin'].disabled = True
+        self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
 
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
@@ -61,7 +62,6 @@ class SiteConfigForm(forms.ModelForm):
                 "display_marks_calculation",
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
-                "enable_shared_library",
                 "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",
@@ -78,6 +78,7 @@ class SiteConfigForm(forms.ModelForm):
                         "custom_stylesheet",
                         "custom_javascript",
                         "deck_owner",
+                        "enable_shared_library",
                         active=False,
                         template="crispy_forms/bootstrap3/accordion-group.html",
                     ),
