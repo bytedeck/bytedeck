@@ -1,5 +1,6 @@
 from io import StringIO
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
@@ -79,5 +80,7 @@ class InitDbTest(TestCase):
         user = User.objects.get(username='admin')
         self.assertTrue(user.is_superuser)
         self.assertTrue(Site.objects.exists())
+
+        Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
 
         FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
