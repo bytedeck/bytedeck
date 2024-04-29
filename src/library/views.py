@@ -38,15 +38,17 @@ def import_quest_to_current_deck(request, quest_import_id):
 
         dest_schema = connection.schema_name
 
+        # Check if the quest already exists in the deck
+        local_quest = Quest.objects.filter(import_id=quest_import_id).first()
+        if local_quest:
+            messages.warning(request, f"Your deck already has a quest named '{local_quest.name}' with the import_id {local_quest.import_id}.")
+            return redirect('library:library_quest_list')
+
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
 
             quest_ids = [quest.import_id]
-            result = import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
-
-            result.totals.get('new')
-            result.totals.get('update')
-
+            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
             messages.success(request, f"Successfully imported '{quest.name}' to your deck.")
 
     return redirect('library:library_quest_list')
