@@ -6,6 +6,7 @@ from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
+from django_tenants.utils import tenant_context
 
 # from hackerspace_online.management.commands import find_replace
 from tenant.models import Tenant
@@ -75,12 +76,12 @@ class InitDbTest(TestCase):
         output = self.call_command()
         print("*** INITDB Management Command: ", output)
 
-        Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
+        public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
-        user = User.objects.get(username='admin')
-        self.assertTrue(user.is_superuser)
-        self.assertTrue(Site.objects.exists())
+        with tenant_context(public_tenant):
+            FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            user = User.objects.get(username='admin')
+            self.assertTrue(user.is_superuser)
+            self.assertTrue(Site.objects.exists())
 
-        Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
-
-        FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
