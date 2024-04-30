@@ -30,17 +30,11 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
 
         # Need to do this since the setupClass sets the current tenant connection to
         # cls.tenant. We cannot create the library tenant if we are not using the public schema
-        with tenant_context(_public_tenant):
-            cls._setup_library_tenant()
+        # But check first if the library tenant already exists
 
-    @classmethod
-    def tearDownClass(cls):
-        super().tearDownClass()
-
-        # Delete the library tenant after all tests are done
-        cls.library_tenant.delete(force_drop=True)
-
-        assert not schema_exists(cls.library_tenant.schema_name)
+        if not Tenant.objects.filter(schema_name=cls.get_library_schema_name()).exists():
+            with tenant_context(_public_tenant):
+                cls._setup_library_tenant()
 
     @classmethod
     def get_library_tenant_domain(cls):
