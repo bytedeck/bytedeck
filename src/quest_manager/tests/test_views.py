@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
+from django.http import JsonResponse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -109,6 +110,9 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
 
+        # summary stats
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 403)
+
         self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
@@ -133,6 +137,18 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
+
+        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 404)  # Ajax only
+        response = self.client.get(
+            reverse('quests:ajax_summary_histogram', args=[q_pk]),
+            data={
+                "min": 0,
+                "max": 100,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_start(self):
         # log in a student from setUp
@@ -246,7 +262,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "There are currently no new quest available to you!")
 
         # Only hidden quests #################################################
-
+        Quest.objects.all().delete()
         # add a new quest available to the user
         quest = baker.make(Quest, name="hide me")
         # but adding a new quest won't make it appear in their available list, because the available list is cached
@@ -260,6 +276,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Now hide it
         user.profile.hide_quest(quest.id)
         self.assertEqual(user.profile.num_hidden_quests(), 1)  # Sanity check that the quest is hidden
+
         self.assertFalse(Quest.objects.get_available(user).exists())  # Should not show up here cus hidden
         response = self.client.get(url)
         self.assertContains(response, "You have no new quests available")
@@ -1602,6 +1619,88 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
 
+class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for:
+    def ajax_submission_count(request, quest_id=None)
+
+    via
+
+    url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_student = User.objects.create_user('test_student', password="password")
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.quest = baker.make(Quest, name="Test Quest")
+        # put the student in a course in the active semester
+        teacher_block = baker.make('courses.Block', current_teacher=self.test_teacher)
+        baker.make('courses.CourseStudent', block=teacher_block,
+                   user=self.test_student, semester=SiteConfig.get().active_semester)
+
+    def test_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        self.client.force_login(self.test_teacher)
+        self.assert404('quests:ajax_submission_count')
+
+    def test_non_ajax_post_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:ajax_submission_count')
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_student_access_granted(self):
+        """ The current behavior is that students can access the view.
+        This test acknowledges that behavior."""
+        self.client.force_login(self.test_student)
+        response = self.client.post(
+            reverse('quests:ajax_submission_count'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_ajax_returns_json(self):
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:ajax_submission_count'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(type(response), JsonResponse)
+
+    def test_ajax_returns_correct_count(self):
+        """ Should return the number of pending submissions for the quest"""
+        self.client.force_login(self.test_teacher)
+        # only submissions that are "completed" but not "approved" should be counted
+        submissions = [
+            baker.make(QuestSubmission, is_completed=True, is_approved=False),
+            baker.make(QuestSubmission, is_completed=True, is_approved=False),
+            baker.make(QuestSubmission, is_completed=False, is_approved=False),
+            baker.make(QuestSubmission, is_completed=False, is_approved=False),
+            baker.make(QuestSubmission, is_completed=True, is_approved=True),
+            baker.make(QuestSubmission, is_completed=False, is_approved=True),
+        ]
+        for sub in submissions:
+            sub.semester = SiteConfig.get().active_semester
+            sub.user = self.test_student
+            sub.quest = self.quest
+            sub.save()
+
+        response = self.client.post(
+            reverse('quests:ajax_submission_count'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(response.json()['count'], 2)
+
+
 class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
 
     """Tests for:
@@ -1640,7 +1739,6 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        from django.http import JsonResponse
         self.assertEqual(type(response), JsonResponse)
 
         # Same without a quest ID:
@@ -1651,7 +1749,6 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        from django.http import JsonResponse
         self.assertEqual(type(response), JsonResponse)
 
 
@@ -1692,7 +1789,6 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        from django.http import JsonResponse
         self.assertEqual(type(response), JsonResponse)
 
         # includes the submission in context as s
@@ -1747,7 +1843,6 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-        from django.http import JsonResponse
         self.assertEqual(type(response), JsonResponse)
 
         # Check context variables
@@ -1930,7 +2025,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -2022,7 +2117,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, SiteConfig.get().blank_approval_text)
+        self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
 
     def test_approve_with_mutiple_badges_staff_submission_form(self):
         """ Test that multiple badges can be granted from the SubmissionFormStaff form"""
@@ -2125,7 +2220,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -2155,7 +2250,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, SiteConfig.get().blank_return_text)
+        self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_return_text}</p>")
 
     def test_non_existant_submit_button(self):
         """Can this even happen?  Somehow the form was submitted with a button that doesn't exist"""
@@ -2189,7 +2284,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, "(Skipped - You were not granted XP for this quest)")
+        self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):

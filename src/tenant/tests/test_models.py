@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
+from hackerspace_online import settings
 
 from tenant.models import Tenant, check_tenant_name
 
@@ -44,7 +45,9 @@ class TenantModelTest(TenantTestCase):
         self.assertEqual(self.tenant_localhost.get_root_url(), "http://my-dev-schema.localhost:8000")
 
     def test_tenant_last_staff_login_populated(self):
-        """ When a staff logins to a tenant, the last_staff_login should have the correct value """
+        """ When a staff logins to a tenant, the last_staff_login should have the correct value,
+        should not include the admin account
+        """
         self.assertIsNone(self.tenant.last_staff_login)
 
         staff = baker.make(User, is_staff=True)
@@ -53,6 +56,14 @@ class TenantModelTest(TenantTestCase):
 
         staff.refresh_from_db()
         self.assertIsNotNone(self.tenant.last_staff_login)
+        self.assertEqual(self.tenant.last_staff_login, staff.last_login)
+
+        # if admin account logs in, should not change the result
+        admin = User.objects.get(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        self.client.force_login(admin)
+        self.tenant.update_cached_fields()
+        admin.refresh_from_db
+        # should still return the staff user's last log in, ignoring the admin user
         self.assertEqual(self.tenant.last_staff_login, staff.last_login)
 
 

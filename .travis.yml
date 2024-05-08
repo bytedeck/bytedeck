@@ -16,6 +16,6 @@ before_script:
 # Don't use coveralls for Pull Requests because it doesn't have access to the environment variables
 # https://docs.travis-ci.com/user/pull-requests/#pull-requests-and-security-restrictions
 script:
-   # - docker-compose -f docker-compose.yml -f docker-compose.override.yml run web sh -c "test src && flake8 src"
-   - docker-compose -f docker-compose.yml -f docker-compose.override.yml run web sh -c "coverage run --source=src src/manage.py test src && coverage && flake8 src"
-   - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then docker-compose -f docker-compose.yml -f docker-compose.override.yml run -e COVERALLS_REPO_TOKEN web sh -c "coveralls"; fi
+   # - docker compose -f docker-compose.yml -f docker-compose.override.yml run web sh -c "test src && flake8 src"
+   - docker compose -f docker-compose.yml -f docker-compose.override.yml run web sh -c "coverage run --source=src src/manage.py test src && coverage && flake8 src"
+   - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then docker compose -f docker-compose.yml -f docker-compose.override.yml run -e COVERALLS_REPO_TOKEN web sh -c "coveralls"; fi

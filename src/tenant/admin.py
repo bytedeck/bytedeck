@@ -3,22 +3,32 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.admin import helpers, widgets
+from django.core.exceptions import PermissionDenied
 from django.contrib.sites.models import Site
 from django.template.response import TemplateResponse
 from django.db import connection, transaction
 from django.utils.translation import ngettext
+from django.contrib.admin.utils import unquote
+from django.contrib.admin.exceptions import DisallowedModelAdminToField
+from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
+from django.utils.translation import gettext as _
+from django.utils.html import format_html
+from django.utils.formats import date_format
 from django.urls import reverse
 
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from allauth.account.utils import user_email
-from django_tenants.utils import get_public_schema_name
-from django_tenants.utils import tenant_context
+from django_tenants.utils import get_public_schema_name, tenant_context
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
-from tenant.models import Tenant, TenantDomain
-from tenant.utils import generate_schema_name
-from tenant.tasks import send_email_message
+from siteconfig.models import SiteConfig
+
+from .models import Tenant, TenantDomain
+from .forms import TenantBaseForm
+from .utils import generate_schema_name
+from .tasks import send_email_message
+
 
 User = get_user_model()
 
@@ -60,26 +70,17 @@ class TenantDomainInline(admin.TabularInline):
         return False
 
 
-class TenantAdminForm(forms.ModelForm):
+class TenantAdminForm(TenantBaseForm):
 
-    class Meta:
-        model = Tenant
-        fields = ['name', 'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
+    class Meta(TenantBaseForm.Meta):
+        fields = TenantBaseForm.Meta.fields + [
+            'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date']
 
     def clean_name(self):
-        name = self.cleaned_data["name"]
-        # has already validated the model field at this point
-        if name == "public":
-            raise forms.ValidationError("The public tenant is restricted and cannot be edited")
-        elif self.instance.schema_name and self.instance.schema_name != generate_schema_name(name):
+        name = super().clean_name()
+        if self.instance.schema_name and self.instance.schema_name != generate_schema_name(name):
             # if the schema already exists, then can't change the name
-            raise forms.ValidationError("The name cannot be changed after the tenant is created")
-        else:
-            # TODO
-            # finally, check that there isn't a schema on the db that doesn't have a tenant object
-            # and thus doesn't care about name validation/uniqueness.
-            pass
-
+            raise forms.ValidationError("The name cannot be changed after the tenant is created.")
         return name
 
 
@@ -92,62 +93,251 @@ class SendEmailAdminForm(forms.Form):
     message = forms.CharField(widget=ByteDeckSummernoteSafeWidget)
 
 
+class DeleteConfirmationForm(forms.Form):
+    confirmation = forms.CharField(required=True, widget=widgets.AdminTextInputWidget)
+
+    # Say friend and enter (Doors of Durin)
+    keyword = None
+
+    def __init__(self, *args, **kwargs):
+        self.target_object = kwargs.pop("target_object")
+        super().__init__(*args, **kwargs)
+
+        # generate keyword as confirmation code / phrase
+        keyword = str(self.target_object.name)
+        with tenant_context(self.target_object):
+            owner = SiteConfig.get().deck_owner or None
+            keyword = "/".join([owner.username if owner else "bytedeck", keyword])
+        self.keyword = keyword
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        confirmation = cleaned_data.get("confirmation", "")
+        if confirmation and confirmation != self.keyword:
+            self.add_error("confirmation", _("The confirmation does not match the keyword"))
+
+        return cleaned_data
+
+
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name', 'owner_email', 'last_staff_login',
-        'google_signon_enabled',
-        'paid_until', 'trial_end_date',
+        'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
+        'owner_email_text', 'owner_email_verified_boolean', 'owner_email_deprecated',
+        'last_staff_login', 'google_signon_enabled',
+        'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'max_quests', 'quest_count',
     )
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
-    search_fields = ['schema_name', 'owner_full_name', 'owner_email']
+    # DEPRECATED: these fields ("owner_full_name" and "owner_email") will be removed in a future update
+    search_fields = ['schema_name', 'owner_full_name', 'owner_full_name_cached', 'owner_email', 'owner_email_cached']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
     change_list_template = 'admin/tenant/tenant/change_list.html'
+    delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
+    delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = ['message_selected', 'enable_google_signin', 'disable_google_signin']
+    actions = ['message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
 
-    def delete_model(self, request, obj):
-        messages.error(request, 'Tenants must be deleted manually from `manage.py shell`;  \
-            and the schema deleted from the db via psql: `DROP SCHEMA schema_name CASCADE;`. \
-            ignore the success message =D')
+    @admin.display(description="owner full name")
+    def owner_full_name_text(self, obj):
+        return obj.owner_full_name_cached
+    owner_full_name_text.admin_order_field = "owner_full_name_cached"
 
-        # don't delete
-        return
+    @admin.display(description="owner full name (DEPRECATED)")
+    def owner_full_name_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_full_name
+    owner_full_name_deprecated.admin_order_field = "owner_full_name"
 
-    def has_delete_permission(self, request, obj=None):
-        # Disable delete button and admin action
+    @admin.display(description="owner email")
+    def owner_email_text(self, obj):
+        return obj.owner_email_cached
+    owner_email_text.admin_order_field = "owner_email_cached"
+
+    @admin.display(description="email verified", boolean=True)
+    def owner_email_verified_boolean(self, obj):
+        """
+        Returns `True` (green), if at least one verified email address was found, otherwise `False`.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return  # skip public schema
+
+        with tenant_context(obj):
+            owner = SiteConfig.get().deck_owner
+            # get the email address, but only primary and verified
+            for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                # make sure it's primary email for real
+                if primary_email_address.email == user_email(owner):
+                    return True
         return False
+
+    @admin.display(description="owner email (DEPRECATED)")
+    def owner_email_deprecated(self, obj):
+        """This field will be removed in a future update"""
+        return obj.owner_email
+    owner_email_deprecated.admin_order_field = "owner_email"
+
+    @admin.display(description="paid until", ordering="paid_until")
+    def paid_until_text(self, obj):
+        """Returns htmlized value of `paid_until` field"""
+        if not obj.paid_until:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.paid_until,
+            date_format(obj.paid_until, use_l10n=True),
+        )
+
+    @admin.display(description="trial end date", ordering="trial_end_date")
+    def trial_end_date_text(self, obj):
+        """Returns htmlized value of `trial_end_date` field"""
+        if not obj.trial_end_date:
+            return None
+        return format_html(
+            "<span data-date=\"{}\">{}</span>",
+            obj.trial_end_date,
+            date_format(obj.trial_end_date, use_l10n=True),
+        )
+
+    def get_actions(self, request):
+        """
+        The method ``ModelAdmin.get_actions`` returns the list of registered actions.
+
+        By overriding this method, to remove `delete_selected`. We can remove it form the dropdown.
+        """
+        actions = super().get_actions(request)
+        # Removing "delete_selected" action in admin
+        if "delete_selected" in actions:
+            del actions["delete_selected"]
+        return actions
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # Update cached fields
+        #
+        # FIX: reduce number of SQL queries by triggering this only when Tenant (and/or related) objects are changed
         for tenant in qs:
             if tenant.name != get_public_schema_name():
                 with tenant_context(tenant):
                     tenant.update_cached_fields()
         return qs
 
-    @admin.action(description="Send an email message to all owners for the selected tenant(s)")
-    def message_selected(self, request, queryset):
+    def delete_model(self, request, obj):
+        # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
+        obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema
+
+    def _delete_view(self, request, object_id, extra_context):
+        """Custom `_delete_view` method.
+
+        This is the original method from ``ModelAdmin`` class that adds
+        extra confirmation (must type keyword / phrase) instead of original
+        simple two-step deletion.
+
+        # See: https://github.com/django/django/blob/main/django/contrib/admin/options.py#L2125
+
         """
-        Send an email message to all owners for selected tenant(s).
+        app_label = self.opts.app_label
+
+        to_field = request.POST.get(TO_FIELD_VAR, request.GET.get(TO_FIELD_VAR))
+        if to_field and not self.to_field_allowed(request, to_field):
+            raise DisallowedModelAdminToField(
+                "The field %s cannot be referenced." % to_field
+            )
+
+        obj = self.get_object(request, unquote(object_id), to_field)
+
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied
+
+        if obj is None:
+            return self._get_obj_does_not_exist_redirect(request, self.opts, object_id)
+
+        # Populate deleted_objects, a data structure of all related objects that
+        # will also be deleted.
+        (
+            deleted_objects,
+            model_count,
+            perms_needed,
+            protected,
+        ) = self.get_deleted_objects([obj], request)
+
+        if request.POST.get("post") and not protected:  # The user has confirmed the deletion.
+            if perms_needed:
+                raise PermissionDenied
+            form = DeleteConfirmationForm(data=request.POST, target_object=obj)
+            if form.is_valid():
+                obj_display = str(obj)
+                attr = str(to_field) if to_field else self.opts.pk.attname
+                obj_id = obj.serializable_value(attr)
+                self.log_deletion(request, obj, obj_display)
+                self.delete_model(request, obj)
+
+                return self.response_delete(request, obj_display, obj_id)
+        else:
+            # create form and pass the data with target object before triggering 'post' action.
+            form = DeleteConfirmationForm(target_object=obj)
+
+        object_name = str(self.opts.verbose_name)
+
+        if perms_needed or protected:
+            title = _("Cannot delete %(name)s") % {"name": object_name}
+        else:
+            title = _("Are you sure?")
+
+        # AdminForm is a class within the `django.contrib.admin.helpers` module of the Django project.
+        #
+        # AdminForm is not usually used directly by developers, but can be used by libraries that want to
+        # extend the forms within the Django Admin.
+        adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
+        media = self.media + adminform.media
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": title,
+            "subtitle": None,
+            "adminform": adminform,
+            "object_name": object_name,
+            "object": obj,
+            "deleted_objects": deleted_objects,
+            "model_count": dict(model_count).items(),
+            "perms_lacking": perms_needed,
+            "protected": protected,
+            # building proper breadcrumb in admin
+            "opts": self.opts,
+            "app_label": app_label,
+            "media": media,
+            "preserved_filters": self.get_preserved_filters(request),
+            "is_popup": IS_POPUP_VAR in request.POST or IS_POPUP_VAR in request.GET,
+            "to_field": to_field,
+            **(extra_context or {}),
+        }
+
+        return self.render_delete_form(request, context)
+
+    @admin.action(description="Send an email message to *all* owners for the selected tenant(s)")
+    def message_unverified(modeladmin, request, queryset):
+        """Send an email message to *all* owners for selected tenant(s)."""
+        return modeladmin.message_selected(request, queryset, verified=False)
+
+    @admin.action(description="Send an email message to *verified* only owners for the selected tenant(s)")
+    def message_verified(modeladmin, request, queryset):
+        """Send an email message to *verified* only owners for selected tenant(s)."""
+        return modeladmin.message_selected(request, queryset, verified=True)
+
+    def message_selected(modeladmin, request, queryset, verified=True):
+        """
+        Send an email message to either *all* or *verified* only owners for selected tenant(s).
 
         This action first displays an intermediate page which shows compose message form and
         a list of all recipients.
 
         Next, it send email message to all selected users and redirects back to the change list.
         """
-        from siteconfig.models import SiteConfig
-
-        def get_owner_or_none():
-            """Returns owner (User) object or None"""
-            return SiteConfig.get().deck_owner or None
-
         # get a list of selected tenant(s), excluding public schema
-        objects = self.model.objects.filter(
+        objects = modeladmin.model.objects.filter(
             pk__in=[str(x) for x in request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)]
         ).exclude(schema_name=get_public_schema_name())
 
@@ -155,15 +345,17 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         recipient_list = []
         for tenant in objects:
             with tenant_context(tenant):
-                owner = get_owner_or_none()
+                owner = SiteConfig.get().deck_owner or None
                 if owner is None:  # where is the owner?
                     continue
                 # get the full name of the user, or if none is supplied will return the username
                 full_name_or_username = owner.get_full_name() or owner.username
 
-                # get the email address, but only primary and verified
                 email = ""
-                for primary_email_address in EmailAddress.objects.filter(user=owner, primary=True, verified=True):
+                for primary_email_address in EmailAddress.objects.filter(user=owner):
+                    # get the email address, but only primary and verified
+                    if verified and not (primary_email_address.verified and primary_email_address.primary):
+                        continue
                     # make sure it's primary email for real
                     if primary_email_address.email == user_email(owner):
                         email = owner.email
@@ -174,7 +366,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # Create a message informing the user that the recipients were not found
         # and return a redirect to the admin index page.
         if not len(recipient_list):
-            self.message_user(request, "No recipients found.", messages.WARNING)
+            modeladmin.message_user(request, "No recipients found.", messages.WARNING)
             # return None to display the change list page again.
             return None
 
@@ -198,7 +390,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 )
 
                 # show alert that everything is cool
-                self.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
+                modeladmin.message_user(request, "%s users emailed successfully!" % len(recipient_list), messages.SUCCESS)
 
                 # return None to display the change list page again.
                 return None
@@ -212,23 +404,23 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         # AdminForm is not usually used directly by developers, but can be used by libraries that want to
         # extend the forms within the Django Admin.
         adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
-        media = self.media + adminform.media
+        media = modeladmin.media + adminform.media
 
-        request.current_app = self.admin_site.name
+        request.current_app = modeladmin.admin_site.name
 
         # we need to create a template of intermediate page with form
         return TemplateResponse(
             request,
             "admin/tenant/tenant/message_selected_compose.html",
             context={
-                **self.admin_site.each_context(request),
+                **modeladmin.admin_site.each_context(request),
                 "title": "Write your message here",
                 "adminform": adminform,
                 "subtitle": None,
                 "recipient_list": recipient_list,
                 "queryset": objects,
                 # building proper breadcrumb in admin
-                "opts": self.model._meta,
+                "opts": modeladmin.model._meta,
                 "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
                 "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
                 "media": media,

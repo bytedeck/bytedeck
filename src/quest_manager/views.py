@@ -243,7 +243,7 @@ class QuestCopy(QuestCreate):
         return kwargs
 
 
-class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
+class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
     model = Quest
     context_object_name = "quest"
     template_name = "quest_manager/summary.html"
@@ -255,6 +255,11 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context = super().get_context_data(**kwargs)
 
         subs = self.object.questsubmission_set.exclude(time_approved=None)
+        subs = QuestSubmission.objects.all_approved(quest=self.object, active_semester_only=False)
+        if subs:
+            latest_submission_time = subs.latest("time_approved").time_approved
+        else:
+            latest_submission_time = None
         count_total = subs.count()
         subs = subs.filter(time_returned=None)
         count_first_time = subs.count()
@@ -266,6 +271,7 @@ class QuestSubmissionSummary(DetailView, UserPassesTestMixin):
         context["count_total"] = count_total
         context["count_first_time"] = count_first_time
         context["percent_returned"] = percent_returned
+        context["latest_submission_time"] = latest_submission_time
 
         return context
 
@@ -340,7 +346,7 @@ def ajax_summary_histogram(request, pk):
             "histogram_labels": histogram_labels[:-1].tolist(),
             "count": size,
             "mean": mean,
-            "percentile_50": int(np.median(np_data)),
+            "percentile_50": int(np.median(np_data)) if size else None,
             "percentile_25": int(np_data[size // 4]) if size else None,
             "percentile_75": int(np_data[size * 3 // 4]) if size else None,
         }
@@ -510,18 +516,12 @@ def ajax_quest_info(request, quest_id=None):
 
         if quest_id:
             quest = get_object_or_404(Quest, pk=quest_id)
-            is_hidden = request.user.profile.is_quest_hidden(quest)
-            is_repeatable = quest.is_repeatable()
-            is_prerequisite = quest.is_used_prereq()
 
             template = "quest_manager/preview_content_quests_avail.html"
             quest_info_html = render_to_string(template, {"q": quest}, request=request)
 
             data = {
-                "quest_info_html": quest_info_html,
-                "is_hidden": is_hidden,
-                "is_repeatable": is_repeatable,
-                "is_prerequisite": is_prerequisite,
+                "quest_info_html": quest_info_html
             }
 
             # JsonResponse new in Django 1.7 is equivalent to:
@@ -739,7 +739,8 @@ def approve(request, submission_id):
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
-                text=comment_text + comment_text_addition,
+                # wrap comment text in <p> tag so default submission replies and quick replies are formatted correctly
+                text=f"<p>{comment_text}</p>{comment_text_addition}",
                 target=submission,
             )
 
@@ -1330,17 +1331,15 @@ def submission(request, submission_id=None, quest_id=None):
 
 @non_public_only_view
 @login_required
-def ajax(request):
+def ajax_submission_count(request):
+    """Returns the number of submissions awaiting approval for the current user
+    This is used to update the number beside the "Approvals" button in the navbar"""
     if request.is_ajax() and request.method == "POST":
         submission_count = QuestSubmission.objects.all_awaiting_approval(
             teacher=request.user
         ).count()
-        sub_data = {
-            "count": submission_count,
-        }
-        json_data = json.dumps(sub_data)
 
-        return HttpResponse(json_data, content_type="application/json")
+        return JsonResponse(data={"count": submission_count})
     else:
         raise Http404
 

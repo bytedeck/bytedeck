@@ -59,7 +59,7 @@ class MarkRange(models.Model):
     courses = models.ManyToManyField(
         "courses.course",
         blank=True,
-        help_text="Which courses this field is relevant to; If left blank it will apply to all courses."
+        help_text="Which courses this Mark Range will be used for; if left blank it will apply to all courses."
     )
 
     objects = MarkRangeManager()
@@ -335,13 +335,6 @@ class Semester(models.Model):
         return mark_list
 
 
-class DateType(models.Model):
-    date_type = models.CharField(max_length=50, unique=True)
-
-    def __str__(self):
-        return self.date_type
-
-
 class BlockManager(models.Manager):
 
     def grouped_teachers_blocks(self):
@@ -383,7 +376,6 @@ class Block(IsAPrereqMixin, models.Model):
 
 class ExcludedDate(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
-    date_type = models.ForeignKey(DateType, on_delete=models.SET_NULL, blank=True, null=True)
     date = models.DateField(unique=True)
     label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
 
@@ -502,7 +494,7 @@ class CourseStudentManager(models.Manager):
             courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
             user_list = courses.values_list('user', flat=True)
             user_list = set(user_list)  # removes doubles
-            return User.objects.filter(id__in=user_list)
+            return User.objects.filter(id__in=user_list, is_active=True)
         except AttributeError:
             # The code will run on the public tenant when booting up, throwing an exception because
             # the public tenant doesn't have a SiteConfig object.
@@ -520,8 +512,9 @@ class CourseStudent(models.Model):
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
     # grade is deprecated, shouldn't be used anywhere any more
     grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)
-    xp_adjustment = models.IntegerField(default=0)
-    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True)
+    xp_adjustment = models.IntegerField(default=0, help_text="A one-time adjustment to the the user's XP for this course.")
+    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True,
+                                             help_text="An optional reminder why an XP Adjustment was provided.")
     final_xp = models.PositiveIntegerField(blank=True, null=True)
     final_grade = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)

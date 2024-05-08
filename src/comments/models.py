@@ -5,7 +5,6 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.urls import reverse
 from django.utils.html import urlize, escape
 
 from notifications.models import deleted_object_receiver
@@ -158,9 +157,7 @@ class Comment(models.Model):
 
     def get_absolute_url(self):
         """ Find the aboslute url of the target object, then add the comment"""
-        # find absolute url of the target
-        self.target_object.get_absolute_url()
-        return reverse('comments:threads', kwargs={'id': self.id})
+        return self.path
 
     def get_origin(self):
         return self.path

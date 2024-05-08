@@ -97,7 +97,7 @@ class GFKSelect2Mixin:
                 or_queries = [Q(**{orm_lookup: term}) for orm_lookup in search_fields]
                 select |= reduce(operator.or_, or_queries)
 
-            queryset_models.append(model.objects.filter(select))
+            queryset_models.append(qs.filter(select))
 
         # Aggregate querysets
         return QuerySetSequence(*queryset_models)

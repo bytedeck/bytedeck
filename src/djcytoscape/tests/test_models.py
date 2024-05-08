@@ -175,6 +175,23 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
 
+    def test_generate_map__long_name_xp(self):
+        """
+        objects with long names + xp should be truncated correctly during map generation to avoid raising a DataError where labels are too long:
+
+        Exception Type: DataError at /maps/all/regenerate/
+        Exception Value: value too long for type character varying(50)
+        """
+        # Create a quest with name length 50 and xp 10000000 to ensure dynamic label truncation catches all potential cases
+        # testing for badges, etc. not needed as truncation only checks for xp attribute, not object type
+        # xp_can_be_entered_by_students appends a single "+" character to label, so testing with it verifies it is caught as well
+        quest = baker.make('quest_manager.Quest', name="____Sample Quest Name with 50 Character Length____", xp=10000000,
+                           xp_can_be_entered_by_students=True)
+
+        # Generate map with created quest and assert generation is successful (object count increased from default 1 to 2)
+        CytoScape.generate_map(quest, "test")
+        self.assertEqual(CytoScape.objects.count(), 2)
+
     def test_save__sets_first_scape_as_primary(self):
         newmap = baker.make('djcytoscape.CytoScape')
         self.assertTrue(self.map.is_the_primary_scape)

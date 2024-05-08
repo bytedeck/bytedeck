@@ -5,10 +5,13 @@
 
 {% block head_title %}{% trans "Sign up" %} | {% endblock %}
 
-{% block heading %}{% trans "Sign Up" %}{% endblock %}
+{% block heading %}{% trans "Sign Up" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 {% block content %}
-
-<p>{% blocktrans %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktrans %}</p>
+<p>Complete the sign up process below.</p>
+<p>Already have an account?  This email address is not used by an existing account.
+If you want to use this email to <b>Sign In with Google</b> on an existing account,
+you need to first add your gmail address on the existing account profile.
+</p>
 
 <form class="signup" id="signup_form" method="post" action="{% url 'socialaccount_signup' %}">
   {% csrf_token %}

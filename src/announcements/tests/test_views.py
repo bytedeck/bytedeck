@@ -77,6 +77,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('announcements:update', args=[1])
         self.assert403('announcements:copy', args=[1])
         self.assert403('announcements:publish', args=[1])
+        self.assert403('announcements:archived')
 
     def test_all_announcement_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -170,6 +171,22 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
         form = AnnouncementForm(data=model_to_dict(draft_announcement))
         self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['datetime_released'], ['An Announcement that is auto published cannot have a past release date.'])
+
+    def test_create_announcement_auto_publish_and_archive(self):
+        draft_announcement = baker.make(
+            Announcement,
+            datetime_released=timezone.now() - timedelta(days=3),
+            auto_publish=True,
+        )
+
+        form_data = model_to_dict(draft_announcement)
+        form_data['archived'] = True
+
+        form = AnnouncementForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['auto_publish'], ['An Announcement that is archived cannot be auto published.'])
+        # self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
     def test_comment_on_announcement_by_student(self):
         # log in a student

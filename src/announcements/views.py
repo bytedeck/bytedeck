@@ -24,6 +24,7 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from .forms import AnnouncementForm
 from .models import Announcement
 from .tasks import publish_announcement, send_notifications
+from django.core.exceptions import PermissionDenied
 
 
 @non_public_only_view
@@ -90,6 +91,9 @@ def list(request, ann_id=None, template='announcements/list.html'):
         archived = active_object.archived
     else:
         archived = '/archived/' in request.path_info
+
+    if archived and not request.user.is_staff:
+        raise PermissionDenied
 
     if request.user.is_staff:
         if archived:

@@ -25,7 +25,7 @@ urlpatterns = [
     # url(r'^create/$', views.quest_create, name='quest_create'),
 
     # Ajax
-    url(r'^ajax/$', views.ajax, name='ajax'),
+    url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
     url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
     url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
