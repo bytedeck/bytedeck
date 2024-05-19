@@ -1,4 +1,9 @@
 {% if library_quests %}
+<p>
+  <span class="text-danger">EXPERIMENTAL!</span>
+  The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
+  Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
+</p>
   <table id="accordion-available"
          class="accordian-table"
          data-classes="table table-hover table-responsive"
@@ -40,7 +45,8 @@
           <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
           <td class="col-sm-2 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
           <td id="status-icon-{{q.id}}" class="col-sm-1 text-muted">
-            <a href="{% url 'library_quests:import_quest' q.import_id %}" class="btn btn-sm btn-default" title="Import Quest to Deck"><i class="fa fa-download"></i></a>
+            <a href="{% url 'library_quests:import_quest' q.import_id %}" class="btn btn-sm btn-default"
+            title="Import this Quest into your Deck.  The quest will appear in your Drafts tab."><i class="fa fa-download"></i></a>
           </td>
         </tr>
       {% endfor %}

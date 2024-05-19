@@ -1,15 +1,30 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
 
-{% block heading_inner %}Import Quest {% endblock %}
+{% block heading_inner %}Import Quest from Library{% endblock %}
 
 {% block content %}
-<form action="" method="post">{% csrf_token %}
-  <p>This will overwrite your existing quest, are you sure you want to?</p>
-  <div class="well">
-    <p>Quest Name: {{quest.name}}</p>
-  </div>
-  <a href="{% url 'library_quests:library_quest_list' %}" role="button" class="btn btn-info">Cancel</a>
-  <input type="submit" value="Import" class="btn btn-default" />
-</form>
+
+  {% if local_quest %}
+    <p>Your deck already contains a quest with a matching Import ID.  Overwriting existing quests is not yet supported.
+      If you still want to import this quest from the Library, you need to delete the existing quest from your deck
+      or change it's Import ID:</p>
+      <div class="well">
+        <p>Existing Quest: <a href="{{ local_quest.get_absolute_url }}">{{local_quest.name}}</a></p>
+        <p>Import ID: {{local_quest.import_id}}</p>
+      </div>
+  {% else %}
+    <p>Are you sure you want to import this quest into your deck?</p>
+  {% endif %}
+    <form action="" method="post">{% csrf_token %}
+      <a href="{% url 'library_quests:library_quest_list' %}" role="button" class="btn btn-info">Cancel</a>
+      <input type="submit" value="Import" class="btn btn-success" {% if local_quest%} disabled {% endif %}/>
+    </form>
+    <hr>
+    <h3>{{quest.name}}</h3>
+    {% with dont_edit_prereqs=True %}
+      {% include "quest_manager/quest_detail_content.html" %}
+    {% endwith %}
+
+
 {% endblock %}
