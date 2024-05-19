@@ -35,17 +35,10 @@
 
   {% if request.user.is_staff %}
   {% with submission as s %}
-  <div class="pull-right">
+  <div class="pull-right submission-buttons-other-top">
     {% include "quest_manager/submission_buttons_other.html" %}
   </div>
   {% endwith %}
-  {% endif %}
-
-  {% if not submission.is_completed %}
-    <!-- <div class="pull-right"> -->
-        <!-- <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop</a> -->
-        <!-- <a class="btn btn-primary" href="{% url 'quests:complete' submission.id %}" role="button">Complete</a> -->
-    <!-- </div> -->
   {% endif %}
 
   {% with submission.quest as quest %}

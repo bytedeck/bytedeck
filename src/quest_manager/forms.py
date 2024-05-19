@@ -11,7 +11,7 @@ from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
-from utilities.fields import RestrictedFileFormField
+from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from .models import Category, Quest, CommonData
@@ -213,11 +213,12 @@ class TAQuestForm(QuestForm):
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
-    attachments = RestrictedFileFormField(required=False,
-                                          max_upload_size=16777216,
-                                          widget=forms.ClearableFileInput(attrs={'multiple': True}),
-                                          label="Attach files",
-                                          help_text="Hold Ctrl to select multiple files, 16MB limit per file")
+    attachments = RestrictedMultiFileFormField(
+        required=False,
+        max_upload_size=16777216,
+        label="Attach files",
+        help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
+    )
 
 
 class SubmissionFormCustomXP(SubmissionForm):

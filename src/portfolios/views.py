@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.http import Http404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth import get_user_model
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, CreateView, DetailView, UpdateView, DeleteView
@@ -12,6 +13,8 @@ from comments.models import Document
 from portfolios.models import Portfolio, Artwork
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from portfolios.forms import PortfolioForm, ArtworkForm
+
+User = get_user_model()
 
 
 class PortfolioList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
@@ -28,10 +31,22 @@ class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         """ If a user id (pk) wasn't provided in the url, then use the requesting user's id.
         If the user doesn't have a portfolio yet , create one."""
         pk = self.kwargs.get('pk')
+
+        # If there is no pk, then the `portfolios:current_user` was probably used.
+        # If the user doesn't have a portfolio yet, create one.
         if pk is None:
-            portfolio, _ = Portfolio.objects.get_or_create(user=self.request.user)
-            # insert the pk into kwargs before calling super().get_object()
-            self.kwargs['pk'] = portfolio.pk
+            user = self.request.user
+        else:
+            user = get_object_or_404(User, pk=pk)
+
+        if hasattr(user, 'portfolio'):
+            portfolio = user.portfolio
+        else:
+            portfolio, _ = Portfolio.objects.get_or_create(user=user)
+
+        # insert the pk into kwargs before calling super().get_object()
+        self.kwargs['pk'] = portfolio.pk
+
         return super().get_object(queryset=queryset)
 
     def dispatch(self, *args, **kwargs):

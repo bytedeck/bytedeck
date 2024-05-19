@@ -1,3 +1,5 @@
+import dns.resolver
+
 from django import forms
 
 from django.contrib.auth import get_user_model
@@ -65,8 +67,20 @@ class ProfileForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data['email']
 
+        # Verify the domain is real
+        if '@' in email:
+            domain = email.split('@')[1]  # ["myemail", "gmail.com"]
+            try:
+                dns.resolver.resolve(domain, 'MX')
+                # If it doesn't throw an exception, the domain has MX records
+            except dns.resolver.NoAnswer:
+                # Some domains don't answer, such as sd72.bc.ca!
+                pass
+            except dns.resolver.NXDOMAIN:
+                raise forms.ValidationError(f"{domain} doesn't appear to exist. Enter a valid email address or leave it blank.")
+
         if email and email_address_exists(email, exclude_user=self.instance.user):
-            raise forms.ValidationError("A user is already registered with this email address")
+            raise forms.ValidationError("A user is already registered with this email address.")
 
         return email
 

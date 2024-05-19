@@ -38,9 +38,12 @@ class AnnouncementForm(forms.ModelForm):
 
         auto_publish = data.get('auto_publish')
         datetime_released = data.get('datetime_released')
+        archived = data.get('archived')
 
         if auto_publish and datetime_released < timezone.now():
-            raise forms.ValidationError(
-                'An Announcement that is auto published cannot have a past release date.'
-            )
+            self.add_error("datetime_released", forms.ValidationError('An Announcement that is auto published cannot have a past release date.'))
+
+        if auto_publish and archived:
+            self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
+
         return data

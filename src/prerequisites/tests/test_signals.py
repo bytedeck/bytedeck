@@ -65,6 +65,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
         """
         Updating a quest_submission (when completing a quest) should trigger a signal
         """
+        self.quest_submission.is_approved = True
         self.quest_submission.is_completed = True
         self.quest_submission.save()
         self.assertEqual(task.call_count, 1)
@@ -111,6 +112,15 @@ class PrerequisitesSignalsTest(TenantTestCase):
         quest.verification_required = False
         quest.save()  # update
         self.assertEqual(task.call_count, 0)
+
+    @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
+    def test_update_prereq_cache_triggered_by_quest_available_outside_course(self, task):
+        """Creation and Update of a quest should trigger a cache update, only when it is available outside the course.
+        """
+        quest = baker.make(Quest, verification_required=True)  # creation
+        quest.available_outside_course = True
+        quest.save()  # update
+        self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_cache_triggered_by_non_quest_prereq(self, task):

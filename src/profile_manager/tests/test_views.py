@@ -552,7 +552,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student2.refresh_from_db()
 
         self.assertFalse(form.is_valid())
-        self.assertEqual(form.errors['email'][0], 'A user is already registered with this email address')
+        self.assertEqual(form.errors['email'][0], 'A user is already registered with this email address.')
         self.assertEqual(self.test_student2.email, "current@example.com")   # Should be the same email
 
     def test_update_profile__revert_email_to_original(self):

@@ -1,15 +1,25 @@
 import functools
 
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import get_template
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.sites.models import Site
 from django.db import connection
-from django.http import Http404
+from django.dispatch import receiver
+from django.http import Http404, HttpResponseRedirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
 from django.urls import reverse_lazy
 
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
+
+from allauth.account.utils import user_username, send_email_confirmation
+from allauth.account.signals import email_confirmed
+from allauth.account.models import EmailConfirmationHMAC
+
+from siteconfig.models import SiteConfig
+from utilities.html import textify
 
 from .forms import TenantForm
 from .models import Tenant
@@ -57,8 +67,6 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         """ Copy the tenant name to the schema_name and the domain_url fields."""
-        from siteconfig.models import SiteConfig
-
         # TODO: this is duplication of code in admin.py.  Move this into the Tenant model?  Perhaps as a pre-save hook?
         form.instance.schema_name = form.instance.name.replace('-', '_')
         form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
@@ -76,22 +84,86 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.last_name = cleaned_data['last_name']
             owner.save()
 
-            # save email address...
+            # set the owner's username to firstname.lastname (instead of "owner")
+            user_username(owner, f"{owner.first_name}.{owner.last_name}")
+
+            # set the owner's password to firstname-deckname-lastname
+            owner.set_password("-".join([owner.first_name, self.object.name, owner.last_name]).lower())
+
+            # save email address
             email = cleaned_data['email']
             owner.email = email
             owner.save()
 
-            # ...and send email confirmation message
-            from allauth.account.utils import send_email_confirmation
-            send_email_confirmation(
-                request=self.request,
-                user=owner,
-                signup=False,
-                email=owner.email,
-            )
+            return HttpResponseRedirect(self.get_success_url())
 
         return response
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests: instantiate a form instance with the passed
+        POST variables and then check if it's valid.
+        """
+        self.object = None
+
+        form = self.get_form()
+        if form.is_valid():
+            # get the response (HttpResponseRedirect)...
+            response = self.form_valid(form)
+            # ...and send email confirmation message
+            with tenant_context(self.object):
+                owner = SiteConfig.get().deck_owner
+                send_email_confirmation(
+                    request=request,
+                    user=owner,
+                    signup=False,
+                    email=owner.email,
+                )
+
+            return response
+        else:
+            return self.form_invalid(form)
 
     def get_success_url(self):
         """ Redirect to the newly created tenant."""
         return self.object.get_root_url()
+
+
+@receiver(email_confirmed, sender=EmailConfirmationHMAC)
+def email_confirmed_handler(email_address, **kwargs):
+    # Once the owner user has verified the email for the first time,
+    # send an email with instructions for how to log in with the username and password.
+    user = email_address.user
+    config = SiteConfig.get()
+    tenant = Tenant.get()
+
+    # just verified email for a first time and never been logged into app before
+    if user.last_login is not None:
+        return
+    # somehow user is not a deck owner
+    if not (user.pk == config.deck_owner.pk):
+        return
+
+    subject = get_template("tenant/email/welcome_subject.txt").render(context={
+        "config": config,
+        "tenant": tenant,
+        "user": user,
+    })
+    # email subject *must not* contain newlines
+    subject = "".join(subject.splitlines())
+
+    # generate "welcome" email for new user
+    msg = get_template("tenant/email/welcome_message.txt").render(context={
+        "config": config,
+        "tenant": tenant,
+        "user": user,
+    })
+
+    # sending a text and HTML content combination
+    email = EmailMultiAlternatives(
+        subject,
+        body=textify(msg),  # convert msg to plain text, using textify utility
+        to=[user.email],
+    )
+    email.attach_alternative(msg, "text/html")
+    email.send()

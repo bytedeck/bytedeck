@@ -52,8 +52,8 @@
         </a>
         {% endif %}
         {% if not object.closed and object == config.active_semester%}
-        <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button"
-          title="Close this semester. WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements, and delete any in-progress submissions.">
+        <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button" id="end-semester"
+          title="Close this semester. WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements and delete any in-progress submissions.">
           <i class="fa fa-calendar-times-o"></i>
         </a>
         {% endif %}
@@ -77,7 +77,7 @@
 
 <script>
   $('body').on('click', '#end-semester', function(e) {
-      if(!confirm("Are you sure?")) {
+      if(!confirm("WARNING!  Once a semester is closed, it can't be re-opened. It will archive all announcements and delete any in-progress submissions. Are you sure you want to do this?")) {
           e.preventDefault();
           return;
       }

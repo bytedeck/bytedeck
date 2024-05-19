@@ -273,6 +273,11 @@ class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateVi
 
         return HttpResponseRedirect(self.get_success_url())
 
+    def form_invalid(self, forms, *args, **kwargs):
+        response = super().form_invalid(forms)
+        messages.error(self.request, 'There was an error processing the form. Fields reporting an error will have more information below.')
+        return response
+
     def get_success_url(self):
         return reverse("profiles:profile_detail", args=[self.get_object().pk])
 
