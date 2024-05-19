@@ -238,7 +238,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
             reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q="
         )
         # confirm the search by an empty query returned all (test, public and extra) objects
-        self.assertContains(response, "3 total")
+        self.assertContains(response, "4 total")
 
         response = self.client.get(
             reverse("admin:{}_{}_changelist".format("tenant", "tenant")) + "?q=John+Doe"
@@ -546,7 +546,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         self.assertEqual(response.status_code, 403)
         post = self.client.post(delete_url, delete_dict)
         self.assertEqual(post.status_code, 403)
-        self.assertEqual(Tenant.objects.count(), 3)  # no changes
+        self.assertEqual(Tenant.objects.count(), 4)  # no changes
         self.client.logout()
 
         # third case, view user should not be able to delete tenants
@@ -556,7 +556,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         self.assertEqual(response.status_code, 403)
         post = self.client.post(delete_url, delete_dict)
         self.assertEqual(post.status_code, 403)
-        self.assertEqual(Tenant.objects.count(), 3)  # no changes
+        self.assertEqual(Tenant.objects.count(), 4)  # no changes
         self.client.logout()
 
         # fourth case, delete user can delete, but using incorrect confirmation keyword/phrase
@@ -566,7 +566,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         self.assertEqual(response.status_code, 200)
         post = self.client.post(delete_url, {"post": "yes", "confirmation": "stranger/something"})
         self.assertEqual(post.status_code, 200)
-        self.assertEqual(Tenant.objects.count(), 3)  # no changes
+        self.assertEqual(Tenant.objects.count(), 4)  # no changes
         self.assertContains(
             post, "The confirmation does not match the keyword"
         )
@@ -579,7 +579,7 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         self.assertContains(response, "Tenants: 1")
         post = self.client.post(delete_url, delete_dict)
         self.assertRedirects(post, reverse("admin:index"))
-        self.assertEqual(Tenant.objects.count(), 2)
+        self.assertEqual(Tenant.objects.count(), 3)
         tenant_ct = ContentType.objects.get_for_model(Tenant)
         logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
         self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
@@ -592,13 +592,13 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
 
         # assert number of tenants, should be three objects (test, public and extra)
-        self.assertEqual(Tenant.objects.count(), 3)
+        self.assertEqual(Tenant.objects.count(), 4)
 
         self.client.force_login(self.deleteuser)
         post = self.client.post(delete_url, delete_dict)
         self.assertRedirects(post, reverse("admin:index"))
         # tenant object was removed (extra tenant is gone)
-        self.assertEqual(Tenant.objects.count(), 2)
+        self.assertEqual(Tenant.objects.count(), 3)
         # ...but schema still in database
         self.assertTrue(schema_exists("extra"))
 

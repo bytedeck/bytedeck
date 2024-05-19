@@ -1,0 +1,15 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Import Quest {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>This will overwrite your existing quest, are you sure you want to?</p>
+  <div class="well">
+    <p>Quest Name: {{quest.name}}</p>
+  </div>
+  <a href="{% url 'library_quests:library_quest_list' %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Import" class="btn btn-default" />
+</form>
+{% endblock %}

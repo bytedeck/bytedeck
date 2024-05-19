@@ -1,0 +1,51 @@
+{% if library_quests %}
+  <table id="accordion-available"
+         class="accordian-table"
+         data-classes="table table-hover table-responsive"
+         data-toggle="table"
+         data-detail-view="true"
+         data-search="true">
+    <thead>
+      <tr class="panel-heading">
+        <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
+        <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
+        <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
+        <th class="col-sm-2 text-right hidden-xs" data-field="campaign" data-sortable="true">Campaign</th>
+        <th class="col-sm-1 text-center hidden-xs" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+        <th class="col-sm-2" data-field="status_icons">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
+      {% for q in library_quests %}
+        <tr class="accordian-trigger panel-title
+          {% if request.user.is_staff %}
+            {% if not q.visible_to_students %}danger
+            {% elif q.is_expired %}warning
+            {% else %}default{% endif %}
+          {% else %}
+            default
+          {% endif %}
+          {% if q.id == active_q_id %} active {% endif %}"
+          role="tab"
+          aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
+          aria-controls="collapse-quest-{{q.id}}"
+        >
+          <td class="col-sm-1 col-xs-2 col-icon">
+            <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
+          </td>
+          <td class="col-sm-5 col-xs-8">{{q.name}}
+            {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
+          </td>
+          <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
+          <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
+          <td class="col-sm-2 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
+          <td id="status-icon-{{q.id}}" class="col-sm-1 text-muted">
+            <a href="{% url 'library_quests:import_quest' q.import_id %}" class="btn btn-sm btn-default" title="Import Quest to Deck"><i class="fa fa-download"></i></a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Quest library is empty at the moment.</p>
+{% endif %}
