@@ -20,6 +20,7 @@ from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from tenant.models import Tenant
 from utilities.models import MenuItem
 
 User = get_user_model()
@@ -108,8 +109,12 @@ def create_users():
 
 
 def create_site_config_object():
-    """ Create the single SiteConfig object for this tenant """
-    SiteConfig.objects.create()
+    """ Create the single SiteConfig object for this tenant and provide sensible defaults"""
+    config = SiteConfig.objects.create()
+    name = Tenant.get().name.replace("_", " ").replace("-", " ").title()
+    config.site_name = f"{name} Deck"
+    config.site_name_short = name
+    config.save()
 
 
 def create_initial_course():

@@ -18,8 +18,11 @@ class NotificationTasksTests(TenantTestCase):
 
     def setUp(self):
 
+        config = SiteConfig.get()
+        self.sem = config.active_semester
+        config.site_name_short = "Deck"
+        config.save()
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.sem = SiteConfig.get().active_semester
         self.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', email="student@email.com")
         self.test_student2 = baker.make(User, email="student2@email.com")

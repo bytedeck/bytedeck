@@ -9,3 +9,6 @@ You should change your password after logging in for the first time.
 
 Thank you,
 Bytedeck Team
+
+Help forum: https://github.com/bytedeck/bytedeck/discussions
+Documentation: https://github.com/bytedeck/bytedeck/wiki
