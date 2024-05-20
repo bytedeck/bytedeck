@@ -112,9 +112,10 @@ def create_site_config_object():
     """ Create the single SiteConfig object for this tenant and provide sensible defaults"""
     config = SiteConfig.objects.create()
     name = Tenant.get().name.replace("_", " ").replace("-", " ").title()
-    config.site_name = f"{name} Deck"
-    config.site_name_short = name
-    config.save()
+    if name:
+        config.site_name = f"{name} Deck"
+        config.site_name_short = name
+        config.save()
 
 
 def create_initial_course():

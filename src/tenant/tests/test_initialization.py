@@ -144,7 +144,7 @@ class TenantInitializationTest(TenantTestCase):
     def test_site_config_created(self):
         """ Test that the SiteConfig object exists and the Deck name has expected defaults.
         """
-        from tenant.models import SiteConfig
+        from siteconfig.models import SiteConfig
         site_config = SiteConfig.get()
         self.assertTrue(site_config is not None)
         self.assertEqual(site_config.site_name, "Testing Deck")
