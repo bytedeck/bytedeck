@@ -199,6 +199,11 @@ class SiteConfig(models.Model):
             having to submit a form."
     )
 
+    enable_shared_library = models.BooleanField(
+        verbose_name="Enable Shared Library", default=False,
+        help_text="If enabled, you can import quests and campaigns from the Shared Library."
+    )
+
     # Field to select custom name to change all instances of "announcement" to site-wide
     # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
     custom_name_for_announcement = models.CharField(

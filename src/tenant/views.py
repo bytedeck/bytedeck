@@ -1,8 +1,11 @@
 import functools
 
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import get_template
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.sites.models import Site
 from django.db import connection
+from django.dispatch import receiver
 from django.http import Http404, HttpResponseRedirect
 from django.utils.decorators import method_decorator
 from django.views.generic.edit import CreateView
@@ -11,7 +14,12 @@ from django.urls import reverse_lazy
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
+from allauth.account.utils import user_username, send_email_confirmation
+from allauth.account.signals import email_confirmed
+from allauth.account.models import EmailConfirmationHMAC
+
 from siteconfig.models import SiteConfig
+from utilities.html import textify
 
 from .forms import TenantForm
 from .models import Tenant
@@ -51,6 +59,13 @@ class NonPublicOnlyViewMixin:
         return super().dispatch(*args, **kwargs)
 
 
+def generate_default_owner_password(user, tenant):
+    """Generate a default password for a new deck's owner to"
+    firstname-deckname-lastname
+    """
+    return "-".join([user.first_name, tenant.name, user.last_name]).lower()
+
+
 class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Tenant
     form_class = TenantForm
@@ -76,6 +91,12 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.last_name = cleaned_data['last_name']
             owner.save()
 
+            # set the owner's username to firstname.lastname (instead of "owner")
+            user_username(owner, f"{owner.first_name}.{owner.last_name}")
+
+            # set the owner's password to firstname-deckname-lastname
+            owner.set_password(generate_default_owner_password(owner, self.object))
+
             # save email address
             email = cleaned_data['email']
             owner.email = email
@@ -99,7 +120,6 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             # ...and send email confirmation message
             with tenant_context(self.object):
                 owner = SiteConfig.get().deck_owner
-                from allauth.account.utils import send_email_confirmation
                 send_email_confirmation(
                     request=request,
                     user=owner,
@@ -114,3 +134,45 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     def get_success_url(self):
         """ Redirect to the newly created tenant."""
         return self.object.get_root_url()
+
+
+@receiver(email_confirmed, sender=EmailConfirmationHMAC)
+def email_confirmed_handler(email_address, **kwargs):
+    """Send a welcome email to the deck owner after their email has been verified.
+    Include instructions for how to log in with the username and password.
+    """
+    user = email_address.user
+    config = SiteConfig.get()
+    tenant = Tenant.get()
+
+    # just verified email for a first time and never been logged into app before
+    if user.last_login is not None:
+        return
+    # somehow user is not a deck owner
+    if not (user.pk == config.deck_owner.pk):
+        return
+
+    subject = get_template("tenant/email/welcome_subject.txt").render(context={
+        "config": config,
+        "tenant": tenant,
+        "user": user,
+    })
+    # email subject *must not* contain newlines
+    subject = "".join(subject.splitlines())
+
+    # generate "welcome" email for new user
+    msg = get_template("tenant/email/welcome_message.txt").render(context={
+        "config": config,
+        "tenant": tenant,
+        "user": user,
+        "password": generate_default_owner_password(user, tenant),
+    })
+
+    # sending a text and HTML content combination
+    email = EmailMultiAlternatives(
+        subject,
+        body=textify(msg),  # convert msg to plain text, using textify utility
+        to=[user.email],
+    )
+    email.attach_alternative(msg, "text/html")
+    email.send()

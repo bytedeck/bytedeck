@@ -207,6 +207,7 @@ INSTALLED_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    'library',
 )
 
 TAGGIT_CASE_INSENSITIVE = True

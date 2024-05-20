@@ -324,7 +324,7 @@ class CourseModelTest(TenantTestCase):
 class CourseStudentManagerTest(TenantTestCase):
 
     def setUp(self):
-        self.student = baker.make(User)
+        self.student = baker.make(User, username='test_student')
         self.course = baker.make(Course)
         self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
 
@@ -389,6 +389,17 @@ class CourseStudentManagerTest(TenantTestCase):
         xp_per_course.return_value = -10
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
+
+    def test_all_users_for_active_semester(self):
+
+        # There should be 1 student in the active semester
+        self.assertEqual(CourseStudent.objects.all_users_for_active_semester().count(), 1)
+
+        # Makef the student inactiveo
+        self.student.is_active = False
+        self.student.save()
+
+        self.assertEqual(CourseStudent.objects.all_users_for_active_semester(students_only=True).count(), 0)
 
 
 class CourseStudentModelTest(TenantTestCase):

@@ -65,6 +65,7 @@ class ProfileManager(models.Manager):
 
     def get_mailing_list(
         self,
+        *,
         as_emails_list=False,
         for_announcement_email=False,
         for_notification_email=False,
@@ -84,7 +85,7 @@ class ProfileManager(models.Manager):
             email_filter &= models.Q(profile__get_notifications_by_email=True)
 
         empty_emails = models.Q(email='') | models.Q(email__isnull=True)
-        verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True)
+        verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
         students_to_email = (
             CourseStudent.objects.all_users_for_active_semester()
@@ -139,10 +140,6 @@ class Profile(models.Model):
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
     avatar = ResizedImageField(upload_to='avatars/', null=True, blank=True)
-    first_name = models.CharField(max_length=50, null=True, blank=False,
-                                  help_text='Use the first name that matches your school records.')
-    last_name = models.CharField(max_length=50, null=True, blank=False,
-                                 help_text='Use the last name that matches your school records.')
     preferred_name = models.CharField(max_length=50, null=True, blank=True,
                                       verbose_name='Preferred first name',
                                       help_text='If you would prefer your teacher to call you by a name other than \

@@ -40,6 +40,7 @@ urlpatterns += [
     url(r'^$', views.home, name='home'),
     url(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     # quest_manager
+    url(r'^library/', include('library.urls', namespace='library')),
     url(r'^quests/', include('quest_manager.urls', namespace='quests')),
     # profile_manager
     url(r'^profiles/', include('profile_manager.urls', namespace='profiles')),

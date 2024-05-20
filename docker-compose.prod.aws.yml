@@ -5,7 +5,7 @@ version: '2.2'
 # FOR DOCKER-COMPOSE SETTINGS SPECIFIC TO AWS PRODUCTION
 #
 # Run with:
-# `docker-compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d`
+# `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d`
 #
 # https://docs.docker.com/compose/extends/
 ################################################################################
@@ -33,7 +33,8 @@ services:
       args:
         WUID: $WUID
         WGID: $WGID
-    #volumes:
+    volumes:
+        - /etc/letsencrypt:/etc/letsencrypt
     #   - static_data:/var/www/bytedeck/static
     #   - socket_data:/bytedeck-volume
     #   - media_data:/var/www/bytedeck/media/
