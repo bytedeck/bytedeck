@@ -165,7 +165,7 @@ def email_confirmed_handler(email_address, **kwargs):
         "config": config,
         "tenant": tenant,
         "user": user,
-        "password": generate_default_owner_password(user, config.tenant),
+        "password": generate_default_owner_password(user, tenant),
     })
 
     # sending a text and HTML content combination

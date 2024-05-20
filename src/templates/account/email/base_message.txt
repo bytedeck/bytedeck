@@ -1,7 +1,8 @@
-{% load i18n %}{% autoescape off %}{% blocktrans with site_name=current_site.name %}Hello from {{ site_name }}!{% endblocktrans %}
+{% load i18n %}{% autoescape off %}{% blocktrans with site_name=current_site.name %}Hello from Bytedeck!{% endblocktrans %}
 
 {% block content %}{% endblock content %}
 
-{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}Thank you for using {{ site_name }}!
-{{ site_domain }}{% endblocktrans %}
+{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}
+Thank you for using Bytedeck
+{% endblocktrans %}
 {% endautoescape %}

@@ -1,1 +1,11 @@
-Hello {{ user.full_name }},
+Hello {{user.get_full_name}},
+
+Thank you for confirming your email address.  Use these credentails to log in to your new deck at {{tenant.get_root_url}}
+
+username: {{user.username}}
+password: {{password}}
+
+You should change your password after logging in for the first time.
+
+Thank you,
+Bytedeck Team
