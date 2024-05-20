@@ -59,6 +59,13 @@ class NonPublicOnlyViewMixin:
         return super().dispatch(*args, **kwargs)
 
 
+def generate_default_owner_password(user, tenant):
+    """Generate a default password for a new deck's owner to"
+    firstname-deckname-lastname
+    """
+    return "-".join([user.first_name, tenant.name, user.last_name]).lower()
+
+
 class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     model = Tenant
     form_class = TenantForm
@@ -88,7 +95,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             user_username(owner, f"{owner.first_name}.{owner.last_name}")
 
             # set the owner's password to firstname-deckname-lastname
-            owner.set_password("-".join([owner.first_name, self.object.name, owner.last_name]).lower())
+            owner.set_password(generate_default_owner_password(owner, self.object))
 
             # save email address
             email = cleaned_data['email']
@@ -131,8 +138,9 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
 
 @receiver(email_confirmed, sender=EmailConfirmationHMAC)
 def email_confirmed_handler(email_address, **kwargs):
-    # Once the owner user has verified the email for the first time,
-    # send an email with instructions for how to log in with the username and password.
+    """Send a welcome email to the deck owner after their email has been verified.
+    Include instructions for how to log in with the username and password.
+    """
     user = email_address.user
     config = SiteConfig.get()
     tenant = Tenant.get()
@@ -157,6 +165,7 @@ def email_confirmed_handler(email_address, **kwargs):
         "config": config,
         "tenant": tenant,
         "user": user,
+        "password": generate_default_owner_password(user, tenant),
     })
 
     # sending a text and HTML content combination
