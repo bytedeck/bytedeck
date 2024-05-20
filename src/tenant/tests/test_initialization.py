@@ -147,5 +147,5 @@ class TenantInitializationTest(TenantTestCase):
         from siteconfig.models import SiteConfig
         site_config = SiteConfig.get()
         self.assertTrue(site_config is not None)
-        self.assertEqual(site_config.site_name, "Testing Deck")
-        self.assertEqual(site_config.site_name_short, "Testing")
+        self.assertEqual(site_config.site_name, "My Byte Deck")
+        self.assertEqual(site_config.site_name_short, "Deck")

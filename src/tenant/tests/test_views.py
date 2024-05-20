@@ -135,7 +135,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # check mailbox after submitting form
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Please Confirm Your E-mail Address", mail.outbox[0].subject)
+        self.assertIn("Please Confirm Your Email Address", mail.outbox[0].subject)
         # expecting to see john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
         # expecting to see correct domain name in confirmation link and make sure link is correct
@@ -164,7 +164,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         email_confirmed_handler(email_address=email_address_obj)
 
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Welcome to Deck!", mail.outbox[0].subject)
+        self.assertIn("Instructions to sign in to default", mail.outbox[0].subject)
         # expecting to see the same john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
 
