@@ -4,6 +4,18 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.24.0] 2024-05-19 - Library MVP
+* Feature:
+  - Minimally viable Library Deck!!  Turn on this feature in the Site Settings which will enable a new "Library" tab when viewing your quests. This allows you to import quests shared from the special Library deck.  Currently the feature is very limited.
+* Tweaks:
+  - Verify existance of email domains to prevent some typos and fake user email addresses [#1562](https://github.com/bytedeck/bytedeck/issues/1562)
+  - Add helpful message when saving a profile doesn't work, since the form is long and might not be clear what the problem is.
+  - New deck workflow improvements, including more helpful intro emails [#1489](https://github.com/bytedeck/bytedeck/issues/1489)
+* Bugfixes:
+  - Fix announcement emails being sent to old/removed email addresses, and inactive students [#1551](https://github.com/bytedeck/bytedeck/issues/1551)
+  - Multi-file uploads are now possible again (Hold Ctrl to select multiple files) [#1353](https://github.com/bytedeck/bytedeck/issues/1353)
+
+
 ### [1.23.5] 2024-02-17
 * Bugfixes:
   - Prevent submission buttons from covering text on small/mobile widths; closes [#1218](https://github.com/bytedeck/bytedeck/issues/1218)
@@ -14,6 +26,7 @@ This file chronologically records all notable changes to this website, including
   - Refactor project to use docker compose v2
   - Remove name field from Profile model (not used) [#1549](https://github.com/bytedeck/bytedeck/issues/1549)
   - Remove old Grade field from course form [#1230](https://github.com/bytedeck/bytedeck/issues/1230)
+
 
 ### [1.23.4] 2023-12-10
 * Tweak:
