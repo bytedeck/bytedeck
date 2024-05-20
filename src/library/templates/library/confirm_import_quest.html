@@ -17,7 +17,7 @@
     <p>Are you sure you want to import this quest into your deck?</p>
   {% endif %}
     <form action="" method="post">{% csrf_token %}
-      <a href="{% url 'library_quests:library_quest_list' %}" role="button" class="btn btn-info">Cancel</a>
+      <a href="{% url 'library:library_quest_list' %}" role="button" class="btn btn-info">Cancel</a>
       <input type="submit" value="Import" class="btn btn-success" {% if local_quest%} disabled {% endif %}/>
     </form>
     <hr>

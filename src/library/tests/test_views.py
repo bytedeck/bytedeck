@@ -78,7 +78,7 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         non_library_quest_count = Quest.objects.get_active().count()
 
         self.client.force_login(self.test_teacher)
-        url = reverse('library_quests:library_quest_list')
+        url = reverse('library:library_quest_list')
         response = self.client.get(url)
 
         # Check the request context for the library quests
@@ -87,10 +87,35 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
 
     def test_import_non_existing_quest_to_current_deck(self):
 
-        url = reverse('library_quests:import_quest', args=[str(uuid.uuid4())])
+        url = reverse('library:import_quest', args=[str(uuid.uuid4())])
 
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
+
+    def test_import_quest_already_exists_locally(self):
+        """ Currently we don't support overwriting existing quests (based on import_id),
+        so make sure the import feature rejects already existing import_ids
+        TODO: When we add an overwrite feature, this quest will need to be modified to test that feature """
+
+        # Create quest in the test tenant
+        quest = baker.make(Quest)
+
+        # Create a quest in the libray schema with same import_id:
+        with library_schema_context():
+            library_quest = baker.make(Quest, import_id=quest.import_id)
+
+        q = Quest.objects.get(import_id=quest.import_id)
+        print(q.import_id)
+        print(library_quest.import_id)
+
+        url = reverse('library:import_quest', args=[library_quest.import_id])
+
+        # Test the confirmation page
+        response = self.client.get(url)
+
+        # Make a request to import the quest, should result in Permission Denied (403)
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
 
     def test_import_library_to_current_deck(self):
         """
@@ -104,14 +129,15 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(import_id=library_quest.import_id)
 
-        url = reverse('library_quests:import_quest', args=[library_quest.import_id])
+        url = reverse('library:import_quest', args=[library_quest.import_id])
 
         # Test the confirmation page
         response = self.client.get(url)
 
         # Make a request to import the quest
         response = self.client.post(url)
-        self.assertRedirects(response, reverse('library_quests:library_quest_list'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('quests:drafts'))
 
         # Check that the quest now exists in the non-library tenant
         quest_qs = Quest.objects.filter(import_id=library_quest.import_id)

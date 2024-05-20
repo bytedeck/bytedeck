@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.db import connection
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
 from django.shortcuts import render
@@ -47,6 +48,12 @@ def import_quest_to_current_deck(request, quest_import_id):
     elif request.method == 'POST':
 
         dest_schema = connection.schema_name
+
+        # If the quest already exists in the destination schema, throw 404.
+        # Shouldn't get here because the "Import" button is disabled
+        local_quest = Quest.objects.filter(import_id=quest_import_id).first()
+        if local_quest:
+            raise PermissionDenied(f"Quest with import_id {quest_import_id} already exists in the current deck.")
 
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
