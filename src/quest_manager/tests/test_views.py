@@ -604,7 +604,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # make sure the comment was created
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments[0].text, comment)
+        self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
     def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
@@ -724,7 +724,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # make sure the comment was created
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments[0].text, comment)
+        self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
     def test_comment_button_no_comment_verification_not_required(self):
         """ When commenting on an already completed quest, needs to actually comment with something
@@ -2025,7 +2025,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
+        self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -2220,7 +2220,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, f"<p>{comment_text}</p>")
+        self.assertEqual(comments.first().text, comment_text)
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
