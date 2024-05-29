@@ -179,6 +179,30 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
 
         self.assertEqual(expected_order, calculated_order)
 
+    def test_query_tag_from_approved_quest(self):
+        """
+            When getting all quests related to tag and user, check if only submitted and approved tags show
+        """
+        # create quests with submissions
+        q_unrelated = baker.make(Quest)
+        q_approved, s_approved = self.create_quest_and_submissions(5)
+        q_submitted, s_submitted = self.create_quest_and_submissions(10)
+        s_submitted[0].is_approved = False
+        s_submitted[0].is_completed = False
+        s_submitted[0].save()
+
+        # tags
+        q_unrelated.tags.add('unrelated')
+        q_approved.tags.add('approved')
+        q_submitted.tags.add('submitted')
+
+        # check if only q_approved is in the query
+        tags = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]
+
+        self.assertFalse('unrelated' in tags)
+        self.assertTrue('approved' in tags)
+        self.assertFalse('submitted' in tags)
+
 
 class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
     """
