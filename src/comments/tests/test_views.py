@@ -98,7 +98,8 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
     def test_delete_comment_path(self):
-        ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html correctly contains the `comment.path` as its href attribute.
+        ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
+        correctly contains the `comment.path` as its href attribute.
         '''
         self.client.force_login(self.teacher)
 
