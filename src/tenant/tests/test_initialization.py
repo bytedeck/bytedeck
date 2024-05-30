@@ -145,7 +145,7 @@ class TenantInitializationTest(TenantTestCase):
         """ test if intro tag is properly assigned to
         "Welcome to ByteDeck!" + all quests in the orientation campaign.
         """
-        q_intro = Quest.objects.filter(tags__name="Intro")
+        q_intro = Quest.objects.filter(tags__name="intro")
         self.assertEqual(q_intro.count(), 6)
         self.assertTrue(q_intro.filter(name="Welcome to ByteDeck!").exists())
         self.assertTrue(q_intro.filter(name="ByteDeck Class Contract").exists())
@@ -158,7 +158,7 @@ class TenantInitializationTest(TenantTestCase):
         """ test if intro tag is properly assigned to
         "Bytedeck Proficiency"
         """
-        b_intro = Badge.objects.filter(tags__name="Intro")
+        b_intro = Badge.objects.filter(tags__name="intro")
         self.assertEqual(b_intro.count(), 1)
         self.assertTrue(b_intro.filter(name="ByteDeck Proficiency").exists())
 
