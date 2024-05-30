@@ -104,6 +104,61 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['tag0', 'tag1', 'tag2'])
         self.assertEqual(badge_assertion_qs.count(), 6)
 
+    def test_correct_quest_submission_tagged(self):
+        """ check if 'correct tag' is retrieved and no other submission from a different tag or no tag """
+        # with correct tag
+        co_1, cs_1 = self.create_quest_and_submissions(1)
+        co_2, cs_2 = self.create_quest_and_submissions(1)
+        co_1.tags.add('correct tag')
+        co_2.tags.add('correct tag')
+
+        cs_1 = cs_1[0]
+        cs_2 = cs_2[0]
+
+        # with incorrect tag
+        for _i in range(3):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('incorrect tag')
+
+        # no tag
+        no_tag, _ = self.create_quest_and_submissions(1)
+
+        # check the amount of submissions are correct
+        quest_submission_qs = get_quest_submission_by_tag(self.user, ['correct tag'])
+        self.assertEqual(quest_submission_qs.count(), 2)
+
+        # check if the submissions are the correct ones
+        self.assertTrue(cs_1 in quest_submission_qs)
+        self.assertTrue(cs_2 in quest_submission_qs)
+
+    def test_correct_badge_assertion_tagged(self):
+        """ check if 'correct tag' is retrieved and no other assertion from a different tag or no tag """
+
+        # with correct tag
+        co_1, ca_1 = self.create_badge_and_assertions(1)
+        co_2, ca_2 = self.create_badge_and_assertions(1)
+        co_1.tags.add('correct tag')
+        co_2.tags.add('correct tag')
+
+        ca_1 = ca_1[0]
+        ca_2 = ca_2[0]
+
+        # with incorrect tag
+        for _i in range(3):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('incorrect tag')
+
+        # no tag
+        no_tag, _ = self.create_badge_and_assertions(1)
+
+        # check the amount of submissions are correct
+        badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['correct tag'])
+        self.assertEqual(badge_assertion_qs.count(), 2)
+
+        # check if the submissions are the correct ones
+        self.assertTrue(ca_1 in badge_assertion_qs)
+        self.assertTrue(ca_2 in badge_assertion_qs)
+
 
 class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
     """
