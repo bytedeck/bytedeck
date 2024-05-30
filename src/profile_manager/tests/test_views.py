@@ -176,6 +176,68 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('profiles:profile_detail', args=[s_pk]))
         self.assertContains(response, 'View your Mark Calculations')
 
+    def test_profile_detail__xp_earned_by_tag_show_all_tags_on_profiles(self):
+        """ tests 'SiteConfig.get().show_all_tags_on_profiles' when true or false
+        if true:
+            checks if shows all the tags on the student profile, instead of just tags where the student has earned XP
+        if false:
+            checks if shows only tags where student has earned XP, instead of all tags
+        """
+        original_setting = SiteConfig.get().show_all_tags_on_profiles
+        try:
+            # Setup tags and quests
+            quest_count = 3
+            quest_set = baker.make('quest_manager.quest', _quantity=quest_count)
+
+            # add unique tag for each quest
+            [quest.tags.add(f'TAG-{str(count)}') for count, quest in enumerate(quest_set)]
+
+            # have a submission for one of the quests
+            baker.make(
+                'quest_manager.questsubmission',
+                quest=quest_set[0],
+                user=self.test_student1,
+                is_completed=True,
+                is_approved=True,
+                semester=SiteConfig().get().active_semester,
+            )
+
+            # Tests
+
+            # change SiteConfig option to test if the tags student has earned xp
+            # on is the only tags visible
+            site_config = SiteConfig.get()
+            site_config.show_all_tags_on_profiles = False
+            site_config.save()
+
+            # should have one of the tags in (TAG-0, TAG-1, TAG-2, ..., TAG-quest_count)
+            self.client.force_login(self.test_student1)
+            response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+
+            # should only show the tag with the approved submission
+            self.assertContains(response, 'TAG-0')
+            for i in range(1, quest_count, 1):
+                self.assertNotContains(response, f'TAG-{str(i)}')
+
+            # for sanity check (its true by default)
+            site_config = SiteConfig.get()
+            site_config.show_all_tags_on_profiles = True
+            site_config.save()
+
+            # should have all tags in (TAG-0, TAG-1, TAG-2, ..., TAG-quest_count)
+            self.client.force_login(self.test_student1)
+            response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+
+            # should contains all tags including the ones that don't have a submission from the user
+            for i in range(quest_count):
+                self.assertContains(response, f'TAG-{str(i)}')
+
+        finally:
+            # Ensure the setting is reverted back to its original state
+            site_config = SiteConfig.get()
+            site_config.show_all_tags_on_profiles = original_setting
+            site_config.save()
+
     def test_student_view_marks_404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.
