@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from django_tenants.models import TenantMixin
 from django_tenants.signals import post_schema_sync
+from django_tenants.utils import tenant_context
 
 from tenant.models import Tenant
 from tenant.signals import initialize_tenant_with_data, tenant_save_callback
@@ -22,6 +23,25 @@ class Command(BaseCommand):
     help = ('Used to initialize the database, creates a Sites object, creates the public Tenant object, '
             'and creates a superuser for the public schema/tenant.'
             '\nThis should only be run on a fresh db')
+
+    def setup_shared_library(self):
+        self.stdout.write('\n** Setting up shared library...')
+        library_tenant, created = Tenant.objects.get_or_create(
+            schema_name='library',
+            name='Shared Library'
+        )
+
+        if not created:
+            library_tenant.domains.create(
+                domain='library.' + settings.ROOT_DOMAIN,
+                is_primary=True
+            )
+        from django.db import models
+        from django.db.models.functions import Concat
+        from quest_manager.models import Quest
+
+        with tenant_context(library_tenant):
+            Quest.objects.update(name=Concat(models.Value('[Shared Library] - '), models.F('name')))
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -112,6 +132,8 @@ class Command(BaseCommand):
         # Connect again
         post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
         post_save.connect(tenant_save_callback, sender=Tenant)
+
+        self.setup_shared_library()
 
 
 def get_homepage_content():

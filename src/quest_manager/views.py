@@ -697,7 +697,7 @@ def approve(request, submission_id):
                     + "<i class='fa fa-shield fa-stack-1x'></i>"
                     + "</span>"
                 )
-                blank_comment_text = SiteConfig.get().blank_approval_text
+                blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
                 submission.mark_approved()
             elif "comment_button" in request.POST:
                 note_verb = "commented on"
@@ -707,7 +707,7 @@ def approve(request, submission_id):
                     + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
                     + "</span>"
                 )
-                blank_comment_text = "(no comment added)"
+                blank_comment_text = "<p>(no comment added)</p>"
             elif "return_button" in request.POST:
                 note_verb = "returned"
                 icon = (
@@ -716,7 +716,7 @@ def approve(request, submission_id):
                     + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
                     + "</span>"
                 )
-                blank_comment_text = SiteConfig.get().blank_return_text
+                blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
                 submission.mark_returned()
             elif "skip_button" in request.POST:
                 note_verb = "skipped"
@@ -726,22 +726,21 @@ def approve(request, submission_id):
                     + "</span>"
                 )
                 blank_comment_text = (
-                    "(Skipped - You were not granted XP for this quest)"
+                    "<p>(Skipped - You were not granted XP for this quest)</p>"
                 )
                 submission.mark_approved(transfer=True)
             else:
                 raise Http404("unrecognized submit button")
 
             comment_text_form = form.cleaned_data.get("comment_text")
-            if not comment_text_form:
+            if not comment_text_form or comment_text_form == "<p><br></p>":
                 comment_text = blank_comment_text
             else:
                 comment_text = comment_text_form
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
-                # wrap comment text in <p> tag so default submission replies and quick replies are formatted correctly
-                text=f"<p>{comment_text}</p>{comment_text_addition}",
+                text=comment_text + comment_text_addition,
                 target=submission,
             )
 
@@ -994,7 +993,7 @@ def complete(request, submission_id):
 
         if form.is_valid():
             comment_text = form.cleaned_data.get("comment_text")
-            if not comment_text:
+            if not comment_text or comment_text == "<p><br></p>":
                 if submission.quest.verification_required and not request.FILES:
                     messages.error(
                         request,
@@ -1018,7 +1017,7 @@ def complete(request, submission_id):
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
-                text=comment_text,
+                text=f"<p>{comment_text}</p>",
                 target=submission,
             )
 

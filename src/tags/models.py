@@ -24,7 +24,7 @@ def get_tags_from_user(user):
     BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
 
     # tags related to user's quests
-    quest_ids = QuestSubmission.objects.filter(user=user).distinct().values_list('quest', flat=True)
+    quest_ids = QuestSubmission.objects.all_approved(user=user).distinct().values_list('quest', flat=True)
     quest_tags = Tag.objects.filter(quest__id__in=quest_ids)
 
     # tags related to user's badges

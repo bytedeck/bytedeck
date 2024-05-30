@@ -47,7 +47,7 @@
           </li>
           {% endif %}
           <li>Prerequisites:
-                {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'quests:quest_prereqs_update' quest.id %}">Edit</a>{% endif %}
+                {% if request.user.is_staff and not dont_edit_prereqs %}<a class="btn btn-info btn-xs" href="{% url 'quests:quest_prereqs_update' quest.id %}">Edit</a>{% endif %}
                 {% with quest as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
         </ul>
       </div>

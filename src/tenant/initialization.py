@@ -20,9 +20,14 @@ from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from tenant.models import Tenant
 from utilities.models import MenuItem
 
 User = get_user_model()
+
+# tag for all initial quests (welcome + orientation campaign)
+# including bytedeck proficiency badge
+intro_tag = "intro"
 
 
 def load_initial_tenant_data():
@@ -108,8 +113,13 @@ def create_users():
 
 
 def create_site_config_object():
-    """ Create the single SiteConfig object for this tenant """
-    SiteConfig.objects.create()
+    """ Create the single SiteConfig object for this tenant and provide sensible defaults"""
+    config = SiteConfig.objects.create()
+    name = Tenant.get().name.replace("_", " ").replace("-", " ").title()
+    if name:
+        config.site_name = f"{name} Deck"
+        config.site_name_short = name
+        config.save()
 
 
 def create_initial_course():
@@ -232,7 +242,7 @@ def create_initial_badge_rarities():
 def create_initial_badges():
     # Talents
     badge_type = BadgeType.objects.get(name="Talent")  # created in previous data migration
-    Badge.objects.create(
+    bytedeck_proficiency = Badge.objects.create(
         name="ByteDeck Proficiency",
         xp=2,
         short_description="<p>You have demonstrated your proficiency with this online platform. I hope you enjoy using it for this course!</p>",
@@ -241,6 +251,7 @@ def create_initial_badges():
         active=True,
         import_id='fa3b0518-cf9c-443c-8fe4-f4a887b495a7'
     )
+    bytedeck_proficiency.tags.add(intro_tag)
 
     # Awards
     badge_type = BadgeType.objects.get(name="Award")  # created in previous data migration
@@ -338,6 +349,7 @@ def create_orientation_campaign():
         verification_required=False,
 
     )
+    welcome_quest.tags.add(intro_tag)
 
     orientation_campaign = Category.objects.create(
         title="Orientation",
@@ -401,6 +413,13 @@ def create_orientation_campaign():
         available_outside_course=1,
         hideable=False,
     )
+
+    # intro tag for all orientation campaign
+    contract_quest.tags.add(intro_tag)
+    avatar_quest.tags.add(intro_tag)
+    screenshots_quest.tags.add(intro_tag)
+    cc_quest.tags.add(intro_tag)
+    message_quest.tags.add(intro_tag)
 
     # quests with icons need to have them uploaded programmatically from static files to be displayed properly in development, same as badges.
     if not settings.TESTING:

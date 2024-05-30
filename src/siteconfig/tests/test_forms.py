@@ -72,6 +72,7 @@ class SiteConfigFormTest(TenantTestCase):
             charset="utf-8",
         )
         form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        # print(form.errors)
         self.assertTrue(form.is_valid())
 
     def test_custom_stylesheet_file_submission_removal(self):
