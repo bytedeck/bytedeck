@@ -200,6 +200,47 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, self.tag.name)
         self.assertContains(response, self.test_student.username)
 
+    def test_DetailView__student_view_ordinal(self):
+        ''' test if detail view list the ordinal quests correctly '''
+        num_subs = 5
+        unrelated_quest = baker.make('quest_manager.quest', xp=1)
+        repeatable_quest = baker.make('quest_manager.quest', name='Repeatable Quest', max_repeats=-1, xp=1)
+        unrelated_quest.tags.add(self.tag.name)
+        repeatable_quest.tags.add(self.tag.name)
+
+        # submission for unrelated test
+        baker.make(
+            'quest_manager.questsubmission',
+            quest=unrelated_quest,
+            user=self.test_student,
+            is_completed=True,
+            is_approved=True,
+            semester=SiteConfig().get().active_semester,
+        )
+        # create repeatable quest submissions
+        for i in range(1, num_subs + 1, 1):
+            baker.make(
+                'quest_manager.questsubmission',
+                quest=repeatable_quest,
+                user=self.test_student,
+                is_completed=True,
+                is_approved=True,
+                semester=SiteConfig().get().active_semester,
+                ordinal=i
+            )
+
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))
+
+        # check if DetailView follows this format:
+        #   Quest Name (1 XP)
+        #   Quest Name (2) (1 XP)
+        #   ...
+        #   Quest Name (5) (1 XP)
+        self.assertContains(response, f'{repeatable_quest.name} ({repeatable_quest.xp} XP)', html=True)
+        for i in range(2, num_subs, 1):
+            self.assertContains(response, f'{repeatable_quest.name} ({i}) ({repeatable_quest.xp} XP)', html=True)
+
     def test_CreateView(self):
         """Make sure create view can create tags"""
         form_data = generate_form_data(model_form=TagForm)
