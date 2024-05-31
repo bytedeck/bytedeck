@@ -20,7 +20,14 @@
             </div>
             <div class="panel-body">
                 Sharing your portfolio locally means a link to the portfolio will appear in the
-                <a href="{% url 'profiles:profile_list' %}">students list</a> accessed
+                <a href=
+                {% if request.user.is_staff %}
+                    "{% url 'profiles:profile_list' %}"
+                {% else %}
+                    "{% url 'profiles:profile_list_current' %}"
+                {% endif %}
+
+                >students list</a> accessed
                 from the Students button at the left.
                 <a href="{% url 'portfolios:edit' p.pk %}">Edit</a> your portfolio to change this setting.
             </div>
