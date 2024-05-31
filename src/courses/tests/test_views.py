@@ -666,6 +666,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['object_list'].count(), 1)
 
         for obj in response.context['object_list']:
+            self.assertContains(response, str(obj))
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
@@ -673,12 +674,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
 
         post_data = {
-            'first_day': '2020-10-15', 'last_day': '2020-12-15',
+            'name': 'semester', 'first_day': '2020-10-15', 'last_day': '2020-12-15',
             **generate_formset_data(ExcludedDateFormset, quantity=0)
         }
         response = self.client.post(reverse('courses:semester_create'), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.count(), 2)
+        self.assertTrue(Semester.objects.filter(name='semester').exists())
 
     def test_SemesterCreate__with_ExcludedDates__view(self):
         """

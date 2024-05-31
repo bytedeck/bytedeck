@@ -205,6 +205,11 @@ class Semester(models.Model):
     QUEST_AWAITING_APPROVAL = -2
     STUDENTS_WITH_NEGATIVE_XP = -3
 
+    name = models.CharField(
+        blank=True, unique=False, max_length=50,
+        help_text="If left blank, the semester will display it's First Day as a default name, in the form: mmm-YYYY."
+    )
+
     first_day = models.DateField(null=True, default=date.today)
     last_day = models.DateField(null=True, default=default_end_date)
     closed = models.BooleanField(
@@ -219,7 +224,7 @@ class Semester(models.Model):
         ordering = ['first_day']
 
     def __str__(self):
-        return self.first_day.strftime("%b-%Y")
+        return self.name or self.first_day.strftime("%b-%Y")
 
     def active_by_date(self):
         # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
