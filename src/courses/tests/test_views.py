@@ -1048,3 +1048,79 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         total_students = sum(json_response['data']['students'])
         self.assertNotEqual(total_students, len(test_account_students))
         self.assertEqual(total_students, len(active_sem_students))
+
+
+class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.student = baker.make(User)
+
+        self.block = baker.make(Block)
+        self.course = baker.make(Course, xp_for_100_percent=1000)
+
+        self.stu_course = baker.make(
+            CourseStudent,
+            user=self.student,
+            semester=SiteConfig.get().active_semester,
+            block=self.block,
+            course=self.course,
+        )
+
+        # to show mark calculation page without 404 you need to turn this on
+        siteconfig = SiteConfig.get()
+        siteconfig.display_marks_calculation = True
+        siteconfig.save()
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
+        """
+        tests the markranges displayed under "Current Mark Ranges by XP" are correct based on the percentage of the semester completed.
+        specifically tests when semester is 0%, 50%, 75%, 100%, and 125% done.
+        """
+        self.client.force_login(self.student)
+
+        # default markranges from initialization
+        # pass.minimum_mark = 0.495
+        # B.minimum_mark = 0.725
+        # A.minimum_mark = 0.855
+
+        # Check if markranges show 0% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertContains(response, '0')  # XP should be 0 for all ranges
+
+        # Check if markranges show as 50% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0.5
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertTrue(mock_sem_fraction_complete.called)
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 500)
+        self.assertContains(response, '247')  # 500 * 0.495 = 247.5
+        self.assertContains(response, '362')  # 500 * 0.725 = 362.5
+        self.assertContains(response, '427')  # 500 * 0.855 = 427.5
+
+        # Check if markranges show as 75% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0.75
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 750)
+        self.assertContains(response, '371')  # 750 * 0.495 = 371.25
+        self.assertContains(response, '543')  # 750 * 0.725 = 543.75
+        self.assertContains(response, '641')  # 750 * 0.855 = 641.25
+
+        # Check if markranges show as 100% of 1000 xp
+        mock_sem_fraction_complete.return_value = 1
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 1000)
+        self.assertContains(response, '495')  # 1000 * 0.495 = 495
+        self.assertContains(response, '725')  # 1000 * 0.725 = 725
+        self.assertContains(response, '855')  # 1000 * 0.855 = 855
+
+        # Test for over 100% completion
+        mock_sem_fraction_complete.return_value = 1.25
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertContains(response, '618')  # 1250 * 0.495 = 618.75
+        self.assertContains(response, '906')  # 1250 * 0.725 = 906.25
+        self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
