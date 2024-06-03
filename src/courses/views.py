@@ -26,6 +26,7 @@ from django.db.models import Q
 from django.db.models.functions import Greatest
 
 import numpy
+import math
 
 
 # Create your views here.
@@ -64,6 +65,18 @@ def mark_calculations(request, user_id=None):
 
     # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
     markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
+
+    # in some tests course_student == None
+    # So, if getting this page ("courses:mark_all"/"courses:my_mark")
+    # it will crash
+    if course_student:
+        # inject the xp needed for passing the mark range
+        # cant do it with template tags as you can only multiply/divide once
+        days_percentage = course_student.semester.fraction_complete()
+        total_xp = courses.first().course.xp_for_100_percent
+        for markrange in markranges:
+            mark_percentage = markrange.minimum_mark / 100
+            markrange.xp_needed = math.floor(total_xp * mark_percentage * days_percentage)
 
     context = {
         'user': user,
