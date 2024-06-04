@@ -67,6 +67,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_name_for_group",
                 "custom_name_for_student",
                 "custom_name_for_tag",
+                "show_all_tags_on_profiles",
                 Accordion(
                     AccordionGroup(
                         "Advanced",
