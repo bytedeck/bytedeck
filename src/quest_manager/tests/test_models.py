@@ -170,12 +170,15 @@ class QuestTestModel(TenantTestCase):
         self.assertFalse(q.active)
 
         # create and test a quest that won't be available until one hour later in the same day
-        q = baker.make(
-            Quest,
-            date_available=timezone.localdate(),
-            time_available=(timezone.localtime() + timezone.timedelta(hours=1)).time()
-        )
-        self.assertFalse(q.active)
+        # using freeze_time to prevent time_available from looping from 23:00 to 0:00 when adding 1 hour
+        dt = datetime.datetime(2024, 1, 1, 6, tzinfo=timezone.get_current_timezone())
+        with freeze_time(dt):
+            q = baker.make(
+                Quest,
+                date_available=timezone.localdate(),
+                time_available=(timezone.localtime() + timezone.timedelta(hours=1)).time()
+            )
+            self.assertFalse(q.active)
 
         dt = timezone.get_current_timezone().localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
         with freeze_time(dt):
