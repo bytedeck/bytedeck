@@ -1499,6 +1499,38 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
             # assert ordered view is unchanged from displayed view
             self.assertQuerysetEqual(displayed_order, intended_order)
 
+    def test_no_active_semester__student(self):
+        """ When there is no active semester:
+            - students who have not joined a course should be unable to join one
+            - students who have joined a course shouldn't be able to do Quests (their semester isn't active)
+        """
+        cached_sem = SiteConfig.get().active_semester
+        self.assertNotEqual(cached_sem, None)
+        self.client.force_login(self.test_student)
+        try:
+            sc = SiteConfig.get()
+            sc.active_semester = None
+            sc.save()
+
+            # test without course
+            response = self.client.get(reverse('quests:available'))
+            self.assertEqual(response.context['num_available'], 0)
+            self.assertContains(response, "You will be able to join a course once the owner of this deck has activated a Semester.")
+
+            # create StudentCourse for student
+            baker.make('courses.CourseStudent', user=self.test_student, semester=cached_sem)
+
+            # test after student is in a course
+            response = self.client.get(reverse('quests:available'))
+            self.assertEqual(response.context['num_available'], 0)
+            self.assertContains(response, "You will be able to join a course once the owner of this deck has activated a Semester.")
+
+        # revert SiteConfig.active_semester in case of future tests
+        finally:
+            sc = SiteConfig.get()
+            sc.active_semester = cached_sem
+            sc.save()
+
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
@@ -2285,6 +2317,32 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
+
+    def test_no_active_semester_warning_message(self):
+        """ """
+        cached_sem = SiteConfig.get().active_semester
+        self.assertNotEqual(cached_sem, None)
+        self.client.force_login(self.test_teacher)
+
+        # see if response doesn't show up prematurely
+        response = self.client.get(reverse('quest_manager:approvals'))
+        self.assertNotContains(response, 'Reminder: this deck does not currently have an active semester')
+
+        try:
+            sc = SiteConfig.get()
+            sc.active_semester = None
+            sc.save()
+
+            # response should only show if there is no active semester
+            response = self.client.get(reverse('quest_manager:approvals'))
+            self.assertWarningMessage(response)
+            self.assertContains(response, 'Reminder: this deck does not currently have an active semester')
+
+        # revert SiteConfig.active_semester in case of future tests
+        finally:
+            sc = SiteConfig.get()
+            sc.active_semester = cached_sem
+            sc.save()
 
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):

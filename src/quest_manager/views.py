@@ -504,6 +504,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "past_tab_active": past_tab_active,
         "drafts_tab_active": drafts_tab_active,
         "quick_reply_form": quick_reply_form,
+        "config": SiteConfig.get(),
     }
     return render(request, template, context)
 
@@ -930,6 +931,16 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
             "url": reverse("quests:flagged"),
         },
     ]
+
+    # putting warning message of no active semesters
+    # as no url gets redirected to this view
+    if request.user.is_staff and not SiteConfig.get().active_semester:
+        semester_list = reverse_lazy("courses:semester_list")
+        messages.warning(
+            request,
+            f"Reminder: this deck does not currently have an active semester, so student will not be able \
+            to join a course. You can manage semesters <a href=\"{semester_list}\">here</a>"
+        )
 
     quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
 

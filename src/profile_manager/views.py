@@ -186,6 +186,7 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
         context['xp_per_course'] = profile.xp_per_course()
         context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
+        context['config'] = SiteConfig.get()
         context['tags'] = get_user_tags_and_xp(profile.user)
 
         tags_xp = get_user_tags_and_xp(profile.user)

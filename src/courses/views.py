@@ -525,6 +525,24 @@ class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
         return context
 
 
+class DisableActiveSemester(NonPublicOnlyViewMixin, View):
+    """view to disable the currently active semester.
+    """
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+
+        # disable active semester
+        sc = SiteConfig.get()
+        sc.set_active_semester(None)
+
+        # since this view is called from semester_list. redirect back to "refresh"
+        return redirect('courses:semester_list')
+
+
 @non_public_only_view
 @staff_member_required
 def end_active_semester(request):

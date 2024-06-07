@@ -154,7 +154,7 @@ class SiteConfig(models.Model):
 
     active_semester = models.ForeignKey(
         'courses.Semester',
-        verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
+        null=True, verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
         help_text="Your currently active semester.  New semesters can be created from the admin menu."
     )
 
@@ -317,6 +317,8 @@ class SiteConfig(models.Model):
         # check if id or model object was given
         if isinstance(semester, Semester):
             self.active_semester = semester
+        elif semester is None:
+            self.active_semester = None
         else:  # assume it's an id
             self.active_semester = get_object_or_404(Semester, id=semester)
         self.save()

@@ -238,6 +238,42 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             site_config.show_all_tags_on_profiles = original_setting
             site_config.save()
 
+    def test_profile_detail__no_active_semester(self):
+        """ Students should not be able to join a course within their Profile if there is no active semester.
+        Student's should still be able to view their profiles
+        """
+        cached_sem = SiteConfig.get().active_semester
+        self.assertNotEqual(cached_sem, None)
+        self.client.force_login(self.test_student1)
+        try:
+            sc = SiteConfig.get()
+            sc.active_semester = None
+            sc.save()
+
+            # test without course
+            response = self.client.get(reverse('profile_manager:profile_detail', args=[self.test_student1.pk]))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "You will be able to join a course once the owner of this deck has activated a Semester.")
+
+            # create StudentCourse for student
+            baker.make('courses.CourseStudent', user=self.test_student1, semester=cached_sem)
+
+            # test after student is in a course
+            # these unable to join messages should not exist
+            response = self.client.get(reverse('profile_manager:profile_detail', args=[self.test_student1.pk]))
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, "You will be able to join a course once the owner of this deck has activated a Semester.")
+
+        # revert SiteConfig.active_semester in case of future tests
+        finally:
+            sc = SiteConfig.get()
+            sc.active_semester = cached_sem
+            sc.save()
+
+    def test_profile_detail__active_semester_toggle(self):
+        """
+        """
+
     def test_student_view_marks_404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.

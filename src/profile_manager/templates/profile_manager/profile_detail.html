@@ -84,7 +84,11 @@
               {% endfor %}
             {% else %}
               You have not joined a course yet this semester.
-              <a href="{% url 'courses:create' %}">Join a Course</a>
+              {% if config.active_semester %}
+                <a href="{% url 'courses:create' %}">Join a Course</a>
+              {% else %}
+              <p>You will be able to join a course once the owner of this deck has activated a Semester.</p>
+              {% endif %}
             {% endif %}
 
           </div>

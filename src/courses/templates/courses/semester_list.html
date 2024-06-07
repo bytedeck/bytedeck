@@ -54,6 +54,10 @@
         </a>
         {% endif %}
         {% if not object.closed and object == config.active_semester%}
+        <a class="btn btn-danger" href="{% url 'courses:disable_active_semester' %}" role="button" id="disable-semester"
+          title="Disable this semester. Once a semester is inactive, it can be reactivated again.">
+          <i class="fa fa-times-circle"></i>
+        </a>
         <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button" id="end-semester"
           title="Close this semester. WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements and delete any in-progress submissions.">
           <i class="fa fa-calendar-times-o"></i>

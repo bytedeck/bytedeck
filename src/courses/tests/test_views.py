@@ -859,6 +859,29 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
+    def test_DisableActiveSemester_view(self):
+        """ Admin should be able to disable a semester.
+        """
+        cached_sem = SiteConfig.get().active_semester
+        self.assertNotEqual(cached_sem, None)
+        self.client.force_login(self.test_teacher)
+
+        try:
+            # should change the SiteConfig.active_semester to None
+            self.assertRedirects(
+                response=self.client.get(reverse('courses:disable_active_semester')),
+                expected_url=reverse('courses:semester_list'),
+            )
+
+            # confirm the change
+            self.assertEqual(SiteConfig.get().active_semester, None)
+
+        # revert SiteConfig.active_semester in case of future tests
+        finally:
+            sc = SiteConfig.get()
+            sc.active_semester = cached_sem
+            sc.save()
+
 
 class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
 

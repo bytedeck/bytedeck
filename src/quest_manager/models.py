@@ -655,7 +655,13 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(SiteConfig.get().active_semester.pk)
+            semester = SiteConfig.get().active_semester
+            if semester:
+                qs = qs.get_semester(semester.pk)
+            else:
+                # empty queryset since no active semesters
+                qs = self.none()
+
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_visible_to_students:
