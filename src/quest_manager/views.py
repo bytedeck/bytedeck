@@ -26,6 +26,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
 from notifications.signals import notify
+from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
@@ -779,6 +780,16 @@ def approve(request, submission_id):
                 icon=icon,
             )
 
+            # if approving a sumbission and granting an xp.
+            if "approve_button" in request.POST and not submission.do_not_grant_xp:
+                xp = submission.xp_requested or submission.quest.xp
+                notify_rank_up(
+                    submission.user,
+                    # xp_cached is updated we have to subtract to get old xp
+                    submission.user.profile.xp_cached - xp,
+                    submission.user.profile.xp_cached,
+                )
+
             message_string = (
                 "<a href='"
                 + origin_path
@@ -1084,6 +1095,17 @@ def complete(request, submission_id):
                 submission.mark_completed(xp_requested)
                 if not submission.quest.verification_required:
                     submission.mark_approved()
+
+                    if not submission.do_not_grant_xp:
+                        # if not requesting xp, xp_requested will default to 0
+                        # 0 or xp = xp
+                        xp = xp_requested or submission.quest.xp
+                        notify_rank_up(
+                            submission.user,
+                            # subtract from cache as mark_approved updates xp
+                            submission.user.profile.xp_cached - xp,
+                            submission.user.profile.xp_cached,
+                        )
 
             elif "comment" in request.POST:
                 note_verb = "commented on"

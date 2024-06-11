@@ -11,6 +11,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from notifications.models import Notification, notify_rank_up
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
 
@@ -1324,3 +1325,117 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, '618')  # 1250 * 0.495 = 618.75
         self.assertContains(response, '906')  # 1250 * 0.725 = 906.25
         self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
+
+
+class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
+    """ test case for
+    + ajax/on_show_ranked_popup/
+    + ajax/on_close_ranked_popup/
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.student = baker.make(User)
+
+    def test_on_show_ranked_popup(self):
+        """ Checks if earned_rank and next_rank are correct when requesting json from ranked popups
+        """
+        # make sure theres enough initial ranks for test
+        # first (0), second (20), third (60)
+        # cant get notification for first, so get second and third
+        self.assertTrue(Rank.objects.count() >= 3)
+        earned_rank = Rank.objects.get_next_rank(1)
+        next_rank = Rank.objects.get_next_rank(earned_rank.xp)
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_show_ranked_popup__no_notification(self):
+        """ Check if when no notifications, ranked popup has no html to show and show=False
+        """
+        # clear all notifications
+        Notification.objects.all().mark_all_read(self.student)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 0)
+
+        # login and get json response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        json_data = json.loads(response.content)
+
+        # check if "show=False" and if html is empty
+        self.assertFalse(json_data['show'])
+        self.assertFalse(json_data['html'])
+
+    def test_on_show_ranked_popup__on_last_rank(self):
+        """ Check if the next_rank is None when achieving the highest possible rank
+        """
+        self.assertTrue(Rank.objects.count() >= 2)
+        earned_rank = Rank.objects.all().last()
+        next_rank = None
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_show_ranked_popup__multiple_ranked_notifications(self):
+        """ Check if the popup only shows the latest notification (newest rank)
+        """
+        # make sure theres enough initial ranks for test
+        self.assertTrue(Rank.objects.count() >= 4)
+        previous_rank = Rank.objects.get_next_rank(1)
+        earned_rank = Rank.objects.get_next_rank(previous_rank.xp)
+        next_rank = Rank.objects.get_next_rank(earned_rank.xp)
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, previous_rank.xp)
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 2)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertNotEqual(context['earned_rank'], previous_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_close_ranked_popup(self):
+        """ Check if 'courses:ajax_on_show_ranked_popup' closes only the latest ranked notification
+        """
+        # create 2 rank up notifications
+        # one should be older than the other
+        notify_rank_up(self.student, 0, 500)
+        notify_rank_up(self.student, 0, 1000)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 2)
+
+        # trigger the ajax response
+        self.client.force_login(self.student)
+        self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # check if it was marked as read
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)

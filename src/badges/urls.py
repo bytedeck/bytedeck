@@ -29,4 +29,8 @@ urlpatterns = [
     path('types/create/', views.BadgeTypeCreate.as_view(), name='badge_type_create'),
     path('types/<int:pk>/edit', views.BadgeTypeUpdate.as_view(), name='badge_type_update'),
     path('types/<int:pk>/delete', views.BadgeTypeDelete.as_view(), name='badge_type_delete'),
+
+    # Ajax
+    path('ajax/on_show_badge_popup/', views.Ajax_OnShowBadgePopup.as_view(), name='ajax_on_show_badge_popup'),
+    path('ajax/on_close_badge_popup/', views.Ajax_OnCloseBadgePopup.as_view(), name='ajax_on_close_badge_popup'),
 ]

@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -363,3 +364,32 @@ def deleted_object_receiver(sender, **kwargs):
     object = kwargs["instance"]
     # print(object)
     Notification.objects.get_queryset().get_object_anywhere(object).delete()
+
+
+def notify_rank_up(notified_user, old_xp, new_xp):
+    """ notifies user if they've ranked up.
+    Mainly used alongside other notify.send
+    """
+    # cant import because of circular imports
+    SiteConfig = apps.get_model('siteconfig.SiteConfig')
+    Rank = apps.get_model('courses.Rank')
+
+    # get appropriate rank
+    old_rank = Rank.objects.get_rank(old_xp)
+    new_rank = Rank.objects.get_rank(new_xp)
+
+    if old_rank.xp == new_rank.xp:
+        return
+
+    fa_icon = new_rank.fa_icon or "fa-star"
+    icon = f"<i class='text-warning fa fa-lg fa-fw {fa_icon}'></i>"
+
+    #
+    notify.send(
+        SiteConfig.get().deck_ai,
+        target=new_rank,
+        recipient=notified_user,
+        affected_users=[notified_user, ],
+        icon=icon,
+        verb="promoted you to",
+    )

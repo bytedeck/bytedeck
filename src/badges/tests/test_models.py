@@ -9,6 +9,7 @@ from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
 from siteconfig.models import SiteConfig
+from notifications.models import Notification
 
 User = get_user_model()
 
@@ -321,3 +322,29 @@ class BadgeAssertionTestModel(TenantTestCase):
 
         percentile = badge.percent_of_active_users_granted_this()
         self.assertEqual(percentile, num_students_with_badge / total_students * 100)
+
+    def test_post_save_receiver__creates_notifications(self):
+        """" Checks to see if BadeAssertion's post_save_receiver generates notifications
+        Creates 3 badge assertions (20 XP each) totaling to 60 XP.
+        Triggering the granted and promotion notifications
+        """
+        # should be no notifications at the start
+        self.assertEqual(Notification.objects.all_for_user(self.student).count(), 0)
+
+        # check for false positive
+        # 40 XP < Digital Noob (60 XP)
+        BadgeAssertion.objects.create_assertion(self.student, self.badge)
+        BadgeAssertion.objects.create_assertion(self.student, self.badge)
+
+        # notification: 2 granted
+        self.assertEqual(Notification.objects.all_for_user(self.student).count(), 2)
+
+        # should promote student
+        # 60 XP (20 + 20 + 20) == Digital Noob (60 XP)
+        BadgeAssertion.objects.create_assertion(self.student, self.badge)
+
+        # notifications: 3 granted, 1 promoted
+        notifications = Notification.objects.all_for_user(self.student)
+        self.assertEqual(notifications.count(), 4)
+        self.assertEqual(notifications.filter(verb__contains='granted').count(), 3)
+        self.assertEqual(notifications.filter(verb__contains='promoted').count(), 1)
