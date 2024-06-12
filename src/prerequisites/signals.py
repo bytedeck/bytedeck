@@ -4,9 +4,10 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from badges.models import Badge
-from prerequisites.models import Prereq
+from prerequisites.models import Prereq, HasPrereqsMixin
 from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
 from quest_manager.models import Quest, QuestSubmission
+from djcytoscape.models import CytoScape
 
 User = get_user_model()
 
@@ -87,3 +88,67 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
         # Cover this instance in a post_delete signal receiver for Quest objects.
         if instance.parent_object:
             update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
+
+
+@receiver(post_save, sender=Prereq)
+def on_quest_badge_save_with_rank_prereq(sender, instance, *args, **kwargs):
+    """ Handles the post-save signal for Prereq objects to ensure the creation of a CytoScape map if certain conditions are met.
+
+    This function is triggered after a Prereq object is saved.
+    If a prerequisite involving a rank and a map for the referenced rank does not already exist, a new CytoScape map is generated.
+
+    The function performs the following steps:
+    1. Verifies if the parent of the Prereq object is registered with `HasPrereqsMixin`.
+    2. Checks prereq and and alternate prereq for conditions:
+       a. Check if the prerequisite does not apply (inverted), and return if it does.
+       b. Verify if the prerequisite is referencing a rank.
+       c. Ensure that there is no existing CytoScape map for the referenced rank.
+       d. Create a new CytoScape map for the rank if all conditions are satisfied.
+    """
+    # parent prereq does not have `HasPrereqsMixin` return
+    if not HasPrereqsMixin.content_type_is_registered(instance.parent_content_type):
+        return
+
+    def check_conditions_and_create_map(prereq_invert, prereq_content_type, prereq_object_id):
+        """
+        1. Check if the prerequisite does not apply (inverted), and return if it does.
+        2. Verify if the prerequisite is referencing a rank.
+        3. Ensure that there is no existing CytoScape map for the referenced rank.
+        4. Create a new CytoScape map for the rank if all conditions are satisfied.
+
+        args:
+            Prereq - the model (a group of conditions)
+            prereq_object - the actual prerequisite that needs to be met
+            or_prereq_object - the alternate prerequisite.
+
+            prereq_invert (bool): if user cant have this rank as a condition
+            prereq_content_type (ContentType): the prereq object's model as a ContentType
+            prereq_object_id (int): the prereq object's id
+        """
+        # check if the invert. Means user cant have this rank as a condition.
+        if prereq_invert:
+            return
+
+        # check if the prereq has ct 'rank'
+        if prereq_content_type is None or prereq_content_type.model != 'rank':
+            return
+
+        # check Cytoscope object with ct 'rank' and it's id exist
+        if CytoScape.objects.filter(initial_content_type=prereq_content_type, initial_object_id=prereq_object_id).exists():
+            return
+
+        # map only generates if
+        # 1. prereq is required
+        # 2. prereq is referencing a rank
+        # 3. Rank does not have a CytoScape map
+        rank = prereq_content_type.model_class().objects.get(id=prereq_object_id)
+        CytoScape.generate_map(
+            initial_object=rank,
+            name=f'{rank.name} Map',
+        )
+
+    # for first prereq
+    check_conditions_and_create_map(instance.prereq_invert, instance.prereq_content_type, instance.prereq_object_id)
+
+    # for alternate prereq
+    check_conditions_and_create_map(instance.or_prereq_invert, instance.or_prereq_content_type, instance.or_prereq_object_id)
