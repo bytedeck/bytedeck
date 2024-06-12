@@ -113,22 +113,28 @@ If everything has worked so far, you should now be able to create your own byted
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
-1. Open a Python shell specific to your tenant (make sure your virtual environment is activated), enter your tenant's name (for example, `hackerspace`) and paste these commands:
-    ```
-    $ python src/manage.py tenant_command shell
-    Enter Tenant Schema ('?' to list schemas): hackerspace
++ Using venv: ```python src/manage.py generate_content hackerspace```
++ Using docker: ```docker compose exec web bash -c "python src/manage.py generate_content hackerspace"```
 
-    In [1]: from hackerspace_online.shell_utils import generate_content
+This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
 
-    In [2]: generate_content()
-    ```
+Some examples of the command in use:
+```
+$ python src/manage.py generate_content --help
+# lists positional arguments and optional flags
 
-    You can also do this from docker with:
-    `docker compose exec web bash -c "python src/manage.py tenant_command shell"`
+$ python src/manage.py generate_content --quiet
+# Generates fake students, campaigns, and quests without printing anything to the console
 
-2. This will create 100 fake students, and 5 campaigns of 10 quests each, and maybe some other stuff we've added since writing this!  You should see the output of the objects being created.  Go to your map page and regenerate the map to see them.
-3. use Ctrl + D or `exit()` to close the Python shell.
+$ python src/manage.py generate_content hackerspace --num_quests_per_campaign 7 --num_campaigns 3
+# Creates 3 campaigns of 7 quest each. Additionally creates 100 students because `--num_students` were unspecified
 
+$ python src/manage.py generate_content hackerspace --num_students 50
+# Creates 50 fake students. Additionally creates 5 campaigns of 10 quests each because both `--num_quests_per_campaign` and `--num_campaigns` were unspecified
+
+$ python src/manage.py generate_content hackerspace --num_quests_per_campaign 7 --num_campaigns 3 --num_students 50
+# create 50 fake students, and 3 campaigns of 7 quests each.
+```
 
 ### Enabling Google Sign In (Optional)
 
