@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 
+from django.contrib.contenttypes.models import ContentType
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
@@ -10,6 +11,7 @@ from badges.models import Badge, BadgeAssertion
 from courses.models import CourseStudent, Semester
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
+from djcytoscape.models import CytoScape
 
 User = get_user_model()
 
@@ -154,3 +156,74 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
         quest.delete()  # doesn't call task because parent_object no longer exists.
         self.assertEqual(task.call_count, 1)
+
+    def test_on_quest_badge_save_with_rank_prereq__creation(self):
+        """  Test that creating a Prereq, where either the prereq_object or the or_prereq_object are a Rank,
+        results in the generation of a new CytoScape map with the Rank as the map's initial_object.
+
+        Prereq - the model (a group of conditions)
+        prereq_object - the actual prerequisite that needs to be met
+        or_prereq_object - the alternate prerequisite.
+        """
+
+        # create prereq with rank as the first prereq
+        # and check if new map is created
+        first_rank = baker.make('courses.rank', name='first rank')
+        baker.make(
+            Prereq,
+            parent_object=baker.make('quest_manager.quest'),
+            prereq_object=first_rank,
+        )
+
+        self.assertTrue(CytoScape.objects.filter(
+            name=f'{first_rank.name} Map',
+            initial_content_type=ContentType.objects.get_for_model(first_rank),
+            initial_object_id=first_rank.id,
+        ).exists())
+
+        # create prereq with rank as the alternative prereq
+        # and check if new map is created
+        second_rank = baker.make('courses.rank', name='second rank')
+        baker.make(
+            Prereq,
+            parent_object=baker.make('quest_manager.quest'),
+            or_prereq_object=second_rank,
+        )
+
+        self.assertTrue(CytoScape.objects.filter(
+            name=f'{second_rank.name} Map',
+            initial_content_type=ContentType.objects.get_for_model(second_rank),
+            initial_object_id=second_rank.id,
+        ).exists())
+
+        # check if rank with a preexisting map isnt created
+        third_rank = baker.make('courses.rank', name='third rank')
+        CytoScape.generate_map(
+            initial_object=third_rank,
+            name='Pre-Existing Map',
+        )
+        baker.make(
+            Prereq,
+            parent_object=baker.make('quest_manager.quest'),
+            prereq_object=third_rank,
+        )
+        # assert only 1 map exist
+        self.assertEqual(CytoScape.objects.filter(
+            initial_content_type=ContentType.objects.get_for_model(third_rank),
+            initial_object_id=third_rank.id,
+        ).count(), 1)
+
+        # check if `invert=True` doesn't make a map
+        no_map = baker.make('courses.rank', name='no map rank')
+        baker.make(
+            Prereq,
+            prereq_invert=True,
+            parent_object=baker.make('quest_manager.quest'),
+            prereq_object=no_map,
+        )
+
+        self.assertFalse(CytoScape.objects.filter(
+            name=f'{no_map.name} Map',
+            initial_content_type=ContentType.objects.get_for_model(no_map),
+            initial_object_id=no_map.id,
+        ).exists())
