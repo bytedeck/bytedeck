@@ -2473,6 +2473,44 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
+    def test_ajax_approve(self):
+        """ Checks functionality of approve using ajax for all valid button types using ajax
+        """
+        post_request = {
+            'path': reverse('quests:approve', args=[self.sub.pk]),
+            'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'
+        }
+
+        # 'approve_button' self.sub.is_approved is True
+        response = self.client.post(**post_request, data={'approve_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, True)
+
+        # 'return_button' self.sub.is_approved is False
+        response = self.client.post(**post_request, data={'return_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, False)
+
+        # 'skip_button' self.sub.is_approved is True
+        response = self.client.post(**post_request, data={'skip_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, True)
+
+        # 'comment_button' new comment should exist
+        response = self.client.post(**post_request, data={
+            'comment_button': '',
+            'comment_text': 'COMMENT TEXT',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
+
+        # no button returns 404
+        response = self.client.post(**post_request)
+        self.assertEqual(response.status_code, 404)
+
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:

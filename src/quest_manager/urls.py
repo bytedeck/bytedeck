@@ -35,9 +35,9 @@ urlpatterns = [
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
     url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
+    url(r'^ajax_submission_approve/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='ajax_approve'),
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
-
     # Lists
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^available/$', views.quest_list, name='quests'),
@@ -84,7 +84,7 @@ urlpatterns = [
     url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
     url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
     url(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='approve'),
     url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 
     # Flagged submissions
