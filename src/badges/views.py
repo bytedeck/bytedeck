@@ -20,6 +20,7 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
+from djcytoscape.models import CytoScape
 
 
 class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, RedirectView):
@@ -126,6 +127,7 @@ def detail(request, badge_id):
         "current": True,
         "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
         "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, True),
+        "maps": CytoScape.objects.get_related_maps(badge),
     }
     return render(request, 'badges/detail.html', context)
 
@@ -142,6 +144,7 @@ def detail_all(request, badge_id):
         "current": False,
         "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
         "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, False),
+        "maps": CytoScape.objects.get_related_maps(badge),
     }
     return render(request, 'badges/detail.html', context)
 

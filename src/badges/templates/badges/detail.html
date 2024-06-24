@@ -34,6 +34,7 @@
         </div>
         <div class="col-sm-6">
           <ul class="list-unstyled">
+            <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}</li>
             {% if not request.user.is_staff %}
             <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
             {% else %}

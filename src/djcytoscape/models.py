@@ -444,6 +444,17 @@ class CytoScapeManager(models.Manager):
         except ObjectDoesNotExist:
             return None
 
+    def get_related_maps(self, object_):
+        """ returns all CytoScape maps associated with object as a queryset """
+        selector_id = CytoElement.generate_selector_id(object_)
+
+        related_ids = CytoElement.objects.filter(
+            group=CytoElement.NODES,
+            selector_id=selector_id,
+        ).values_list('scape__id', flat=True)
+
+        return self.get_queryset().filter(id__in=related_ids)
+
 
 class CytoScape(models.Model):
     ALLOWED_INITIAL_CONTENT_TYPES = models.Q(app_label='quest_manager', model='quest') | \

@@ -41,6 +41,7 @@ from .forms import (
     CommonDataForm,
 )
 from .models import Quest, QuestSubmission, Category, CommonData
+from djcytoscape.models import CytoScape
 
 User = get_user_model()
 
@@ -622,6 +623,7 @@ def detail(request, quest_id):
         "heading": q.name,
         "q": q,
         "available": available,
+        "maps": CytoScape.objects.get_related_maps(q),
     }
 
     return render(request, "quest_manager/detail.html", context)
