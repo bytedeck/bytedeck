@@ -980,7 +980,8 @@ def complete(request, submission_id):
         if "complete" not in request.POST and "comment" not in request.POST:
             raise Http404("unrecognized submit button")
 
-        if not submission.draft_comment:  # if no comment, the quest is not complete
+        # if no comment and not completed, quest did not come from submission view
+        if not submission.is_completed and not submission.draft_comment:
             raise Http404("no comment found")
 
         if (
@@ -992,8 +993,6 @@ def complete(request, submission_id):
             form = SubmissionForm(request.POST, request.FILES)
         else:
             form = SubmissionQuickReplyFormStudent(request.POST)
-
-        draft_comment = submission.draft_comment
 
         if form.is_valid():
             comment_text = form.cleaned_data.get("comment_text")
@@ -1018,11 +1017,24 @@ def complete(request, submission_id):
                 xp_requested = form.cleaned_data.get("xp_requested")
                 comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
 
-            # update all comment fields
-            draft_comment.text = f"<p>{comment_text}</p>"
-            draft_comment.target_object_id = submission.id
-            draft_comment.target_object = submission
-            draft_comment.save()
+            # mark_complete() clears draft_comment making commenting after submission impossible
+            draft_comment = submission.draft_comment
+            if draft_comment:
+                # update all comment fields
+                draft_comment.text = f"<p>{comment_text}</p>"
+                draft_comment.target_object_id = submission.id
+                draft_comment.target_object = submission
+                draft_comment.save()
+
+            # this if for quick_reply comments
+            # if draft comment was removed. make a new comment object for submission
+            else:
+                draft_comment = Comment.objects.create_comment(
+                    user=request.user,
+                    path=submission.get_absolute_url(),
+                    text=f"<p>{comment_text}</p>",
+                    target=submission,
+                )
 
             if request.FILES:
                 for afile in request.FILES.getlist("attachments"):
@@ -1097,6 +1109,12 @@ def complete(request, submission_id):
                         )
                     # remove doubles/flatten
                     affected_users = set(affected_users)
+
+                    # if commenting after approval we have to remove draft_comment
+                    # else drafts get "stuck" to same comment
+                    submission.draft_comment = None
+                    submission.draft_text = None
+                    submission.save()
             else:
                 raise Http404("unrecognized submit button")
 
@@ -1308,27 +1326,28 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
 
-    draft_comment = sub.draft_comment
-    # if there is no draft comment, create one, and also create a set of QuestionSubmissions
-    if not draft_comment:
-        # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
-        # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
-        text = ""
-        if sub.draft_text:
-            text = sub.draft_text
-        draft_comment = Comment.objects.create_comment(
-            user=request.user,
-            path=sub.get_absolute_url(),
-            text=text,
-            target=None
-        )
-        sub.draft_comment = draft_comment
-        sub.save()
-
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff()
+
     else:
+        draft_comment = sub.draft_comment
+        # if there is no draft comment, create one, and also create a set of QuestionSubmissions
+        if not draft_comment:
+            # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
+            # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
+            text = ""
+            if sub.draft_text:
+                text = sub.draft_text
+            draft_comment = Comment.objects.create_comment(
+                user=request.user,
+                path=sub.get_absolute_url(),
+                text=text,
+                target=None
+            )
+            sub.draft_comment = draft_comment
+            sub.save()
+
         initial = {"comment_text": sub.draft_comment.text}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp

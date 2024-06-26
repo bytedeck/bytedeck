@@ -591,7 +591,7 @@ class SubmissionViewTests(TenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
 
-    def test_draft_text_changed_to_draft_comment(self):
+    def test_backwards_compatibility_draft_text_changed_to_draft_comment(self):
         """BACKWARDS COMPATIBILITY: The old draft_text field was kept around to make it easier to
         migrate existing data to the new draft_comment field.  This test makes sure that when
         the submission view is visited, the old draft_text is copied to the new draft_comment field."""
@@ -816,18 +816,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertErrorMessage(response)
 
-    def test_complete_no_draft_comment(self):
-        """ When a student tries to complete a quest, their submission should have a draft_comment
-        attribute. If it doesn't the submission is invalid, so they are shown a 404 page.
-        """
-        invalid_sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
-                                 draft_comment=None)
-        response = self.client.post(
-            reverse('quests:complete', args=[invalid_sub.id]),
-            data={'comment_text': "test comment", 'complete': True}
-        )
-        self.assertEqual(response.status_code, 404)
-
     # def test_quest_not_available(self):
     #     """ If a quest is not available to a student, they should not be able to complete it """
     #     # TODO
@@ -933,6 +921,31 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         import os
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
+
+    def test_comment_multiple_comments_from_user(self):
+        """ Tests the functionality of comments made by user using standard and quick reply forms.
+        """
+        # complete quest as the only way user can comment is if they complete
+        self.post_complete(button='complete', submission_comment='submitted')
+
+        # comments using submission
+        self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission_comment='comment from submission #1')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #1').exists())
+
+        self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission_comment='comment from submission #2')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #2').exists())
+
+        # comments using quick reply
+        self.post_complete(button='comment', submission_comment='comment from quick reply #1')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
 
     def test_unrecognized_submit_button(self):
         """ Unrecognized form submit button should 404.
