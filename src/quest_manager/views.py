@@ -1125,8 +1125,6 @@ def complete(request, submission_id):
         else:
             form = SubmissionQuickReplyFormStudent(request.POST)
 
-        draft_comment = submission.draft_comment
-
         if form.is_valid():
             comment_text = form.cleaned_data.get("comment_text")
             if not comment_text or comment_text == "<p><br></p>":
@@ -1469,23 +1467,6 @@ def submission(request, submission_id=None, quest_id=None):
 
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
-
-    draft_comment = sub.draft_comment
-    # if there is no draft comment, create one, and also create a set of QuestionSubmissions
-    if not draft_comment:
-        # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
-        # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
-        text = ""
-        if sub.draft_text:
-            text = sub.draft_text
-        draft_comment = Comment.objects.create_comment(
-            user=request.user,
-            path=sub.get_absolute_url(),
-            text=text,
-            target=None
-        )
-        sub.draft_comment = draft_comment
-        sub.save()
 
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
