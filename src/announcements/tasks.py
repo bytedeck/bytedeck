@@ -72,6 +72,7 @@ def publish_announcement(user_id, announcement_id, root_url):
     announcement.datetime_released = timezone.now()
     announcement.draft = False
     announcement.auto_publish = False
+    announcement.full_clean()
     announcement.save()
 
     absolute_url = announcement.get_absolute_url()

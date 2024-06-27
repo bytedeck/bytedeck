@@ -24,7 +24,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
         The task should also exists in the public schema.
         """
 
-        announcement = baker.make(Announcement)
+        announcement = baker.make(Announcement, author=self.teacher)
         # save_announcement_signal() method called via `@receiver(post_save, sender=Announcement)`
 
         # by default announcements are drafts, so no periodic task for it should exist
@@ -34,6 +34,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
 
         # change the announcement to auto_publish, and the save signal creates a tasks to publish it
         announcement.auto_publish = True
+        announcement.full_clean()
         announcement.save()
 
         task = PeriodicTask.objects.get(name__contains=announcement.id)
@@ -59,6 +60,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
 
         # changing the announcement to not be a draft should cause the signal to delete the task
         announcement.draft = False
+        announcement.full_clean()
         announcement.save()
 
         with self.assertRaises(ObjectDoesNotExist):
@@ -76,12 +78,13 @@ class AnnouncementsSignalsTest(TenantTestCase):
         This is because there PeriodicTask doesn't have an update_or_create() method for some reason, so we need to use get
         and catch the exception https://github.com/celery/django-celery-beat/issues/106
         """
-        announcement = baker.make(Announcement, auto_publish=True)
+        announcement = baker.make(Announcement, auto_publish=True, author=self.teacher)
         # Task should exist (created by signal)
         task = PeriodicTask.objects.get(name__contains=announcement.id)
 
         # change the announcement and resave to force recall of `save_announcement_signal()`
         announcement.title = "New Title"
+        announcement.full_clean()
         announcement.save()
         task2 = PeriodicTask.objects.get(name__contains=announcement.id)
         # Didn't create a new PeriodicTask object
