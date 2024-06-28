@@ -99,12 +99,14 @@ class CommentModelTest(TenantTestCase):
     def test_comment_creation(self):
         comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
-        self.assertEqual(str(comment), comment.text)
+        self.assertEqual(str(comment), "")
+        self.assertEqual(comment.text, None)
 
     def test_get_absolute_url(self):
         comment = baker.make(Comment)
         self.assertIsInstance(comment, Comment)
-        self.assertEqual(str(comment), comment.text)
+        self.assertEqual(str(comment), "")
+        self.assertEqual(comment.text, None)
         self.assertIsNotNone(comment.get_absolute_url())
 
     def test_orphaned_li_tags(self):
