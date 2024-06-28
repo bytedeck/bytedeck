@@ -251,6 +251,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
@@ -285,6 +286,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert every instance of custom label is present
@@ -403,6 +405,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
