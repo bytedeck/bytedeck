@@ -270,10 +270,13 @@ class SemesterModelTest(TenantTestCase):
     def test_reset_students_xp_cached(self):
         """Students' xp_cached should be set to 0."""
         student = baker.make(User)
+        student.profile.grad_year = 2020  # prevent validation error
+
         course = baker.make(Course)
         active_semester = SiteConfig.get().active_semester
 
         student.profile.xp_cached = 100
+        student.profile.full_clean()
         student.profile.save()
 
         baker.make(CourseStudent, user=student, course=course, semester=active_semester)
@@ -325,7 +328,9 @@ class CourseStudentManagerTest(TenantTestCase):
     def setUp(self):
         self.student = baker.make(User, username='test_student')
         self.course = baker.make(Course)
-        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+        self.block = baker.make(Block)
+        self.course_student = baker.make(
+            CourseStudent, user=self.student, course=self.course, block=self.block, semester=SiteConfig.get().active_semester)
 
     def test_current_course(self):
         """ Currently returns the first course in the active semester, if there are more than one"""
@@ -360,12 +365,14 @@ class CourseStudentManagerTest(TenantTestCase):
 
         # second student in same course as setup
         student2 = baker.make(User)
-        course_student2 = baker.make(CourseStudent, user=student2, course=self.course, semester=SiteConfig.get().active_semester)
+        course_student2 = baker.make(
+            CourseStudent, user=student2, course=self.course, block=self.block, semester=SiteConfig.get().active_semester)
 
         # 3rd student in different course
         student3 = baker.make(User)
         course2 = baker.make(Course)
-        course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
+        course_student3 = baker.make(
+            CourseStudent, user=student3, course=course2, block=self.block, semester=SiteConfig.get().active_semester)
 
         xp_per_course.return_value = 500
         CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
@@ -396,6 +403,7 @@ class CourseStudentManagerTest(TenantTestCase):
 
         # Makef the student inactiveo
         self.student.is_active = False
+        self.student.full_clean()
         self.student.save()
 
         self.assertEqual(CourseStudent.objects.all_users_for_active_semester(students_only=True).count(), 0)
@@ -405,6 +413,9 @@ class CourseStudentModelTest(TenantTestCase):
 
     def setUp(self):
         self.student = baker.make(User)
+        self.student.profile.grad_year = 2020
+        self.student.profile.save()  # add grad year else full_clean() validation will fail
+
         self.course = baker.make(Course)
         self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
 
@@ -448,6 +459,7 @@ class CourseStudentModelTest(TenantTestCase):
     def test_xp_per_day_ave(self, days_so_far):
 
         self.student.profile.xp_cached = 120
+        self.student.profile.full_clean()
         self.student.profile.save()
         days_so_far.return_value = 10
         xp_per_day = self.course_student.xp_per_day_ave()
@@ -565,6 +577,7 @@ class RankModelTest(TenantTestCase):
         """Returns the icon url for the rank, if no url then returns the default icon from SiteConfig"""
         self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
         self.rank.icon = 'test.png'
+        self.rank.full_clean()
         self.rank.save()
 
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)

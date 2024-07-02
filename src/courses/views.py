@@ -465,6 +465,7 @@ class SemesterActivate(View):
         semester = get_object_or_404(Semester, pk=semester_pk)
         siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
+        siteconfig.full_clean()
         siteconfig.save()
 
         return redirect('courses:semester_list')
