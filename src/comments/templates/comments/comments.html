@@ -62,6 +62,9 @@
           {% endfor %}
         </ul>
         {% endif %}{% endwith %}
+        {% block additional_content %}{% endblock %}
       </li>
     {% endif %}
   {% endfor %}
+
+{% block js %}{% endblock %}

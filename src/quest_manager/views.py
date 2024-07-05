@@ -16,8 +16,10 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from hackerspace_online.decorators import staff_member_required
 
@@ -32,6 +34,9 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
+from questions.models import QuestionSubmission
+from questions.forms import QuestionSubmissionFormsetFactory
+from utilities.fields import FILE_MIME_TYPES
 from .forms import (
     QuestForm,
     SubmissionForm,
@@ -40,7 +45,7 @@ from .forms import (
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     TAQuestForm,
-    CommonDataForm,
+    CommonDataForm
 )
 from .models import Quest, QuestSubmission, Category, CommonData
 from djcytoscape.models import CytoScape
@@ -1092,197 +1097,344 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
-@non_public_only_view
-@login_required
-def complete(request, submission_id):
+
+class CompleteView(NonPublicOnlyViewMixin, View):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
     - If the quest is automatically approved, then the submission is also marked as approved
     """
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
-    origin_path = submission.get_absolute_url()
 
-    # http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
-    if request.method == "POST":
+    def get_submission(self, submission_id):
+        """ gets the main model of this view: QuestSubmission.
+        functions like CRUD view's self.get_object()
+        """
+        return get_object_or_404(QuestSubmission, pk=submission_id)
+
+    def get_draft_comment(self):
+        """ even though draft_comment is created in submission view. An instance is needed when
+        commenting using quick reply
+        """
+        # create a new comment if draft_comment was cleared.
+        # (should be cleared when this view is called without errors)
+        if not self.submission.draft_comment:
+            self.submission.draft_comment = Comment.objects.create_comment(
+                user=self.request.user,
+                path=self.submission.get_absolute_url(),
+                text="",
+                target=None,
+            )
+        return self.submission.draft_comment
+
+    def update_draft_comment(self, comment_text):
+        """ update draft comment with proper text and target.
+        - draft's target needs to be 'None' initially in order to not show on submission
+        """
+        draft_comment = self.get_draft_comment()
+        draft_comment.text = f"<p>{comment_text}</p>"
+        draft_comment.target_object_id = self.submission.id
+        draft_comment.target_object = self.submission
+        draft_comment.timestamp = timezone.localtime()
+        draft_comment.updated = timezone.localtime()
+        draft_comment.full_clean()
+        draft_comment.save()
+
+    # forms
+
+    def get_form(self):
+        """ Multiple forms because student can either
+        - request XP and complete
+        - complete/comment using quick reply view
+        - complete/comment using submission view
+        """
+        if (
+            self.submission.quest.xp_can_be_entered_by_students
+            and not self.submission.is_approved
+        ):
+            form = SubmissionFormCustomXP(self.request.POST, self.request.FILES)
+        elif self.request.FILES:
+            form = SubmissionForm(self.request.POST, self.request.FILES)
+        else:
+            form = SubmissionQuickReplyFormStudent(self.request.POST)
+
+        return form
+
+    def get_formset(self):
+        """ get formset for QuestSubmissions """
+        draft_comment = self.get_draft_comment()
+        return QuestionSubmissionFormsetFactory(
+            self.request.POST, self.request.FILES,
+            instance=draft_comment,
+            queryset=QuestionSubmission.objects.filter(comment=draft_comment),
+        )
+
+    def formset_is_valid(self):
+        """ Check if formset is valid
+        (unless case when there are no questions to formset)
+        """
+        return self.formset.is_valid() or self.submission.quest.question_set.all().count() == 0
+
+    def form_valid(self):
+        """
+        "# This method is called when valid form data has been POSTed.
+        # It should return an HttpResponse." - django docs
+        """
+        return redirect("quests:quests")
+
+    def form_invalid(self):
+        """ When form is invalid, reload page injecting already inputted fields back. """
+        context = {
+            "heading": self.submission.quest.name,
+            "submission": self.submission,
+            "q": self.submission.quest,  # allows for common data to be displayed on sidebar more easily...
+            "submission_form": self.form,
+            "question_formset": self.formset,
+            "anchor": "submission-form-" + str(self.submission.quest.id),
+            "messages": messages.get_messages(self.request),
+            # "reply_comment_form": reply_comment_form,
+        }
+        return render(self.request, "quest_manager/submission.html", context)
+
+    # misc.
+
+    def get_notification_kwargs(self):
+        """ gets the kwargs for notifications. every key should be empty unless
+        there is something we want to put before hand.
+        similar to get_context_data """
+        kwargs = {el: None for el in [
+            "action", "target", "recipient", "affected_users", "verb", "icon"
+        ]}
+
+        # add default values here
+        kwargs["action"] = self.get_draft_comment()
+        kwargs["target"] = self.submission
+        kwargs["recipient"] = self.submission.user
+
+        return kwargs
+
+    def handle_comment_text(self):
+        """ formats the forms comment text. returns an extra variable incase there was an error with comment format.
+        """
+        comment_text = self.form.cleaned_data.get("comment_text")
+        error = False
+
+        if not comment_text or comment_text == "<p><br></p>":
+            if self.submission.quest.verification_required and not self.request.FILES:
+                messages.error(
+                    self.request,
+                    "Please read the Submission Instructions more carefully.  "
+                    "You are expected to attach something or comment to complete this quest!",
+                )
+                error = True
+            elif "comment" in self.request.POST and not self.request.FILES:
+                messages.error(self.request, "Please leave a comment.")
+                error = True
+            else:
+                comment_text = "(submitted without comment)"
+
+        if (
+            self.submission.quest.xp_can_be_entered_by_students
+            and not self.submission.is_approved
+        ):
+            xp_requested = self.form.cleaned_data.get("xp_requested")
+            comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
+
+        return comment_text, error
+
+    def save_uploaded_files(self):
+        """ handles basic file upload """
+        if self.request.FILES:
+            for afile in self.request.FILES.getlist("attachments"):
+                newdoc = Document(docfile=afile, comment=self.get_draft_comment())
+                newdoc.save()
+
+    def on_comment_button(self):
+        """ if comment button was pressed.
+        - set notification kwargs
+        - clear draft comment
+        - send notification
+        - send django.message
+        """
+        # has to be called before self.submission.draft_comment gets cleared
+        # else it makes a copy
+        notification_kwargs = self.get_notification_kwargs()
+
+        #
+        affected_users = []
+        if self.request.user.is_staff:
+            affected_users = [
+                self.submission.user,
+            ]
+        else:  # student comment
+            # student's teachers
+            affected_users.extend(
+                self.request.user.profile.current_teachers()
+            )  # User.objects.filter(is_staff=True)
+            # add quest's teacher if necessary
+            if self.submission.quest.specific_teacher_to_notify:
+                affected_users.append(
+                    self.submission.quest.specific_teacher_to_notify
+                )
+            # remove doubles/flatten
+            affected_users = set(affected_users)
+
+            # if commenting after approval we have to remove draft_comment
+            # else drafts get "stuck" to same comment
+            self.submission.draft_comment = None
+            self.submission.draft_text = None
+            self.submission.full_clean()
+            self.submission.save()
+
+        # for messages and notifications
+        notification_kwargs.update({
+            "verb": "commented on",
+            "icon": ("<span class='fa-stack'>"
+                     + "<i class='fa fa-shield fa-stack-1x'></i>"
+                     + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
+                     + "</span>"),
+            "affected_users": affected_users,
+        })
+        notify.send(self.request.user, **notification_kwargs)
+        messages.success(self.request, "Quest commented on.")
+
+    def on_complete_button(self):
+        """ if complete button was pressed.
+        - mark submission complete (clears draft_comment)
+        - set notification kwargs
+        - send notification
+        - send django.message
+        """
+        # has to be called before self.submission.draft_comment gets cleared (by mark_complete())
+        # else it makes a copy
+        notification_kwargs = self.get_notification_kwargs()
+
+        affected_users = []
+        # Notify teacher if they are specific to quest but are not the student's current teacher
+        # current teacher doesn't need the notification because they'll see it in their approvals tabs already
+        if (
+            self.submission.quest.specific_teacher_to_notify
+            and self.submission.quest.specific_teacher_to_notify
+            not in self.request.user.profile.current_teachers()
+        ):
+            affected_users.append(self.submission.quest.specific_teacher_to_notify)
+
+        # Send notification to current teachers when a comment is left on an auto-approved quest
+        # since these quests don't appear in the approvals tab, teacher would never know about the comment.
+        if (
+            self.form.cleaned_data.get("comment_text")
+            and not self.submission.quest.verification_required
+        ):
+            affected_users.extend(self.request.user.profile.current_teachers())
+
+        xp_requested = (
+            self.form.cleaned_data.get("xp_requested")
+            if self.submission.quest.xp_can_be_entered_by_students
+            else 0
+        )
+        self.submission.mark_completed(xp_requested)
+        if not self.submission.quest.verification_required:
+            self.submission.mark_approved()
+
+            if not self.submission.do_not_grant_xp:
+                # if not requesting xp, xp_requested will default to 0
+                # 0 or xp = xp
+                xp = xp_requested or self.submission.quest.xp
+                notify_rank_up(
+                    self.submission.user,
+                    # subtract from cache as mark_approved updates xp
+                    self.submission.user.profile.xp_cached - xp,
+                    self.submission.user.profile.xp_cached,
+                )
+
+        # for notifications and message
+        note_verb = "completed"
+        msg_text = "Quest completed"
+        if self.submission.quest.verification_required:
+            msg_text += ", awaiting approval."
+        else:
+            note_verb += " (auto-approved quest)"
+            msg_text += " and automatically approved."
+            msg_text += " Please give me a moment to calculate what new quests this should make available to you."
+            msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
+            msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
+
+        notification_kwargs.update({
+            "verb": note_verb,
+            "icon": "<i class='fa fa-shield fa-lg'></i>",
+            "affected_users": affected_users,
+        })
+        notify.send(self.request.user, **notification_kwargs)
+        messages.success(self.request, msg_text)
+
+    # django built-in methods
+
+    @method_decorator(login_required)
+    def dispatch(self, request, *args, **kwargs):
+        """ requests are only allowed if:
+        - POST method
+        - POST data has:
+            + comment, complete,
+        """
+        # this is a POST only view
+        if request.method != "POST":
+            raise Http404
+
         # for some reason Summernote is submitting the form in the background when an image is added or
         # dropped into the widget We need to ignore that submission
         # https://github.com/summernote/django-summernote/issues/362
         if "complete" not in request.POST and "comment" not in request.POST:
             raise Http404("unrecognized submit button")
 
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, submission_id, *args, **kwargs):
+        self.submission = self.get_submission(submission_id)
+        self.form = self.get_form()
+        self.formset = self.get_formset()
+
         # if no comment and not completed, quest did not come from submission view
-        if not submission.is_completed and not submission.draft_comment:
-            raise Http404("no comment found")
+        if not self.submission.is_completed and not self.submission.draft_comment:
+            raise Http404("no draft comment found")
 
-        if (
-            submission.quest.xp_can_be_entered_by_students
-            and not submission.is_approved
-        ):
-            form = SubmissionFormCustomXP(request.POST, request.FILES)
-        elif request.FILES:
-            form = SubmissionForm(request.POST, request.FILES)
-        else:
-            form = SubmissionQuickReplyFormStudent(request.POST)
-
-        if form.is_valid():
-            comment_text = form.cleaned_data.get("comment_text")
-            if not comment_text or comment_text == "<p><br></p>":
-                if submission.quest.verification_required and not request.FILES:
-                    messages.error(
-                        request,
-                        "Please read the Submission Instructions more carefully.  "
-                        "You are expected to attach something or comment to complete this quest!",
-                    )
-                    return redirect(origin_path)
-                elif "comment" in request.POST and not request.FILES:
-                    messages.error(request, "Please leave a comment.")
-                    return redirect(origin_path)
-                else:
-                    comment_text = "(submitted without comment)"
-
-            if (
-                submission.quest.xp_can_be_entered_by_students
-                and not submission.is_approved
-            ):
-                xp_requested = form.cleaned_data.get("xp_requested")
-                comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
-
-            # mark_complete() clears draft_comment making commenting after submission impossible
-            draft_comment = submission.draft_comment
-            if draft_comment:
-                # update all comment fields
-                draft_comment.text = f"<p>{comment_text}</p>"
-                draft_comment.target_object_id = submission.id
-                draft_comment.target_object = submission
-                draft_comment.save()
-
-            # this if for quick_reply comments
-            # if draft comment was removed. make a new comment object for submission
-            else:
-                draft_comment = Comment.objects.create_comment(
-                    user=request.user,
-                    path=submission.get_absolute_url(),
-                    text=f"<p>{comment_text}</p>",
-                    target=submission,
-                )
-
-            if request.FILES:
-                for afile in request.FILES.getlist("attachments"):
-                    newdoc = Document(docfile=afile, comment=draft_comment)
-                    newdoc.save()
+        if self.form.is_valid():
+            comment_text, error = self.handle_comment_text()
+            if error:
+                # not sure why this redirects, it goes to the same page as self.form_invalid() but with new context
+                # keep as is since there are tests that account for this
+                return redirect(self.submission.get_absolute_url())
 
             if "complete" in request.POST:
-                note_verb = "completed"
-                msg_text = "Quest completed"
-                affected_users = []
+                if not self.formset_is_valid():
+                    return self.form_invalid()
 
-                if submission.quest.verification_required:
-                    msg_text += ", awaiting approval."
-                else:
-                    note_verb += " (auto-approved quest)"
-                    msg_text += " and automatically approved."
-                    msg_text += " Please give me a moment to calculate what new quests this should make available to you."
-                    msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-                    msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
+                # needs to be before complete_button since it clears it
+                self.update_draft_comment(comment_text)
+                self.save_uploaded_files()
+                self.formset.save()
 
-                icon = "<i class='fa fa-shield fa-lg'></i>"
-
-                # Notify teacher if they are specific to quest but are not the student's current teacher
-                # current teacher doesn't need the notification because they'll see it in their approvals tabs already
-                if (
-                    submission.quest.specific_teacher_to_notify
-                    and submission.quest.specific_teacher_to_notify
-                    not in request.user.profile.current_teachers()
-                ):
-                    affected_users.append(submission.quest.specific_teacher_to_notify)
-
-                # Send notification to current teachers when a comment is left on an auto-approved quest
-                # since these quests don't appear in the approvals tab, teacher would never know about the comment.
-                if (
-                    form.cleaned_data.get("comment_text")
-                    and not submission.quest.verification_required
-                ):
-                    affected_users.extend(request.user.profile.current_teachers())
-
-                xp_requested = (
-                    form.cleaned_data.get("xp_requested")
-                    if submission.quest.xp_can_be_entered_by_students
-                    else 0
-                )
-                submission.mark_completed(xp_requested)
-                if not submission.quest.verification_required:
-                    submission.mark_approved()
-
-                    if not submission.do_not_grant_xp:
-                        # if not requesting xp, xp_requested will default to 0
-                        # 0 or xp = xp
-                        xp = xp_requested or submission.quest.xp
-                        notify_rank_up(
-                            submission.user,
-                            # subtract from cache as mark_approved updates xp
-                            submission.user.profile.xp_cached - xp,
-                            submission.user.profile.xp_cached,
-                        )
+                self.on_complete_button()
 
             elif "comment" in request.POST:
-                note_verb = "commented on"
-                msg_text = "Quest commented on."
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
-                    + "</span>"
-                )
-                affected_users = []
-                if request.user.is_staff:
-                    affected_users = [
-                        submission.user,
-                    ]
-                else:  # student comment
-                    # student's teachers
-                    affected_users.extend(
-                        request.user.profile.current_teachers()
-                    )  # User.objects.filter(is_staff=True)
-                    # add quest's teacher if necessary
-                    if submission.quest.specific_teacher_to_notify:
-                        affected_users.append(
-                            submission.quest.specific_teacher_to_notify
-                        )
-                    # remove doubles/flatten
-                    affected_users = set(affected_users)
+                # since its possible to comment from quick reply.
+                # (there are no questions in quick reply)
+                if self.formset_is_valid():
+                    self.formset.save()
 
-                    # if commenting after approval we have to remove draft_comment
-                    # else drafts get "stuck" to same comment
-                    submission.draft_comment = None
-                    submission.draft_text = None
-                    submission.save()
-            else:
-                raise Http404("unrecognized submit button")
+                # after visiting submission view an empty set of QuestionSubmissions will be attached to draft_comment. (See submission view)
+                # this makes comments with quick replies have an QuestionSubmissions attached to it.
+                # Since this view handles submission view and quick reply theres no elegant way to fix that other
+                # than deleting the submissions when quick replying
+                else:
+                    QuestionSubmission.objects.filter(comment=self.get_draft_comment()).delete()
 
-            notify.send(
-                request.user,
-                action=draft_comment,
-                target=submission,
-                recipient=submission.user,
-                affected_users=affected_users,
-                verb=note_verb,
-                icon=icon,
-            )
-            messages.success(request, msg_text)
-            return redirect("quests:quests")
-        else:  # form is not valid
-            context = {
-                "heading": submission.quest.name,
-                "submission": submission,
-                "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
-                "submission_form": form,
-                "anchor": "submission-form-" + str(submission.quest.id),
-                # "reply_comment_form": reply_comment_form,
-            }
-            return render(request, "quest_manager/submission.html", context)
-    else:
-        raise Http404
+                # needs to be before comment_button since it clears it
+                self.update_draft_comment(comment_text)
+                self.save_uploaded_files()
+
+                self.on_comment_button()
+
+            return self.form_valid()
+        return self.form_invalid()
 
 
 @non_public_only_view
@@ -1415,11 +1567,66 @@ def ajax_save_draft(request):
 
         draft_comment = sub.draft_comment
 
+        question_subs = QuestionSubmission.objects.filter(comment=draft_comment)
+        question_updates = 0
+
+        # just loop through the number of questions and match them with their question subs
+        # instead of trying to directly loop through the question subs. This is because the
+        # questions sent through ajax are not guaranteed to be in the same order as the
+        # question subs from the database
+        for i in range(len(question_subs)):
+
+            # since question submissions are retrieved and stored in the same order,
+            # we should be able to access them directly by their index
+            # the JSON structure of the question data in request.POST is:
+            # {
+            # "questions[0][index]": "0",
+            # "questions[0][response_text]": "test",
+            # "questions[1][index]": "1",
+            # "questions[1][response_file,
+            # "questions[0][response_text]": "test",
+            # "questions[1][index]": "1",
+            # "questions[1][response_file]": <InMemoryUploadedFile: test.txt (text/plain)>,
+            # ...
+            # }
+            # note that the files must be accessed through request.FILES
+            index = request.POST.get(f"questions[{i}][index]")
+            if index and index != 'NaN':
+                index = int(index)
+                question_sub = question_subs[index]
+                old_updates = question_updates
+
+                if question_sub.question.type == 'short_answer' or question_sub.question.type == 'long_answer':
+                    response_text = request.POST.get(f"questions[{i}][response_text]")
+                    if response_text and response_text != question_sub.response_text:
+                        question_sub.response_text = response_text
+                        question_updates += 1
+                elif question_sub.question.type == 'file_upload':
+
+                    response_file = request.FILES.get(f"questions[{i}][response_file]")
+                    if isinstance(response_file, InMemoryUploadedFile):
+                        question_type = question_sub.question.allowed_file_type
+                        allowed_mimes = FILE_MIME_TYPES[question_type]
+                        content_type = response_file.content_type
+                        # only save allowed file types
+                        if content_type in allowed_mimes:
+                            question_sub.response_file = response_file
+                            question_updates += 1
+
+                # only update if there were changes
+                if question_updates > old_updates:
+                    question_sub.save()
+
+        submission_changed = False
         if draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
             # sub.xp_requested = xp_requested
-            response_data["result"] = "Draft saved"
             draft_comment.save()
+            submission_changed = True
+
+        # if there were changes to the submission or any of the questions, then return a success message
+        if submission_changed or question_updates:
+            response_data["result"] = "Draft saved"
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
@@ -1468,25 +1675,36 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
 
+    question_formset = None
+
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff()
-
     else:
         draft_comment = sub.draft_comment
         # if there is no draft comment, create one, and also create a set of QuestionSubmissions
         if not draft_comment:
             # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
             # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
-            text = ""
-            if sub.draft_text:
-                text = sub.draft_text
             draft_comment = Comment.objects.create_comment(
                 user=request.user,
                 path=sub.get_absolute_url(),
-                text=text,
+                text=sub.draft_text or "",
                 target=None
             )
+
+            # create a submission for each question
+            # if already completed should revert to default format
+            if not sub.is_approved:
+                questions = sub.quest.question_set.all()
+                QuestionSubmission.objects.bulk_create([
+                    QuestionSubmission(
+                        question=question,
+                        comment=draft_comment,
+                    )
+                    for question in questions
+                ])
+
             sub.draft_comment = draft_comment
             sub.save()
 
@@ -1494,20 +1712,26 @@ def submission(request, submission_id=None, quest_id=None):
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
-            main_comment_form = SubmissionFormCustomXP(initial=initial,
-                                                       minimum_xp=sub.quest.xp)
+            main_comment_form = SubmissionFormCustomXP(initial=initial, minimum_xp=sub.quest.xp)
         else:
             main_comment_form = SubmissionForm(initial=initial)
 
+        # if already completed should revert to default format
+        if not sub.is_approved:
+            question_formset = QuestionSubmissionFormsetFactory(
+                instance=draft_comment,
+                queryset=QuestionSubmission.objects.filter(comment=draft_comment)
+            )
+
     # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
     # reply_comment_form = CommentForm(request.POST or None, label="")
-    # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest_name(),
         "submission": sub,
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         "submission_form": main_comment_form,
+        "question_formset": question_formset,
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
     }
