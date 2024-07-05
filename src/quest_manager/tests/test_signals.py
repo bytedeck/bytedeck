@@ -1,7 +1,29 @@
+from django_tenants.test.cases import TenantTestCase
+
+from model_bakery import baker
 import re
 import unittest
 
 from quest_manager.signals import tidy_html
+from quest_manager.models import QuestSubmission
+from comments.models import Comment
+
+
+class TestSubmissionSignals(TenantTestCase):
+
+    def test_pre_delete_signal(self):
+        """ test the pre delete signal for QuestSubmission """
+        # create two submissions delete 1 and see if pre_delete
+        # did not remove more comments than it needed to
+
+        sub1 = baker.make(QuestSubmission)
+        sub2 = baker.make(QuestSubmission)
+        baker.make(Comment, target_object=sub1, _quantity=3)
+        baker.make(Comment, target_object=sub2, _quantity=2)
+
+        self.assertEqual(Comment.objects.all().count(), 5)
+        sub1.delete()
+        self.assertEqual(Comment.objects.all().count(), 2)
 
 
 class TestTidyHtml(unittest.TestCase):
