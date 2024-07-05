@@ -31,7 +31,7 @@
     {% include "quest_manager/snippets/time_to_complete_submission.html" %}
 </li>
 {% with s.get_comments as target_comments %}
-    {% include "comments/comments.html" %}
+    {% include "questions/comments_with_questions.html" %}
 {% endwith %}
 <li class="list-group-item list-group-item-info">
     Quick Reply Form
