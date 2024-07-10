@@ -1,4 +1,24 @@
-## Deployment workflow
+# Production Server Notes
+
+## SSL Certificates
+
+Installed via [cerbot (snap package)](https://certbot.eff.org/instructions?ws=nginx&os=ubuntufocal&tab=wildcard) and [cerbot-dns-route5](https://certbot-dns-route53.readthedocs.io/en/stable/) and auto-renewed via systemd
+
+### certbot
+
+Once set up, the certbot package's systemd timer will try to auto renew the certificates.
+
+1. `systemctl status snap.certbot.renew.timer` which runs twice a day at 0900 and 2200 UTC and triggers the renew service
+2. `systemctl status snap.certbot.renew.service` which executes `/usr/bin/snap run --timer="00:00~24:00/2" certbot.renew` which runs the renew command twice a day as a one shot
+
+Not exactly sure why both timer and renew services go twice a day.  And the renew service seems to be a random picked times (~) for some reason.  See snap renew docs.
+
+However, even if this succeeds, the new certificates won't automatically be available to nginx, so we need to overide the renew service to add some additional commands to reload nginx.  If the override is properly located, it should appear when you get the status of the snap.certbot.renew.service.
+
+3. `cat /etc/systemd/system/snap.certbot.renew.service.d/snap.certbot.renew.service.override.conf`
+
+
+## Deployment workflow -- OLD
 
 ### Stack
 - nginx
