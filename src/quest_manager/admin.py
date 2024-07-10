@@ -6,7 +6,8 @@ from django.contrib.contenttypes.models import ContentType
 
 from import_export import resources
 from import_export.fields import Field
-from import_export.admin import ImportExportActionModelAdmin, ExportActionMixin
+from import_export.formats.base_formats import CSV
+from import_export.admin import ImportExportActionModelAdmin
 
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
@@ -178,8 +179,7 @@ class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvanced
         PrereqInline,
     ]
 
-    actions = ExportActionMixin.actions + [publish_selected_quests, archive_selected_quests,
-                                           prettify_code_selected_quests, fix_whitespace_bug]  # noqa
+    actions = [publish_selected_quests, archive_selected_quests, prettify_code_selected_quests, fix_whitespace_bug]
 
     change_list_filter_template = "admin/filter_listing.html"
 
@@ -191,6 +191,14 @@ class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvanced
     # fieldsets = [
     #     ('Available', {'fields': ['date_available', 'time_available']}),
     # ]
+
+    def get_import_formats(self):
+        """ file formats for importing """
+        return [CSV]
+
+    def get_export_formats(self):
+        """ file formats for exporting """
+        return [CSV]
 
 
 class CategoryAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
