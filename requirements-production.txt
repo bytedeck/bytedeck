@@ -12,7 +12,7 @@ django-crispy-forms>=1.8.1,<1.15
 django-datetime-widget>=0.9.3,<1.0
 django-decorator-include==3.0
 django-embed-video>=1.1.2,<1.5
-django-grappelli>=2.13.3,<2.14
+django-grappelli>=4.0.1,<5
 django-import-export==3.3.9
 bleach[css]>=5,<6
 cssutils==2.6.0
