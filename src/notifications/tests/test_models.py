@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
+from unittest import TestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
@@ -65,7 +66,7 @@ class NotificationModelTest(TenantTestCase):
         self.assertEqual(notes_unread.count(), 1)
 
 
-class NotificationModel_html_strip_Test(TenantTestCase):
+class NotificationModel_html_strip_Test(TestCase):
     """
         This test class is specialized on testing the html_strip() method of Notification model
     """
