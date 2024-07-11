@@ -1,6 +1,6 @@
 django-tenants>=3.4,<3.6
 backports.csv>=1.0.7,<1.1
-beautifulsoup4>=4.8,<4.12
+beautifulsoup4>=4.12.3,<4.13
 celery>=5.2.2,<5.4
 Django==3.2.25  # temp pinned at .19 while resolvoing issue #1353
 django-allauth>=0.54,<0.55
