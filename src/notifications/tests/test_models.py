@@ -36,7 +36,7 @@ class NotificationModelTest(TenantTestCase):
         :param sender: the object (any Model) initiating/causing the notification
         :param kwargs:
             target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
-            action (any Model): Not sure... not used I assume.
+            action (any Model): Used alongside "verb" to create syntax of notification ie. "<user> <verb> with <action>"
             recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
             affected_users (list of Users): everyone who should receive the notification
             verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
@@ -64,6 +64,38 @@ class NotificationModelTest(TenantTestCase):
 
         notes_unread = Notification.objects.all_unread(self.student)
         self.assertEqual(notes_unread.count(), 1)
+
+    def test_url_correct_comment_hash(self):
+        """ Checks if instances where an url is given. There is a corresponding comment hash with it
+        ie. url...#comment-id.
+
+        So far the only functions that use target_object.get_absolute_url are:
+        - __str__
+        - get_url()
+        """
+        # create notification with comment as an action and corresponding verb
+        comment = baker.make('comments.Comment')
+        new_notification(
+            self.student,
+            action=comment,
+            target=baker.make('announcements.Announcement'),
+            recipient=self.student,
+            affected_users=[self.teacher],
+            verb="commented on",
+        )
+        # since new_notification does not return anything, have to get it from query
+        notification = Notification.objects.order_by('id').last()
+        self.assertEqual(notification.verb, "commented on")
+        self.assertEqual(notification.action_object_id, comment.id)
+
+        # Base case: check if notification without comment does not have hash
+        self.assertFalse('#comment-' in self.notification.get_url())
+        self.assertFalse('#comment-' in str(self.notification))
+
+        # check if notification with comment has a hash
+        comment_hash = f'#comment-{comment.id}'
+        self.assertTrue(comment_hash in notification.get_url())
+        self.assertTrue(comment_hash in str(notification))
 
 
 class NotificationModel_html_strip_Test(TestCase):
