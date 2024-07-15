@@ -45,7 +45,7 @@ class CourseStudentForm(forms.ModelForm):
     # filtering the available options in a foreign key choice field
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
-        student_registration = kwargs.pop('student_registration')
+        student_registration = kwargs.pop('student_registration', None)
         super().__init__(*args, **kwargs)
 
         semester_qs = Semester.objects.get_current(as_queryset=True)
@@ -101,7 +101,7 @@ class CourseStudentStaffForm(CourseStudentForm):
 
     class Meta:
         model = CourseStudent
-        exclude = ['user', 'active']
+        exclude = ['user', 'active', 'grade_fk']
 
 
 class SemesterForm(forms.ModelForm):
