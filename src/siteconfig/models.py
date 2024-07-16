@@ -246,6 +246,11 @@ class SiteConfig(models.Model):
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
     )
 
+    show_all_tags_on_profiles = models.BooleanField(
+        default=True,
+        help_text="Controls the visibility of tags on user profiles. If set to False, only tags where the student has earned XP are displayed."
+    )
+
     # Custom stylesheet and javascript
     #
     custom_stylesheet = RestrictedFileField(

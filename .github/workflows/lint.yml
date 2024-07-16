@@ -20,7 +20,7 @@ jobs:
       run: |
         pip install flake8
         # stop the build if there are Python syntax errors or undefined names
-        flake8 src --count --show-source --statistics
+        flake8 src --count --show-source --statistics --config=.flake8
 
 # jobs:
 #   lint:

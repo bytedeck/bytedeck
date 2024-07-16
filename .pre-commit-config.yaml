@@ -37,6 +37,10 @@ repos:
             "flake8-comprehensions",
             "flake8-mutable",
           ]
+        args:
+          [
+            "--config=.flake8",
+          ]
 
   ## Packages here are subjective...
   # - repo: https://github.com/asottile/reorder_python_imports

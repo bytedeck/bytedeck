@@ -11,7 +11,7 @@
     <p>Date Posted: {{object.timestamp}}</p>
     <p>Comment: {{object.text|safe}}</p>
   </div>
-  <a href="{{comment.path}}" role="button" class="btn btn-info">Cancel</a>
+  <a href="{{object.path}}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
 </form>
 {% endblock %}

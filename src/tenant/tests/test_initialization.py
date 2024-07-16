@@ -141,6 +141,27 @@ class TenantInitializationTest(TenantTestCase):
         owner = User.objects.filter(username="owner", is_staff=True).first()
         self.assertEqual(message_quest.specific_teacher_to_notify, owner)
 
+    def test_create_orientation_campaign__default_tags_created(self):
+        """ test if intro tag is properly assigned to
+        "Welcome to ByteDeck!" + all quests in the orientation campaign.
+        """
+        q_intro = Quest.objects.filter(tags__name="intro")
+        self.assertEqual(q_intro.count(), 6)
+        self.assertTrue(q_intro.filter(name="Welcome to ByteDeck!").exists())
+        self.assertTrue(q_intro.filter(name="ByteDeck Class Contract").exists())
+        self.assertTrue(q_intro.filter(name="Create an Avatar").exists())
+        self.assertTrue(q_intro.filter(name="Screenshots").exists())
+        self.assertTrue(q_intro.filter(name="Who owns your creations?").exists())
+        self.assertTrue(q_intro.filter(name="Send your teacher a Message").exists())
+
+    def test_create_initial_badges__default_tags_created(self):
+        """ test if intro tag is properly assigned to
+        "Bytedeck Proficiency"
+        """
+        b_intro = Badge.objects.filter(tags__name="intro")
+        self.assertEqual(b_intro.count(), 1)
+        self.assertTrue(b_intro.filter(name="ByteDeck Proficiency").exists())
+
     def test_site_config_created(self):
         """ Test that the SiteConfig object exists and the Deck name has expected defaults.
         """

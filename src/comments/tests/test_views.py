@@ -6,6 +6,7 @@ from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 from comments.models import Comment
+from bs4 import BeautifulSoup
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 
@@ -95,3 +96,19 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('comments:delete', args=[self.comment.id]))
         self.assertRedirects(response, path)
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
+
+    def test_delete_comment_path(self):
+        ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
+        correctly contains the `comment.path` as its href attribute.
+        '''
+        self.client.force_login(self.teacher)
+
+        # get confirm delete content html
+        response = self.client.get(reverse('comments:delete', args=[self.comment.id]))
+        self.assertContains(response, 'Cancel')
+
+        soup = BeautifulSoup(response.content.decode('utf-8'), features='html.parser')
+
+        # find the Cancel Button
+        tag = soup.find('a', href=self.announcement.get_absolute_url(), role='button', text='Cancel')
+        self.assertIsNotNone(tag)

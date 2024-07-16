@@ -17,7 +17,6 @@
                         <li>
                             <a href="{{ submission.quest.get_absolute_url }}">
                                 {{ submission }}
-                                {% if submission.is_multiple %}({{submission.ordinal}}){% endif %}
                                 ({% firstof submission.xp_requested submission.quest.xp %} XP)
                             </a>
                         </li>
