@@ -11,7 +11,7 @@
 {% load static %}
 
 {% block heading_inner %}{{ heading }}
-    {% if submitted_tab_active %}
+    {% if view_type == VIEW_TYPES.SUBMITTED %}
       {% if show_all_blocks_button %}
         <div class="btn-group">
             <a href="{% url 'quests:submitted' %}"

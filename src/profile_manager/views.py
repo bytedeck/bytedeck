@@ -34,8 +34,10 @@ from allauth.socialaccount.helpers import _complete_social_login
 User = get_user_model()
 
 
-class ViewTypes:
-    """ enum for ProfileList and its descendants """
+class ProfileViewTypes:
+    """ enum for ProfileList and its descendants.
+    Note: using enum.auto() will not work as django template tags cant properly define its value.
+    """
     LIST = 0
     CURRENT = 1
     STAFF = 2
@@ -48,8 +50,8 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     template_name = 'profile_manager/profile_list.html'
 
     # this will determine which button will be active in self.template_name
-    # also if view_type=ViewTypes.STAFF will render a different partial template
-    view_type = ViewTypes.LIST
+    # also if view_type=ProfileViewTypes.STAFF will render a different partial template
+    view_type = ProfileViewTypes.LIST
 
     def test_func(self):
         return self.request.user.is_staff
@@ -77,7 +79,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['VIEW_TYPES'] = ViewTypes
+        context['VIEW_TYPES'] = ProfileViewTypes
         context['view_type'] = self.view_type
         return context
 
@@ -94,7 +96,7 @@ class ProfileListCurrent(ProfileList):
     Arguments:
         ProfileList -- Base class
     """
-    view_type = ViewTypes.CURRENT
+    view_type = ProfileViewTypes.CURRENT
 
     # override the staff requirement for ProfileList
     def test_func(self):
@@ -108,7 +110,7 @@ class ProfileListCurrent(ProfileList):
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListBlock(ProfileList):
     """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
-    view_type = ViewTypes.BLOCK
+    view_type = ProfileViewTypes.BLOCK
     block_object = None
 
     def get_queryset(self):
@@ -130,7 +132,7 @@ class ProfileListBlock(ProfileList):
 
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListStaff(ProfileList):
-    view_type = ViewTypes.STAFF
+    view_type = ProfileViewTypes.STAFF
 
     def get_queryset(self):
         return Profile.objects.filter(user__is_staff=True)
@@ -138,7 +140,7 @@ class ProfileListStaff(ProfileList):
 
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListInactive(ProfileList):
-    view_type = ViewTypes.INACTIVE
+    view_type = ProfileViewTypes.INACTIVE
 
     def get_queryset(self):
         return Profile.objects.all_inactive()
