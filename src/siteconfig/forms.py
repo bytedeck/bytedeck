@@ -23,15 +23,21 @@ class SiteConfigForm(forms.ModelForm):
         # active_semester setting moved to Semester views.
         exclude = ["active_semester"]
 
+    advanced_fields = [
+        "custom_stylesheet",
+        "custom_javascript",
+        "deck_owner",
+        "enable_shared_library",
+    ]
+
     def __init__(self, *args, **kwargs):
         is_deck_owner = kwargs.pop('is_deck_owner', False)
 
         super().__init__(*args, **kwargs)
 
         if not is_deck_owner:
-            self.fields['custom_stylesheet'].disabled = True
-            self.fields['custom_javascript'].disabled = True
-            self.fields['deck_owner'].disabled = True
+            for field in self.advanced_fields:
+                self.fields[field].disabled = True
 
         self.fields['enable_google_signin'].disabled = True
         self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
@@ -76,10 +82,7 @@ class SiteConfigForm(forms.ModelForm):
                             "<b>Warning: </b> These features are only editable by the deck owner."
                             "</p></div>"
                         ),
-                        "custom_stylesheet",
-                        "custom_javascript",
-                        "deck_owner",
-                        "enable_shared_library",
+                        *self.advanced_fields,
                         active=False,
                         template="crispy_forms/bootstrap3/accordion-group.html",
                     ),
@@ -96,6 +99,11 @@ class SiteConfigForm(forms.ModelForm):
         This method overrides default `clean_<fieldname>` method and parse <fieldname> upload
         using `cssutils` library to determine whether it is "valid" stylesheet or not.
         """
+        # if field is disabled, clean should return None
+        # ie. custom_javascript returns None when it is disabled
+        if self.fields['custom_stylesheet'].disabled:
+            return None
+
         # get data from form upload or do nothing if there is no uploads
         value = self.cleaned_data.get("custom_stylesheet", False)
         if value or self.files.get("custom_stylesheet"):

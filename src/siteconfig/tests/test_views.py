@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.forms.models import model_to_dict
@@ -162,7 +162,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Second case, trying to find out missing fields
 
-        # get complete list of fields from `generateh_form_data` helper function
+        # get complete list of fields from `generate_form_data` helper function
         response = self.client.get(URL, data={})
         for f in generate_form_data(model_form=SiteConfigForm).keys():
             # should succeed if `form.helper.layout` is up-to-date
@@ -250,3 +250,69 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.post(URL, data=data)
         self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
+
+    def test_owner_only_fields_can_only_be_changed_by_owner(self):
+        """ Checks if staff users that isnt the owner can change any of the advanced fields.
+        Which are only editable by the deck_owner
+        """
+        URL = reverse("config:site_config_update_own")
+
+        # create form data. remove any file uploads
+        data = model_to_dict(self.config)
+        keys_to_delete = [
+            # these keys need to have files for inputs delete them
+            'banner_image',
+            'banner_image_dark',
+            'site_logo',
+            'default_icon',
+            'favicon',
+
+            # delete these fields for initial post request
+            *SiteConfigForm.advanced_fields,
+        ]
+        [data.pop(key) for key in keys_to_delete]
+
+        staff = baker.make(User, is_staff=True)
+        self.client.force_login(staff)
+
+        # base case, check if form data can be successfully submitted
+        response = self.client.post(URL, data={**data, 'site_name': 'site name changed to prove form was successful'})
+        self.assertEqual(response.status_code, 302)
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.site_name, 'site name changed to prove form was successful')
+        self.assertEqual(self.config.custom_stylesheet.name, '')  # use `.name` because field files are never empty (ie. <FieldFile: None>)
+        self.assertEqual(self.config.custom_javascript.name, '')
+        self.assertEqual(self.config.enable_shared_library, False)
+
+        # test deck owner fields on staff (non deck owner)
+        # should not be affected by form data
+        response = self.client.post(URL, data={
+            **data,
+            'custom_stylesheet': SimpleUploadedFile('staff.css', b' ', content_type='text/css'),
+            'custom_javascript': SimpleUploadedFile('staff.js', b' ', content_type='text/javascript'),
+            'deck_owner': staff.id,
+            'enable_shared_library': True,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.config.refresh_from_db()
+        self.assertFalse('staff' in self.config.custom_stylesheet.name)  # file fields modify name
+        self.assertFalse('staff' in self.config.custom_javascript.name)
+        self.assertNotEqual(self.config.deck_owner, staff)
+        self.assertNotEqual(self.config.enable_shared_library, True)
+
+        # test deck owner fields on deck owner
+        # should be affected by form data
+        self.client.force_login(self.config.deck_owner)
+        response = self.client.post(URL, data={
+            **data,
+            'custom_stylesheet': SimpleUploadedFile('owner.css', b' ', content_type='text/css'),
+            'custom_javascript': SimpleUploadedFile('owner.js', b' ', content_type='text/javascript'),
+            'deck_owner': staff.id,
+            'enable_shared_library': True,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.config.refresh_from_db()
+        self.assertTrue('owner' in self.config.custom_stylesheet.name)  # file fields modify name
+        self.assertTrue('owner' in self.config.custom_javascript.name)
+        self.assertEqual(self.config.deck_owner, staff)
+        self.assertEqual(self.config.enable_shared_library, True)
