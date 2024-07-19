@@ -1,0 +1,29 @@
+[tool.ruff]
+exclude = ["migrations"]
+line-length = 150
+
+[tool.ruff.format]
+quote-style = 'single'
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "W",  # pycodestyle warnings
+  "F",  # pyflakes
+  "B",  # flake8-bugbear
+  "C4", # flake8-comprehensions
+  # "I",  # isort
+  "UP", # pyupgrade
+]
+ignore = [
+  "E501",  # line too long, handled by black
+  "B008",  # do not perform function calls in argument defaults
+  "C901",  # too complex
+  "W191",  # indentation contains tabs
+  "B904",  # `raise from exc` within exceptions
+  "B018",  # found useless expression
+  "UP031", # Use format specifiers instead of percent format
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
