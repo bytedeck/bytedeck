@@ -25,7 +25,7 @@ from djcytoscape.models import CytoScape
 
 class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, RedirectView):
     def dispatch(self, request):
-        return redirect(request.path_info.replace("achievements", "badges", 1))
+        return redirect(request.path_info.replace('achievements', 'badges', 1))
 
 
 @non_public_only_view
@@ -38,13 +38,13 @@ def badge_list(request):
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
 
     context = {
-        "heading": f"{SiteConfig.get().custom_name_for_badge}s",
+        'heading': f'{SiteConfig.get().custom_name_for_badge}s',
         # "badge_type_dicts": badge_type_dicts,
-        "badge_types": badge_types,
-        "earned_badges": earned_badges,
-        "inactive_badges": inactive_badges
+        'badge_types': badge_types,
+        'earned_badges': earned_badges,
+        'inactive_badges': inactive_badges,
     }
-    return render(request, "badges/list.html", context)
+    return render(request, 'badges/list.html', context)
 
 
 class BadgePrereqsUpdate(ObjectPrereqsFormView):
@@ -69,8 +69,8 @@ class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
-        context['heading'] = f"Update {SiteConfig.get().custom_name_for_badge}"
-        context['submit_btn_value'] = "Update"
+        context['heading'] = f'Update {SiteConfig.get().custom_name_for_badge}'
+        context['submit_btn_value'] = 'Update'
         return context
 
     @method_decorator(staff_member_required)
@@ -87,11 +87,11 @@ def badge_create(request):
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": f"Create New {SiteConfig.get().custom_name_for_badge}",
-        "form": form,
-        "submit_btn_value": "Create",
+        'heading': f'Create New {SiteConfig.get().custom_name_for_badge}',
+        'form': form,
+        'submit_btn_value': 'Create',
     }
-    return render(request, "badges/badge_form.html", context)
+    return render(request, 'badges/badge_form.html', context)
 
 
 @non_public_only_view
@@ -101,33 +101,32 @@ def badge_copy(request, badge_id):
     new_badge = get_object_or_404(Badge, pk=badge_id)
     new_badge.pk = None  # autogen a new primary key (quest_id by default)
     new_badge.import_id = uuid.uuid4()
-    new_badge.name = "Copy of " + new_badge.name
+    new_badge.name = 'Copy of ' + new_badge.name
 
     form = BadgeForm(request.POST or None, instance=new_badge, initial={'tags': original_badge.tags.all()})
     if form.is_valid():
         form.save()
         return redirect('badges:list')
     context = {
-        "heading": f"Copy another {SiteConfig.get().custom_name_for_badge}",
-        "form": form,
-        "submit_btn_value": "Create",
+        'heading': f'Copy another {SiteConfig.get().custom_name_for_badge}',
+        'form': form,
+        'submit_btn_value': 'Create',
     }
-    return render(request, "badges/badge_form.html", context)
+    return render(request, 'badges/badge_form.html', context)
 
 
 @non_public_only_view
 @login_required
 def detail(request, badge_id):
-
     badge = get_object_or_404(Badge, pk=badge_id)
 
     context = {
-        "heading": badge.name,
-        "badge": badge,
-        "current": True,
-        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
-        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, True),
-        "maps": CytoScape.objects.get_related_maps(badge),
+        'heading': badge.name,
+        'badge': badge,
+        'current': True,
+        'assertions_of_this_badge': BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
+        'user_assertion_count': BadgeAssertion.objects.user_badge_assertion_count(badge, True),
+        'maps': CytoScape.objects.get_related_maps(badge),
     }
     return render(request, 'badges/detail.html', context)
 
@@ -135,21 +134,21 @@ def detail(request, badge_id):
 @non_public_only_view
 @login_required
 def detail_all(request, badge_id):
-
     badge = get_object_or_404(Badge, pk=badge_id)
 
     context = {
-        "heading": badge.name,
-        "badge": badge,
-        "current": False,
-        "assertions_of_this_badge": BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
-        "user_assertion_count": BadgeAssertion.objects.user_badge_assertion_count(badge, False),
-        "maps": CytoScape.objects.get_related_maps(badge),
+        'heading': badge.name,
+        'badge': badge,
+        'current': False,
+        'assertions_of_this_badge': BadgeAssertion.objects.all_for_user_badge(request.user, badge, False),
+        'user_assertion_count': BadgeAssertion.objects.user_badge_assertion_count(badge, False),
+        'maps': CytoScape.objects.get_related_maps(badge),
     }
     return render(request, 'badges/detail.html', context)
 
 
 # ########## Badge Type Views ##############################
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeTypeList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
@@ -163,7 +162,6 @@ class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('badges:badge_types')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -177,7 +175,6 @@ class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
     success_url = reverse_lazy('badges:badge_types')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_badge} Type'
         kwargs['submit_btn_value'] = 'Update'
 
@@ -193,7 +190,7 @@ class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
         context = super().get_context_data(**kwargs)
 
         badge_type_badge_qs = Badge.objects.filter(badge_type=self.get_object())
-        context["has_badges"] = badge_type_badge_qs.exists()
+        context['has_badges'] = badge_type_badge_qs.exists()
         return context
 
     def post(self, request, *args, **kwargs):
@@ -207,6 +204,7 @@ class BadgeTypeDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 # ########## Badge Assertion Views #########################
+
 
 @non_public_only_view
 @staff_member_required
@@ -223,21 +221,21 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
+        result_message = f'{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to '
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
-            result_message += profile.preferred_full_name() + "; "
+            result_message += profile.preferred_full_name() + '; '
 
         messages.success(request, result_message)
         return redirect('badges:list')
 
     context = {
-        "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
-        "form": form,
-        "submit_btn_value": "Grant",
+        'heading': f'Grant {SiteConfig.get().custom_name_for_badge} in Bulk',
+        'form': form,
+        'submit_btn_value': 'Grant',
     }
 
-    return render(request, "badges/assertion_form.html", context)
+    return render(request, 'badges/assertion_form.html', context)
 
 
 @non_public_only_view
@@ -256,16 +254,16 @@ def assertion_create(request, user_id, badge_id):
     if form.is_valid():
         new_ass = form.save(commit=False)
         BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
-        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
+        messages.success(request, f'{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}')
         return redirect('badges:list')
 
     context = {
-        "heading": "Grant an Achievment",
-        "form": form,
-        "submit_btn_value": "Grant",
+        'heading': 'Grant an Achievment',
+        'form': form,
+        'submit_btn_value': 'Grant',
     }
 
-    return render(request, "badges/assertion_form.html", context)
+    return render(request, 'badges/assertion_form.html', context)
 
 
 @non_public_only_view
@@ -280,16 +278,17 @@ def assertion_delete(request, assertion_id):
             # action=...,
             target=assertion.badge,
             recipient=user,
-            affected_users=[user, ],
-            icon="<span class='fa-stack'>" +
-                 "<i class='fa fa-certificate fa-stack-1x text-warning'></i>" +
-                 "<i class='fa fa-ban fa-stack-2x text-danger'></i>" +
-                 "</span>",
-            verb='revoked')
+            affected_users=[
+                user,
+            ],
+            icon="<span class='fa-stack'>"
+            + "<i class='fa fa-certificate fa-stack-1x text-warning'></i>"
+            + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
+            + '</span>',
+            verb='revoked',
+        )
 
-        messages.success(request,
-                         ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
-                          ))
+        messages.success(request, ('Badge ' + str(assertion) + ' revoked from ' + str(assertion.user)))
         assertion.delete()
         return redirect('profiles:profile_detail', pk=user.profile.id)
 

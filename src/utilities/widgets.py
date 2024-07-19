@@ -65,9 +65,7 @@ class GFKSelect2Mixin:
         """Return list of lookup names."""
         if self.search_fields:
             return self.search_fields[model._meta.app_label][model._meta.model_name]
-        raise NotImplementedError(
-            '%s, must implement "search_fields".' % self.__class__.__name__
-        )
+        raise NotImplementedError('%s, must implement "search_fields".' % self.__class__.__name__)
 
     def filter_queryset(self, term, queryset=None, **dependent_fields):
         """
@@ -109,9 +107,7 @@ class GFKSelect2Mixin:
             queryset = self.choices.queryset
         else:
             raise NotImplementedError(
-                '%(cls)s is missing a QuerySet. Define '
-                '%(cls)s.queryset, or override '
-                '%(cls)s.get_queryset().' % {'cls': self.__class__.__name__}
+                '%(cls)s is missing a QuerySet. Define ' '%(cls)s.queryset, or override ' '%(cls)s.get_queryset().' % {'cls': self.__class__.__name__}
             )
         return queryset
 
@@ -133,10 +129,7 @@ class GFKSelect2Mixin:
         for ctype_pk, ids in ctype_models.items():
             results = ctype(ctype_pk).model_class().objects.filter(pk__in=ids)
 
-            self.choices += [
-                (f'{ctype_pk}-{r.pk}', self.label_from_instance(r))
-                for r in results
-            ]
+            self.choices += [(f'{ctype_pk}-{r.pk}', self.label_from_instance(r)) for r in results]
 
     def optgroups(self, name, value, attrs=None):
         """

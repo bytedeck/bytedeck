@@ -7,7 +7,7 @@ from tenant.models import Tenant
 
 
 def change_domain_urls(sender, *args, **kwargs):
-    """ Called via post_save signal from Sites app so that when the domain of the site changes,
+    """Called via post_save signal from Sites app so that when the domain of the site changes,
     The domain_url of tenants will be updated.
 
     This should probably be in the Tenant app?

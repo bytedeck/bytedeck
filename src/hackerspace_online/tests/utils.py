@@ -11,43 +11,43 @@ import warnings
 
 def generate_form_data(model=None, model_form=None, **kwargs):
     """
-        This generates valid form data that can be used for post requests. Values will default to form/model default.
-        kwargs values are equal to any name in the meta fields
+    This generates valid form data that can be used for post requests. Values will default to form/model default.
+    kwargs values are equal to any name in the meta fields
 
-        This has the same limitations as baker, so anything that baker.prepare cant make this func cant make either.
-        (m2m fields, null=True will make empty values, ...)
-        Things like special validation should be manually set in kwargs.
+    This has the same limitations as baker, so anything that baker.prepare cant make this func cant make either.
+    (m2m fields, null=True will make empty values, ...)
+    Things like special validation should be manually set in kwargs.
 
-        Note: things like Foreign keys, OnetoOne fields will persist after creation
-        https://model-bakery.readthedocs.io/en/latest/basic_usage.html
+    Note: things like Foreign keys, OnetoOne fields will persist after creation
+    https://model-bakery.readthedocs.io/en/latest/basic_usage.html
 
-        usage (See hackerspace_online.tests.test_utils.py for additional examples):
+    usage (See hackerspace_online.tests.test_utils.py for additional examples):
 
 
-        EXAMPLE 1 (no validators + using forms):
-        >>> form_data = generate_form_data(model_form=FormClass, name="RANDOM NAME")
+    EXAMPLE 1 (no validators + using forms):
+    >>> form_data = generate_form_data(model_form=FormClass, name="RANDOM NAME")
 
-        >>> form = FormClass(form_data)
-        >>> form.is_valid()
-        True
+    >>> form = FormClass(form_data)
+    >>> form.is_valid()
+    True
 
-        >>> response = self.client.post(reverse('form-create'), data=form_data)
-        >>> response.status_code
-        200
+    >>> response = self.client.post(reverse('form-create'), data=form_data)
+    >>> response.status_code
+    200
 
-        EXAMPLE 2 (with validators + using models):
-        >>> form_data = self.generate_form_data(
-                model=ModelClass,
-                url="/url-here/",  # since urls need opening + closing slashes, you would need to manually set this
-            )
+    EXAMPLE 2 (with validators + using models):
+    >>> form_data = self.generate_form_data(
+            model=ModelClass,
+            url="/url-here/",  # since urls need opening + closing slashes, you would need to manually set this
+        )
 
-        >>> form = FormClass(form_data)
-        >>> form.is_valid()
-        True
+    >>> form = FormClass(form_data)
+    >>> form.is_valid()
+    True
 
-        >>> response = self.client.post(reverse('form-create'), data=form_data)
-        >>> response.status_code
-        200
+    >>> response = self.client.post(reverse('form-create'), data=form_data)
+    >>> response.status_code
+    200
     """
     if model is None and model_form is None:
         raise ValueError('one of these arguments is required: model, model_form')
@@ -60,11 +60,14 @@ def generate_form_data(model=None, model_form=None, **kwargs):
         fields = model_form._meta.fields or []
         exclude = model_form._meta.exclude or []
 
-    data = baker.prepare(model, **kwargs,)
+    data = baker.prepare(
+        model,
+        **kwargs,
+    )
 
     json_data = serializers.serialize('json', [data])
-    json_data = json.loads(json_data)[0]["fields"]
-    json_data = {key: item if item is not None else "" for key, item in json_data.items()}  # replaces None with empty string
+    json_data = json.loads(json_data)[0]['fields']
+    json_data = {key: item if item is not None else '' for key, item in json_data.items()}  # replaces None with empty string
 
     # keep only the fields and exclude exclude
     [json_data.pop(field_name) for field_name in json_data.copy() if fields and field_name not in fields]
@@ -75,28 +78,28 @@ def generate_form_data(model=None, model_form=None, **kwargs):
 
 def model_to_form_data(model, model_form):
     """
-        This generates valid form data that can be used for post requests.
-        Values are dependant on the model instance passed through the model variable.
+    This generates valid form data that can be used for post requests.
+    Values are dependant on the model instance passed through the model variable.
 
-        The only limitations it should have are whatever serializers.serialize() can't serialize into json
+    The only limitations it should have are whatever serializers.serialize() can't serialize into json
 
-        EXAMPLE:
-        >>> instance = Model(var1=1, var2=2, ...)
-        >>> form_data = model_to_form_data(instance, ModelForm)
-        >>> form_data
-        { "var1": 1, "var2": 2 }
+    EXAMPLE:
+    >>> instance = Model(var1=1, var2=2, ...)
+    >>> form_data = model_to_form_data(instance, ModelForm)
+    >>> form_data
+    { "var1": 1, "var2": 2 }
 
-        >>> form = ModelForm(form)
-        >>> form.is_valid()
-        True
+    >>> form = ModelForm(form)
+    >>> form.is_valid()
+    True
     """
     fields = model_form._meta.fields or [field.name for field in model._meta.fields]
     exclude = model_form._meta.exclude or []
 
     json_data = serializers.serialize('json', [model])
-    json_data = json.loads(json_data)[0]["fields"]
+    json_data = json.loads(json_data)[0]['fields']
 
-    json_data = {key: item if item is not None else "" for key, item in json_data.items()}
+    json_data = {key: item if item is not None else '' for key, item in json_data.items()}
     [json_data.pop(field_name) for field_name in json_data.copy() if fields and field_name not in fields]
     [json_data.pop(field_name) for field_name in exclude]
 
@@ -105,21 +108,21 @@ def model_to_form_data(model, model_form):
 
 def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
     """
-        This generates valid form data that can be used for post requests. This has the same limitations as generate_form_data()
-        Values will default to form/model default.
-        kwargs values are equal to any name in the meta fields
+    This generates valid form data that can be used for post requests. This has the same limitations as generate_form_data()
+    Values will default to form/model default.
+    kwargs values are equal to any name in the meta fields
 
-        EXAMPLE 1:
-        >>> formset_data = generate_formset_data(ModelFormset, quantity=5)
-        >>> formset = ModelFormset(formset_data)
-        >>> formset.is_valid()
-        True
+    EXAMPLE 1:
+    >>> formset_data = generate_formset_data(ModelFormset, quantity=5)
+    >>> formset = ModelFormset(formset_data)
+    >>> formset.is_valid()
+    True
 
-        EXAMPLE 2 (using kwargs):
-        >>> formset_data = generate_formset(ModelFormset, quantity=3, name=lambda: random.choice(['name1', 'name2', 'name3']))
-        >>> formset = ModelFormset(formset_data)
-        >>> formset.is_valid()
-        True
+    EXAMPLE 2 (using kwargs):
+    >>> formset_data = generate_formset(ModelFormset, quantity=3, name=lambda: random.choice(['name1', 'name2', 'name3']))
+    >>> formset = ModelFormset(formset_data)
+    >>> formset.is_valid()
+    True
     """
     model = model_formset.model
     form_fields = list(model_formset.form._meta.fields)
@@ -128,7 +131,7 @@ def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
     model_instances = [] if not quantity else baker.prepare(model, _quantity=quantity, **kwargs)
 
     json_data = serializers.serialize('json', model_instances)
-    json_data = [data["fields"] for data in json.loads(json_data)]
+    json_data = [data['fields'] for data in json.loads(json_data)]
 
     # format json data to formset valid data
     for index in range(quantity):
@@ -138,7 +141,7 @@ def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
         form_data = {name: data for name, data in form_data.items() if name in form_fields}
 
         # replaces None with empty string
-        form_data = {name: data if data is not None else "" for name, data in form_data.items()}
+        form_data = {name: data if data is not None else '' for name, data in form_data.items()}
 
         # converts existing fields to formset valid fields
         form_data = {f'{prefix}-{index}-{field}': form_data.pop(field) for field in form_fields}
@@ -157,7 +160,7 @@ def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
     return formset_data
 
 
-class ViewTestUtilsMixin():
+class ViewTestUtilsMixin:
     """
     Utility methods to make cleaner tests for common response assertions.  The base class must
     be a django TestCase.
@@ -172,8 +175,9 @@ class ViewTestUtilsMixin():
         with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
 
         """
-        warnings.warn("Redirection to django admin is now deprecated.\nUse assertRedirectsLogin(self, url_name, *args, **kwargs) instead...",
-                      stacklevel=2)
+        warnings.warn(
+            'Redirection to django admin is now deprecated.\nUse assertRedirectsLogin(self, url_name, *args, **kwargs) instead...', stacklevel=2
+        )
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
             expected_url='{}?next={}'.format('/admin/login/', reverse(url_name, *args, **kwargs)),
@@ -196,20 +200,17 @@ class ViewTestUtilsMixin():
         """
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
-            expected_url=f'{reverse(settings.LOGIN_URL)}?next={reverse(url_name, *args, **kwargs)}'
+            expected_url=f'{reverse(settings.LOGIN_URL)}?next={reverse(url_name, *args, **kwargs)}',
         )
 
     def assertRedirectsLoginURL(self, url_name):
         """
-            assertRedirectsLogin function without reverse() hard coded inside it
+        assertRedirectsLogin function without reverse() hard coded inside it
 
-            Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the login page
-            with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the login page
+        with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
         """
-        self.assertRedirects(
-            response=self.client.get(url_name),
-            expected_url=f'{reverse(settings.LOGIN_URL)}?next={url_name}'
-        )
+        self.assertRedirects(response=self.client.get(url_name), expected_url=f'{reverse(settings.LOGIN_URL)}?next={url_name}')
 
     def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):
         """
@@ -233,20 +234,13 @@ class ViewTestUtilsMixin():
         Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
-        self.assertEqual(
-            response.status_code,
-            200
-        )
+        self.assertEqual(response.status_code, 200)
         return response
 
     def assert200URL(self, url):
-        """ Assert that a GET response succeeded with a status code of 200.
-        """
+        """Assert that a GET response succeeded with a status code of 200."""
         response = self.client.get(url)
-        self.assertEqual(
-            response.status_code,
-            200
-        )
+        self.assertEqual(response.status_code, 200)
 
     def assert302(self, url_name, *args, **kwargs):
         """
@@ -255,10 +249,7 @@ class ViewTestUtilsMixin():
         Provide any url and path parameters as args or kwargs.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
-        self.assertEqual(
-            response.status_code,
-            302
-        )
+        self.assertEqual(response.status_code, 302)
         return response
 
     def assert404(self, url_name, *args, **kwargs):
@@ -269,19 +260,13 @@ class ViewTestUtilsMixin():
         Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
-        self.assertEqual(
-            response.status_code,
-            404
-        )
+        self.assertEqual(response.status_code, 404)
         return response
 
     def assert404URL(self, url):
         """Assert that a GET response fails with a status code of 404."""
         response = self.client.get(url)
-        self.assertEqual(
-            response.status_code,
-            404
-        )
+        self.assertEqual(response.status_code, 404)
 
     def assert403(self, url_name, *args, **kwargs):
         """
@@ -291,43 +276,36 @@ class ViewTestUtilsMixin():
         Returns the response object.
         """
         response = self.client.get(reverse(url_name, *args, **kwargs))
-        self.assertEqual(
-            response.status_code,
-            403
-        )
+        self.assertEqual(response.status_code, 403)
         return response
 
     def get_message_list(self, response):
-        """ Django messages missing from context of redirected views, so get another way
+        """Django messages missing from context of redirected views, so get another way
         https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages
         https://docs.djangoproject.com/en/3.0/ref/contrib/messages/
         """
         return list(response.wsgi_request._messages)
 
     def assertSuccessMessage(self, response):
-        """ Assert that a response, including redirects, provides a single success message
-        """
+        """Assert that a response, including redirects, provides a single success message"""
         message_list = self.get_message_list(response)
         self.assertEqual(len(message_list), 1)
         self.assertEqual(message_list[0].level, messages.SUCCESS)
 
     def assertWarningMessage(self, response):
-        """ Assert that a response, including redirects, provides a single warning message
-        """
+        """Assert that a response, including redirects, provides a single warning message"""
         message_list = self.get_message_list(response)
         self.assertEqual(len(message_list), 1)
         self.assertEqual(message_list[0].level, messages.WARNING)
 
     def assertErrorMessage(self, response):
-        """ Assert that a response, including redirects, provides a single error message
-        """
+        """Assert that a response, including redirects, provides a single error message"""
         message_list = self.get_message_list(response)
         self.assertEqual(len(message_list), 1)
         self.assertEqual(message_list[0].level, messages.ERROR)
 
     def assertInfoMessage(self, response):
-        """ Assert that a response, including redirects, provides a single info message
-        """
+        """Assert that a response, including redirects, provides a single info message"""
         message_list = self.get_message_list(response)
         self.assertEqual(len(message_list), 1)
         self.assertEqual(message_list[0].level, messages.INFO)

@@ -17,7 +17,7 @@ def create_missing_profiles(modeladmin, request, queryset):
             new_profiles.append(user.username)
 
     if new_profiles:
-        msg_str = "New profiles created for: " + str(new_profiles)
+        msg_str = 'New profiles created for: ' + str(new_profiles)
         messages.success(request, msg_str)
 
 
@@ -30,7 +30,7 @@ def migrate_names_to_user_model(modeladmin, request, queryset):
 
         profile.user.save()
 
-    messages.success(request, "Complete")
+    messages.success(request, 'Complete')
 
 
 @admin.register(Profile)
@@ -44,8 +44,10 @@ class ProfileAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):  # us
 
     def get_username(self, obj):
         return obj.user.get_username()
-    get_username.short_description = "Username"
+
+    get_username.short_description = 'Username'
 
     def get_full_name(self, obj):
         return obj.user.get_full_name()
-    get_full_name.short_description = "Full name"
+
+    get_full_name.short_description = 'Full name'

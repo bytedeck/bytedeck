@@ -20,14 +20,16 @@ class PrereqInlineForm(forms.ModelForm):
 
 class PrereqInline(GenericTabularInline):
     model = Prereq
-    ct_field = "parent_content_type"
-    ct_fk_field = "parent_object_id"
-    fk_name = "parent_object"
+    ct_field = 'parent_content_type'
+    ct_fk_field = 'parent_object_id'
+    fk_name = 'parent_object'
     form = PrereqInlineForm
 
     extra = 1
 
-    exclude = ['name', ]
+    exclude = [
+        'name',
+    ]
 
     autocomplete_lookup_fields = {
         'generic': [
@@ -46,8 +48,9 @@ def auto_name_selected_prereqs(modeladmin, request, queryset):
 def recalculate_available_quests_for_all_users(modeladmin, request, queryset):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
     messages.add_message(
-        request, messages.INFO,
-        'Recalculating... this might take a while so I\'m doing it the background. You don\'t need to stick around and can leave this page.'
+        request,
+        messages.INFO,
+        "Recalculating... this might take a while so I'm doing it the background. You don't need to stick around and can leave this page.",
     )
 
 

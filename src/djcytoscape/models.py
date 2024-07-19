@@ -25,19 +25,19 @@ def clean_JSON(dirty_json_str):
     txt = dirty_json_str.strip()
 
     # remove trailing comma
-    if txt[-1] == ",":
+    if txt[-1] == ',':
         txt = txt[:-1]
 
     # remove trailing comma before closing brace or square bracket
-    regex = r"(,)\s*[\]}]"
-    txt = re.sub(regex, "", txt)
+    regex = r'(,)\s*[\]}]'
+    txt = re.sub(regex, '', txt)
 
     # Add enclosing braces if not present
-    if txt[0] != "{":
-        txt = "{" + txt
+    if txt[0] != '{':
+        txt = '{' + txt
 
-    if txt[-1] != "}":
-        txt += "}"
+    if txt[-1] != '}':
+        txt += '}'
 
     # Find unquoted keys and add quotes:
     # https://regex101.com/r/oV0udR/1
@@ -86,42 +86,42 @@ class CytoElementManager(models.Manager):
 
 
 class CytoElement(models.Model):
-    NODES = "nodes"
-    EDGES = "edges"
-    GROUP_CHOICES = ((NODES, "nodes"), (EDGES, "edges"))
+    NODES = 'nodes'
+    EDGES = 'edges'
+    GROUP_CHOICES = ((NODES, 'nodes'), (EDGES, 'edges'))
     # name = models.CharField(max_length=200)
-    scape = models.ForeignKey("CytoScape", on_delete=models.CASCADE)
+    scape = models.ForeignKey('CytoScape', on_delete=models.CASCADE)
     selector_id = models.CharField(
         max_length=16, blank=True, null=True, help_text="unique id in the form of 'model-#' where the model = Quest (etc) and # = object id."
     )
     group = models.CharField(max_length=6, choices=GROUP_CHOICES, default=NODES)
     # TODO: make a callable for limit choices to, so that limited to nodes within the same scape
     data_parent = models.ForeignKey(
-        "self",
+        'self',
         blank=True,
         null=True,
-        related_name="parents",
-        limit_choices_to={"group": NODES},
-        help_text="indicates the compound node parent; blank/null => no parent",
+        related_name='parents',
+        limit_choices_to={'group': NODES},
+        help_text='indicates the compound node parent; blank/null => no parent',
         on_delete=models.CASCADE,
     )
     data_source = models.ForeignKey(
-        "self", on_delete=models.CASCADE, blank=True, null=True, related_name="sources", help_text="edge comes from this node"
+        'self', on_delete=models.CASCADE, blank=True, null=True, related_name='sources', help_text='edge comes from this node'
     )
     data_target = models.ForeignKey(
-        "self", on_delete=models.CASCADE, blank=True, null=True, related_name="targets", help_text="edge goes to this node"
+        'self', on_delete=models.CASCADE, blank=True, null=True, related_name='targets', help_text='edge goes to this node'
     )
     data_dict = models.TextField(blank=True, null=True, help_text="python dictionary stored as string: {'key1':'value1', 'key2':'value2'}")
     selected = models.BooleanField(default=False)
     selectable = models.BooleanField(default=True)
     locked = models.BooleanField(default=False)
     grabbable = models.BooleanField(default=True)
-    classes = models.CharField(max_length=250, blank=True, null=True, help_text="a space separated list of css class names for the element")
-    id_styles = models.TextField(blank=True, null=True, help_text="styles specific to this node (using id selector)")
-    label = models.CharField(max_length=50, blank=True, null=True, help_text="if present, will be used as node label instead of id")
-    min_len = models.IntegerField(default=1, help_text="number of ranks to keep between the source and target of the edge")
+    classes = models.CharField(max_length=250, blank=True, null=True, help_text='a space separated list of css class names for the element')
+    id_styles = models.TextField(blank=True, null=True, help_text='styles specific to this node (using id selector)')
+    label = models.CharField(max_length=50, blank=True, null=True, help_text='if present, will be used as node label instead of id')
+    min_len = models.IntegerField(default=1, help_text='number of ranks to keep between the source and target of the edge')
     href = models.URLField(blank=True, null=True)
-    is_transition = models.BooleanField(default=False, help_text="Whether this node transitions to a new map")
+    is_transition = models.BooleanField(default=False, help_text='Whether this node transitions to a new map')
     objects = CytoElementManager()
 
     class Meta:
@@ -131,13 +131,13 @@ class CytoElement(models.Model):
 
         # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before
         # other nodes within that comound node (campaign)
-        ordering = ["-group", models.F("data_parent").asc(nulls_first=True)]
+        ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
 
     def __str__(self):
         if self.group == self.NODES:
-            return str(self.id) + ": " + str(self.label)
+            return str(self.id) + ': ' + str(self.label)
         else:
-            return str(self.id) + ": " + str(self.data_source.id) + "->" + str(self.data_target.id)
+            return str(self.id) + ': ' + str(self.data_source.id) + '->' + str(self.data_target.id)
 
     def has_parent(self):
         return self.data_parent is not None
@@ -167,32 +167,32 @@ class CytoElement(models.Model):
             "classes": "Badge link"
         }
         """
-        data = {"id": self.id}
+        data = {'id': self.id}
 
         if self.label:
-            data["label"] = self.label
+            data['label'] = self.label
 
         if self.has_parent():
-            data["parent"] = self.data_parent.id
+            data['parent'] = self.data_parent.id
 
         elif self.is_edge():
-            data["source"] = self.data_source.id
-            data["target"] = self.data_target.id
+            data['source'] = self.data_source.id
+            data['target'] = self.data_target.id
             if self.min_len and self.min_len != 1:  # 1 is default, not needed:
-                data["minLen"] = str(self.min_len)
+                data['minLen'] = str(self.min_len)
             # json_str += "        edgeWeight: 1, \n"  # '" + str(self.edge_weight) + "',\n"
         if self.href:
-            data["href"] = self.href
+            data['href'] = self.href
         if self.selector_id:
             # selector_id will be something like "Quest: 342"
-            key = self.selector_id.split(":")[0].strip()
-            value = self.selector_id.split(":")[1].strip()  # this is the pk/id of the quest or badge
+            key = self.selector_id.split(':')[0].strip()
+            value = self.selector_id.split(':')[1].strip()  # this is the pk/id of the quest or badge
             data[key] = int(value)
 
-        json_dict = {"data": data}
+        json_dict = {'data': data}
 
         if self.classes:
-            json_dict["classes"] = self.classes
+            json_dict['classes'] = self.classes
 
         return json_dict
 
@@ -203,8 +203,8 @@ class CytoElement(models.Model):
         """If this obj is a transition node (to a new map), convert it."""
         ct = ContentType.objects.get_for_model(obj)
 
-        self.href = reverse("maps:quest_map_interlink", args=[ct.id, obj.id, scape.id])
-        self.classes = "link child-map"
+        self.href = reverse('maps:quest_map_interlink', args=[ct.id, obj.id, scape.id])
+        self.classes = 'link child-map'
         self.is_transition = True
         self.save()
 
@@ -216,15 +216,15 @@ class CytoElement(models.Model):
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.id)
+        return str(type(obj).__name__) + ': ' + str(obj.id)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):
         if styles:
             json_dict = {}
-            json_dict["selector"] = selector
+            json_dict['selector'] = selector
             styles = clean_JSON(styles)
-            json_dict["style"] = json.loads(styles)
+            json_dict['style'] = json.loads(styles)
             return json_dict
         else:
             return None
@@ -254,12 +254,12 @@ class TempCampaign:
         self.nodes = []  # a list of TempCampaignNodes (representing quests) in the Campaign
 
     def __str__(self):
-        tmp_str = "Parent: " + str(self.node_id)
+        tmp_str = 'Parent: ' + str(self.node_id)
         if self.nodes:
             for node in self.nodes:
-                tmp_str += " Child:" + str(node)
+                tmp_str += ' Child:' + str(node)
         else:
-            tmp_str += " No children"
+            tmp_str += ' No children'
         return tmp_str
 
     def add_node(self, node_id, prereq_node_id):
@@ -372,8 +372,8 @@ class CytoScapeManager(models.Manager):
     def generate_random_tree_scape(self, name, size=100):
         scape = CytoScape(
             name=name,
-            layout_name="breadthfirst",
-            layout_options="directed: true, spacingFactor: " + str(1.75 * 30 / size),
+            layout_name='breadthfirst',
+            layout_options='directed: true, spacingFactor: ' + str(1.75 * 30 / size),
         )
         scape.save()
 
@@ -458,14 +458,14 @@ class CytoScapeManager(models.Manager):
         related_ids = CytoElement.objects.filter(
             group=CytoElement.NODES,
             selector_id=selector_id,
-        ).values_list("scape__id", flat=True)
+        ).values_list('scape__id', flat=True)
 
         return self.get_queryset().filter(id__in=related_ids)
 
 
 class CytoScape(models.Model):
     ALLOWED_INITIAL_CONTENT_TYPES = (
-        models.Q(app_label="quest_manager", model="quest") | models.Q(app_label="badges", model="badge") | models.Q(app_label="courses", model="rank")
+        models.Q(app_label='quest_manager', model='quest') | models.Q(app_label='badges', model='badge') | models.Q(app_label='courses', model='rank')
     )
 
     name = models.CharField(max_length=250)
@@ -475,37 +475,37 @@ class CytoScape(models.Model):
     # The initial object
     initial_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, limit_choices_to=ALLOWED_INITIAL_CONTENT_TYPES)
     initial_object_id = models.PositiveIntegerField(
-        help_text="The id of the object for this content type. "
-        "You may need to look this up.  E.g. If the initial type "
+        help_text='The id of the object for this content type. '
+        'You may need to look this up.  E.g. If the initial type '
         "is a quest, then the quest's id goes here."
     )
-    initial_content_object = GenericForeignKey("initial_content_type", "initial_object_id")
+    initial_content_object = GenericForeignKey('initial_content_type', 'initial_object_id')
 
     parent_scape = models.ForeignKey(
-        "self", blank=True, null=True, help_text="The map/scape preceding this one, so it can be linked back to", on_delete=models.CASCADE
+        'self', blank=True, null=True, help_text='The map/scape preceding this one, so it can be linked back to', on_delete=models.CASCADE
     )
     is_the_primary_scape = models.BooleanField(
-        default=False, help_text="There can only be one primary map/scape. Making this True " "will change all other map/scapes will be set to False."
+        default=False, help_text='There can only be one primary map/scape. Making this True ' 'will change all other map/scapes will be set to False.'
     )
     last_regeneration = models.DateTimeField(default=timezone.now)
     autobreak = models.BooleanField(
-        default=True, help_text="Stop the map when reaching a quest with a ~ or a badge with a *." "If this is unchecked, the map is gonna be CRAZY!"
+        default=True, help_text='Stop the map when reaching a quest with a ~ or a badge with a *.' 'If this is unchecked, the map is gonna be CRAZY!'
     )
     elements_json = models.TextField(
         blank=True,
         null=True,
-        help_text="A cache of the json representing all elements in this scape.  Updated when the map is recalculated.",
+        help_text='A cache of the json representing all elements in this scape.  Updated when the map is recalculated.',
     )
     class_styles_json = models.TextField(
         blank=True,
         null=True,
-        help_text="A cache of the json representing element-specific styles in this scape.  Updated when the map is recalculated.",
+        help_text='A cache of the json representing element-specific styles in this scape.  Updated when the map is recalculated.',
     )
 
     class Meta:
-        unique_together = (("initial_content_type", "initial_object_id"),)
-        verbose_name = "Quest Map"
-        ordering = ["name"]
+        unique_together = (('initial_content_type', 'initial_object_id'),)
+        verbose_name = 'Quest Map'
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -526,7 +526,7 @@ class CytoScape(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse("djcytoscape:quest_map", kwargs={"scape_id": self.id})
+        return reverse('djcytoscape:quest_map', kwargs={'scape_id': self.id})
 
     objects = CytoScapeManager()
 
@@ -535,7 +535,7 @@ class CytoScape(models.Model):
 
     def elements(self):
         elements = self.cytoelement_set.all()
-        return elements.select_related("data_parent", "data_source", "data_target")
+        return elements.select_related('data_parent', 'data_source', 'data_target')
 
     def elements_dict(self):
         elements = self.elements()
@@ -546,8 +546,8 @@ class CytoScape(models.Model):
         edges_list = [edge.json_dict() for edge in edges]
 
         elements_dict = {
-            "nodes": nodes_list,
-            "edges": edges_list,
+            'nodes': nodes_list,
+            'edges': edges_list,
         }
         return elements_dict
 
@@ -558,7 +558,7 @@ class CytoScape(models.Model):
         ls = []
         for element in self.elements():
             if element.id_styles:
-                ls.append(element.get_selector_styles_json_dict("#" + str(element.id), element.id_styles))
+                ls.append(element.get_selector_styles_json_dict('#' + str(element.id), element.id_styles))
         return ls
 
     def generate_class_styles_json(self):
@@ -573,31 +573,31 @@ class CytoScape(models.Model):
     def generate_label(obj):
         # set max label length in characters
         # object labels with large xp values require a shorter name length so all values when combined comply with max label length
-        if hasattr(obj, "xp"):
+        if hasattr(obj, 'xp'):
             max_len = 46 - len(str(obj.xp))
         else:
             max_len = 44
 
-        post = ""
-        pre = ""
+        post = ''
+        pre = ''
         if type(obj) is Badge:
-            pre = "Badge: "
+            pre = 'Badge: '
         elif type(obj) is Rank:
-            pre = "Rank: "
+            pre = 'Rank: '
 
         title = pre + str(obj)
         # shorten the end
         if len(title) > max_len:
-            title = title[: (max_len - 3)] + "..."  # + title[-int(l/2-2):]
+            title = title[: (max_len - 3)] + '...'  # + title[-int(l/2-2):]
 
-        if hasattr(obj, "xp"):
-            if hasattr(obj, "xp_can_be_entered_by_students") and obj.xp_can_be_entered_by_students:
-                plus = "+"
+        if hasattr(obj, 'xp'):
+            if hasattr(obj, 'xp_can_be_entered_by_students') and obj.xp_can_be_entered_by_students:
+                plus = '+'
             else:
-                plus = ""
-            post = f" ({str(obj.xp)}{plus})"
+                plus = ''
+            post = f' ({str(obj.xp)}{plus})'
         elif type(obj) is Category:
-            post = f" ({str(obj.xp_sum())} XP)"
+            post = f' ({str(obj.xp_sum())} XP)'
 
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
         #     if obj.max_repeats != 0:
@@ -617,7 +617,7 @@ class CytoScape(models.Model):
         try:
             # latest normally used with dates, but actually works with other fields too!
             # return CytoElement.objects.all_for_campaign(self, parent_node).latest('id')
-            qs = CytoElement.objects.all_for_campaign(self, parent_node).order_by("-id")
+            qs = CytoElement.objects.all_for_campaign(self, parent_node).order_by('-id')
             return qs[offset]
         except self.DoesNotExist:
             return None
@@ -634,9 +634,9 @@ class CytoScape(models.Model):
             parent_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
-                label=f"{self.parent_scape.name} Quest Map",
-                href=reverse("maps:quest_map", args=[self.parent_scape.id]),
-                classes="link parent-map",
+                label=f'{self.parent_scape.name} Quest Map',
+                href=reverse('maps:quest_map', args=[self.parent_scape.id]),
+                classes='link parent-map',
             )
 
             # link them together with an edge
@@ -657,16 +657,16 @@ class CytoScape(models.Model):
         child_map_qs = CytoScape.objects.filter(initial_content_type=ct.id, initial_object_id=obj.id)
         if child_map_qs.exists():
             child_map = child_map_qs[0]
-            label = f"{child_map.name} Map"
+            label = f'{child_map.name} Map'
         else:
-            label = "The Void"
+            label = 'The Void'
 
         child_map_node, _ = CytoElement.objects.get_or_create(
             scape=self,
             group=CytoElement.NODES,
             label=label,
-            href=reverse("maps:quest_map_interlink", args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
-            classes="link child-map",
+            href=reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
+            classes='link child-map',
         )
 
         # link them together with an edge
@@ -683,14 +683,14 @@ class CytoScape(models.Model):
         # If node node doesn't exist already, create a new one
 
         # check for an icon
-        if hasattr(obj, "get_icon_url"):
+        if hasattr(obj, 'get_icon_url'):
             img_url = obj.get_icon_url()
         else:
-            img_url = "none"
+            img_url = 'none'
 
         # check for map transition
         map_transition = False
-        if hasattr(obj, "map_transition"):
+        if hasattr(obj, 'map_transition'):
             map_transition = obj.map_transition
 
         new_node, created = CytoElement.objects.get_or_create(
@@ -699,10 +699,10 @@ class CytoScape(models.Model):
             selector_id=CytoElement.generate_selector_id(obj),
             label=self.generate_label(obj),
             defaults={
-                "id_styles": "'background-image': '" + img_url + "'",
-                "classes": type(obj).__name__,
-                "href": obj.get_absolute_url(),
-                "is_transition": map_transition,
+                'id_styles': "'background-image': '" + img_url + "'",
+                'classes': type(obj).__name__,
+                'href': obj.get_absolute_url(),
+                'is_transition': map_transition,
             },
         )
 
@@ -743,7 +743,7 @@ class CytoScape(models.Model):
         campaign_created = False
 
         # Check if the obj has a campaign attribute, currently only Quest objects have this, but obj could be a Badge or other prereq model
-        if hasattr(obj, "campaign") and obj.campaign is not None:
+        if hasattr(obj, 'campaign') and obj.campaign is not None:
             campaign = obj.campaign
 
             # Create a node for this campaign (or get it if it already exists)
@@ -751,7 +751,7 @@ class CytoScape(models.Model):
                 scape=self,
                 group=CytoElement.NODES,
                 label=CytoScape.generate_label(obj.campaign),
-                classes="campaign",
+                classes='campaign',
                 # defaults={'attribute': value},
             )
 
@@ -798,7 +798,7 @@ class CytoScape(models.Model):
                             data_source_id=current_node.id,
                             data_target_id=next_node.id,
                             defaults={
-                                "classes": "hidden",
+                                'classes': 'hidden',
                             },
                         )
 
@@ -828,7 +828,7 @@ class CytoScape(models.Model):
                         data_source_id=prereq_node_id,
                         data_target_id=first_node.id,
                         defaults={
-                            "classes": "hidden",
+                            'classes': 'hidden',
                         },
                     )
 
@@ -861,7 +861,7 @@ class CytoScape(models.Model):
                             data_source_id=last_node.id,
                             data_target_id=reliant_node_id,
                             defaults={
-                                "classes": "hidden",
+                                'classes': 'hidden',
                             },
                             # defaults={'attribute': value},
                         )
@@ -875,7 +875,7 @@ class CytoScape(models.Model):
                     data_source_id=last_node.id,
                     data_target_id=reliant_node_id,
                     defaults={
-                        "classes": "hidden",
+                        'classes': 'hidden',
                     },
                     # defaults={'attribute': value},
                 )
@@ -926,7 +926,7 @@ class CytoScape(models.Model):
             # add a class to alternate prerequisites edges so they can be styled differently if desired
             if obj.has_or_prereq() or obj.has_inverted_prereq():
                 # add "alternate" class
-                defaults = {"classes": "complicated-prereqs"}
+                defaults = {'classes': 'complicated-prereqs'}
             else:
                 defaults = {}
 
@@ -940,12 +940,12 @@ class CytoScape(models.Model):
             )
 
             # If repeatable, also add circular edge
-            if hasattr(obj, "max_repeats"):
+            if hasattr(obj, 'max_repeats'):
                 if obj.max_repeats != 0:
                     if obj.max_repeats < 0:
-                        label = "∞"
+                        label = '∞'
                     else:
-                        label = "x" + str(obj.max_repeats)
+                        label = 'x' + str(obj.max_repeats)
 
                     CytoElement.objects.get_or_create(
                         scape=self,
@@ -953,8 +953,8 @@ class CytoScape(models.Model):
                         data_source=target_node,
                         data_target=target_node,
                         defaults={
-                            "label": label,
-                            "classes": "repeat-edge",
+                            'label': label,
+                            'classes': 'repeat-edge',
                         },
                     )
 
@@ -971,7 +971,7 @@ class CytoScape(models.Model):
             if node.is_transition:
                 return True
             else:
-                return node.label[0] == "~" or "*" in node.label
+                return node.label[0] == '~' or '*' in node.label
         else:
             return False
 

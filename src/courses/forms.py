@@ -12,8 +12,11 @@ from siteconfig.models import SiteConfig
 class MarkRangeForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['courses'].help_text = MarkRange._meta.get_field('courses').help_text + " Hold down “Control”, or “Command” on a Mac, to \
-            select more than one."
+        self.fields['courses'].help_text = (
+            MarkRange._meta.get_field('courses').help_text
+            + ' Hold down “Control”, or “Command” on a Mac, to \
+            select more than one.'
+        )
         self.helper = FormHelper()
         self.helper.layout = Layout(
             Div(
@@ -22,18 +25,18 @@ class MarkRangeForm(forms.ModelForm):
                 'active',
                 Accordion(
                     AccordionGroup(
-                        "Advanced",
+                        'Advanced',
                         'color_light',
                         'color_dark',
                         'days',
                         'courses',
                         active=False,
-                        template="crispy_forms/bootstrap3/accordion-group.html"
+                        template='crispy_forms/bootstrap3/accordion-group.html',
                     ),
-                )
+                ),
             ),
             HTML('<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/>'),
-            HTML('<a href="{% url "courses:markranges" %}" role="button" class="btn btn-danger">Cancel</a>')
+            HTML('<a href="{% url "courses:markranges" %}" role="button" class="btn btn-danger">Cancel</a>'),
         )
 
     class Meta:
@@ -93,19 +96,18 @@ class CourseStudentForm(forms.ModelForm):
     class Meta:
         model = CourseStudent
         fields = ['semester', 'block', 'course']
+
     #         exclude = ['user', 'active']
     #         # widgets = {'user': forms.HiddenInput()}
 
 
 class CourseStudentStaffForm(CourseStudentForm):
-
     class Meta:
         model = CourseStudent
         exclude = ['user', 'active', 'grade_fk']
 
 
 class SemesterForm(forms.ModelForm):
-
     class Meta:
         model = Semester
         fields = ('name', 'first_day', 'last_day')
@@ -123,23 +125,29 @@ class SemesterForm(forms.ModelForm):
         self.helper.form_tag = False
 
         self.helper.layout = Layout(
-            Div('name', css_class='col-xs-4',),
-            Div('first_day', css_class='col-xs-4',),
-            Div('last_day', css_class='col-xs-4',),
+            Div(
+                'name',
+                css_class='col-xs-4',
+            ),
+            Div(
+                'first_day',
+                css_class='col-xs-4',
+            ),
+            Div(
+                'last_day',
+                css_class='col-xs-4',
+            ),
         )
 
 
 class ExcludedDateForm(forms.ModelForm):
-
     class Meta:
         model = ExcludedDate
         fields = ['date', 'label']
         widgets = {
             'date': DateTimePickerInput(format='%Y-%m-%d'),
         }
-        help_texts = {
-            'label': None
-        }
+        help_texts = {'label': None}
 
     def __init__(self, *args, **kwargs):
         self.semester_instance = kwargs.pop('semester')
@@ -170,8 +178,14 @@ class ExcludedDateFormsetHelper(FormHelper):
             'id',
             'DELETE',
             # form vars
-            Div('date', css_class='col-xs-4 col-sm-3',),
-            Div('label', css_class='col-xs-6 col-sm-4',),
+            Div(
+                'date',
+                css_class='col-xs-4 col-sm-3',
+            ),
+            Div(
+                'label',
+                css_class='col-xs-6 col-sm-4',
+            ),
         )
 
 
@@ -185,14 +199,10 @@ ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=Exclud
 
 
 class BlockForm(forms.ModelForm):
-
     class Meta:
         model = Block
         fields = '__all__'
-        widgets = {
-            'start_time': TimePickerInput,
-            'end_time': TimePickerInput
-        }
+        widgets = {'start_time': TimePickerInput, 'end_time': TimePickerInput}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

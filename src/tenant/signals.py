@@ -12,7 +12,7 @@ def initialize_tenant_with_data(sender, tenant, **kwargs):
 
 
 def tenant_save_callback(sender, instance, **kwargs):
-    """ Create one tenant domain """
+    """Create one tenant domain"""
 
     # Already have a domain so no further action required
     if instance.domains.exists():

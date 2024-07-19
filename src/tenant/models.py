@@ -17,23 +17,23 @@ User = get_user_model()
 
 
 def check_tenant_name(name):
-    """ A tenant's name is used for both the schema_name and as the subdomain in the
+    """A tenant's name is used for both the schema_name and as the subdomain in the
     tenant's domain_url field, so {name} it must be valid for a schema and a url.
     """
     if not re.match(re.compile(r'^[a-z]'), name):
-        raise ValidationError("The name must begin with a lower-case letter.")
+        raise ValidationError('The name must begin with a lower-case letter.')
 
     if re.search(re.compile(r'[A-Z]'), name):
-        raise ValidationError("The name cannot contain capital letters.")
+        raise ValidationError('The name cannot contain capital letters.')
 
     if re.search(re.compile(r'-$'), name):
-        raise ValidationError("The name cannot end in a dash.")
+        raise ValidationError('The name cannot end in a dash.')
 
     if re.search(re.compile(r'--'), name):
-        raise ValidationError("The name cannot have two consecutive dashes.")
+        raise ValidationError('The name cannot have two consecutive dashes.')
 
     if not re.match(re.compile(r'^([a-z][a-z0-9]*(\-?[a-z0-9]+)*)$'), name):
-        raise ValidationError("Invalid string used for the tenant name.")
+        raise ValidationError('Invalid string used for the tenant name.')
 
 
 def default_trial_end_date():
@@ -56,76 +56,74 @@ class Tenant(TenantMixin):
         max_length=62,  # max length of a postgres schema name is 62
         unique=True,
         validators=[check_tenant_name],
-        help_text="The name of your deck, for example the name `example` would give you the site: `example.bytedeck.com` \n\
+        help_text='The name of your deck, for example the name `example` would give you the site: `example.bytedeck.com` \n\
         The name may only include lowercase letters, numbers, and dashes. \
-        It must start with a letter, and may not end in a dash nor include consecutive dashes"
+        It must start with a letter, and may not end in a dash nor include consecutive dashes',
     )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
     owner_full_name = models.CharField(
-        max_length=255, blank=True, null=True,
+        max_length=255,
+        blank=True,
+        null=True,
         help_text="DEPRECATED: the full name of the Deck Owner (set in each deck's Site Config) will be used. \
         This field will be removed in a future update",
     )
     owner_email = models.EmailField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="DEPRECATED: the verified email address of the Deck Owner (set in each deck's Site Config) will be used. \
         This field will be removed in a future update",
     )
-    max_active_users = models.SmallIntegerField(
-        default=5,
-        help_text="The maximum number of users that can be active on this deck; -1 = unlimited."
-    )
+    max_active_users = models.SmallIntegerField(default=5, help_text='The maximum number of users that can be active on this deck; -1 = unlimited.')
     max_quests = models.SmallIntegerField(
         default=100,
-        help_text="The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited."
+        help_text='The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited.',
     )
     trial_end_date = models.DateField(
         null=True,
         default=default_trial_end_date,
-        help_text="The date when the trial period ends. Blank or a date in the past means the deck is not in trial mode."
+        help_text='The date when the trial period ends. Blank or a date in the past means the deck is not in trial mode.',
     )
     paid_until = models.DateField(
-        blank=True, null=True,
-        help_text="If the deck is not in trial mode, then the deck will become inaccessable to students after this date."
+        blank=True, null=True, help_text='If the deck is not in trial mode, then the deck will become inaccessable to students after this date.'
     )
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys
     # instead they have to be found within the tenant's context / schema
     owner_full_name_cached = models.CharField(
-        max_length=255, blank=True, null=True, editable=False,
-        help_text="This is a cached field: the full name of the Deck Owner (set in each deck's Site Config) will be used."
+        max_length=255,
+        blank=True,
+        null=True,
+        editable=False,
+        help_text="This is a cached field: the full name of the Deck Owner (set in each deck's Site Config) will be used.",
     )
     owner_email_cached = models.EmailField(
-        null=True, blank=True, editable=False,
-        help_text="This is a cached field: the verified email address of the Deck Owner (set in each deck's Site Config) will be used."
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="This is a cached field: the verified email address of the Deck Owner (set in each deck's Site Config) will be used.",
     )
 
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
-        help_text="This is a cached field: the number of staff users, plus the number student users currently \
-            registered in a course in an active semester."
+        help_text='This is a cached field: the number of staff users, plus the number student users currently \
+            registered in a course in an active semester.',
     )
 
     total_user_count = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="This is a cached field: all users, including currently unregistered and archived users."
+        default=0, help_text='This is a cached field: all users, including currently unregistered and archived users.'
     )
 
-    quest_count = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="This is a cached field: the number of non-archived quests in the deck"
-    )
+    quest_count = models.PositiveSmallIntegerField(default=0, help_text='This is a cached field: the number of non-archived quests in the deck')
 
     last_staff_login = models.DateTimeField(
-        blank=True, null=True,
-        help_text="This is a cached field: the last time a staff user logged in to the deck."
+        blank=True, null=True, help_text='This is a cached field: the last time a staff user logged in to the deck.'
     )
 
     google_signon_enabled = models.BooleanField(
-        default=False,
-        help_text="This is a cached field: Whether Google signon has been enabled for this deck."
+        default=False, help_text='This is a cached field: Whether Google signon has been enabled for this deck.'
     )
     # END CALCULATED / CACHED FIELDS ##################################
 
@@ -134,6 +132,7 @@ class Tenant(TenantMixin):
 
     def save(self, *args, **kwargs):
         from tenant.utils import generate_schema_name
+
         if not self.schema_name:
             self.schema_name = generate_schema_name(self.name)
 
@@ -237,14 +236,15 @@ class Tenant(TenantMixin):
 
         domain_url = self.get_primary_domain().domain
         if 'localhost' in domain_url:  # Development
-            return f"http://{domain_url}:8000"
+            return f'http://{domain_url}:8000'
         else:  # Production
-            return f"https://{domain_url}"
+            return f'https://{domain_url}'
 
     @classmethod
     def get(cls):
-        """ Used to access the Tenant object for the current connection """
+        """Used to access the Tenant object for the current connection"""
         from django.db import connection
+
         return Tenant.objects.get(schema_name=connection.schema_name)
 
 

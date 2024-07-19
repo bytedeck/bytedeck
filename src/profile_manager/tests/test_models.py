@@ -14,7 +14,6 @@ User = get_user_model()
 
 
 class ProfileTestModel(TenantTestCase):
-
     def setUp(self):
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.user = baker.make(User)
@@ -36,15 +35,15 @@ class ProfileTestModel(TenantTestCase):
         self.assertEqual(str(self.user.profile), self.user.username)
 
     def test_profile_deletion(self):
-        """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too. """
+        """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too."""
         Profile.objects.filter(pk=self.profile.pk).delete()
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 
     def test_profile_alias_clipped(self):
         max_len = 16
-        self.assertEqual(self.profile.alias_clipped(), "-")
+        self.assertEqual(self.profile.alias_clipped(), '-')
 
-        self.profile.alias = "Short Alias"
+        self.profile.alias = 'Short Alias'
         self.assertEqual(self.profile.alias_clipped(), self.profile.alias)
 
         self.profile.alias = "Super duper duper long alias that's super duper long"
@@ -101,10 +100,7 @@ class ProfileTestModel(TenantTestCase):
         self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration)])
         # add a second
         course_registration2 = self.create_active_course_registration()
-        self.assertQuerysetEqual(
-            self.profile.current_courses(),
-            [repr(course_registration), repr(course_registration2)]
-        )
+        self.assertQuerysetEqual(self.profile.current_courses(), [repr(course_registration), repr(course_registration2)])
 
     def test_profile_has_current_course(self):
         self.assertFalse(self.profile.has_current_course)
@@ -151,8 +147,8 @@ class ProfileTestModel(TenantTestCase):
         # print(self.profile.current_teachers()) # why is this empty?!?!
 
     def test_rank(self):
-        """ By default a new user has a rank"""
-        default_starting_rank = "Digital Noob"
+        """By default a new user has a rank"""
+        default_starting_rank = 'Digital Noob'
         self.assertEqual(self.profile.rank().name, default_starting_rank)
 
     def test_mark__no_courses(self):
@@ -173,7 +169,7 @@ class ProfileTestModel(TenantTestCase):
         mock_coursestudent1 = Mock()
         mock_coursestudent1.calc_mark.return_value = 87
         # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
+        mock_current_courses.return_value = [mock_coursestudent1, 'Another Course']
         self.assertEqual(self.profile.mark(), 87 / 2)
 
     @patch('profile_manager.models.Profile.current_courses')
@@ -191,7 +187,7 @@ class ProfileTestModel(TenantTestCase):
         self.assertEqual(self.profile.mark(), 100)
 
         # Add a second course, should not be capped anymore
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
+        mock_current_courses.return_value = [mock_coursestudent1, 'Another Course']
         self.assertEqual(self.profile.mark(), 125 / 2)
 
         # What if both are over 100?
@@ -204,7 +200,6 @@ class ProfileTestModel(TenantTestCase):
 
 
 class SmartListTests(SimpleTestCase):
-
     def test_smart_list_empty(self):
         self.assertEqual(smart_list(''), [])
         self.assertEqual(smart_list([]), [])

@@ -29,14 +29,13 @@ class TaggitSelect2WidgetForm(forms.Form):
 
 
 class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
-        Tag.objects.create(name="test-tag")
+        Tag.objects.create(name='test-tag')
 
     def test_autocomplete_view(self):
-        """ Make sure our custom django-select2 view for tag widget is accessible"""
+        """Make sure our custom django-select2 view for tag widget is accessible"""
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
         assert form.as_p()
@@ -45,7 +44,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_autocomplete_view__unauthenticated(self):
-        """ The view should return an empty json response if the user is not authenticated """
+        """The view should return an empty json response if the user is not authenticated"""
         self.client.logout()
 
         url = reverse('tags:auto-json')
@@ -56,7 +55,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.json()['results'], [])
 
     def test_autocomplete_view__authenticated(self):
-        """ The view should return tags in json results if the user is authenticated """
+        """The view should return tags in json results if the user is authenticated"""
         self.client.force_login(baker.make('User'))
 
         url = reverse('tags:auto-json')
@@ -71,15 +70,14 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
-        self.test_password = "password"
+        self.test_password = 'password'
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student = User.objects.create_user('test_student', password=self.test_password)
 
-        self.tag = Tag.objects.create(name="test-tag")
+        self.tag = Tag.objects.create(name='test-tag')
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""
@@ -144,8 +142,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_DetailView___staff_view(self):
         """
-            Make sure detail view displays related quest/badges correctly.
-            Staff should have access to all quest and badges tagged to self.tag
+        Make sure detail view displays related quest/badges correctly.
+        Staff should have access to all quest and badges tagged to self.tag
         """
         # generate quests + badges and link to tag
         quest_set = baker.make('quest_manager.quest', _quantity=5)
@@ -162,8 +160,8 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_DetailView__student_view(self):
         """
-            Make sure detail view displays related quest/badges correctly.
-            Students should only have access to quest and badges they have completed/earned
+        Make sure detail view displays related quest/badges correctly.
+        Students should only have access to quest and badges they have completed/earned
         """
         # generate quests + badges and link to tag
         quest_set = baker.make('quest_manager.quest', xp=1, _quantity=5)
@@ -201,7 +199,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, self.test_student.username)
 
     def test_DetailView__student_view_ordinal(self):
-        ''' test if detail view list the ordinal quests correctly '''
+        """test if detail view list the ordinal quests correctly"""
         num_subs = 5
         unrelated_quest = baker.make('quest_manager.quest', xp=1)
         repeatable_quest = baker.make('quest_manager.quest', name='Repeatable Quest', max_repeats=-1, xp=1)
@@ -226,7 +224,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
                 is_completed=True,
                 is_approved=True,
                 semester=SiteConfig().get().active_semester,
-                ordinal=i
+                ordinal=i,
             )
 
         self.client.force_login(self.test_student)

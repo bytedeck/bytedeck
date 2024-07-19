@@ -25,28 +25,28 @@ class TenantFormTest(TenantTestCase):
 
         # second case, forgot to enter "first" and "last" names
         data = {
-            "name": "default",
-            "email": "john.doe@example.com",
+            'name': 'default',
+            'email': 'john.doe@example.com',
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
         # third case, incorrect email address
         data = {
-            "name": "default",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example",  # incorrect email address
+            'name': 'default',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example',  # incorrect email address
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
         # final case, submit complete (full) form
         data = {
-            "name": "default",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
+            'name': 'default',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example.com',
         }
         form = TenantForm(data)
         self.assertTrue(form.is_valid())
@@ -55,39 +55,40 @@ class TenantFormTest(TenantTestCase):
         """
         Test if form fields has set correct `max_length` property.
         """
+
         def generate_random_string(length=128):
-            return "".join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+            return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
 
         # first case, using `first_name` longer than `User.first_name` can accept,
         # should fail with form error
         data = {
-            "first_name": generate_random_string(User._meta.get_field("first_name").max_length + 1),
+            'first_name': generate_random_string(User._meta.get_field('first_name').max_length + 1),
         }
         form = TenantForm(data)
-        self.assertEqual(form.errors["first_name"], ["Ensure this value has at most 150 characters (it has 151)."])
+        self.assertEqual(form.errors['first_name'], ['Ensure this value has at most 150 characters (it has 151).'])
 
         # second case, using `last_name` longer than `User.last_name` can accept,
         # should fail with form error
         data = {
-            "last_name": generate_random_string(User._meta.get_field("last_name").max_length + 1),
+            'last_name': generate_random_string(User._meta.get_field('last_name').max_length + 1),
         }
         form = TenantForm(data)
-        self.assertEqual(form.errors["last_name"], ["Ensure this value has at most 150 characters (it has 151)."])
+        self.assertEqual(form.errors['last_name'], ['Ensure this value has at most 150 characters (it has 151).'])
 
         # third case, using `email` longer than `User.email` can accept,
         # should fail with form error
         data = {
-            "email": generate_random_string(User._meta.get_field("email").max_length) + "@example.com",
+            'email': generate_random_string(User._meta.get_field('email').max_length) + '@example.com',
         }
         form = TenantForm(data)
-        self.assertEqual(form.errors["email"], ["Ensure this value has at most 254 characters (it has 266)."])
+        self.assertEqual(form.errors['email'], ['Ensure this value has at most 254 characters (it has 266).'])
 
         # final case, submit complete (full) form
         data = {
-            "name": "default",
-            "first_name": generate_random_string(User._meta.get_field("first_name").max_length),
-            "last_name": generate_random_string(User._meta.get_field("last_name").max_length),
-            "email": generate_random_string(User._meta.get_field("email").max_length - 12) + "@example.com",
+            'name': 'default',
+            'first_name': generate_random_string(User._meta.get_field('first_name').max_length),
+            'last_name': generate_random_string(User._meta.get_field('last_name').max_length),
+            'email': generate_random_string(User._meta.get_field('email').max_length - 12) + '@example.com',
         }
         form = TenantForm(data)
         self.assertTrue(form.is_valid())
@@ -97,10 +98,10 @@ class TenantFormTest(TenantTestCase):
         Creating new tenant object with reserved "public" name, should fail with form (validation) error
         """
         data = {
-            "name": "public",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
+            'name': 'public',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example.com',
         }
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
@@ -110,10 +111,10 @@ class TenantFormTest(TenantTestCase):
         Creating new tenant object with a name of existing schema, should fail with form (validation) error
         """
         data = {
-            "name": "test",  # created by TenantTestCase parent class
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
+            'name': 'test',  # created by TenantTestCase parent class
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example.com',
         }
         # delete test tenant object without dropping schema
         Tenant.get().delete(force_drop=False)

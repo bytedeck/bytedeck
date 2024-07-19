@@ -8,9 +8,9 @@ from .views import ByteDeckSummernoteEditor
 
 urlpatterns = [
     path(
-        "editor/<id>/",
+        'editor/<id>/',
         ByteDeckSummernoteEditor.as_view(),
-        name="bytedeck_summernote-editor",
+        name='bytedeck_summernote-editor',
     ),
 ]
 

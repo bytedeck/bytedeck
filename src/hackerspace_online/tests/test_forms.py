@@ -27,7 +27,6 @@ User = get_user_model()
 
 
 class CustomSignUpFormTest(TenantTestCase):
-
     def setUp(self):
         pass
 
@@ -37,59 +36,67 @@ class CustomSignUpFormTest(TenantTestCase):
     def test_valid_data(self):
         form = CustomSignupForm(
             {
-                'username': "username",
-                'first_name': "firsttest",
-                'last_name': "Lasttest",
-                'access_code': "314159",
-                'password1': "password",
-                'password2': "password"
+                'username': 'username',
+                'first_name': 'firsttest',
+                'last_name': 'Lasttest',
+                'access_code': '314159',
+                'password1': 'password',
+                'password2': 'password',
             }
         )
         self.assertTrue(form.is_valid())
 
     def test_bad_access_codecoverage(self):
-        """ Test that a sign up form with the wrong access code doesn't validate """
+        """Test that a sign up form with the wrong access code doesn't validate"""
         form = CustomSignupForm(
             {
-                'username': "username",
-                'first_name': "firsttest",
-                'last_name': "Lasttest",
-                'access_code': "wrongcode",
-                'password1': "password",
-                'password2': "password"
+                'username': 'username',
+                'first_name': 'firsttest',
+                'last_name': 'Lasttest',
+                'access_code': 'wrongcode',
+                'password1': 'password',
+                'password2': 'password',
             }
         )
         self.assertFalse(form.is_valid())
 
-        with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
+        with self.assertRaisesMessage(forms.ValidationError, 'Access code unrecognized.'):
             form.clean()
 
     def test_sign_up_via_post(self):
         self.client = TenantClient(self.tenant)
         form_data = {
-            'username': "username",
-            'first_name': "firsttest",
-            'last_name': "Lasttest",
-            'access_code': "314159",
-            'password1': "password",
-            'password2': "password"
+            'username': 'username',
+            'first_name': 'firsttest',
+            'last_name': 'Lasttest',
+            'access_code': '314159',
+            'password1': 'password',
+            'password2': 'password',
         }
-        response = self.client.post(reverse('account_signup'), form_data, follow=True,)
+        response = self.client.post(
+            reverse('account_signup'),
+            form_data,
+            follow=True,
+        )
         self.assertRedirects(response, reverse('quests:quests'))
-        user = User.objects.get(username="username")
-        self.assertEqual(user.first_name, "firsttest")
+        user = User.objects.get(username='username')
+        self.assertEqual(user.first_name, 'firsttest')
 
     def test_sign_up_via_post_upcase_username(self):
         self.client = TenantClient(self.tenant)
         form_data = {
-            'username': "TestUser",
-            'first_name': "firsttest",
-            'last_name': "Lasttest",
-            'access_code': "314159",
-            'password1': "password",
-            'password2': "password"
+            'username': 'TestUser',
+            'first_name': 'firsttest',
+            'last_name': 'Lasttest',
+            'access_code': '314159',
+            'password1': 'password',
+            'password2': 'password',
         }
-        response = self.client.post(reverse('account_signup'), form_data, follow=True,)
+        response = self.client.post(
+            reverse('account_signup'),
+            form_data,
+            follow=True,
+        )
         self.assertRedirects(response, reverse('quests:quests'))
 
         with self.assertRaises(User.DoesNotExist):
@@ -100,20 +107,23 @@ class CustomSignUpFormTest(TenantTestCase):
         self.assertIsNotNone(user)
 
     def test_sign_up_via_post_with_email(self):
-
         self.client = TenantClient(self.tenant)
         form_data = {
             'email': 'email@example.com',
-            'username': "username",
-            'first_name': "firsttest",
-            'last_name': "Lasttest",
-            'access_code': "314159",
-            'password1': "password",
-            'password2': "password"
+            'username': 'username',
+            'first_name': 'firsttest',
+            'last_name': 'Lasttest',
+            'access_code': '314159',
+            'password1': 'password',
+            'password2': 'password',
         }
 
-        with patch("django.contrib.messages.add_message") as mock_add_message:
-            response = self.client.post(reverse('account_signup'), form_data, follow=True,)
+        with patch('django.contrib.messages.add_message') as mock_add_message:
+            response = self.client.post(
+                reverse('account_signup'),
+                form_data,
+                follow=True,
+            )
             self.assertEqual(mock_add_message.call_count, 2)
             confirmation_email_sent_msg = mock_add_message.call_args_list[0][0][2]
             successfully_signed_in_msg = mock_add_message.call_args_list[1][0][2]
@@ -123,32 +133,27 @@ class CustomSignUpFormTest(TenantTestCase):
         self.assertEqual(successfully_signed_in_msg, f'Successfully signed in as {form_data["username"]}.')
 
         self.assertRedirects(response, reverse('quests:quests'))
-        user = User.objects.get(username="username")
-        self.assertEqual(user.first_name, "firsttest")
+        user = User.objects.get(username='username')
+        self.assertEqual(user.first_name, 'firsttest')
 
         # Signals don't seem to populate the request attribute during tests.. but it actually gets called
         # self.assertTrue(getattr(response.wsgi_request, 'recently_signed_up_with_email', None))
 
 
 class CustomSocialAccountSignUpFormTest(TenantTestCase):
-
     def setUp(self):
         pass
 
     def get_social_login(self):
         extra_data = {
-            "email": "user@example.com",
+            'email': 'user@example.com',
         }
         return SocialLogin(
-            user=User(email="user@example.com", first_name="firsttest", last_name="lasttest"),
-            account=SocialAccount(provider="google", extra_data=extra_data),
+            user=User(email='user@example.com', first_name='firsttest', last_name='lasttest'),
+            account=SocialAccount(provider='google', extra_data=extra_data),
             email_addresses=[
-                EmailAddress(
-                    email="user@example.com",
-                    verified=True,
-                    primary=True
-                ),
-            ]
+                EmailAddress(email='user@example.com', verified=True, primary=True),
+            ],
         )
 
     def setup_social_app(self):
@@ -190,7 +195,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             data={
                 'username': 'sample.username',
                 'access_code': '314159',
-            }
+            },
         )
 
         form.data = {**form.initial, **form.data}
@@ -198,58 +203,53 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.assertTrue(form.is_valid())
 
     def test_bad_access_codecoverage(self):
-        """ Test that a social sign up form with the wrong access code doesn't validate """
+        """Test that a social sign up form with the wrong access code doesn't validate"""
         form = CustomSocialAccountSignupForm(
             sociallogin=self.get_social_login(),
             data={
-                'username': "username",
-                'access_code': "wrongcode",
-            }
+                'username': 'username',
+                'access_code': 'wrongcode',
+            },
         )
         form.data = {**form.initial, **form.data}
 
         self.assertFalse(form.is_valid())
 
-        with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
+        with self.assertRaisesMessage(forms.ValidationError, 'Access code unrecognized.'):
             form.clean()
 
     def test_sign_up_via_post(self):
         self.client = TenantClient(self.tenant)
         session = self.client.session
         form_data = {
-            'username': "username",
-            'access_code': "314159",
+            'username': 'username',
+            'access_code': '314159',
         }
 
         # Fake the session object to have the `socialaccount_sociallogin` since that's what it looks for
         # when a user chooses a google account to sign up
         sociallogin = self.get_social_login()
-        session["socialaccount_sociallogin"] = sociallogin.serialize()
+        session['socialaccount_sociallogin'] = sociallogin.serialize()
         session.save()
 
         # email should be pre-populated
-        resp = self.client.get(reverse("socialaccount_signup"))
-        form = resp.context["form"]
+        resp = self.client.get(reverse('socialaccount_signup'))
+        form = resp.context['form']
 
-        self.assertEqual(form["email"].value(), "user@example.com")
+        self.assertEqual(form['email'].value(), 'user@example.com')
 
         form_data = {**form.initial, **form_data}
         response = self.client.post(reverse('socialaccount_signup'), data=form_data, follow=True)
 
         self.assertRedirects(response, reverse('quests:quests'))
 
-        user = User.objects.get(username="username")
-        self.assertEqual(user.first_name, "firsttest")
+        user = User.objects.get(username='username')
+        self.assertEqual(user.first_name, 'firsttest')
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
-    def test_signin_via_post_connect_existing_account_automatically(
-        self,
-        mock_verify_and_unstash_state,
-        mock_complete_login,
-        mock_get_access_token
-    ):
+    def test_signin_via_post_connect_existing_account_automatically(self, mock_verify_and_unstash_state, mock_complete_login, mock_get_access_token):
         """
         When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
         but that email is verified, automatically merge their social account with their local account
@@ -257,7 +257,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
         test_student = User.objects.create_user(
             username='test_student',
-            password="password",
+            password='password',
             email='test_student@example.com',
         )
         # Add a verified email to the student
@@ -278,7 +278,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'expires_in': 3599,
             'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
             'token_type': 'Bearer',
-            'id_token': 'test_id_token'
+            'id_token': 'test_id_token',
         }
         mock_complete_login.return_value = social_login
         mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
@@ -312,10 +312,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
     def test_signin_via_post_connect_existing_account_manually__merge_yes(
-        self,
-        mock_verify_and_unstash_state,
-        mock_complete_login,
-        mock_get_access_token
+        self, mock_verify_and_unstash_state, mock_complete_login, mock_get_access_token
     ):
         """
         When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
@@ -325,7 +322,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
         test_student = User.objects.create_user(
             username='test_student',
-            password="password",
+            password='password',
             email='test_student@example.com',
         )
 
@@ -341,7 +338,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'expires_in': 3599,
             'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
             'token_type': 'Bearer',
-            'id_token': 'test_id_token'
+            'id_token': 'test_id_token',
         }
         mock_complete_login.return_value = social_login
         mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
@@ -391,10 +388,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
     def test_signin_via_post_connect_existing_account_manually__merge_no(
-        self,
-        mock_verify_and_unstash_state,
-        mock_complete_login,
-        mock_get_access_token
+        self, mock_verify_and_unstash_state, mock_complete_login, mock_get_access_token
     ):
         """
         When a user tries to login via OAuth and the email they used in an OAuth signin matches their current email
@@ -405,7 +399,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
         test_student = User.objects.create_user(
             username='test_student',
-            password="password",
+            password='password',
             email='test_student@example.com',
         )
 
@@ -421,7 +415,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'expires_in': 3599,
             'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
             'token_type': 'Bearer',
-            'id_token': 'test_id_token'
+            'id_token': 'test_id_token',
         }
         mock_complete_login.return_value = social_login
         mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
@@ -483,10 +477,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
     def test_signin_via_post_google_signin_redirects_to_signup_page_on_new_account(
-        self,
-        mock_verify_and_unstash_state,
-        mock_complete_login,
-        mock_get_access_token
+        self, mock_verify_and_unstash_state, mock_complete_login, mock_get_access_token
     ):
         """
         When a student tries to login via OAuth and they have not yet created an account in ByteDeck,
@@ -496,7 +487,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.setup_social_app()
         self.client = TenantClient(self.tenant)
 
-        social_email = "user@example.com"
+        social_email = 'user@example.com'
         social_login = self.get_social_login()
         social_login.user.email = social_email
         social_login.email_addresses[0].email = social_email
@@ -506,7 +497,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'expires_in': 3599,
             'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
             'token_type': 'Bearer',
-            'id_token': 'test_id_token'
+            'id_token': 'test_id_token',
         }
         mock_complete_login.return_value = social_login
         mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
@@ -534,10 +525,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
     def test_signup_via_post_google_signin_change_email_and_revert_back_to_google_email(
-        self,
-        mock_verify_and_unstash_state,
-        mock_complete_login,
-        mock_get_access_token
+        self, mock_verify_and_unstash_state, mock_complete_login, mock_get_access_token
     ):
         """
         When a student performs a signup via google, completes the signup process, and then changes their email and verifies
@@ -554,7 +542,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.setup_social_app()
         self.client = TenantClient(self.tenant)
 
-        social_email = "user@example.com"
+        social_email = 'user@example.com'
         social_login = self.get_social_login()
         social_login.user.email = social_email
         social_login.email_addresses[0].email = social_email
@@ -564,7 +552,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'expires_in': 3599,
             'scope': 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
             'token_type': 'Bearer',
-            'id_token': 'test_id_token'
+            'id_token': 'test_id_token',
         }
         mock_complete_login.return_value = social_login
         mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
@@ -592,7 +580,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         response = self.client.post(reverse('socialaccount_signup'), data=form_data, follow=True)
 
         # User should now be registered
-        user = User.objects.get(username=form_data["username"])
+        user = User.objects.get(username=form_data['username'])
         self.assertIsNotNone(user)
 
         self.assertTrue(user.socialaccount_set.exists())
@@ -600,12 +588,14 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         # Change email and then verify
         form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
         old_email = user.email
-        new_email = "my_new_email@example.com"
-        form_data.update({
-            "email": new_email,
-        })
+        new_email = 'my_new_email@example.com'
+        form_data.update(
+            {
+                'email': new_email,
+            }
+        )
         self.assertEqual(len(mail.outbox), 0)
-        self.client.post(reverse("profiles:profile_update", args=[user.profile.pk]), data=form_data)
+        self.client.post(reverse('profiles:profile_update', args=[user.profile.pk]), data=form_data)
         self.assertEqual(len(mail.outbox), 1)  # email should be sent
 
         user.refresh_from_db()
@@ -629,10 +619,8 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         mail.outbox.clear()
 
         # Revert back to old email
-        form_data.update({
-            "email": old_email
-        })
-        self.client.post(reverse("profiles:profile_update", args=[user.profile.pk]), data=form_data)
+        form_data.update({'email': old_email})
+        self.client.post(reverse('profiles:profile_update', args=[user.profile.pk]), data=form_data)
 
         # There should be no emails sent at this point since emails are only sent if the email address is not verified
         self.assertEqual(len(mail.outbox), 0)
@@ -647,7 +635,6 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
 
 class CustomLoginFormTest(TenantTestCase):
-
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='testuser')
 
@@ -655,7 +642,6 @@ class CustomLoginFormTest(TenantTestCase):
         CustomLoginForm()
 
     def test_valid_data(self):
-
         # django-allauth forms require `request` to be passed when instantiating the form
         # normally, forms are used from within a django view and the view passes the request object to the form
         # but in this case, we are just performing a test to the form itself so we need to have access to
@@ -678,10 +664,7 @@ class CustomLoginFormTest(TenantTestCase):
         User should still be able to login regardless of the username case
         """
         self.client = TenantClient(self.tenant)
-        form_data = {
-            'login': 'TestUser',
-            'password': 'testuser'
-        }
+        form_data = {'login': 'TestUser', 'password': 'testuser'}
         response = self.client.post(reverse('account_login'), form_data, follow=True)
         self.assertRedirects(response, reverse('quests:quests'))
 
@@ -692,10 +675,7 @@ class CustomLoginFormTest(TenantTestCase):
         """
 
         self.client = TenantClient(self.tenant)
-        form_data = {
-            'login': 'TestUser',
-            'password': 'testuser'
-        }
+        form_data = {'login': 'TestUser', 'password': 'testuser'}
 
         response = self.client.post(reverse('account_login'), form_data, follow=True)
         self.assertRedirects(response, reverse('quests:quests'))
@@ -713,10 +693,7 @@ class CustomLoginFormTest(TenantTestCase):
         """
 
         self.client = TenantClient(self.tenant)
-        form_data = {
-            'login': 'TestUser',
-            'password': 'testuser'
-        }
+        form_data = {'login': 'TestUser', 'password': 'testuser'}
 
         response = self.client.post(reverse('account_login'), form_data, follow=True)
         self.assertRedirects(response, reverse('quests:quests'))
@@ -729,11 +706,7 @@ class CustomLoginFormTest(TenantTestCase):
         """
 
         self.client = TenantClient(self.tenant)
-        form_data = {
-            'login': 'TestUser',
-            'password': 'testuser',
-            'remember': True
-        }
+        form_data = {'login': 'TestUser', 'password': 'testuser', 'remember': True}
 
         response = self.client.post(reverse('account_login'), form_data, follow=True)
         self.assertRedirects(response, reverse('quests:quests'))
@@ -745,7 +718,6 @@ class CustomLoginFormTest(TenantTestCase):
 
 
 class PublicContactFormTest(TenantTestCase):
-
     def setUp(self):
         pass
 

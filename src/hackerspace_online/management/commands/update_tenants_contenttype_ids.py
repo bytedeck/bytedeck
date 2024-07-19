@@ -19,22 +19,12 @@ def group_by_sql(schema, table, column):
 
 
 class Command(BaseCommand):
-
     help = "One time management command execution to update tenant's content_type_ids"
 
     def handle(self, *args, **options):
-
         has_gfk_models = [
-            {
-                'app_label': 'comments',
-                'model': 'comment',
-                'col': 'target_content_type_id'
-            },
-            {
-                'app_label': 'notifications',
-                'model': 'notification',
-                'col': 'target_content_type_id'
-            },
+            {'app_label': 'comments', 'model': 'comment', 'col': 'target_content_type_id'},
+            {'app_label': 'notifications', 'model': 'notification', 'col': 'target_content_type_id'},
             {
                 'app_label': 'notifications',
                 'model': 'notification',
@@ -59,7 +49,7 @@ class Command(BaseCommand):
                 'app_label': 'djcytoscape',
                 'model': 'cytoscape',
                 'col': 'initial_content_type_id',
-            }
+            },
         ]
 
         for tenant in Tenant.objects.exclude(schema_name='public'):
@@ -67,10 +57,7 @@ class Command(BaseCommand):
                 app_label, model, col = has_gfk_model.values()
 
                 with connection.cursor() as cursor:
-                    cursor.execute(group_by_sql(
-                        schema=tenant.schema_name,
-                        table=f"{app_label}_{model}",
-                        column=col))
+                    cursor.execute(group_by_sql(schema=tenant.schema_name, table=f'{app_label}_{model}', column=col))
 
                     # Remove null ids
                     tenant_target_content_type_ids = [_id[0] for _id in cursor.fetchall() if _id[0]]
@@ -123,6 +110,6 @@ class Command(BaseCommand):
                         print(connection.queries)
 
             # Drop the table so it only uses public.django_content_type
-            drop_contenttype_table = f"DROP TABLE IF EXISTS {tenant.schema_name}.django_content_type CASCADE"
+            drop_contenttype_table = f'DROP TABLE IF EXISTS {tenant.schema_name}.django_content_type CASCADE'
             with connection.cursor() as cursor:
                 cursor.execute(drop_contenttype_table)

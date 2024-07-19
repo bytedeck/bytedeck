@@ -10,7 +10,6 @@ User = get_user_model()
 
 
 class MenuItemFormTest(TenantTestCase):
-
     def test_MenuItem_form_allow_relative_urls(self):
         form_data = {
             'label': 'New Menu Item',

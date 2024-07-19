@@ -21,8 +21,7 @@ User = get_user_model()
 
 
 class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
-    """Tests for the SiteConfig View
-    """
+    """Tests for the SiteConfig View"""
 
     def setUp(self):
         """TenantTestCase generates a tenant for tests.
@@ -51,7 +50,6 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('config:site_config_update_own')
 
     def testSiteConfigUpdate_uses_newly_saved_cache_data(self):
-
         self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
 
         old_cache = cache.get(SiteConfig.cache_key())
@@ -87,12 +85,12 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SiteConfigForm_basic_tests(self):
         """
-            Basic test for SiteConfigForm
+        Basic test for SiteConfigForm
         """
         owner_user = self.config.deck_owner
         staff_user = baker.make(User, is_staff=True)
 
-        URL = reverse("config:site_config_update_own")
+        URL = reverse('config:site_config_update_own')
 
         # NOTE FOR FUTURE TESTS USE SiteConfig.get() INSTEAD OF self.config
         # self.config IS CACHED SO ITS NOT PASSED BY REFERENCE
@@ -100,31 +98,42 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         # base case (see if something will change)
         self.client.force_login(staff_user)
 
-        test_case = "BASE CASE"
-        self.client.post(URL, data=generate_form_data(
-            model_form=SiteConfigForm,
-            site_name=test_case,
-        ))
+        test_case = 'BASE CASE'
+        self.client.post(
+            URL,
+            data=generate_form_data(
+                model_form=SiteConfigForm,
+                site_name=test_case,
+            ),
+        )
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)  # owner should be unaffected
 
         # check if a user who != owner can change SiteConfig deck_owner field
-        test_case = "TEST CASE #1"
-        self.client.post(URL, data=generate_form_data(
-            model_form=SiteConfigForm,
-            site_name=test_case, deck_owner=staff_user,
-        ))
+        test_case = 'TEST CASE #1'
+        self.client.post(
+            URL,
+            data=generate_form_data(
+                model_form=SiteConfigForm,
+                site_name=test_case,
+                deck_owner=staff_user,
+            ),
+        )
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)  # prevents non owner from changing owner
 
         # check if owner can change who deck_owner is
         self.client.force_login(owner_user)
 
-        test_case = "TEST CASE #2"
-        self.client.post(URL, data=generate_form_data(
-            model_form=SiteConfigForm,
-            site_name=test_case, deck_owner=staff_user,
-        ))
+        test_case = 'TEST CASE #2'
+        self.client.post(
+            URL,
+            data=generate_form_data(
+                model_form=SiteConfigForm,
+                site_name=test_case,
+                deck_owner=staff_user,
+            ),
+        )
         self.assertEqual(SiteConfig.get().site_name, test_case)
         self.assertEqual(staff_user.pk, SiteConfig.get().deck_owner.pk)  # form success should have updated model
 
@@ -146,7 +155,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
         owner_user = self.config.deck_owner
 
-        URL = reverse("config:site_config_update_own")
+        URL = reverse('config:site_config_update_own')
 
         # check if owner can change who deck_owner is
         self.client.force_login(owner_user)
@@ -155,10 +164,10 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # incomplete payload
         form_data = {
-            "site_name": "site_name",
+            'site_name': 'site_name',
         }
         self.client.post(URL, data=form_data)
-        self.assertNotEqual(SiteConfig.get().site_name, "site_name")  # should not be equal and prove the case
+        self.assertNotEqual(SiteConfig.get().site_name, 'site_name')  # should not be equal and prove the case
 
         # Second case, trying to find out missing fields
 
@@ -173,20 +182,20 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # all required (non-blank) fields
         form_data = {
-            "site_name": "site_name",
-            "site_name_short": "site_name_short",
-            "access_code": "123456",
-            "banned_from_comments_text": "banned from comments",  # doesn't need to be verbose when checked
-            "deck_ai": owner_user.pk,
-            "custom_name_for_badge": "badge",
-            "custom_name_for_announcement": "announcement",
-            "custom_name_for_group": "group",
-            "custom_name_for_student": "student",
-            "custom_name_for_tag": "tag",
-            "deck_owner": owner_user.pk,
+            'site_name': 'site_name',
+            'site_name_short': 'site_name_short',
+            'access_code': '123456',
+            'banned_from_comments_text': 'banned from comments',  # doesn't need to be verbose when checked
+            'deck_ai': owner_user.pk,
+            'custom_name_for_badge': 'badge',
+            'custom_name_for_announcement': 'announcement',
+            'custom_name_for_group': 'group',
+            'custom_name_for_student': 'student',
+            'custom_name_for_tag': 'tag',
+            'deck_owner': owner_user.pk,
         }
         self.client.post(URL, data=form_data)
-        self.assertEqual(SiteConfig.get().site_name, "site_name")  # should be equal and prove the case
+        self.assertEqual(SiteConfig.get().site_name, 'site_name')  # should be equal and prove the case
 
     def test_custom_javascript_mimetypes(self):
         """
@@ -194,7 +203,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
         owner_user = self.config.deck_owner
 
-        URL = reverse("config:site_config_update_own")
+        URL = reverse('config:site_config_update_own')
 
         self.client.force_login(owner_user)
 
@@ -210,13 +219,13 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         valid_js = b"""alert('Hello, application/x-javascript!');"""
         custom_javascript = InMemoryUploadedFile(
             BytesIO(valid_js),
-            field_name="tempfile",
-            name="custom.js",
+            field_name='tempfile',
+            name='custom.js',
             content_type='application/x-javascript',
             size=len(valid_js),
-            charset="utf-8",
+            charset='utf-8',
         )
-        data["custom_javascript"] = custom_javascript
+        data['custom_javascript'] = custom_javascript
 
         self.client.post(URL, data=data)
         self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
@@ -225,13 +234,13 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         valid_js = b"""alert('Hello, application/javascript!');"""
         custom_javascript = InMemoryUploadedFile(
             BytesIO(valid_js),
-            field_name="tempfile",
-            name="custom.js",
+            field_name='tempfile',
+            name='custom.js',
             content_type='application/javascript',
             size=len(valid_js),
-            charset="utf-8",
+            charset='utf-8',
         )
-        data["custom_javascript"] = custom_javascript
+        data['custom_javascript'] = custom_javascript
 
         self.client.post(URL, data=data)
         self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
@@ -240,13 +249,13 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         valid_js = b"""alert('Hello, text/javascript!');"""
         custom_javascript = InMemoryUploadedFile(
             BytesIO(valid_js),
-            field_name="tempfile",
-            name="custom.js",
+            field_name='tempfile',
+            name='custom.js',
             content_type='text/javascript',
             size=len(valid_js),
-            charset="utf-8",
+            charset='utf-8',
         )
-        data["custom_javascript"] = custom_javascript
+        data['custom_javascript'] = custom_javascript
 
         self.client.post(URL, data=data)
         self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model

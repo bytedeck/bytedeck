@@ -64,7 +64,6 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
@@ -73,19 +72,15 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1 = User.objects.create_user('test_student', email=self.test_email, password=self.test_password)
 
     def test_user_cannot_request_password_reset(self):
-        """ User should not be able to request password reset if they registered without an email """
-        data = {
-            'email': 'nonexistentemail@gmail.com'
-        }
+        """User should not be able to request password reset if they registered without an email"""
+        data = {'email': 'nonexistentemail@gmail.com'}
         response = self.client.post(reverse('account_reset_password'), data=data)
         self.assertContains(response, 'error_1_id_email')  # invalid with error message
         self.assertContains(response, 'This e-mail address is not assigned')
 
     def test_email_sent_to_requesting_user(self):
-        """ Email should be sent to the requesting user containing the password verification link """
-        data = {
-            'email': self.test_email
-        }
+        """Email should be sent to the requesting user containing the password verification link"""
+        data = {'email': self.test_email}
         response = self.client.post(reverse('account_reset_password'), data=data)
         self.assertRedirects(
             response=response,
@@ -107,10 +102,7 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
         # User should be able to change password
         new_password = 'newpassword'
         new_password_again = 'newpassword'
-        data = {
-            'password1': new_password,
-            'password2': new_password_again
-        }
+        data = {'password1': new_password, 'password2': new_password_again}
 
         # Get the form action url from the previous response where we can send a post
         # request to change the user's password

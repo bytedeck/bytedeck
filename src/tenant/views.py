@@ -27,17 +27,20 @@ from .models import Tenant
 
 def public_only_view(f):
     """A decorator that causes a view to raise Http404() if it is accessed by a non-public tenant"""
+
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if connection.schema_name == get_public_schema_name():
             return f(*args, **kwargs)
         else:
             raise Http404()
+
     return wrapper
 
 
 class PublicOnlyViewMixin:
     """A mixin that causes a view to raise Http404() if it is accessed by a non-public tenant"""
+
     @method_decorator(public_only_view)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
@@ -48,12 +51,12 @@ def non_public_only_view(f):
     def wrapper(*args, **kwargs):
         if connection.schema_name != get_public_schema_name():
             return f(*args, **kwargs)
-        raise Http404("Page not found!")
+        raise Http404('Page not found!')
+
     return wrapper
 
 
 class NonPublicOnlyViewMixin:
-
     @method_decorator(non_public_only_view)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
@@ -63,7 +66,7 @@ def generate_default_owner_password(user, tenant):
     """Generate a default password for a new deck's owner to"
     firstname-deckname-lastname
     """
-    return "-".join([user.first_name, tenant.name, user.last_name]).lower()
+    return '-'.join([user.first_name, tenant.name, user.last_name]).lower()
 
 
 class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
@@ -73,7 +76,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     login_url = reverse_lazy('admin:login')
 
     def form_valid(self, form):
-        """ Copy the tenant name to the schema_name and the domain_url fields."""
+        """Copy the tenant name to the schema_name and the domain_url fields."""
         # TODO: this is duplication of code in admin.py.  Move this into the Tenant model?  Perhaps as a pre-save hook?
         form.instance.schema_name = form.instance.name.replace('-', '_')
         form.instance.domain_url = f'{form.instance.name}.{Site.objects.get(id=1).domain}'
@@ -92,7 +95,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             owner.save()
 
             # set the owner's username to firstname.lastname (instead of "owner")
-            user_username(owner, f"{owner.first_name}.{owner.last_name}")
+            user_username(owner, f'{owner.first_name}.{owner.last_name}')
 
             # set the owner's password to firstname-deckname-lastname
             owner.set_password(generate_default_owner_password(owner, self.object))
@@ -132,7 +135,7 @@ class TenantCreate(PublicOnlyViewMixin, LoginRequiredMixin, CreateView):
             return self.form_invalid(form)
 
     def get_success_url(self):
-        """ Redirect to the newly created tenant."""
+        """Redirect to the newly created tenant."""
         return self.object.get_root_url()
 
 
@@ -152,21 +155,25 @@ def email_confirmed_handler(email_address, **kwargs):
     if not (user.pk == config.deck_owner.pk):
         return
 
-    subject = get_template("tenant/email/welcome_subject.txt").render(context={
-        "config": config,
-        "tenant": tenant,
-        "user": user,
-    })
+    subject = get_template('tenant/email/welcome_subject.txt').render(
+        context={
+            'config': config,
+            'tenant': tenant,
+            'user': user,
+        }
+    )
     # email subject *must not* contain newlines
-    subject = "".join(subject.splitlines())
+    subject = ''.join(subject.splitlines())
 
     # generate "welcome" email for new user
-    msg = get_template("tenant/email/welcome_message.txt").render(context={
-        "config": config,
-        "tenant": tenant,
-        "user": user,
-        "password": generate_default_owner_password(user, tenant),
-    })
+    msg = get_template('tenant/email/welcome_message.txt').render(
+        context={
+            'config': config,
+            'tenant': tenant,
+            'user': user,
+            'password': generate_default_owner_password(user, tenant),
+        }
+    )
 
     # sending a text and HTML content combination
     email = EmailMultiAlternatives(
@@ -174,5 +181,5 @@ def email_confirmed_handler(email_address, **kwargs):
         body=textify(msg),  # convert msg to plain text, using textify utility
         to=[user.email],
     )
-    email.attach_alternative(msg, "text/html")
+    email.attach_alternative(msg, 'text/html')
     email.send()

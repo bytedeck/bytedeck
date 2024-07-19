@@ -16,5 +16,4 @@ urlpatterns = [
     url(r'^(?P<ann_id>\d+)/publish/$', views.publish, name='publish'),
     url(r'^(?P<ann_id>\d+)/comment/$', views.comment, name='comment'),
     url(r'^(?P<ann_id>\d+)/$', views.list, name='list'),
-
 ]

@@ -40,9 +40,9 @@ def list(request):
 def list_unread(request):
     notifications = Notification.objects.all_unread(request.user)
     context = {
-        "notifications": notifications,
+        'notifications': notifications,
     }
-    return render(request, "notifications/list.html", context)
+    return render(request, 'notifications/list.html', context)
 
 
 @non_public_only_view
@@ -84,8 +84,7 @@ def read(request, id):
 @non_public_only_view
 @login_required
 def ajax(request):
-    if request.is_ajax() and request.method == "POST":
-
+    if request.is_ajax() and request.method == 'POST':
         limit = 15
         notifications = Notification.objects.all_unread(request.user)
         count = notifications.count()
@@ -94,10 +93,7 @@ def ajax(request):
         notifications = notifications[:limit]
         notes = []
         for note in notifications:
-            removable = note.target_content_type != ContentType.objects.get(
-                app_label="announcements",
-                model='announcement'
-            )
+            removable = note.target_content_type != ContentType.objects.get(app_label='announcements', model='announcement')
             notes.append(
                 {
                     'link': str(note.get_link()),
@@ -107,9 +103,9 @@ def ajax(request):
             )
 
         data = {
-            "notifications": notes,
-            "count": count,
-            "limit": limit,
+            'notifications': notes,
+            'count': count,
+            'limit': limit,
         }
         json_data = json.dumps(data)
 
@@ -121,14 +117,14 @@ def ajax(request):
 @non_public_only_view
 @login_required
 def ajax_mark_read(request):
-    if request.is_ajax() and request.method == "POST":
-
+    if request.is_ajax() and request.method == 'POST':
         id = request.POST.get('id', None)
         n = Notification.objects.get(id=id)
         n.mark_read()
         return JsonResponse(data={})
     else:
         raise Http404
+
 
 # class NotifcationOptionsForm(ModelForm):
 #     class Meta:

@@ -26,6 +26,5 @@ class SiteConfigUpdate(SuccessMessageMixin, UpdateView):
 
 
 class SiteConfigUpdateOwn(SiteConfigUpdate):
-
     def get_object(self):
         return SiteConfig.get()

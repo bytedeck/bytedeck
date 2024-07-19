@@ -25,9 +25,7 @@ User = get_user_model()
 
 
 def random_string(n):
-    return "".join(
-        random.choice(string.ascii_uppercase + string.digits) for _ in range(n)
-    )
+    return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(n))
 
 
 class GFKSelect2WidgetForm(forms.Form):
@@ -35,10 +33,7 @@ class GFKSelect2WidgetForm(forms.Form):
         queryset=QuerySetSequence(
             Group.objects.all(),
         ),
-        widget=GFKSelect2Widget(
-            search_fields={
-                'auth': {'group': ['name__icontains']}}
-        )
+        widget=GFKSelect2Widget(search_fields={'auth': {'group': ['name__icontains']}}),
     )
 
 
@@ -53,16 +48,13 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
 
 
 class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
-        self.groups = Group.objects.bulk_create(
-            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
-        )
+        self.groups = Group.objects.bulk_create([Group(pk=pk, name=random_string(50)) for pk in range(100)])
 
     def _ct_pk(self, obj):
-        return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
+        return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
     def test_get(self):
         group = self.groups[0]
@@ -102,7 +94,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
             queryset=QuerySetSequence(Group.objects.all()),
             search_fields={
                 'auth': {'group': ['name__icontains']},
-            }
+            },
         )
         widget.render('name', None)
         field_id = signing.dumps(id(widget))
@@ -154,26 +146,25 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
 
 class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to login '''
+        """If not logged in then all views should redirect to login"""
         self.assertRedirectsLogin('utilities:menu_items')
         self.assertRedirectsLogin('utilities:menu_item_create')
         self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
         self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in as admin then all views should redirect to 403 '''
+        """If not logged in as admin then all views should redirect to 403"""
         self.client.force_login(self.test_student)
 
         # Staff access only
@@ -183,13 +174,13 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('utilities:menu_item_delete', args=[1])
 
     def test_MenuItemList_view(self):
-        ''' Admin should be able to view menu item list '''
+        """Admin should be able to view menu item list"""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('utilities:menu_items'))
         self.assertEqual(response.status_code, 200)
 
     def test_MenuItemCreate_view(self):
-        ''' Admin should be able to create a menu item '''
+        """Admin should be able to create a menu item"""
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
@@ -205,7 +196,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(test_menuitem.label, data['label'])
 
     def test_MenuItemCreate_view__displays_leading_slash_error(self):
-        """ Menu Item create view should display correct error text when a bad url is submitted"""
+        """Menu Item create view should display correct error text when a bad url is submitted"""
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
@@ -217,11 +208,11 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # tests Menu Item creation without leading slash ((reverse('courses:ranks'))[1:]) == 'courses/ranks/'
         response = self.client.post(reverse('utilities:menu_item_create'), data=data)
-        leading_slash_error = "Enter a valid URL."
+        leading_slash_error = 'Enter a valid URL.'
         self.assertContains(response, leading_slash_error)
 
     def test_MenuItemUpdate_view(self):
-        """ Admin should be able to update a Menu Item """
+        """Admin should be able to update a Menu Item"""
         self.client.force_login(self.test_teacher)
         # set label and icon to something they wouldn't normally be
         data = {
@@ -238,7 +229,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(test_menuitem.fa_icon, data['fa_icon'])
 
     def test_MenuItemUpdate_view__displays_leading_slash_error(self):
-        """ Menu Item update view should display correct error text when a bad url is submitted"""
+        """Menu Item update view should display correct error text when a bad url is submitted"""
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'My Updated Name',
@@ -250,19 +241,20 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # tests Menu Item updating without leading slash
         response = self.client.post(reverse('utilities:menu_item_update', args=[1]), data=data)
-        leading_slash_error = "Enter a valid URL."
+        leading_slash_error = 'Enter a valid URL.'
         self.assertContains(response, leading_slash_error)
 
 
 class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
         """
-            This is basically baker.make(FlatPage) but it actually works
+        This is basically baker.make(FlatPage) but it actually works
         """
+
         def random_string(length):
             return ''.join(random.choice(string.ascii_letters) for i in range(length))
+
         data = {}
 
         for field in FlatPage._meta.fields:
@@ -275,7 +267,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
             elif field.name == 'url':
                 max_length = FlatPage._meta.get_field(field.name).max_length - 2
-                data[field.name] = f"/{random_string(max_length)}/"
+                data[field.name] = f'/{random_string(max_length)}/'
 
         flatpage = FlatPage.objects.create(**data)
         flatpage.sites.add(Site.objects.first())
@@ -286,7 +278,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         User = get_user_model()
 
-        self.test_password = "password"
+        self.test_password = 'password'
 
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
@@ -296,7 +288,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_page_status_codes_for_anonymous(self):
         """
-            Redirects to admin or returns 200 if user is not logged in
+        Redirects to admin or returns 200 if user is not logged in
         """
         self.assert200('utilities:flatpage_list')
 
@@ -307,7 +299,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_page_status_codes_for_students(self):
         """
-            Redirects to 403 or returns 200 if user is is_staff=False
+        Redirects to 403 or returns 200 if user is is_staff=False
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -321,7 +313,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_page_status_codes_for_staff(self):
         """
-            Should return 200 for all cases
+        Should return 200 for all cases
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
@@ -335,8 +327,8 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_login_requirements_for_flatpage(self):
         """
-            Flatpage with login required can only be accessed by users,
-            while flatpages without can be accessed by all
+        Flatpage with login required can only be accessed by users,
+        while flatpages without can be accessed by all
         """
 
         # check all exists in flatpage_list first
@@ -368,7 +360,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_flatpagelist__list(self):
         """
-            Confirm that all flatpages are properly displayed
+        Confirm that all flatpages are properly displayed
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -380,7 +372,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_flatpagecreate__create(self):
         """
-            Can create flatpage and access it
+        Can create flatpage and access it
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
@@ -407,7 +399,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_flatpageupdate__update(self):
         """
-            Confirm that flatpages are being updated using update view
+        Confirm that flatpages are being updated using update view
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
@@ -451,7 +443,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_flatpagedelete__delete(self):
         """
-            Confirm that flatpages are being properly deleted
+        Confirm that flatpages are being properly deleted
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)

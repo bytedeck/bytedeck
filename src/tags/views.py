@@ -74,7 +74,7 @@ class TaggitAutoResponseView(AutoResponseView):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
 
-        return super().get_queryset().order_by("name")
+        return super().get_queryset().order_by('name')
 
 
 class TagList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
@@ -83,13 +83,13 @@ class TagList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 
 class TagDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
-    """ abstract view for TagDetailStudent and TagDetailStaff """
+    """abstract view for TagDetailStudent and TagDetailStaff"""
+
     model = Tag
     template_name = 'tags/detail.html'
 
 
 class TagDetailStudent(TagDetail):
-
     def get_object(self):
         pk = self.request.GET.get('tag_pk')
         return Tag.objects.get(pk=pk)
@@ -148,7 +148,6 @@ class TagDetailStudent(TagDetail):
 
 @method_decorator(staff_member_required, name='dispatch')
 class TagDetailStaff(TagDetail):
-
     def get_context_data(self, **kwargs):
         kwargs['view'] = 'staff'
 

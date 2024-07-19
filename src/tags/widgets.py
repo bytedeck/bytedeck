@@ -9,7 +9,7 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
     """Select2 tag widget for taggit's TagField."""
 
     model = Tag
-    search_fields = ["name__icontains"]
+    search_fields = ['name__icontains']
 
     def get_url(self):
         return reverse('tags:auto-json')
@@ -61,9 +61,7 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
         groups = [default]
 
         for i, v in enumerate(self.options(name, value, attrs)):
-            default[1].append(
-                self.create_option(v, v, v, True, i)
-            )
+            default[1].append(self.create_option(v, v, v, True, i))
         return groups
 
     def value_from_datadict(self, data, files, name):

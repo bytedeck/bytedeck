@@ -8,6 +8,7 @@ from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 #         model = Comment
 #         fields = ('text',)
 
+
 class CommentForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.wysiwyg = kwargs.pop('wysiwyg', False)

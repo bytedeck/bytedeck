@@ -28,7 +28,7 @@ class PortfolioDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     context_object_name = 'p'
 
     def get_object(self, queryset=None):
-        """ If a user id (pk) wasn't provided in the url, then use the requesting user's id.
+        """If a user id (pk) wasn't provided in the url, then use the requesting user's id.
         If the user doesn't have a portfolio yet , create one."""
         pk = self.kwargs.get('pk')
 
@@ -63,7 +63,7 @@ class PortfolioUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessage
     form_class = PortfolioForm
     template_name = 'portfolios/edit.html'
     context_object_name = 'p'
-    success_message = "Portfolio updated."
+    success_message = 'Portfolio updated.'
 
     def get_success_url(self):
         return reverse('portfolios:detail', kwargs={'pk': self.object.pk})
@@ -79,12 +79,12 @@ class PortfolioUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessage
 
 def public_list(request):
     public_portfolios = Portfolio.objects.all().filter(listed_publicly=True)
-    return render(request, 'portfolios/public_list.html', {"portfolios": public_portfolios})
+    return render(request, 'portfolios/public_list.html', {'portfolios': public_portfolios})
 
 
 def public(request, uuid):
     p = get_object_or_404(Portfolio, uuid=uuid)
-    return render(request, 'portfolios/public.html', {"p": p})
+    return render(request, 'portfolios/public.html', {'p': p})
 
 
 ######################################
@@ -93,11 +93,12 @@ def public(request, uuid):
 #
 ######################################
 
+
 class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
-    success_message = "The art was added to the Portfolio"
+    success_message = 'The art was added to the Portfolio'
 
     def get_success_url(self):
         return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})
@@ -111,8 +112,8 @@ class ArtworkCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         portfolio = get_object_or_404(Portfolio, pk=self.kwargs.get('pk'))
-        context['heading'] = "Add Art to " + portfolio.user.get_username() + "'s Portfolio"
-        context['submit_btn_value'] = "Create"
+        context['heading'] = 'Add Art to ' + portfolio.user.get_username() + "'s Portfolio"
+        context['submit_btn_value'] = 'Create'
         context['portfolio'] = portfolio
         return context
 
@@ -129,7 +130,7 @@ class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
     model = Artwork
     form_class = ArtworkForm
     template_name = 'portfolios/art_form.html'
-    success_message = "Art updated!"
+    success_message = 'Art updated!'
 
     def get_success_url(self):
         return reverse('portfolios:edit', kwargs={'pk': self.object.portfolio.pk})
@@ -137,8 +138,8 @@ class ArtworkUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, SuccessMessageMi
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
-        context['heading'] = "Edit " + self.object.portfolio.user.get_username() + "'s Portfolio Art"
-        context['submit_btn_value'] = "Update"
+        context['heading'] = 'Edit ' + self.object.portfolio.user.get_username() + "'s Portfolio Art"
+        context['submit_btn_value'] = 'Update'
         context['portfolio'] = self.object.portfolio
         return context
 
@@ -170,14 +171,14 @@ def is_acceptable_image_type(filename):
     # Get extension from filename to determine filetype...very hacky...
     # TODO use MIMETYPES
     name, ext = os.path.splitext(filename)
-    img_ext_list = [".png", ".gif", ".jpg"]
+    img_ext_list = ['.png', '.gif', '.jpg']
     return ext in img_ext_list
 
 
 def is_acceptable_vid_type(filename):
     # Get extension from filename to determine filetype...very hacky...
     name, ext = os.path.splitext(filename)
-    vid_ext_list = [".ogg", ".avi", ".mp4", ".mkv", ".webm", ".ogv"]
+    vid_ext_list = ['.ogg', '.avi', '.mp4', '.mkv', '.webm', '.ogv']
     return ext in vid_ext_list
 
 
@@ -196,8 +197,7 @@ def art_add(request, doc_id):
             image_file = None
             video_file = doc.docfile
         else:
-            raise Http404("Unsupported image or video format.  See your teacher if"
-                          " you think this format should be supported.")
+            raise Http404('Unsupported image or video format.  See your teacher if' ' you think this format should be supported.')
 
         portfolio, created = Portfolio.objects.get_or_create(user=doc_user)
 

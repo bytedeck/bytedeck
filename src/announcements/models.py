@@ -38,7 +38,6 @@ class AnnouncementManager(models.Manager):
         return self.get_active().not_draft().not_expired().released()
 
     def archive_announcements(self):
-
         announcements = self.get_queryset().not_archived().not_draft()
 
         for announcement in announcements:
@@ -51,18 +50,18 @@ class Announcement(models.Model):
     title = models.CharField(max_length=80)
     datetime_released = models.DateTimeField(
         default=timezone.now,
-        help_text="The time the announcement was published.  If auto_publish is True, then the announcement will automatically \
-        be published at this time."
+        help_text='The time the announcement was published.  If auto_publish is True, then the announcement will automatically \
+        be published at this time.',
     )
     auto_publish = models.BooleanField(
-        default=False,
-        help_text="When set to true, the announcement will publish itself on the date and time indicated."
+        default=False, help_text='When set to true, the announcement will publish itself on the date and time indicated.'
     )
     draft = models.BooleanField(
         default=True,
-        help_text="A new announcement saved as a non-draft will be published and notifications sent.  \
+        help_text='A new announcement saved as a non-draft will be published and notifications sent.  \
             Editing a previously saved draft will not send out notifications; use the Publish button on \
-            the Announcements main page.")
+            the Announcements main page.',
+    )
     content = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)

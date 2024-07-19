@@ -18,24 +18,16 @@ User = get_user_model()
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class PrerequisitesSignalsTest(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
 
         self.sem = baker.make(Semester)
-        self.badge_assertion = baker.make(BadgeAssertion,
-                                          user=self.student,
-                                          do_not_grant_xp=True,
-                                          semester=self.sem)
-        self.quest_submission = baker.make(QuestSubmission,
-                                           user=self.student,
-                                           is_completed=False)
+        self.badge_assertion = baker.make(BadgeAssertion, user=self.student, do_not_grant_xp=True, semester=self.sem)
+        self.quest_submission = baker.make(QuestSubmission, user=self.student, is_completed=False)
 
-        self.course_student = baker.make(CourseStudent,
-                                         user=self.student,
-                                         active=False)
+        self.course_student = baker.make(CourseStudent, user=self.student, active=False)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_create(self, task):
@@ -89,8 +81,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
     def test_update_prereq_cache_triggered_by_badge(self, task):
-        """Creation and Update of a badge should...
-        """
+        """Creation and Update of a badge should..."""
         badge = baker.make(Badge, active=True)  # creation
         badge.active = False
         badge.save()  # update
@@ -101,15 +92,14 @@ class PrerequisitesSignalsTest(TenantTestCase):
         """
         Creation and Update of a Quest without a prerequisite should trigger a cache update
         """
-        quest = baker.make(Quest)   # creation
+        quest = baker.make(Quest)  # creation
         quest.verification_required = False
         quest.save()  # update
         self.assertEqual(task.call_count, 2)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_prereq_cache_triggered_by_quest(self, task):
-        """Creation and Update of a quest should not trigger a cache update, only when a prereq is added to the quest (covered elsewhere).
-        """
+        """Creation and Update of a quest should not trigger a cache update, only when a prereq is added to the quest (covered elsewhere)."""
         quest = baker.make(Quest, verification_required=True)  # creation
         quest.verification_required = False
         quest.save()  # update
@@ -117,8 +107,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_prereq_cache_triggered_by_quest_available_outside_course(self, task):
-        """Creation and Update of a quest should trigger a cache update, only when it is available outside the course.
-        """
+        """Creation and Update of a quest should trigger a cache update, only when it is available outside the course."""
         quest = baker.make(Quest, verification_required=True)  # creation
         quest.available_outside_course = True
         quest.save()  # update
@@ -137,8 +126,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_cache_triggered_by_quest_prereq_changes(self, task):
-        """Creation and Update of a prereq where the parent IS a quest should both trigger a cache update
-        """
+        """Creation and Update of a prereq where the parent IS a quest should both trigger a cache update"""
         quest = baker.make('quest_manager.quest')
         prereq = baker.make(Prereq, prereq_invert=True, parent_object=quest)  # creation
         prereq.prereq_invert = False
@@ -158,7 +146,7 @@ class PrerequisitesSignalsTest(TenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     def test_on_quest_badge_save_with_rank_prereq__creation(self):
-        """  Test that creating a Prereq, where either the prereq_object or the or_prereq_object are a Rank,
+        """Test that creating a Prereq, where either the prereq_object or the or_prereq_object are a Rank,
         results in the generation of a new CytoScape map with the Rank as the map's initial_object.
 
         Prereq - the model (a group of conditions)
@@ -175,11 +163,13 @@ class PrerequisitesSignalsTest(TenantTestCase):
             prereq_object=first_rank,
         )
 
-        self.assertTrue(CytoScape.objects.filter(
-            name=f'{first_rank.name} Map',
-            initial_content_type=ContentType.objects.get_for_model(first_rank),
-            initial_object_id=first_rank.id,
-        ).exists())
+        self.assertTrue(
+            CytoScape.objects.filter(
+                name=f'{first_rank.name} Map',
+                initial_content_type=ContentType.objects.get_for_model(first_rank),
+                initial_object_id=first_rank.id,
+            ).exists()
+        )
 
         # create prereq with rank as the alternative prereq
         # and check if new map is created
@@ -190,11 +180,13 @@ class PrerequisitesSignalsTest(TenantTestCase):
             or_prereq_object=second_rank,
         )
 
-        self.assertTrue(CytoScape.objects.filter(
-            name=f'{second_rank.name} Map',
-            initial_content_type=ContentType.objects.get_for_model(second_rank),
-            initial_object_id=second_rank.id,
-        ).exists())
+        self.assertTrue(
+            CytoScape.objects.filter(
+                name=f'{second_rank.name} Map',
+                initial_content_type=ContentType.objects.get_for_model(second_rank),
+                initial_object_id=second_rank.id,
+            ).exists()
+        )
 
         # check if rank with a preexisting map isnt created
         third_rank = baker.make('courses.rank', name='third rank')
@@ -208,10 +200,13 @@ class PrerequisitesSignalsTest(TenantTestCase):
             prereq_object=third_rank,
         )
         # assert only 1 map exist
-        self.assertEqual(CytoScape.objects.filter(
-            initial_content_type=ContentType.objects.get_for_model(third_rank),
-            initial_object_id=third_rank.id,
-        ).count(), 1)
+        self.assertEqual(
+            CytoScape.objects.filter(
+                initial_content_type=ContentType.objects.get_for_model(third_rank),
+                initial_object_id=third_rank.id,
+            ).count(),
+            1,
+        )
 
         # check if `invert=True` doesn't make a map
         no_map = baker.make('courses.rank', name='no map rank')
@@ -222,8 +217,10 @@ class PrerequisitesSignalsTest(TenantTestCase):
             prereq_object=no_map,
         )
 
-        self.assertFalse(CytoScape.objects.filter(
-            name=f'{no_map.name} Map',
-            initial_content_type=ContentType.objects.get_for_model(no_map),
-            initial_object_id=no_map.id,
-        ).exists())
+        self.assertFalse(
+            CytoScape.objects.filter(
+                name=f'{no_map.name} Map',
+                initial_content_type=ContentType.objects.get_for_model(no_map),
+                initial_object_id=no_map.id,
+            ).exists()
+        )

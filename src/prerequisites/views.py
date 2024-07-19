@@ -32,7 +32,7 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
     def post(self, request, *args, **kwargs):
         self.object = self.get_object(queryset=self.model.objects.all())
 
-        if "cancel" in request.POST:
+        if 'cancel' in request.POST:
             return redirect(self.object.get_absolute_url())
 
         return super().post(request, *args, **kwargs)
@@ -44,10 +44,7 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
     def form_valid(self, form):
         form.save()
 
-        messages.success(
-            self.request,
-            f"Prerequisites have been updated for {self.object}."
-        )
+        messages.success(self.request, f'Prerequisites have been updated for {self.object}.')
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):

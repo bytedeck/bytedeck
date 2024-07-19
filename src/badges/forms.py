@@ -8,17 +8,11 @@ from .models import Badge, BadgeAssertion
 
 
 class BadgeForm(forms.ModelForm):
-
     class Meta:
         model = Badge
-        fields = (
-            'name', 'xp', 'icon', 'short_description', 'badge_type', 'tags',
-            'sort_order', 'active', 'map_transition', 'import_id'
-        )
+        fields = ('name', 'xp', 'icon', 'short_description', 'badge_type', 'tags', 'sort_order', 'active', 'map_transition', 'import_id')
 
-        widgets = {
-            'tags': BootstrapTaggitSelect2Widget()
-        }
+        widgets = {'tags': BootstrapTaggitSelect2Widget()}
 
 
 class BadgeAssertionForm(forms.ModelForm):
@@ -36,9 +30,7 @@ class BadgeAssertionForm(forms.ModelForm):
 
         self.fields['user'].queryset = User.objects.order_by('profile')
         # It appears that sometimes a profile does not exist causing this to fail and the user field to not appear
-        self.fields['user'].label_from_instance = lambda obj: "{} | {}".format(
-            obj.profile if hasattr(obj, 'profile') else "", obj.username
-        )
+        self.fields['user'].label_from_instance = lambda obj: '{} | {}'.format(obj.profile if hasattr(obj, 'profile') else '', obj.username)
 
 
 class ProfileMultiSelectWidget(ModelSelect2MultipleWidget):
@@ -51,7 +43,7 @@ class ProfileMultiSelectWidget(ModelSelect2MultipleWidget):
     ]
 
     def label_from_instance(self, obj):
-        return f"{obj} | {obj.user.username}"
+        return f'{obj} | {obj.user.username}'
 
 
 class BulkBadgeAssertionForm(forms.Form):
@@ -62,7 +54,7 @@ class BulkBadgeAssertionForm(forms.Form):
         widget=ModelSelect2Widget(
             model=Badge,
             search_fields=['name__icontains'],
-        )
+        ),
     )
     # students = forms.ModelMultipleChoiceField(queryset=None)
     students = forms.ModelMultipleChoiceField(

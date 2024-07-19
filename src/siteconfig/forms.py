@@ -17,11 +17,10 @@ User = get_user_model()
 
 
 class SiteConfigForm(forms.ModelForm):
-
     class Meta:
         model = SiteConfig
         # active_semester setting moved to Semester views.
-        exclude = ["active_semester"]
+        exclude = ['active_semester']
 
     def __init__(self, *args, **kwargs):
         is_deck_owner = kwargs.pop('is_deck_owner', False)
@@ -34,7 +33,7 @@ class SiteConfigForm(forms.ModelForm):
             self.fields['deck_owner'].disabled = True
 
         self.fields['enable_google_signin'].disabled = True
-        self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
+        self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + ' - EXPERIMENTAL WIP'
 
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
@@ -42,50 +41,50 @@ class SiteConfigForm(forms.ModelForm):
         self.helper.layout = Layout(
             HTML(submit_btn),
             Div(
-                "site_name",
-                "site_name_short",
-                "access_code",
-                "banner_image",
-                "banner_image_dark",
-                "site_logo",
-                "default_icon",
-                "favicon",
-                "submission_quick_text",
-                "blank_approval_text",
-                "blank_return_text",
-                "banned_from_comments_text",
-                "outgoing_email_signature",
-                "deck_ai",
-                "color_headers_by_mark",
-                "enable_google_signin",
-                "approve_oldest_first",
-                "display_marks_calculation",
-                "cap_marks_at_100_percent",
-                "simplified_course_registration",
-                "custom_name_for_badge",
-                "custom_name_for_announcement",
-                "custom_name_for_group",
-                "custom_name_for_student",
-                "custom_name_for_tag",
-                "show_all_tags_on_profiles",
+                'site_name',
+                'site_name_short',
+                'access_code',
+                'banner_image',
+                'banner_image_dark',
+                'site_logo',
+                'default_icon',
+                'favicon',
+                'submission_quick_text',
+                'blank_approval_text',
+                'blank_return_text',
+                'banned_from_comments_text',
+                'outgoing_email_signature',
+                'deck_ai',
+                'color_headers_by_mark',
+                'enable_google_signin',
+                'approve_oldest_first',
+                'display_marks_calculation',
+                'cap_marks_at_100_percent',
+                'simplified_course_registration',
+                'custom_name_for_badge',
+                'custom_name_for_announcement',
+                'custom_name_for_group',
+                'custom_name_for_student',
+                'custom_name_for_tag',
+                'show_all_tags_on_profiles',
                 Accordion(
                     AccordionGroup(
-                        "Advanced",
+                        'Advanced',
                         HTML(
                             "<div class='help-block'><p class='text-danger'>"
-                            "<b>Warning: </b> These features are only editable by the deck owner."
-                            "</p></div>"
+                            '<b>Warning: </b> These features are only editable by the deck owner.'
+                            '</p></div>'
                         ),
-                        "custom_stylesheet",
-                        "custom_javascript",
-                        "deck_owner",
-                        "enable_shared_library",
+                        'custom_stylesheet',
+                        'custom_javascript',
+                        'deck_owner',
+                        'enable_shared_library',
                         active=False,
-                        template="crispy_forms/bootstrap3/accordion-group.html",
+                        template='crispy_forms/bootstrap3/accordion-group.html',
                     ),
                 ),
                 HTML(submit_btn),
-                style="margin-top: 10px;",
+                style='margin-top: 10px;',
             ),
         )
 
@@ -97,15 +96,13 @@ class SiteConfigForm(forms.ModelForm):
         using `cssutils` library to determine whether it is "valid" stylesheet or not.
         """
         # get data from form upload or do nothing if there is no uploads
-        value = self.cleaned_data.get("custom_stylesheet", False)
-        if value or self.files.get("custom_stylesheet"):
-            css = value or self.files["custom_stylesheet"]
+        value = self.cleaned_data.get('custom_stylesheet', False)
+        if value or self.files.get('custom_stylesheet'):
+            css = value or self.files['custom_stylesheet']
 
             # using CSS parser (from cssutils) to validate form upload,
             # for reference: https://pythonhosted.org/cssutils/docs/parse.html#cssparser
-            parser = CSSParser(
-                validate=True, raiseExceptions=True, loglevel=logging.ERROR
-            )
+            parser = CSSParser(validate=True, raiseExceptions=True, loglevel=logging.ERROR)
             try:
                 # call `parseString` method and parse uploaded file as string,
                 # errors may be raised
@@ -117,7 +114,7 @@ class SiteConfigForm(forms.ModelForm):
             # check if parsed stylesheet is a "valid" CSS file (according to `cssutils`),
             # if not raise validation error
             if not stylesheet.valid:
-                raise forms.ValidationError(_("This stylesheet is not valid CSS."))
+                raise forms.ValidationError(_('This stylesheet is not valid CSS.'))
 
             # returns form upload as is
             return css
@@ -130,7 +127,7 @@ class SiteConfigForm(forms.ModelForm):
         Ensure deck owner is given superuser permissions.
         """
         super().clean()
-        deck_owner = self.cleaned_data.get("deck_owner")
+        deck_owner = self.cleaned_data.get('deck_owner')
         if not deck_owner.is_superuser:
             deck_owner.is_superuser = True
             deck_owner.save()

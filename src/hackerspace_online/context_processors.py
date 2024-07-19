@@ -16,5 +16,5 @@ def config(request):
         )
     """
     if connection.schema_name != get_public_schema_name():
-        return {"config": SiteConfig.get()}
-    return {"config": None}
+        return {'config': SiteConfig.get()}
+    return {'config': None}

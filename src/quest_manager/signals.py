@@ -15,7 +15,7 @@ def quest_pre_save_callback(sender, instance, **kwargs):
 
 @receiver(pre_delete, sender=QuestSubmission)
 def submission_pre_delete_callback(sender, instance, **kwargs):
-    """ QuestSubmission pre-delete signal """
+    """QuestSubmission pre-delete signal"""
 
     # Because of how comments work, cascade on delete does not work. So we have to do it in a signal
     # delete all comments relating to submission.
@@ -26,21 +26,37 @@ def submission_pre_delete_callback(sender, instance, **kwargs):
 
 
 def tidy_html(markup, fix_runaway_newlines=False):
-    """Prettify's HTML by adding an indentation of 4, except for specified inline tags.
-    """
+    """Prettify's HTML by adding an indentation of 4, except for specified inline tags."""
 
     # https://stackoverflow.com/questions/17583415/customize-beautifulsoups-prettify-by-tag
 
     # Double the curly brackets to avoid problems with .format()
     stripped_markup = markup.replace('{', '{{').replace('}', '}}')
 
-    stripped_markup_soup = BeautifulSoup(stripped_markup, "html.parser")
+    stripped_markup_soup = BeautifulSoup(stripped_markup, 'html.parser')
 
     # We don't want line breaks/indentation for inline tags, especially span!
-    inline_tags = ['span', 'a', 'b', 'i', 'u', 'em', 'strong',
-                   'sup', 'sub', 'strike',
-                   'code', 'kbd', 'var', 'mark', 'small', 'ins', 'del',
-                   'abbr', 'samp']
+    inline_tags = [
+        'span',
+        'a',
+        'b',
+        'i',
+        'u',
+        'em',
+        'strong',
+        'sup',
+        'sub',
+        'strike',
+        'code',
+        'kbd',
+        'var',
+        'mark',
+        'small',
+        'ins',
+        'del',
+        'abbr',
+        'samp',
+    ]
 
     # find all the inline tags, save them into the list at i,
     # and replace them with: the string "{unformatted_tag_list[{i}]"
@@ -52,7 +68,7 @@ def tidy_html(markup, fix_runaway_newlines=False):
     # need to regenerate the soup so it forgets the location of the tags we just swapped out
     # otherwise it will still enter line breaks and indent at those locations
     markup = str(stripped_markup_soup)
-    new_soup = BeautifulSoup(markup, "html.parser")
+    new_soup = BeautifulSoup(markup, 'html.parser')
 
     prettified = new_soup.prettify(formatter=HTMLFormatter(indent=2))
 

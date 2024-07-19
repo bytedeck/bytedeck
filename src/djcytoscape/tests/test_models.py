@@ -25,18 +25,15 @@ def generate_real_primary_map():
 
 
 class JSONTestCaseMixin:
-
     def assertValidJSON(self, str):
-        """Tests that a string is valid JSON and returns the JSON deserialized as a python object via json.loads
-        """
+        """Tests that a string is valid JSON and returns the JSON deserialized as a python object via json.loads"""
         try:
             return json.loads(str)
         except TypeError:
             self.fail(f"Can't deserialize this JSON string: \n {str}")
 
     def assertValidJSONDict(self, json_dict):
-        """Tests that a python dictionary can be serialized into JSON via json.dumps
-        """
+        """Tests that a python dictionary can be serialized into JSON via json.dumps"""
         try:
             return json.dumps(json_dict)
         except json.JSONDecodeError:
@@ -44,7 +41,7 @@ class JSONTestCaseMixin:
 
 
 class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
-    """ All tests for the method: def clean_JSON(dirty_json_str): """
+    """All tests for the method: def clean_JSON(dirty_json_str):"""
 
     def test_clean_json_no_braces(self):
         self.assertValidJSON(clean_JSON('"key": true'))
@@ -59,7 +56,7 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         self.assertValidJSON(clean_JSON('key: true'))
 
     def test_clean_json_single_quoted_key(self):
-        self.assertValidJSON(clean_JSON('\'key\': true'))
+        self.assertValidJSON(clean_JSON("'key': true"))
 
     def test_clean_old_defaults_INIT_OPTIONS(self):
         json_str = """minZoom: 0.5,
@@ -113,7 +110,7 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertIsInstance(self.element, CytoElement)
 
     def test_json(self):
-        """ Should be valid json string, check by deserializing """
+        """Should be valid json string, check by deserializing"""
         for element in CytoElement.objects.all():
             self.assertValidJSON(element.json())
 
@@ -164,16 +161,16 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         questB = baker.make('quest_manager.Quest')
         questC = baker.make('quest_manager.Quest')
         # Generate maps out of order to ensure they're sorted by name
-        CytoScape.generate_map(questB, "B")
-        CytoScape.generate_map(questC, "C")
-        CytoScape.generate_map(questA, "A")
+        CytoScape.generate_map(questB, 'B')
+        CytoScape.generate_map(questC, 'C')
+        CytoScape.generate_map(questA, 'A')
         all_maps = CytoScape.objects.all()  # Main is included in this list
         # A queryset created from all objects is ordered correctly by default
         self.assertQuerysetEqual(all_maps, all_maps.order_by('name'))
 
     def test_generate_map(self):
         quest = baker.make('quest_manager.Quest')
-        CytoScape.generate_map(quest, "test")
+        CytoScape.generate_map(quest, 'test')
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_generate_map__long_name_xp(self):
@@ -186,11 +183,12 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # Create a quest with name length 50 and xp 10000000 to ensure dynamic label truncation catches all potential cases
         # testing for badges, etc. not needed as truncation only checks for xp attribute, not object type
         # xp_can_be_entered_by_students appends a single "+" character to label, so testing with it verifies it is caught as well
-        quest = baker.make('quest_manager.Quest', name="____Sample Quest Name with 50 Character Length____", xp=10000000,
-                           xp_can_be_entered_by_students=True)
+        quest = baker.make(
+            'quest_manager.Quest', name='____Sample Quest Name with 50 Character Length____', xp=10000000, xp_can_be_entered_by_students=True
+        )
 
         # Generate map with created quest and assert generation is successful (object count increased from default 1 to 2)
-        CytoScape.generate_map(quest, "test")
+        CytoScape.generate_map(quest, 'test')
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_save__sets_first_scape_as_primary(self):
@@ -235,7 +233,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         """Draft (unpublished) quests should not appear in maps (quest.visible_to_students = False)"""
 
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
-        self.assertIn("/quests/6/", self.map.elements_json)
+        self.assertIn('/quests/6/', self.map.elements_json)
 
         # Make quest 6 a draft and regenerate the map
         quest_6 = Quest.objects.get(id=6)
@@ -244,11 +242,11 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.map.regenerate()
 
         # should no longer be in the map
-        self.assertNotIn("/quests/6/", self.map.elements_json)
+        self.assertNotIn('/quests/6/', self.map.elements_json)
 
     def test_maps_dont_include_archived_quests(self):
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
-        self.assertIn("/quests/6/", self.map.elements_json)
+        self.assertIn('/quests/6/', self.map.elements_json)
 
         # Archive quest #6 and regenerate the map
         quest_6 = Quest.objects.get(id=6)
@@ -257,12 +255,12 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.map.regenerate()
 
         # should no longer be in the map
-        self.assertNotIn("/quests/6/", self.map.elements_json)
+        self.assertNotIn('/quests/6/', self.map.elements_json)
 
     def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""
         bad_map = CytoScape.objects.create(
-            name="bad map",
+            name='bad map',
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
         )
@@ -271,11 +269,10 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
             bad_map.regenerate()
 
         # should have been deleted at this point
-        self.assertFalse(CytoScape.objects.filter(name="bad map").exists())
+        self.assertFalse(CytoScape.objects.filter(name='bad map').exists())
 
     def test_get_related_maps(self):
-        """ Check if CytoScape.objects.get_related_maps returns the correct maps per quest.
-        """
+        """Check if CytoScape.objects.get_related_maps returns the correct maps per quest."""
 
         # create 3 categories
         # exclude orientation as its linked with the main map
@@ -300,16 +297,18 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
 
         # quests exist on every map
         self.all_maps = baker.make(Quest)
-        self.all_maps.add_simple_prereqs([
-            c1_quests.last(),
-            c2_quests.last(),
-            c3_quests.last(),
-        ])
+        self.all_maps.add_simple_prereqs(
+            [
+                c1_quests.last(),
+                c2_quests.last(),
+                c3_quests.last(),
+            ]
+        )
 
         # generate maps from categories
-        CytoScape.generate_map(c1_quests.first(), "Map 1")
-        CytoScape.generate_map(c2_quests.first(), "Map 2")
-        CytoScape.generate_map(c3_quests.first(), "Map 3")
+        CytoScape.generate_map(c1_quests.first(), 'Map 1')
+        CytoScape.generate_map(c2_quests.first(), 'Map 2')
+        CytoScape.generate_map(c3_quests.first(), 'Map 3')
 
         # test if get_related_maps get correct
         self.assertEqual(CytoScape.objects.get_related_maps(self.no_maps).count(), 0)

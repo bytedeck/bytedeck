@@ -13,6 +13,7 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
+
 from django.conf import settings
 from django.conf.urls import url
 from django.conf.urls.static import static
@@ -31,10 +32,7 @@ admin.site.site_title = lambda: SiteConfig.get().site_name_short
 
 app_name = 'hackerspace_online'
 
-urlpatterns = [
-    url(r'^grappelli/', include('grappelli.urls')),
-    url(r'^admin/', admin.site.urls)
-]
+urlpatterns = [url(r'^grappelli/', include('grappelli.urls')), url(r'^admin/', admin.site.urls)]
 
 urlpatterns += [
     url(r'^$', views.home, name='home'),
@@ -57,18 +55,16 @@ urlpatterns += [
     url(r'^decks/', include('tenant.urls', namespace='decks')),
     # bytedeck summernote
     url(r'^summernote/', include('bytedeck_summernote.urls')),
-
     url(r'^tags/', include('tags.urls', namespace='tags')),
-
     # allauth
-    url(r'^accounts/password/reset/$',
-        views.CustomPasswordResetView.as_view(),
-        name='account_reset_password'),
-    url(r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',
+    url(r'^accounts/password/reset/$', views.CustomPasswordResetView.as_view(), name='account_reset_password'),
+    url(
+        r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',
         views.CustomPasswordResetFromKeyView.as_view(),
-        name='account_reset_password_from_key'),
+        name='account_reset_password_from_key',
+    ),
     # apply `non_public_only_view` decorator on all `allauth` views, fix #1214
-    url(r'^accounts/', decorator_include(non_public_only_view, "allauth.urls")),
+    url(r'^accounts/', decorator_include(non_public_only_view, 'allauth.urls')),
     url(r'^pages/', include('django.contrib.flatpages.urls')),
     # select2
     url(r'^select2/', include('django_select2.urls')),
@@ -78,10 +74,8 @@ urlpatterns += [
 
 
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL,
-                          document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.MEDIA_URL,
-                          document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     import debug_toolbar
 
     urlpatterns += [

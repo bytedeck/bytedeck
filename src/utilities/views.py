@@ -33,6 +33,7 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
     The view only supports HTTP's GET method.
 
     """
+
     context_object_name = 'objects'
 
     def get(self, request, *args, **kwargs):
@@ -65,26 +66,29 @@ class QuerySetSequenceAutoResponseView(AutoResponseView):
             groups.setdefault(type(result), [])
             groups[type(result)].append(result)
 
-        return JsonResponse({
-            'results': [
-                {
-                    'id': None,
-                    'text': capfirst(self.get_model_name(model)),
-                    'children': [{
-                        'id': self.get_result_value(result),
-                        'text': self.widget.label_from_instance(result),
-                    } for result in results]
-                } for model, results in groups.items()
-            ],
-            'more': context['page_obj'].has_next()
-        })
+        return JsonResponse(
+            {
+                'results': [
+                    {
+                        'id': None,
+                        'text': capfirst(self.get_model_name(model)),
+                        'children': [
+                            {
+                                'id': self.get_result_value(result),
+                                'text': self.widget.label_from_instance(result),
+                            }
+                            for result in results
+                        ],
+                    }
+                    for model, results in groups.items()
+                ],
+                'more': context['page_obj'].has_next(),
+            }
+        )
 
     def get_result_value(self, result):
         """Return ctypeid-objectid for result."""
-        return '{}-{}'.format(
-            ContentType.objects.get_for_model(result).pk,
-            result.pk,
-        )
+        return f'{ContentType.objects.get_for_model(result).pk}-{result.pk}'
 
     def get_model_name(self, model):
         """Return the name of the model, fetch parent if model is a proxy."""
@@ -135,7 +139,7 @@ def videos(request):
     form = VideoForm(request.POST or None, request.FILES or None)
     if form.is_valid():
         form.save()
-    context = {'videos': videos, 'heading': "Video Resources", 'form': form}
+    context = {'videos': videos, 'heading': 'Video Resources', 'form': form}
     return render(request, 'utilities/videos.html', context)
 
 
@@ -180,20 +184,20 @@ class MenuItemDelete(NonPublicOnlyViewMixin, DeleteView):
 class FlatPageCreateView(NonPublicOnlyViewMixin, CreateView):
     model = FlatPage
     form_class = CustomFlatpageForm
-    template_name = "flatpages/flatpage-form.html"
+    template_name = 'flatpages/flatpage-form.html'
 
     def get_success_url(self):
         return reverse('utilities:flatpage_list')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["title"] = "Create"
-        context['heading_title'] = "Create New Custom Page"
+        context['title'] = 'Create'
+        context['heading_title'] = 'Create New Custom Page'
         return context
 
     def get_form_kwargs(self, *args, **kwargs):
         fkwargs = super().get_form_kwargs(*args, **kwargs)
-        fkwargs["initial"] = {"sites": [Site.objects.first().pk]}
+        fkwargs['initial'] = {'sites': [Site.objects.first().pk]}
         return fkwargs
 
 
@@ -201,28 +205,28 @@ class FlatPageCreateView(NonPublicOnlyViewMixin, CreateView):
 class FlatPageUpdateView(NonPublicOnlyViewMixin, UpdateView):
     model = FlatPage
     form_class = CustomFlatpageForm
-    template_name = "flatpages/flatpage-form.html"
+    template_name = 'flatpages/flatpage-form.html'
     context_object_name = 'flatpage'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = "Update"
-        context['heading_title'] = "Update Custom Page"
+        context['title'] = 'Update'
+        context['heading_title'] = 'Update Custom Page'
         return context
 
 
 @method_decorator(staff_member_required, name='dispatch')
 class FlatPageDeleteView(NonPublicOnlyViewMixin, DeleteView):
     model = FlatPage
-    template_name = "flatpages/flatpage-delete.html"
+    template_name = 'flatpages/flatpage-delete.html'
     context_object_name = 'flatpage'
     success_url = reverse_lazy('utilities:flatpage_list')
 
 
 class FlatPageListView(NonPublicOnlyViewMixin, ListView):
     model = FlatPage
-    template_name = "flatpages/flatpage-list.html"
+    template_name = 'flatpages/flatpage-list.html'
     context_object_name = 'flatpages'
 
     def get_queryset(self):
-        return FlatPage.objects.all().order_by("title")
+        return FlatPage.objects.all().order_by('title')

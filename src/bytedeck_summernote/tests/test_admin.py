@@ -11,7 +11,6 @@ from bytedeck_summernote.admin import ByteDeckSummernoteModelAdminMixin
 
 
 class ByteDeckSummernoteModelAdminMixinTestCase(TestCase):
-
     def test_get_summernote_widget_class(self):
         """
         Test two things:
@@ -44,11 +43,11 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
     def setUp(self):
-        self.username = "lqez"
-        self.password = "ohmygoddess"
+        self.username = 'lqez'
+        self.password = 'ohmygoddess'
         self.site = AdminSite()
 
-        self.app_config = apps.get_app_config("django_summernote")
+        self.app_config = apps.get_app_config('django_summernote')
         self.app_config.update_config()
         self.summernote_config = self.app_config.config
 
@@ -65,7 +64,7 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteSafeWidget,
         )
 
@@ -74,28 +73,28 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
-        self.summernote_config["iframe"] = False
+        self.summernote_config['iframe'] = False
 
         class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
             pass
 
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
-        assert isinstance(ma.get_form(None).base_fields["content"].widget, ByteDeckSummernoteSafeInplaceWidget)
+        assert isinstance(ma.get_form(None).base_fields['content'].widget, ByteDeckSummernoteSafeInplaceWidget)
 
-        self.summernote_config["iframe"] = True
+        self.summernote_config['iframe'] = True
 
     def test_admin_summernote_fields(self):
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
         class FlatPageModelAdmin(ByteDeckSummernoteSafeModelAdmin):
-            summernote_fields = ("content",)
+            summernote_fields = ('content',)
 
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteSafeWidget,
         )
 
@@ -105,7 +104,7 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert not isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteSafeWidget,
         )
 
@@ -114,11 +113,11 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
 
     def setUp(self):
-        self.username = "lqez"
-        self.password = "ohmygoddess"
+        self.username = 'lqez'
+        self.password = 'ohmygoddess'
         self.site = AdminSite()
 
-        self.app_config = apps.get_app_config("django_summernote")
+        self.app_config = apps.get_app_config('django_summernote')
         self.app_config.update_config()
         self.summernote_config = self.app_config.config
 
@@ -135,7 +134,7 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteAdvancedWidget,
         )
 
@@ -144,28 +143,28 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
 
-        self.summernote_config["iframe"] = False
+        self.summernote_config['iframe'] = False
 
         class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
             pass
 
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
-        assert isinstance(ma.get_form(None).base_fields["content"].widget, ByteDeckSummernoteAdvancedInplaceWidget)
+        assert isinstance(ma.get_form(None).base_fields['content'].widget, ByteDeckSummernoteAdvancedInplaceWidget)
 
-        self.summernote_config["iframe"] = True
+        self.summernote_config['iframe'] = True
 
     def test_admin_summernote_fields(self):
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 
         class FlatPageModelAdmin(ByteDeckSummernoteAdvancedModelAdmin):
-            summernote_fields = ("content",)
+            summernote_fields = ('content',)
 
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteAdvancedWidget,
         )
 
@@ -175,6 +174,6 @@ class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
         ma = FlatPageModelAdmin(FlatPage, self.site)
 
         assert not isinstance(
-            ma.get_form(None).base_fields["content"].widget,
+            ma.get_form(None).base_fields['content'].widget,
             ByteDeckSummernoteAdvancedWidget,
         )

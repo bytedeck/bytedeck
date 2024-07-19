@@ -17,7 +17,7 @@ class ShellUtilsTest(TenantTestCase):
         pass
 
     def test_generate_students(self):
-        """ Generates the provided number of students (20, is_staff = False) """
+        """Generates the provided number of students (20, is_staff = False)"""
         create_this_many = 20
         num_students_before = User.objects.filter(is_staff=False).count()
         generate_students(create_this_many, quiet=True)
@@ -25,7 +25,7 @@ class ShellUtilsTest(TenantTestCase):
         self.assertEqual(num_students_after, num_students_before + create_this_many)
 
     def test_generate_quests(self):
-        """ Generates the provided number of students (10) """
+        """Generates the provided number of students (10)"""
         num_quest = 5
         num_campaigns = 2
 
@@ -42,6 +42,6 @@ class ShellUtilsTest(TenantTestCase):
         self.assertEqual(num_quests_after, num_quest_before + (num_quest * num_campaigns))
 
         # get the last (num_quest * num_campaigns) quests created and check if its related to only 2 campaigns
-        quest_qs = Quest.objects.order_by('-pk')[:num_quest * num_campaigns]
+        quest_qs = Quest.objects.order_by('-pk')[: num_quest * num_campaigns]
         campaign_ids = set(quest_qs.values_list('campaign_id', flat=True))
         self.assertEqual(len(campaign_ids), num_campaigns)

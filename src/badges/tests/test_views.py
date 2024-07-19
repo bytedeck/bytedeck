@@ -15,12 +15,11 @@ User = get_user_model()
 
 
 class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -30,13 +29,13 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # needed because BadgeAssertions use a default that might not exist yet
         self.sem = SiteConfig.get().active_semester
 
-        self.test_badge = baker.make(Badge, name="badge", xp=5)
+        self.test_badge = baker.make(Badge, name='badge', xp=5)
         self.test_badge.tags.add('tag')
         self.test_badge_type = baker.make(BadgeType)
         self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home  '''
+        """If not logged in then all views should redirect to home"""
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
         s_pk = self.test_student1.pk
@@ -54,7 +53,6 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('badges:revoke', args=[a_pk])
 
     def test_all_badge_page_status_codes_for_students(self):
-
         # log in a student
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
@@ -68,7 +66,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # students shouldn't have access to these and should get permission denied 403
 
-        self.assert403('badges:badge_create'),
+        (self.assert403('badges:badge_create'),)
         self.assert403('badges:badge_update', args=[b_pk])
         self.assert403('badges:badge_copy', args=[b_pk])
         self.assert403('badges:badge_delete', args=[b_pk])
@@ -106,33 +104,30 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         form_data = {
-            'name': "badge test",
+            'name': 'badge test',
             'xp': 5,
-            'content': "test content",
+            'content': 'test content',
             'badge_type': self.test_badge_type.id,
             'author': self.test_teacher.id,
-            'import_id': uuid.uuid4()
+            'import_id': uuid.uuid4(),
         }
 
-        response = self.client.post(
-            reverse('badges:badge_create'),
-            data=form_data
-        )
-        self.assertRedirects(response, reverse("badges:list"))
+        response = self.client.post(reverse('badges:badge_create'), data=form_data)
+        self.assertRedirects(response, reverse('badges:list'))
 
         # Get the newest object
         new_badge = Badge.objects.latest('datetime_created')
-        self.assertEqual(new_badge.name, "badge test")
+        self.assertEqual(new_badge.name, 'badge test')
 
     def test_badge_copy__GET(self):
-        """ initial values in form GET is the same as the self.test_badge (badge that is being copied)  """
+        """initial values in form GET is the same as the self.test_badge (badge that is being copied)"""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_copy', args=[self.test_badge.id]))
 
         form_data = response.context['form'].initial
 
         # Badge name should have changed
-        self.assertEqual(form_data['name'], "Copy of " + self.test_badge.name)
+        self.assertEqual(form_data['name'], 'Copy of ' + self.test_badge.name)
         # Tags should be the same as original
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
 
@@ -142,23 +137,20 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         form_data = {
-            'name': "badge copy test",
+            'name': 'badge copy test',
             'xp': 5,
-            'content': "test content",
+            'content': 'test content',
             'badge_type': self.test_badge_type.id,
             'author': self.test_teacher.id,
-            'import_id': uuid.uuid4()
+            'import_id': uuid.uuid4(),
         }
 
-        response = self.client.post(
-            reverse('badges:badge_copy', args=[self.test_badge.id]),
-            data=form_data
-        )
-        self.assertRedirects(response, reverse("badges:list"))
+        response = self.client.post(reverse('badges:badge_copy', args=[self.test_badge.id]), data=form_data)
+        self.assertRedirects(response, reverse('badges:list'))
 
         # Get the newest object
         new_badge = Badge.objects.latest('datetime_created')
-        self.assertEqual(new_badge.name, "badge copy test")
+        self.assertEqual(new_badge.name, 'badge copy test')
 
     def test_assertion_create_and_delete(self):
         # log in a teacher
@@ -166,16 +158,12 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         # test: assertion_create()
-        form_data = {
-            'badge': self.test_badge.id,
-            'user': self.test_student1.id
-        }
+        form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
 
         response = self.client.post(
-            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
-            data=form_data
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}), data=form_data
         )
-        self.assertRedirects(response, reverse("badges:list"))
+        self.assertRedirects(response, reverse('badges:list'))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.user, self.test_student1)
@@ -185,7 +173,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(
             reverse('badges:revoke', args=[new_assertion.id]),
         )
-        self.assertRedirects(response, reverse("profiles:profile_detail", args=[self.test_student1.profile.id]))
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
 
         # shouldn't exist anymore now that we deleted it!
         with self.assertRaises(BadgeAssertion.DoesNotExist):
@@ -204,10 +192,9 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         }
 
         response = self.client.post(
-            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
-            data=form_data
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}), data=form_data
         )
-        self.assertRedirects(response, reverse("badges:list"))
+        self.assertRedirects(response, reverse('badges:list'))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.do_not_grant_xp, True)
@@ -224,13 +211,10 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
         baker.make('courses.CourseStudent', user=self.test_student2, semester=self.sem)
 
-        form_data = {
-            'badge': self.test_badge.id,
-            'students': [self.test_student1.profile.id, self.test_student2.profile.id]
-        }
+        form_data = {'badge': self.test_badge.id, 'students': [self.test_student1.profile.id, self.test_student2.profile.id]}
         response = self.client.post(reverse('badges:bulk_grant'), data=form_data)
 
-        self.assertRedirects(response, reverse("badges:list"))
+        self.assertRedirects(response, reverse('badges:list'))
 
         # we just bulk granted 2 badges, so there should be two more than before!
         badge_assertions_after = BadgeAssertion.objects.all().count()
@@ -250,15 +234,15 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
-        config.custom_name_for_badge = "CustomBadge"
+        config.custom_name_for_badge = 'CustomBadge'
         config.save()
 
         # Get Create view and assert header is correct
         request = self.client.get(reverse('badges:badge_create'))
-        self.assertContains(request, "Create New CustomBadge")
+        self.assertContains(request, 'Create New CustomBadge')
         # Get Copy view and assert header is correct
         request = self.client.get(reverse('badges:badge_copy', args=[self.test_badge.id]))
-        self.assertContains(request, "Copy another CustomBadge")
+        self.assertContains(request, 'Copy another CustomBadge')
         # Get Edit view and assert header is correct
         request = self.client.get(reverse('badges:badge_update', args=[self.test_badge.id]))
         self.assertContains(request, 'Update CustomBadge')
@@ -267,11 +251,11 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Delete CustomBadge')
         # Get Detail view and assert header is correct
         request = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.id]))
-        self.assertContains(request, "CustomBadge Details")
+        self.assertContains(request, 'CustomBadge Details')
         # Get List view and assert header buttons have correct label
         request = self.client.get(reverse('badges:list'))
-        self.assertContains(request, "Create CustomBadge")
-        self.assertContains(request, "Create CustomBadge Type")
+        self.assertContains(request, 'Create CustomBadge')
+        self.assertContains(request, 'Create CustomBadge Type')
 
     def test_badge_views__field_text_custom_label_displayed(self):
         """
@@ -284,23 +268,22 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
-        config.custom_name_for_badge = "CustomBadge"
+        config.custom_name_for_badge = 'CustomBadge'
         config.save()
 
         # Get Create view and assert every instance of custom label is present
         # (badge_type field label, map_transition field help text, import_id help text)
         # Copy and Update views use these fields too, but through the same logic.
         request = self.client.get(reverse('badges:badge_create'))
-        self.assertContains(request, "CustomBadge Type")
+        self.assertContains(request, 'CustomBadge Type')
 
 
 class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -309,14 +292,14 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.badge_type = baker.make(BadgeType)
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to login page '''
+        """If not logged in then all views should redirect to login page"""
         self.assertRedirectsLogin('badges:badge_types')
         self.assertRedirectsLogin('badges:badge_type_create')
         self.assertRedirectsLogin('badges:badge_type_update', args=[1])
         self.assertRedirectsLogin('badges:badge_type_delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
-        ''' If not logged in then all views should redirect to 403 '''
+        """If not logged in then all views should redirect to 403"""
         self.client.force_login(self.test_student1)
 
         # Staff access only
@@ -326,13 +309,13 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('badges:badge_type_delete', args=[1])
 
     def test_BadgeTypeList_view(self):
-        """ Admin should be able to view badge type list """
+        """Admin should be able to view badge type list"""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_types'))
         self.assertEqual(response.status_code, 200)
 
     def test_BadgeTypeCreate_view(self):
-        """ Admin should be able to create a course """
+        """Admin should be able to create a course"""
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'New badge type',
@@ -345,7 +328,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(test_badgetype.name, data['name'])
 
     def test_BadgeTypeUpdate_view(self):
-        """ Admin should be able to update a badge type """
+        """Admin should be able to update a badge type"""
         self.client.force_login(self.test_teacher)
         # set name and icon to something they wouldn't normally be
         data = {
@@ -359,7 +342,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(test_badgetype.fa_icon, data['fa_icon'])
 
     def test_BadgeTypeDelete_view__no_badges(self):
-        """ Admin should be able to delete a badge type with no assigned badges """
+        """Admin should be able to delete a badge type with no assigned badges"""
         self.client.force_login(self.test_teacher)
 
         # make a new badge type that doesn't have any associated badges to ensure deleting it won't cause problems
@@ -371,7 +354,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
     def test_BadgeTypeDelete_view__with_badges(self):
-        """ Admin should not be able to delete a badge type with badges assigned """
+        """Admin should not be able to delete a badge type with badges assigned"""
         self.client.force_login(self.test_teacher)
 
         # assign badge to badge type
@@ -402,12 +385,12 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
-        config.custom_name_for_badge = "CustomBadge"
+        config.custom_name_for_badge = 'CustomBadge'
         config.save()
 
         # Get Create view and assert header is correct
         request = self.client.get(reverse('badges:badge_type_create'))
-        self.assertContains(request, "Create New CustomBadge Type")
+        self.assertContains(request, 'Create New CustomBadge Type')
         # Get Edit view and assert header is correct
         request = self.client.get(reverse('badges:badge_type_update', args=[self.badge_type.id]))
         self.assertContains(request, 'Update CustomBadge Type')

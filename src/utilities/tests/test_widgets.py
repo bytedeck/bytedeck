@@ -20,9 +20,7 @@ from utilities.widgets import GFKSelect2Widget
 
 
 def random_string(n):
-    return "".join(
-        random.choice(string.ascii_uppercase + string.digits) for _ in range(n)
-    )
+    return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(n))
 
 
 class CustomGFKSelect2Widget(GFKSelect2Widget):
@@ -51,9 +49,7 @@ class TestGFKSelect2Widget(TenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
-        self.groups = Group.objects.bulk_create(
-            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
-        )
+        self.groups = Group.objects.bulk_create([Group(pk=pk, name=random_string(50)) for pk in range(100)])
 
     def _ct_pk(self, obj):
         return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
@@ -77,14 +73,10 @@ class TestGFKSelect2Widget(TenantTestCase):
         another_group = self.groups[1]
         not_required_field = self.form.fields['f']
         assert not_required_field.required is False
-        widget_output = not_required_field.widget.render(
-            'f', self._ct_pk(group))
-        selected_option = '<option value="{ct_pk}" selected="selected">{value}</option>'.format(
-            ct_pk=self._ct_pk(group), value=str(group))
-        selected_option_a = '<option value="{ct_pk}" selected>{value}</option>'.format(
-            ct_pk=self._ct_pk(group), value=str(group))
-        unselected_option = '<option value="{ct_pk}">{value}</option>'.format(
-            ct_pk=self._ct_pk(another_group), value=str(another_group))
+        widget_output = not_required_field.widget.render('f', self._ct_pk(group))
+        selected_option = f'<option value="{self._ct_pk(group)}" selected="selected">{str(group)}</option>'
+        selected_option_a = f'<option value="{self._ct_pk(group)}" selected>{str(group)}</option>'
+        unselected_option = f'<option value="{self._ct_pk(another_group)}">{str(another_group)}</option>'
 
         assert selected_option in widget_output or selected_option_a in widget_output, widget_output
         assert unselected_option not in widget_output
@@ -98,9 +90,10 @@ class TestGFKSelect2Widget(TenantTestCase):
         widget_output = field.widget.render('f', self._ct_pk(group))
 
         def get_selected_options(group):
-            return '<option value="{ct_pk}" selected="selected">{value}</option>'.format(
-                ct_pk=self._ct_pk(group), value=str(group)), '<option value="{ct_pk}" selected>{value}</option>'.format(
-                ct_pk=self._ct_pk(group), value=str(group))
+            return (
+                f'<option value="{self._ct_pk(group)}" selected="selected">{str(group)}</option>',
+                f'<option value="{self._ct_pk(group)}" selected>{str(group)}</option>',
+            )
 
         assert all(o not in widget_output for o in get_selected_options(group))
         group.name = group.name.upper()
@@ -128,12 +121,11 @@ class TestGFKSelect2Widget(TenantTestCase):
         assert widget.filter_queryset(self.groups[0].name[:3]).exists()
 
         widget = CustomGFKSelect2Widget()
-        qs = widget.filter_queryset(" ".join([self.groups[0].name[:3], self.groups[0].name[3:]]))
+        qs = widget.filter_queryset(' '.join([self.groups[0].name[:3], self.groups[0].name[3:]]))
         assert qs.exists()
 
     def test_queryset_kwarg(self):
-        widget = GFKSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
         result = widget.filter_queryset(group.name)
         assert result.exists()
@@ -142,27 +134,21 @@ class TestGFKSelect2Widget(TenantTestCase):
         group = self.groups[0]
 
         queryset = QuerySetSequence(Group.objects.filter(~Q(name__icontains=group.name)))
-        widget = GFKSelect2Widget(
-            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
         result = widget.filter_queryset(group.name)
         assert not result.exists()
 
         queryset = QuerySetSequence(Group.objects.filter(Q(name__icontains=group.name)))
-        widget = GFKSelect2Widget(
-            queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
         result = widget.filter_queryset(group.name)
         assert result.exists()
 
     def test_ajax_view_registration(self):
-        widget = GFKSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
-        data = {
-            'field_id': signing.dumps(id(widget)),
-            'term': group.name
-        }
+        data = {'field_id': signing.dumps(id(widget)), 'term': group.name}
         response = self.client.get(url, data=data)
         assert response.status_code == 200, response.content
         data = json.loads(response.content.decode('utf-8'))
@@ -172,8 +158,7 @@ class TestGFKSelect2Widget(TenantTestCase):
     def test_render(self):
         from django_select2.cache import cache
 
-        widget = GFKSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
         cached_widget = cache.get(widget._get_cache_key())
         assert cached_widget['max_results'] == widget.max_results
@@ -183,6 +168,5 @@ class TestGFKSelect2Widget(TenantTestCase):
         assert text_type(cached_widget['queryset'][0][1]) == text_type(qs.get_querysets()[0].query)
 
     def test_get_url(self):
-        widget = GFKSelect2Widget(
-            queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
+        widget = GFKSelect2Widget(queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         assert isinstance(widget.get_url(), text_type)

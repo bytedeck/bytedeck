@@ -21,7 +21,7 @@ def regenerate_all_maps(requesting_user_id):
                 SiteConfig.get().deck_ai,
                 recipient=requesting_user,
                 icon="<i class='fa fa-lg fa-fw fa-map-signs text-warning'></i>",
-                verb=f"failed to regenerate '{scape.name} Map', the intial object no longer exists.  This map has been deleted."
+                verb=f"failed to regenerate '{scape.name} Map', the intial object no longer exists.  This map has been deleted.",
             )
 
     notify.send(
@@ -30,5 +30,5 @@ def regenerate_all_maps(requesting_user_id):
         recipient=requesting_user,
         affected_users=[requesting_user],
         icon="<i class='fa fa-lg fa-fw fa-map-signs text-success'></i>",
-        verb="completed regeneration of all valid maps."
+        verb='completed regeneration of all valid maps.',
     )

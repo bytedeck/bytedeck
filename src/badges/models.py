@@ -20,6 +20,7 @@ from tags.models import TagsModelMixin
 
 # Create your models here.
 
+
 class BadgeRarityManager(models.Manager):
     def get_rarity(self, percentile):
         """Because this model is sorted by rarity, with the rarist on top,
@@ -47,9 +48,9 @@ class BadgeRarity(models.Model):
     )
     percentile = models.FloatField(
         unique=True,
-        help_text="A number from 0.1% (or less) to 100.0% indicating the rarity of the badge.  For example: \
+        help_text='A number from 0.1% (or less) to 100.0% indicating the rarity of the badge.  For example: \
             10.0% would mean badges that <10.0% of users have earned will be assigned this rarity, unless \
-            it falls into the next more rare category (such as 5.0%).  A value of 100 will catch all badges."
+            it falls into the next more rare category (such as 5.0%).  A value of 100 will catch all badges.',
     )
     color = models.CharField(
         max_length=50,
@@ -60,26 +61,21 @@ class BadgeRarity(models.Model):
         max_length=50,
         default='fa-certificate',
         help_text='A font-awesome icon to represent this rarity, should begin with "fa-".  See here for \
-            options: "https://faicons.com"'
+            options: "https://faicons.com"',
     )
 
     objects = BadgeRarityManager()
 
     class Meta:
         ordering = ['percentile']
-        verbose_name = "Badge Rarity"
-        verbose_name_plural = "Badge Rarities"
+        verbose_name = 'Badge Rarity'
+        verbose_name_plural = 'Badge Rarities'
 
     def __str__(self):
         return self.name
 
     def get_icon_html(self):
-        icon = "<i class='fa {} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
-            self.fa_icon,
-            self.name,
-            self.name,
-            self.color,
-        )
+        icon = f"<i class='fa {self.fa_icon} fa-fw rarity-{self.name}' title='{self.name}' style='color:{self.color}' aria-hidden='true'></i>"
         aria_span = f"<span class='sr-only'>{self.name}</span>"
         return icon + aria_span
 
@@ -90,8 +86,7 @@ class BadgeType(models.Model):
     description = models.TextField(blank=True, null=True)
     repeatable = models.BooleanField(default=True)
     # manual_only = models.BooleanField(default = False)
-    fa_icon = models.CharField(max_length=50, blank=True, null=True,
-                               help_text="Name of a font-awesome icon, e.g.'fa-gift'")
+    fa_icon = models.CharField(max_length=50, blank=True, null=True, help_text="Name of a font-awesome icon, e.g.'fa-gift'")
 
     def __str__(self):
         return self.name
@@ -107,7 +102,7 @@ class BadgeSeries(models.Model):
         return self.name
 
     class Meta:
-        ordering = ["name"]
+        ordering = ['name']
         verbose_name_plural = "Badge Series'"
 
 
@@ -127,7 +122,8 @@ class BadgeManager(models.Manager):
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
-            obj.pk for obj in self.get_queryset().get_active()
+            obj.pk
+            for obj in self.get_queryset().get_active()
             if Prereq.objects.all_conditions_met(obj, user, False)
             # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
         ]
@@ -135,10 +131,7 @@ class BadgeManager(models.Manager):
 
     def all_manually_granted(self):
         # build a list of pk's for badges that have no prerequisites.
-        pk_manual_list = [
-            obj.pk for obj in self.get_queryset()
-            if Prereq.objects.all_parent(obj).count() == 0
-        ]
+        pk_manual_list = [obj.pk for obj in self.get_queryset() if Prereq.objects.all_parent(obj).count() == 0]
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
@@ -155,16 +148,14 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     active = models.BooleanField(default=True)
 
     import_id = models.UUIDField(
-        default=uuid.uuid4, unique=True,
-        help_text="Only edit this if you want to link to a badge in another system so that "
-                  "when importing from that other system, it will update this badge too. "
-                  "Otherwise do not edit this or it will break existing links!"
+        default=uuid.uuid4,
+        unique=True,
+        help_text='Only edit this if you want to link to a badge in another system so that '
+        'when importing from that other system, it will update this badge too. '
+        'Otherwise do not edit this or it will break existing links!',
     )
 
-    map_transition = models.BooleanField(
-        default=False,
-        help_text='Break maps at this badge.  This badge will link to a new map.'
-    )
+    map_transition = models.BooleanField(default=False, help_text='Break maps at this badge.  This badge will link to a new map.')
     # hours_between_repeats = models.PositiveIntegerField(default = 0)
     # date_available = models.DateField(default=timezone.now())
     # time_available = models.TimeField(default=time().min) # midnight
@@ -205,7 +196,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
         if badge_rarity:
             return badge_rarity.get_icon_html()
         else:
-            return ""
+            return ''
 
     # all models that want to act as a possible prerequisite need to have this method
     # Create a default in the PrereqModel(models.Model) class that uses a default:
@@ -253,6 +244,7 @@ class BadgeAssertionManager(models.Manager):
         Otherwise, all users with active profiles will be returned.
         """
         from profile_manager.models import Profile
+
         if active_semester_only:
             users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
         else:
@@ -304,12 +296,7 @@ class BadgeAssertionManager(models.Manager):
             active_semester = SiteConfig.get().active_semester.id
 
         new_assertion = BadgeAssertion(
-            badge=badge,
-            user=user,
-            ordinal=ordinal,
-            issued_by=issued_by,
-            do_not_grant_xp=transfer,
-            semester_id=active_semester
+            badge=badge, user=user, ordinal=ordinal, issued_by=issued_by, do_not_grant_xp=transfer, semester_id=active_semester
         )
         new_assertion.save()
         user.profile.xp_invalidate_cache()  # recalculate user's XP
@@ -329,12 +316,7 @@ class BadgeAssertionManager(models.Manager):
         self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
         qs = self.get_queryset(True).get_user(user)
-        by_type = [
-            {
-                'badge_type': t,
-                'list': qs.get_type(t)
-            } for t in types
-        ]
+        by_type = [{'badge_type': t, 'list': qs.get_type(t)} for t in types]
         return by_type
 
     def calculate_xp(self, user):
@@ -363,8 +345,7 @@ class BadgeAssertion(models.Model):
     # time_issued = models.DateTimeField(default = timezone.now())
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
-    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by',
-                                  on_delete=models.SET_NULL)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by', on_delete=models.SET_NULL)
     do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
     semester = models.ForeignKey('courses.Semester', default=1, on_delete=models.SET_DEFAULT)
 
@@ -390,7 +371,7 @@ class BadgeAssertion(models.Model):
         """
         count = self.count()
         if count < 2:
-            return ""
+            return ''
         return count
 
     def get_duplicate_assertions(self):
@@ -401,8 +382,8 @@ class BadgeAssertion(models.Model):
 # only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
 def post_save_receiver(sender, **kwargs):
-    assertion = kwargs["instance"]
-    if kwargs["created"]:
+    assertion = kwargs['instance']
+    if kwargs['created']:
         # need an issuing object, fix this better, should be generic something "Hackerspace or "Automatic".
         sender = assertion.issued_by
         if sender is None:
@@ -411,7 +392,7 @@ def post_save_receiver(sender, **kwargs):
         fa_icon = assertion.badge.badge_type.fa_icon
 
         if not fa_icon:
-            fa_icon = "fa-certificate"
+            fa_icon = 'fa-certificate'
 
         icon = "<i class='text-warning fa fa-lg fa-fw "
         icon += fa_icon
@@ -422,6 +403,9 @@ def post_save_receiver(sender, **kwargs):
             # action= action,
             target=assertion.badge,
             recipient=assertion.user,
-            affected_users=[assertion.user, ],
+            affected_users=[
+                assertion.user,
+            ],
             icon=icon,
-            verb="granted you a")
+            verb='granted you a',
+        )

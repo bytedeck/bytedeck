@@ -13,6 +13,7 @@ class PrereqGFKChoiceField(AllowedGFKChoiceField):
     So instead provide a hard coded list which is checked during testing to ensure it matches
     what the dynamically loaded list would have produced
     """
+
     def get_allowed_model_classes(self):
         return Prereq.all_registered_model_classes()
 
@@ -30,20 +31,17 @@ class PrereqFormInline(FutureModelForm):
         fields = ['prereq_object', 'prereq_count', 'prereq_invert', 'or_prereq_object', 'or_prereq_count', 'or_prereq_invert']
         help_texts = {field: None for field in fields}
         labels = {
-            'prereq_count': "Count",
-            'or_prereq_count': "Count",
-            'or_prereq_invert': "NOT",
+            'prereq_count': 'Count',
+            'or_prereq_count': 'Count',
+            'or_prereq_invert': 'NOT',
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['prereq_object'].label = "Required Element"
-        self.fields['or_prereq_object'].label = "Alternate Element"
+        self.fields['prereq_object'].label = 'Required Element'
+        self.fields['or_prereq_object'].label = 'Alternate Element'
 
-        count_attrs = {
-            'class': 'form-control',
-            'style': 'width: 50px;'
-        }
+        count_attrs = {'class': 'form-control', 'style': 'width: 50px;'}
         self.fields['prereq_count'].widget.attrs.update(count_attrs)
         self.fields['or_prereq_count'].widget.attrs.update(count_attrs)
 
@@ -54,6 +52,6 @@ class PrereqFormsetHelper(FormHelper):
 
         # self.helper.form_class = 'form-inline'
         self.template = 'bootstrap/table_inline_formset.html'
-        self.form_id = "id_prereq_formset"
-        self.add_input(layout.Submit("submit", "Save", css_class='btn-success'))
-        self.add_input(layout.Submit("cancel", "Cancel", css_class='btn-danger'))
+        self.form_id = 'id_prereq_formset'
+        self.add_input(layout.Submit('submit', 'Save', css_class='btn-success'))
+        self.add_input(layout.Submit('cancel', 'Cancel', css_class='btn-danger'))

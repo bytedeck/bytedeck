@@ -14,14 +14,13 @@ User = get_user_model()
 
 
 class GFKChoiceFieldTest(TenantTestCase):
-
     def setUp(self):
-        self.user1 = User.objects.create(username="johndoe", first_name="John", last_name="Doe")
-        self.user2 = User.objects.create(username="janedoe", first_name="Jane", last_name="Doe")
-        self.group1 = Group.objects.create(name="Editors")
+        self.user1 = User.objects.create(username='johndoe', first_name='John', last_name='Doe')
+        self.user2 = User.objects.create(username='janedoe', first_name='Jane', last_name='Doe')
+        self.group1 = Group.objects.create(name='Editors')
 
     def _ct_pk(self, obj):
-        return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
+        return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
     def test_basics(self):
         f = GFKChoiceField(
@@ -33,31 +32,37 @@ class GFKChoiceFieldTest(TenantTestCase):
         self.assertEqual(
             list(f.choices),
             [
-                ("", "---------"),
-                ("user", [
-                    (self._ct_pk(self.user1), "johndoe"),
-                    (self._ct_pk(self.user2), "janedoe"),
-                ]),
-                ("group", [
-                    (self._ct_pk(self.group1), "Editors"),
-                ]),
+                ('', '---------'),
+                (
+                    'user',
+                    [
+                        (self._ct_pk(self.user1), 'johndoe'),
+                        (self._ct_pk(self.user2), 'janedoe'),
+                    ],
+                ),
+                (
+                    'group',
+                    [
+                        (self._ct_pk(self.group1), 'Editors'),
+                    ],
+                ),
             ],
         )
         with self.assertRaises(ValidationError):
-            f.clean("")
+            f.clean('')
         with self.assertRaises(ValidationError):
             f.clean(None)
         with self.assertRaises(ValidationError):
-            f.clean("-")
+            f.clean('-')
 
         # Invalid types that require TypeError to be caught.
         with self.assertRaises(ValidationError):
-            f.clean([["fail"]])
+            f.clean([['fail']])
         with self.assertRaises(ValidationError):
-            f.clean([{"foo": "bar"}])
+            f.clean([{'foo': 'bar'}])
 
-        self.assertEqual(f.clean(self._ct_pk(self.user2)).get_full_name(), "Jane Doe")
-        self.assertEqual(f.clean(self._ct_pk(self.group1)).name, "Editors")
+        self.assertEqual(f.clean(self._ct_pk(self.user2)).get_full_name(), 'Jane Doe')
+        self.assertEqual(f.clean(self._ct_pk(self.group1)).name, 'Editors')
 
 
 class RestrictedFileFieldTest(TenantTestCase):

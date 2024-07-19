@@ -15,9 +15,4 @@ class TestCSSSanitizer(TenantTestCase):
         escaped_css_values = """<p>Lorem ipsum<span style="font-family: &quot;Comic Sans MS&quot;;">dolor</span> sit amet</p>"""
         expected = """<p>Lorem ipsum<span style='font-family: "Comic Sans MS";'>dolor</span> sit amet</p>"""
 
-        assert (
-            clean(
-                escaped_css_values, tags=["p", "span"], attributes={"span": ["style"]}, css_sanitizer=css_sanitizer
-            )
-            == expected
-        )
+        assert clean(escaped_css_values, tags=['p', 'span'], attributes={'span': ['style']}, css_sanitizer=css_sanitizer) == expected

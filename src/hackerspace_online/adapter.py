@@ -14,7 +14,6 @@ User = get_user_model()
 
 
 class CustomAccountAdapter(DefaultAccountAdapter):
-
     def clean_username(self, username, shallow=False):
         username = super().clean_username(username, shallow)
         return username.lower()
@@ -33,12 +32,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         # get current tenant object...
         tenant = get_tenant_model().get()
         # ...and use it to build absolute uri
-        location = ''.join((tenant.get_root_url(), reverse("account_confirm_email", args=[emailconfirmation.key])))
+        location = ''.join((tenant.get_root_url(), reverse('account_confirm_email', args=[emailconfirmation.key])))
         return build_absolute_uri(request=None, location=location)
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
-
     def pre_social_login(self, request, sociallogin):
         """
         Invoked just after a user successfully authenticates via a

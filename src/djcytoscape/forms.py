@@ -40,16 +40,11 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
         return QuerySetSequence(*queryset_models)
 
     def get_allowed_model_classes(self):
-        model_classes = [
-            ct.model_class() for ct in ContentType.objects.filter(
-                CytoScape.ALLOWED_INITIAL_CONTENT_TYPES
-            )
-        ]
+        model_classes = [ct.model_class() for ct in ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES)]
         return model_classes
 
 
 class GenerateQuestMapForm(FutureModelForm):
-
     class Meta:
         model = CytoScape
         fields = [
@@ -81,7 +76,7 @@ class GenerateQuestMapForm(FutureModelForm):
 
 
 class QuestMapForm(GenerateQuestMapForm, forms.ModelForm):
-    """  Only used when updating Cytoscape map"""
+    """Only used when updating Cytoscape map"""
 
     class Meta(GenerateQuestMapForm.Meta):
         fields = [

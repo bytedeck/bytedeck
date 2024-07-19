@@ -31,6 +31,7 @@ class CommandMixin:
             name = "custom_command"
     ```
     """
+
     name = None
 
     def call_command(self, *args, **kwargs):
@@ -49,7 +50,7 @@ class CommandMixin:
 
 
 class FindReplaceTest(TestCase, CommandMixin):
-    name = "find_replace"
+    name = 'find_replace'
 
     # def setUp(self):
     #     self.tenant = Tenant(
@@ -76,21 +77,21 @@ class FindReplaceTest(TestCase, CommandMixin):
 
 
 class InitDbTest(TestCase, CommandMixin):
-    """ Note that this is NOT a TenantTestCase
-    """
-    name = "initdb"
+    """Note that this is NOT a TenantTestCase"""
+
+    name = 'initdb'
 
     def test_initdb(self):
-        """ Test that initdb command sets up the public tenant, including:
+        """Test that initdb command sets up the public tenant, including:
         - a Tenant object called 'public'
         - a superuser
         - a Site object
         - a Flatpage object with url /pages/home/
         """
         output = self.call_command()
-        print("*** INITDB Management Command: ", output)
+        print('*** INITDB Management Command: ', output)
 
-        public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
+        public_tenant = Tenant.objects.get(schema_name='public')  # no assert, but will throw exception if doesn't exist
 
         with tenant_context(public_tenant):
             FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
@@ -102,13 +103,14 @@ class InitDbTest(TestCase, CommandMixin):
 
 
 class GenerateContentTest(TenantTestCase, CommandMixin):
-    """ generate_content adds items to an existing tenant.
+    """generate_content adds items to an existing tenant.
     Dont need extensive testing as tests exist in "test_shell_utils.py"
     """
-    name = "generate_content"
+
+    name = 'generate_content'
 
     def test_added_rows_to_db(self):
-        """ test checks if "generate_content" adds objects to the db """
+        """test checks if "generate_content" adds objects to the db"""
         new_campaigns = 2
         new_quests = 5
         new_students = 5
@@ -121,10 +123,13 @@ class GenerateContentTest(TenantTestCase, CommandMixin):
         #
         self.call_command(
             self.tenant.schema_name,
-            '--num_quests_per_campaign', new_quests,
-            '--num_campaigns', new_campaigns,
-            '--num_students', new_students,
-            '--quiet'
+            '--num_quests_per_campaign',
+            new_quests,
+            '--num_campaigns',
+            new_campaigns,
+            '--num_students',
+            new_students,
+            '--quiet',
         )
 
         # test if the command added new objects
@@ -160,15 +165,13 @@ class FullCleanTest(TestCase, CommandMixin):
             baker.make('quest_manager.QuestSubmission')
 
     def test_full_clean(self):
-        """ Checks if full clean captures expected validation errors from "full_clean" management command
+        """Checks if full clean captures expected validation errors from "full_clean" management command
         See setUp for the expected errors.
         """
         # capture stdout through contextlib.redirect_stdout, as the return value in call_command only works sometimes?
 
         with StringIO() as buf, redirect_stdout(buf):
-            self.call_command(
-                '--tenants', 'test_schema1'
-            )
+            self.call_command('--tenants', 'test_schema1')
             # should capture any print statements by self.call_command
             # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
             log = buf.getvalue()
@@ -186,9 +189,7 @@ class FullCleanTest(TestCase, CommandMixin):
             self.assertFalse('QuestSubmission' in log)
 
         with StringIO() as buf, redirect_stdout(buf):
-            self.call_command(
-                '--tenants', 'test_schema2'
-            )
+            self.call_command('--tenants', 'test_schema2')
             # should capture any print statements by self.call_command
             # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
             log = buf.getvalue()
