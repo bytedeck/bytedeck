@@ -158,7 +158,6 @@ class SemesterModelTest(TenantTestCase):
 
     def test_semester_creation(self):
         self.assertIsInstance(self.semester, Semester)
-        self.assertEqual(str(self.semester), self.semester.first_day.strftime("%b-%Y"))
 
     def test_is_open(self):
         # before semester starts: False

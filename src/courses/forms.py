@@ -108,7 +108,7 @@ class SemesterForm(forms.ModelForm):
 
     class Meta:
         model = Semester
-        fields = ('first_day', 'last_day')
+        fields = ('name', 'first_day', 'last_day')
         widgets = {
             'first_day': DateTimePickerInput(format='%Y-%m-%d'),
             'last_day': DateTimePickerInput(format='%Y-%m-%d'),
@@ -123,8 +123,9 @@ class SemesterForm(forms.ModelForm):
         self.helper.form_tag = False
 
         self.helper.layout = Layout(
-            Div('first_day', css_class='col-xs-6 col-sm-4',),
-            Div('last_day', css_class='col-xs-6 col-sm-4',),
+            Div('name', css_class='col-xs-4',),
+            Div('first_day', css_class='col-xs-4',),
+            Div('last_day', css_class='col-xs-4',),
         )
 
 

@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        Review the following code using Python Django. Ensure that:
+          - Ensure each method has a clear, detailed docstring explaining its purpose, parameters, and return values. Enhance existing docstrings for clarity and completeness.
+          - Do not suggest adding type annotations.
+          - Review Django querysets for potential performance improvements and suggest optimizations where applicable.
+          - Ensure that for every model.save() there is a model.full_clean() that precedes it.
+          - Avoid adding generic exception handling (e.g., `except Exception`) in test files. Each test failure should be addressed by the developer with specific exception handling or fixes.
+          - Avoid adding comments relating to importing modules.
+    - path: "tests/*.py"
+      instructions: |
+        - There is no sensitive information in the test files. All data handled is procedural/generic and non-sensitive.
+chat:
+  auto_reply: true

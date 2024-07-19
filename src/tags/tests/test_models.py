@@ -104,6 +104,63 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['tag0', 'tag1', 'tag2'])
         self.assertEqual(badge_assertion_qs.count(), 6)
 
+    def test_get_quest_submission_by_tags__correct_quest_submission_tagged(self):
+        """ check if 'correct tag' is retrieved and no other submission from a different tag or no tag """
+        # with correct tag
+        correct_quest_1, submission_1 = self.create_quest_and_submissions(1)
+        correct_quest_2, submission_2 = self.create_quest_and_submissions(1)
+        correct_quest_1.tags.add('correct tag')
+        correct_quest_2.tags.add('correct tag')
+
+        # since create_quest_and_submissions returns a list, get the first element
+        submission_1 = submission_1[0]
+        submission_2 = submission_2[0]
+
+        # with incorrect tag
+        for _i in range(3):
+            quest, _ = self.create_quest_and_submissions(1)
+            quest.tags.add('incorrect tag')
+
+        # no tag
+        no_tag, _ = self.create_quest_and_submissions(1)
+
+        # check the amount of submissions are correct
+        quest_submission_qs = get_quest_submission_by_tag(self.user, ['correct tag'])
+        self.assertEqual(quest_submission_qs.count(), 2)
+
+        # check if the submissions are the correct ones
+        self.assertTrue(submission_1 in quest_submission_qs)
+        self.assertTrue(submission_2 in quest_submission_qs)
+
+    def test_get_badge_assertion_by_tags__correct_badge_assertion_tagged(self):
+        """ check if 'correct tag' is retrieved and no other assertion from a different tag or no tag """
+
+        # with correct tag
+        correct_badge_1, assertion_1 = self.create_badge_and_assertions(1)
+        correct_badge_2, assertion_2 = self.create_badge_and_assertions(1)
+        correct_badge_1.tags.add('correct tag')
+        correct_badge_2.tags.add('correct tag')
+
+        # since create_badge_and_assertions returns a list, get the first element
+        assertion_1 = assertion_1[0]
+        assertion_2 = assertion_2[0]
+
+        # with incorrect tag
+        for _i in range(3):
+            badge, _ = self.create_badge_and_assertions(1)
+            badge.tags.add('incorrect tag')
+
+        # no tag
+        no_tag, _ = self.create_badge_and_assertions(1)
+
+        # check the amount of submissions are correct
+        badge_assertion_qs = get_badge_assertion_by_tags(self.user, ['correct tag'])
+        self.assertEqual(badge_assertion_qs.count(), 2)
+
+        # check if the submissions are the correct ones
+        self.assertTrue(assertion_1 in badge_assertion_qs)
+        self.assertTrue(assertion_2 in badge_assertion_qs)
+
 
 class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
     """
@@ -178,6 +235,51 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
         calculated_order = [tag_tuple[1] for tag_tuple in get_user_tags_and_xp(self.user)]  # get xp from func
 
         self.assertEqual(expected_order, calculated_order)
+
+    def test_query_tag_from_approved_quest(self):
+        """
+            When getting all quests related to tag and user, check if only submitted and approved tags show
+        """
+        # create quests with submissions
+        q_unrelated = baker.make(Quest)
+        q_approved, s_approved = self.create_quest_and_submissions(5)
+        q_submitted, s_submitted = self.create_quest_and_submissions(10)
+        s_submitted[0].is_approved = False
+        s_submitted[0].is_completed = False
+        s_submitted[0].save()
+
+        # tags
+        q_unrelated.tags.add('unrelated')
+        q_approved.tags.add('approved')
+        q_submitted.tags.add('submitted')
+
+        # check if only q_approved is in the query
+        tags = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]
+
+        self.assertFalse('unrelated' in tags)
+        self.assertTrue('approved' in tags)
+        self.assertFalse('submitted' in tags)
+
+    def test_total_xp_is_correct(self):
+        """ check if get_user_tags_and_xp's xp adds up correctly """
+
+        # quest only
+        quest1, _ = self.create_quest_and_submissions(2)
+        quest1.tags.add('tag-1')
+
+        # badge only
+        badge1, _ = self.create_badge_and_assertions(3)
+        badge1.tags.add('tag-2')
+
+        # quest + badge
+        quest2, _ = self.create_quest_and_submissions(5)
+        badge2, _ = self.create_badge_and_assertions(7)
+        quest2.tags.add('tag-3')
+        badge2.tags.add('tag-3')
+
+        total_xp = sum(t[1] for t in get_user_tags_and_xp(self.user))
+        self.assertEqual(total_xp, total_xp_by_tags(self.user, ['tag-1', 'tag-2', 'tag-3']))
+        self.assertEqual(total_xp, 17)  # sanity check
 
 
 class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):

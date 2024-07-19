@@ -179,6 +179,15 @@ for {{user}}
         </div> <!-- tab-content -->
       </div>  <!-- tab container -->
 
+      <h3>Current Mark Ranges by XP</h3>
+      <ul>
+          {% for markrange in markranges %}
+          <li>
+              {{ markrange.name }} ({{ markrange.minimum_mark }}%): {{ markrange.xp_needed }} XP
+          </li>
+          {% endfor %}
+      </ul>
+
     {% endif %}
 
 {% endblock %}

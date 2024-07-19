@@ -278,9 +278,9 @@ def assertion_delete(request, assertion_id):
             target=assertion.badge,
             recipient=user,
             affected_users=[user, ],
-            icon="<span class='fa-stack'>" + \
-                 "<i class='fa fa-certificate fa-stack-1x text-warning'></i>" + \
-                 "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
+            icon="<span class='fa-stack'>" +
+                 "<i class='fa fa-certificate fa-stack-1x text-warning'></i>" +
+                 "<i class='fa fa-ban fa-stack-2x text-danger'></i>" +
                  "</span>",
             verb='revoked')
 

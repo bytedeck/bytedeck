@@ -7,6 +7,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -26,6 +27,7 @@ from django.db.models import Q
 from django.db.models.functions import Greatest
 
 import numpy
+import math
 
 
 # Create your views here.
@@ -64,6 +66,18 @@ def mark_calculations(request, user_id=None):
 
     # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
     markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
+
+    # in some tests course_student == None
+    # So, if getting this page ("courses:mark_all"/"courses:my_mark")
+    # it will crash
+    if course_student:
+        # inject the xp needed for passing the mark range
+        # cant do it with template tags as you can only multiply/divide once
+        days_percentage = course_student.semester.fraction_complete()
+        total_xp = courses.first().course.xp_for_100_percent
+        for markrange in markranges:
+            mark_percentage = markrange.minimum_mark / 100
+            markrange.xp_needed = math.floor(total_xp * mark_percentage * days_percentage)
 
     context = {
         'user': user,
@@ -567,6 +581,25 @@ def ajax_progress_chart(request, user_id=0):
                 # day 0-indexed
                 {'x': day + 1, 'y': xp}
             )
+
+        today = timezone.localtime()
+
+        # SAT and SUN are always excluded by numpy.busday_offset
+        # use today.date() because its a datetime.datetime object and we compare it to a DateField (returns datetime.date)
+        if today.weekday() in [5, 6] or today.date() in sem.excluded_days():  # SAT, SAT or a day specifically excluded
+            # according to a comment inside get_datetime_by_days_since_start:
+            #   "work done on weekend/holidays won't show up till Monday"
+
+            # total_xp <= xp_to_date(today) since the latest xp_data day is the last valid day (usually a friday)
+            # ie. if today is sunday: friday's total xp <= sunday's total xp
+            # (if a submission is removed then will subtract from both friday and sunday xp)
+            total_xp = xp_data[-1]['y']
+            difference = user.profile.xp_to_date(today) - total_xp
+
+            # if true: user has earned xp during the weekend.
+            # add that xp to the last valid date
+            if difference > 0:
+                xp_data[-1]['y'] += difference
 
         progress_chart = {
             "days_in_semester": sem.num_days(),
