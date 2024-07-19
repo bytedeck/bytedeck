@@ -19,18 +19,17 @@ from tags.models import TagsModelMixin
 
 
 class Category(IsAPrereqMixin, models.Model):
-    """ Used to group quests into 'Campaigns'
-    """
+    """Used to group quests into 'Campaigns'"""
+
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     active = models.BooleanField(
-        default=True,
-        help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
+        default=True, help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
     )
 
     class Meta:
-        verbose_name = "campaign"
-        ordering = ["title"]
+        verbose_name = 'campaign'
+        ordering = ['title']
 
     def __str__(self):
         return self.title
@@ -45,15 +44,15 @@ class Category(IsAPrereqMixin, models.Model):
             return SiteConfig.get().get_default_icon_url()
 
     def current_quests(self):
-        """ Returns a queryset containing every currently available quest in this campaign."""
+        """Returns a queryset containing every currently available quest in this campaign."""
         return self.quest_set.all().visible().not_archived()
 
     def quest_count(self):
-        """ Returns the total number of quests available in this campaign."""
+        """Returns the total number of quests available in this campaign."""
         return self.current_quests().count()
 
     def xp_sum(self):
-        """ Returns the total XP available from completing all visible quests in this campaign.
+        """Returns the total XP available from completing all visible quests in this campaign.
         Repeating quests are only counted once."""
         return self.current_quests().aggregate(Sum('xp'))['xp__sum']
 
@@ -78,11 +77,11 @@ class Category(IsAPrereqMixin, models.Model):
 
     @staticmethod
     def autocomplete_search_fields():  # for grapelli prereq selection
-        return ("title__icontains",)
+        return ('title__icontains',)
 
     @staticmethod
     def gfk_search_fields():  # for AllowedGFKChoiceFiled
-        return ["title__icontains"]
+        return ['title__icontains']
 
     @property
     def name(self):
@@ -103,23 +102,25 @@ class XPItem(models.Model):
     Abstract class to gather common data required of all XP granting models
     Need to get badges to use these...
     """
+
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     xp_can_be_entered_by_students = models.BooleanField(
         default=False,
-        help_text="Allow students to enter a custom XP value for their submission of this quest. The XP field above becomes the minimum value."
+        help_text='Allow students to enter a custom XP value for their submission of this quest. The XP field above becomes the minimum value.',
     )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
     visible_to_students = models.BooleanField(
-        default=True, verbose_name="published",
-        help_text="If not checked, this quest will not be visible to students and will appear in your Drafts tab."
+        default=True,
+        verbose_name='published',
+        help_text='If not checked, this quest will not be visible to students and will appear in your Drafts tab.',
     )
     archived = models.BooleanField(
         default=False,
         help_text='Setting this will prevent it from appearing in admin quest lists.  '
-        'To un-archive a quest, you will need to access it through Site Administration.'
+        'To un-archive a quest, you will need to access it through Site Administration.',
     )
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
@@ -127,20 +128,21 @@ class XPItem(models.Model):
         default=-1,
         help_text="The maximum amount of XP that can be gain by repeating this quest. If the Max Repeats hasn't been hit yet \
         then quest will continue to appear after this number is reached, but students will no longer \
-        gain XP for completing it; -1 = unlimited"
+        gain XP for completing it; -1 = unlimited",
     )
     repeat_per_semester = models.BooleanField(
-        default=False,
-        help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
+        default=False, help_text='Repeatable once per semester, and Max Repeats becomes additional repeats per semester'
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=timezone.localdate)  # timezone aware!
     time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
-    date_expired = models.DateField(blank=True, null=True,
-                                    help_text='If both Date and Time expired are blank, then the quest never expires')
-    time_expired = models.TimeField(blank=True, null=True,  # local time
-                                    help_text='If Date expired is blank, expire at this time every day \
-                                    and reappear at midnight. If this is blank, then midnight assumed.')
+    date_expired = models.DateField(blank=True, null=True, help_text='If both Date and Time expired are blank, then the quest never expires')
+    time_expired = models.TimeField(
+        blank=True,
+        null=True,  # local time
+        help_text='If Date expired is blank, expire at this time every day \
+                                    and reappear at midnight. If this is blank, then midnight assumed.',
+    )
     icon = models.ImageField(upload_to='icons/', blank=True, null=True)  # needs Pillow for ImageField
 
     class Meta:
@@ -149,7 +151,7 @@ class XPItem(models.Model):
         # as such, the original value for sort_order (-sort_order,) orders quests upside-down
         # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
         # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
-        ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
+        ordering = ['sort_order', '-time_expired', '-date_expired', 'name']
 
     def __str__(self):
         return self.name
@@ -200,11 +202,7 @@ class XPItem(models.Model):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
         Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
 
-        available = (
-            self.active
-            and QuestSubmission.objects.not_submitted_or_inprogress(user, self)
-            and Prereq.objects.all_conditions_met(self, user)
-        )
+        available = self.active and QuestSubmission.objects.not_submitted_or_inprogress(user, self) and Prereq.objects.all_conditions_met(self, user)
 
         if available and not user.profile.has_current_course:
             return self.available_outside_course
@@ -216,14 +214,13 @@ class XPItem(models.Model):
 
 
 class QuestQuerySet(models.QuerySet):
-
     def exclude_hidden(self, user):
-        """ Users can "hide" quests.  This is stored in their profile as a list of quest ids """
+        """Users can "hide" quests.  This is stored in their profile as a list of quest ids"""
         return self.exclude(pk__in=user.profile.get_hidden_quests_as_list())
 
     def block_if_needed(self, user=None):
-        """ If there are blocking quests or blocking subs in progress, only return blocking quests.
-        Otherwise, return full qs """
+        """If there are blocking quests or blocking subs in progress, only return blocking quests.
+        Otherwise, return full qs"""
         blocking_quests = self.filter(blocking=True)
         if user:
             # Check the student's submissions in progress.
@@ -294,14 +291,14 @@ class QuestQuerySet(models.QuerySet):
 
     def not_in_progress_completed_or_cooldown(self, user):
         """filter the queryset to remove quests that are:
-          1. already inprogress for the user (is_completed=False)
-          2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
-          3. completed, repeatable but still in hourly (max_repeats>0 and now - first_time_completed > hours_between_repeats)
-          4. completed and repeatable and max repeats reached this semester
-          5. completed and repeatable and max all time repeats reached (for repeatable_per_semester=False)
+        1. already inprogress for the user (is_completed=False)
+        2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
+        3. completed, repeatable but still in hourly (max_repeats>0 and now - first_time_completed > hours_between_repeats)
+        4. completed and repeatable and max repeats reached this semester
+        5. completed and repeatable and max all time repeats reached (for repeatable_per_semester=False)
 
-          These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
-          and don't have to worry about them when considering repeats, which are more complicated.
+        These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
+        and don't have to worry about them when considering repeats, which are more complicated.
         """
 
         # Condition 1: remove inprogress submissions
@@ -326,19 +323,13 @@ class QuestQuerySet(models.QuerySet):
 
         # Calculate the cooldown expression based on hours_between_repeats
         current_time = timezone.now()
-        cooldown_time = ExpressionWrapper(
-            current_time - F('hours_between_repeats') * timezone.timedelta(hours=1),
-            output_field=DateTimeField()
-        )
+        cooldown_time = ExpressionWrapper(current_time - F('hours_between_repeats') * timezone.timedelta(hours=1), output_field=DateTimeField())
 
         # start with completed subs this semester (already filtered our non-repeatable)
         # annotate the latest `first_time_completed` for submissions of this quest
         # so we can use that time to determine if cooldown is complete
         cooldown_quests = completed_quests_current.annotate(
-            latest_submission_time=Max(
-                'questsubmission__first_time_completed',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            latest_submission_time=Max('questsubmission__first_time_completed', filter=Q(questsubmission__user_id=user.id))
         )
         # Quests in cooldown will have latest_submission_time > now - hours_between_repeats
         # (cooldown_time = now - hours_between_repeats)
@@ -348,10 +339,7 @@ class QuestQuerySet(models.QuerySet):
 
         # CONDITION 4: remove completed and repeatable and max repeats reached this semester
         max_repeats_this_sem = completed_quests_current.annotate(
-            submission_count=Count(
-                'questsubmission',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            submission_count=Count('questsubmission', filter=Q(questsubmission__user_id=user.id))
         )
         # need to account for max_repeats=-1 (unlimited repeats), don't remove those
         max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
@@ -360,10 +348,7 @@ class QuestQuerySet(models.QuerySet):
 
         # CONDITION 5: remove completed and repeatable and max all-time repeats reached (for repeatable_per_semester=False)
         max_repeats_all_time = completed_quests_all_time.filter(repeat_per_semester=False).annotate(
-            submission_count=Count(
-                'questsubmission',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            submission_count=Count('questsubmission', filter=Q(questsubmission__user_id=user.id))
         )
         # need to account for max_repeats=-1 (unlimited repeats), don't remove those
         max_repeats_all_time = max_repeats_all_time.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
@@ -390,6 +375,7 @@ class QuestQuerySet(models.QuerySet):
         pk_met_list = PrereqAllConditionsMet.objects.filter(user=user, model_name=model_name).first()
         if not pk_met_list:
             from prerequisites.tasks import update_quest_conditions_for_user
+
             pk_met_list = update_quest_conditions_for_user(user.id)
             pk_met_list = PrereqAllConditionsMet.objects.get(id=pk_met_list)
         return json.loads(pk_met_list.ids)
@@ -406,7 +392,7 @@ class QuestManager(models.Manager):
         return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
 
     def get_available(self, user, remove_hidden=True, blocking=True):
-        """ Quests that should appear in the user's Available quests tab.   Should exclude:
+        """Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
         2. Quests that are not visible to students or archived
         3. Quests that are a part of an inactive campaign
@@ -451,61 +437,75 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     TagsModelMixin: provides tagging functionalities.
     XPItem: A quest grants XP to the user when completed. This mixin provides the XP related functionalities.
     """
-    verification_required = models.BooleanField(default=True,
-                                                help_text="Teacher must approve submissions of this quest.  If \
+
+    verification_required = models.BooleanField(
+        default=True,
+        help_text='Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
-                                                granted without the teacher seeing the submission.")
-    hideable = models.BooleanField(default=True, help_text="Students can choose to hide this quest from their list of \
-                                                 available quests. ")
-    available_outside_course = models.BooleanField(default=False,
-                                                   help_text="Allows student to view and submit this quest without "
-                                                             "having joined a course.  E.g. for quests you might "
-                                                             "still want available to past students.")
+                                                granted without the teacher seeing the submission.',
+    )
+    hideable = models.BooleanField(
+        default=True,
+        help_text='Students can choose to hide this quest from their list of \
+                                                 available quests. ',
+    )
+    available_outside_course = models.BooleanField(
+        default=False,
+        help_text='Allows student to view and submit this quest without '
+        'having joined a course.  E.g. for quests you might '
+        'still want available to past students.',
+    )
     # categories = models.ManyToManyField(Category, blank=True)
     specific_teacher_to_notify = models.ForeignKey(
-        settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True}, blank=True, null=True,
-        help_text="Notifications related to this quest will be sent to this teacher "
-                  "even if they do not teach the student.",
-        on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        limit_choices_to={'is_staff': True},
+        blank=True,
+        null=True,
+        help_text='Notifications related to this quest will be sent to this teacher ' 'even if they do not teach the student.',
+        on_delete=models.SET_NULL,
     )
     campaign = models.ForeignKey(Category, blank=True, null=True, on_delete=models.SET_NULL)
     common_data = models.ForeignKey(CommonData, blank=True, null=True, on_delete=models.SET_NULL)
     instructions = models.TextField(blank=True, verbose_name='Quest Details')
     submission_details = models.TextField(blank=True, verbose_name='Submission Instructions')
-    instructor_notes = models.TextField(blank=True, null=True,
-                                        help_text="This field is only visible to Staff. \
-                                        Use it to place answer keys or other notes.")
-
-    editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
-                               help_text='Provides a student TA access to work on the draft of this quest.',
-                               on_delete=models.SET_NULL)
-
-    import_id = models.UUIDField(blank=True, null=True, default=uuid.uuid4, unique=True,
-                                 help_text="Only edit this if you want to link to a quest in another system so that "
-                                           "when importing from that other system, it will update this quest. "
-                                           "Otherwise do not edit this or it will break existing links!")
-
-    blocking = models.BooleanField(default=False,
-                                   help_text="When this quest becomes available, it will block all other "
-                                             "non-blocking quests until this one is submitted.")
-
-    map_transition = models.BooleanField(
-        default=False,
-        help_text='Break maps at this quest. This quest will link to a new map.'
+    instructor_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text='This field is only visible to Staff. \
+                                        Use it to place answer keys or other notes.',
     )
 
+    editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        null=True,
+        related_name='quest_editor',
+        help_text='Provides a student TA access to work on the draft of this quest.',
+        on_delete=models.SET_NULL,
+    )
+
+    import_id = models.UUIDField(
+        blank=True,
+        null=True,
+        default=uuid.uuid4,
+        unique=True,
+        help_text='Only edit this if you want to link to a quest in another system so that '
+        'when importing from that other system, it will update this quest. '
+        'Otherwise do not edit this or it will break existing links!',
+    )
+
+    blocking = models.BooleanField(
+        default=False, help_text='When this quest becomes available, it will block all other ' 'non-blocking quests until this one is submitted.'
+    )
+
+    map_transition = models.BooleanField(default=False, help_text='Break maps at this quest. This quest will link to a new map.')
+
     # What does this do to help us?
-    prereq_parent = GenericRelation(Prereq,
-                                    content_type_field='parent_content_type',
-                                    object_id_field='parent_object_id')
+    prereq_parent = GenericRelation(Prereq, content_type_field='parent_content_type', object_id_field='parent_object_id')
 
-    prereq_prereq = GenericRelation(Prereq,
-                                    content_type_field='prereq_content_type',
-                                    object_id_field='prereq_object_id')
+    prereq_prereq = GenericRelation(Prereq, content_type_field='prereq_content_type', object_id_field='prereq_object_id')
 
-    prereq_or_prereq = GenericRelation(Prereq,
-                                       content_type_field='or_prereq_content_type',
-                                       object_id_field='or_prereq_object_id')
+    prereq_or_prereq = GenericRelation(Prereq, content_type_field='or_prereq_content_type', object_id_field='or_prereq_object_id')
 
     objects = QuestManager()
 
@@ -580,12 +580,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
 
 # QuestSubmission ###############################################
 
+
 class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_user(self, user):
         return self.filter(user=user)
 
     def block_if_needed(self):
-        """ If there are blocking quests, only return them.  Otherwise, return full qs """
+        """If there are blocking quests, only return them.  Otherwise, return full qs"""
         subs_with_blocking_quests = self.filter(quest__blocking=True)
         if subs_with_blocking_quests:
             return subs_with_blocking_quests
@@ -642,10 +643,11 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
             # ]
 
             pk_sub_list = [
-                sub.pk for sub in self
+                sub.pk
+                for sub in self
                 if (
-                    teacher.pk in sub.user.profile.teachers() or
-                    (sub.quest.specific_teacher_to_notify == teacher if sub.quest else False)  # will error if quest has been deleted
+                    teacher.pk in sub.user.profile.teachers()
+                    or (sub.quest.specific_teacher_to_notify == teacher if sub.quest else False)  # will error if quest has been deleted
                 )
             ]
 
@@ -659,12 +661,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
 
 
 class QuestSubmissionManager(models.Manager):
-    def get_queryset(self,
-                     active_semester_only=False,
-                     exclude_archived_quests=True,
-                     exclude_quests_not_visible_to_students=True,
-                     include_related=True):
-
+    def get_queryset(
+        self, active_semester_only=False, exclude_archived_quests=True, exclude_quests_not_visible_to_students=True, include_related=True
+    ):
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
             qs = qs.get_semester(SiteConfig.get().active_semester.pk)
@@ -690,10 +689,7 @@ class QuestSubmissionManager(models.Manager):
         If user is None, then this is a staff member's view of all approved submissions.
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         """
-        qs = self.get_queryset(active_semester_only,
-                               exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False
-                               ).approved()
+        qs = self.get_queryset(active_semester_only, exclude_archived_quests=False, exclude_quests_not_visible_to_students=False).approved()
 
         if user:
             qs = qs.get_user(user)
@@ -708,7 +704,7 @@ class QuestSubmissionManager(models.Manager):
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
-        """ Returns a queryset of all QuestSubmissions that are currently in progress.
+        """Returns a queryset of all QuestSubmissions that are currently in progress.
         This could be quests a student has started, or ones they have completed but have been returned.
 
         Keyword Arguments:
@@ -727,15 +723,11 @@ class QuestSubmissionManager(models.Manager):
             return qs
 
     def all_completed_past(self, user):
-        qs = self.get_queryset(exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False).get_user(user).completed()
+        qs = self.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False).get_user(user).completed()
         return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
-        qs = self.get_queryset(active_semester_only=active_semester_only,
-                               exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False
-                               )
+        qs = self.get_queryset(active_semester_only=active_semester_only, exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
         if user is None:
             qs = qs.completed()
         else:
@@ -745,8 +737,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_awaiting_approval(self, user=None, teacher=None):
         if user is None:
-            qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
-                .for_teacher_only(teacher)
+            qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first).for_teacher_only(teacher)
             return qs
         return self.get_queryset(True).get_user(user).not_approved().completed()
 
@@ -841,7 +832,6 @@ class QuestSubmissionManager(models.Manager):
         submission_xps = submissions_qs.order_by().values('quest', 'quest__max_xp').annotate(xp_sum=Sum('xp_earned'))
 
         for submission_xp in submission_xps:
-
             if submission_xp['quest__max_xp'] == -1:  # no limit
                 total_xp += submission_xp['xp_sum']
             else:
@@ -859,9 +849,8 @@ class QuestSubmissionManager(models.Manager):
 
 class QuestSubmission(models.Model):
     quest = models.ForeignKey(Quest, on_delete=models.CASCADE)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="quest_submission_user", on_delete=models.CASCADE)
-    ordinal = models.PositiveIntegerField(default=1,
-                                          help_text='indicating submissions beyond the first for repeatable quests')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='quest_submission_user', on_delete=models.CASCADE)
+    ordinal = models.PositiveIntegerField(default=1, help_text='indicating submissions beyond the first for repeatable quests')
     is_completed = models.BooleanField(default=False)
     # `first_time_completed` so that repeatable quests can count time from the first submission attempt
     first_time_completed = models.DateTimeField(null=True, blank=True)
@@ -873,36 +862,37 @@ class QuestSubmission(models.Model):
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
     semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
-    flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
-                                   related_name="quest_submission_flagged_by",
-                                   help_text="flagged by a teacher for follow up",
-                                   on_delete=models.SET_NULL)
+    flagged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        related_name='quest_submission_flagged_by',
+        help_text='flagged by a teacher for follow up',
+        on_delete=models.SET_NULL,
+    )
     # BACKWARDS COMPATIBILITY: keep draft_text as to not wipe existing draft comments
     draft_text = models.TextField(null=True, blank=True)
     # while the user is working on their submission, this will store the comment that we will
     # post when they submit. If this field currently stores a comment, we know that they are
     # currently working on a submission.
     draft_comment = models.ForeignKey(Comment, null=True, on_delete=models.SET_NULL)
-    xp_requested = models.PositiveIntegerField(
-        default=0,
-        help_text='The number of XP you are requesting for this submission.'
-    )
+    xp_requested = models.PositiveIntegerField(default=0, help_text='The number of XP you are requesting for this submission.')
 
     class Meta:
-        ordering = ["time_approved", "time_completed"]
+        ordering = ['time_approved', 'time_completed']
 
     objects = QuestSubmissionManager()
 
     def __str__(self):
         if self.ordinal > 1:
-            ordinal_str = " (" + str(self.ordinal) + ")"
+            ordinal_str = ' (' + str(self.ordinal) + ')'
         else:
-            ordinal_str = ""
+            ordinal_str = ''
 
         if self.quest:
             name = self.quest.name
         else:
-            name = "[DELETED QUEST]"
+            name = '[DELETED QUEST]'
         name += ordinal_str
         return name
 
@@ -910,7 +900,7 @@ class QuestSubmission(models.Model):
         if self.quest:
             return self.quest.name
         else:
-            return "[DELETED QUEST]"
+            return '[DELETED QUEST]'
 
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})
@@ -970,7 +960,7 @@ class QuestSubmission(models.Model):
             broken_ordinal_start += 1
 
     def get_previous(self):
-        """ If this is a repeatable quest and has been completed already, return that previous submission """
+        """If this is a repeatable quest and has been completed already, return that previous submission"""
 
         if self.ordinal is None or self.ordinal <= 1:
             return None

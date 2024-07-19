@@ -11,7 +11,6 @@ User = get_user_model()
 
 
 class ProfileManagerTest(TenantTestCase):
-
     def setUp(self):
         self.course = baker.make(Course)
         self.active_semester = SiteConfig().get().active_semester
@@ -28,11 +27,7 @@ class ProfileManagerTest(TenantTestCase):
         self.inactive_semester_students = self.active_inactive_semester_students + self.inactive_inactive_semester_students
 
         for user in self.inactive_semester_students:
-            baker.make(
-                CourseStudent,
-                user=user,
-                course=self.course
-            )
+            baker.make(CourseStudent, user=user, course=self.course)
 
         # students in active sem
         self.active_active_semester_students = baker.make(User, username=names.pop, _quantity=2)
@@ -40,12 +35,7 @@ class ProfileManagerTest(TenantTestCase):
         self.active_semester_students = self.active_active_semester_students + self.inactive_active_semester_students
 
         for user in self.active_semester_students:
-            baker.make(
-                CourseStudent,
-                user=user,
-                course=self.course,
-                semester=self.active_semester
-            )
+            baker.make(CourseStudent, user=user, course=self.course, semester=self.active_semester)
 
     def test_all_for_active_semester_qs(self):
         qs = Profile.objects.all_for_active_semester().values_list('user__username', flat=True)

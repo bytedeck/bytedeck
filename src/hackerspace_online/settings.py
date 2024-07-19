@@ -18,7 +18,7 @@ import environ
 env = environ.Env(
     # set casting, default value
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list)
+    ALLOWED_HOSTS=(list),
 )
 
 
@@ -35,7 +35,7 @@ ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
 if not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
+    ALLOWED_HOSTS = [f'.{ROOT_DOMAIN}']
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
@@ -44,7 +44,6 @@ SHARED_APPS = (
     'django_tenants',
     'tenant',
     'django.contrib.contenttypes',
-
     # WHY ARE THESE NEEDED IN BOTH SHARED AND TENANT APPS LISTS?
     # dylan was here :P delete me later
     'django.contrib.auth',
@@ -53,23 +52,18 @@ SHARED_APPS = (
     'django.contrib.messages',
     'django.contrib.flatpages',
     ###########################################
-
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
-
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
     # or
     # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
-
     'django.contrib.sites',
-
     'captcha',
-
     'grappelli',
     'crispy_forms',
     'bootstrap_datepicker_plus',
@@ -78,7 +72,6 @@ SHARED_APPS = (
     'url_or_relative_url_field',
     'import_export',
     'colorful',
-
 )
 
 TENANT_APPS = (
@@ -88,28 +81,21 @@ TENANT_APPS = (
     'django.contrib.admin',
     'django.contrib.staticfiles',
     'django.contrib.flatpages',
-
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-
     # tenant beat is not supported, have to do it manually with:
     # https://github.com/maciej-gol/tenant-schemas-celery#celery-beat-integration
     # or
     # https://github.com/maciej-gol/tenant-schemas-celery/issues/34
     # by inserting the schema into the task headers so that tenant-schams-celery knows where to run it
     'django_celery_beat',
-
     'django.contrib.sites',  # required inside TENANT_APPS for allauth to work
-
     'hackerspace_online',
-
     # https://github.com/summernote/django-summernote
     'django_summernote',
     'bytedeck_summernote',
-
     'taggit',
-
     'quest_manager',
     'profile_manager',
     'announcements',
@@ -129,10 +115,8 @@ TENANT_APPS = (
 INSTALLED_APPS = (
     # http://django-grappelli.readthedocs.org/en/latest/quickstart.html
     'grappelli',
-
     'django_tenants',
     'tenant.apps.TenantConfig',
-
     # default apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -141,58 +125,41 @@ INSTALLED_APPS = (
     'django.contrib.messages',
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
-
     'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
-
     # third party apps
-
     # https://django-allauth.readthedocs.org/en/latest/installation.html
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     # 'allauth.socialaccount.providers.facebook',
-
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
-
     # https://github.com/summernote/django-summernote
     'django_summernote',
     'bytedeck_summernote',
-
     # https://pypi.org/project/django-recaptcha/
     'captcha',
-
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
-
     # https://github.com/yetty/django-embed-video
     # used for the EmbedVideoField that validates YouTube and Vimeo urls
     'embed_video',
-
     # https://github.com/applegrew/django-select2
     'django_select2',
-
     # https://github.com/timonweb/django-url-or-relative-url-field
     'url_or_relative_url_field',
-
     # https://django-import-export.readthedocs.io
     'import_export',
-
     'django_celery_beat',
-
     # https://github.com/charettes/django-colorful
     'colorful',
-
     # hackerspace_online.apps.HackerspaceConfig
     'hackerspace_online',
-
     # django storages
     'storages',
-
     # django-taggit: https://django-taggit.readthedocs.io/en/latest/index.html
     'taggit',
-
     # local apps
     'quest_manager',
     'profile_manager',
@@ -259,14 +226,14 @@ if DB_LOGS_ENABLED:
                 'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
                 'filename': os.path.join(LOGS_PATH, 'queries.log'),
                 'formatter': 'verbose',
-            }
+            },
         },
         'loggers': {
             'django.db.backends': {
                 'handlers': ['file'],
                 'level': 'DEBUG',
             },
-        }
+        },
     }
 
 
@@ -279,12 +246,10 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-
                 'hackerspace_online.context_processors.config',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
@@ -292,7 +257,7 @@ TEMPLATES = [
     },
 ]
 
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
 
 # REDIS AND CACHES #################################################
@@ -303,7 +268,7 @@ REDIS_PORT = env('REDIS_PORT')  # os.environ.get('REDIS_PORT', '6379')
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
@@ -313,13 +278,13 @@ CACHES = {
     'select2': {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/2',
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
         'KEY_FUNCTION': 'django_tenants.cache.make_key',
         'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
         'TIMEOUT': None,
-    }
+    },
 }
 
 SELECT2_CACHE_BACKEND = 'select2'
@@ -336,7 +301,7 @@ USE_TZ = True
 
 # CELERY ####################################################################
 
-CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
 CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -365,19 +330,17 @@ DATABASES = {
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
         'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
+        'PORT': POSTGRES_PORT,
     }
 }
 
-DATABASE_ROUTERS = (
-    'django_tenants.routers.TenantSyncRouter',
-)
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 
 
 # EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
-EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
+EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, '_sent_mail'))
 
 EMAIL_HOST = env('EMAIL_HOST', default=None)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default=None)
@@ -405,7 +368,6 @@ STATIC_URL = '/static/'
 
 USE_S3 = env('USE_S3', default='0') == '1'
 if USE_S3:
-
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
@@ -413,10 +375,7 @@ if USE_S3:
     # S3 settings
     AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
     AWS_S3_CUSTOM_DOMAIN = env('CDN_static')
-    AWS_S3_OBJECT_PARAMETERS = {
-        "ACL": "public-read",
-        "CacheControl": "max-age=86400"
-    }
+    AWS_S3_OBJECT_PARAMETERS = {'ACL': 'public-read', 'CacheControl': 'max-age=86400'}
 
     # S3 Static Files
     STATICFILES_LOCATION = 'static'
@@ -436,20 +395,19 @@ if USE_S3:
     PRIVATE_FILE_STORAGE = 'storage.custom_storages.PrivateMediaStorage'
 
 else:
-
     # The absolute path to the directory where `collectstatic` will move the static files to.
-    STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, "_collected_static"))
+    STATIC_ROOT = env('STATIC_ROOT', default=os.path.join(PROJECT_ROOT, '_collected_static'))
 
     # The absolute path to the directory where uploaded media files will be saved to
-    MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, "_media_uploads"))
+    MEDIA_ROOT = env('MEDIA_ROOT', default=os.path.join(PROJECT_ROOT, '_media_uploads'))
 
 
 STATICFILES_DIRS = env(
     'STATICFILES_DIRS',
     default=(
-        os.path.join(BASE_DIR, "static"),
+        os.path.join(BASE_DIR, 'static'),
         # '/var/www/static/',
-    )
+    ),
 )
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
@@ -469,8 +427,8 @@ DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='')
 
 # TENANTS ###############################################################
 
-TENANT_MODEL = "tenant.Tenant"
-TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
+TENANT_MODEL = 'tenant.Tenant'
+TENANT_DOMAIN_MODEL = 'tenant.TenantDomain'
 
 TENANT_DEFAULT_ADMIN_USERNAME = env('TENANT_DEFAULT_ADMIN_USERNAME')
 TENANT_DEFAULT_ADMIN_PASSWORD = env('TENANT_DEFAULT_ADMIN_PASSWORD')
@@ -507,16 +465,13 @@ SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
-SESSION_COOKIE_AGE = env("SESSION_COOKIE_AGE", default=int(60 * 60 * 24 * 7 * 8))  # 8 Weeks
+SESSION_COOKIE_AGE = env('SESSION_COOKIE_AGE', default=int(60 * 60 * 24 * 7 * 8))  # 8 Weeks
 
 AUTHENTICATION_BACKENDS = (
-
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
-
     # `allauth` specific authentication methods, such as login by e-mail
     'allauth.account.auth_backends.AuthenticationBackend',
-
 )
 
 # AllAuth Configuration
@@ -539,9 +494,9 @@ SOCIALACCOUNT_PROVIDERS = {
 LOGIN_REDIRECT_URL = '/'
 # https://stackoverflow.com/questions/44571373/python-3-6-django1-10-login-required-decorator-redirects-to-link-with-missing/44571408#44571408
 LOGIN_URL = 'account_login'
-ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
+ACCOUNT_ADAPTER = 'hackerspace_online.adapter.CustomAccountAdapter'
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
-ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
+ACCOUNT_AUTHENTICATION_METHOD = 'username'  # (=”username” | “email” | “username_email”)
 # Specifies the login method to use – whether the user logs in by entering their username,
 # e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
@@ -554,13 +509,13 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=
 # Determines the expiration date of email confirmation mails (# of days).
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
-ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_EMAIL_VERIFICATION = 'optional'
 # Determines the e-mail verification method during signup – choose one of “mandatory”, “optional”, or “none”. When set to “mandatory”
 # the user is blocked from logging in until the email address is verified. Choose “optional” or “none” to allow logins with an unverified
 # e-mail address. In case of “optional”, the e-mail verification mail is still sent, whereas in case of “none” no e-mail verification mails are sent.
 # ACCOUNT_EMAIL_SUBJECT_PREFIX #(=”[Site] ”)
 # Subject-line prefix to use for email messages sent. By default, the name of the current Site (django.contrib.sites) is used.
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv("ACCOUNT_DEFAULT_HTTP_PROTOCOL", "http" if DEBUG else "https")
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv('ACCOUNT_DEFAULT_HTTP_PROTOCOL', 'http' if DEBUG else 'https')
 # The default protocol used for when generating URLs, e.g. for the password forgotten procedure. Note that this is a default only –
 # see the section on HTTPS for more information.
 # ACCOUNT_FORMS #(={})
@@ -593,7 +548,7 @@ SOCIALACCOUNT_FORMS = {
     'signup': 'hackerspace_online.forms.CustomSocialAccountSignupForm',
 }
 SOCIALACCOUNT_EMAIL_REQUIRED = True
-SOCIALACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomSocialAccountAdapter"
+SOCIALACCOUNT_ADAPTER = 'hackerspace_online.adapter.CustomSocialAccountAdapter'
 
 
 #################################
@@ -607,39 +562,42 @@ SUMMERNOTE_THEME = 'bs3'
 SUMMERNOTE_CONFIG = {
     # Using SummernoteWidget - iframe mode, default
     'iframe': True,
-
     # Or, you can set it as False to use SummernoteInplaceWidget by default - no iframe mode
     # In this case, you have to load Bootstrap/jQuery stuff by manually.
     # Use this when you're already using Bootstraip/jQuery based themes.
     # 'iframe': False,
-
     # You can put custom Summernote settings
     'summernote': {
         # As an example, using Summernote Air-mode
         'airMode': False,
-
         # Change editor size
         'width': '100%',
         'height': '480',
-
         'followingToolbar': False,
-
         # Customize toolbar buttons
         'toolbar': [
             ['style', ['style']],
-            ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript',
-                      'strikethrough', 'add-text-tags', 'clear']],
+            ['font', ['bold', 'italic', 'underline', 'superscript', 'subscript', 'strikethrough', 'add-text-tags', 'clear']],
             ['fontname', ['fontname']],
             ['fontsize', ['fontsize']],
             ['color', ['color']],
             ['para', ['ul', 'ol', 'listStyles', 'paragraph']],
             # ['height', ['height']],
             ['table', ['table']],
-            ['insert', ['link', 'picture', 'videoAttributes', 'hr', 'faicon', 'math', ]],  # , 'nugget']],
+            [
+                'insert',
+                [
+                    'link',
+                    'picture',
+                    'videoAttributes',
+                    'hr',
+                    'faicon',
+                    'math',
+                ],
+            ],  # , 'nugget']],
             ['view', ['codeview']],
             ['help', ['help']],
         ],
-
         # You can also add custom settings for external plugins
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
@@ -652,28 +610,21 @@ SUMMERNOTE_CONFIG = {
             'theme': 'monokai',
         },
     },
-
     # Need authentication while uploading attachments.
     'attachment_require_authentication': True,
     'attachment_filesize_limit': 4096 * 4096,
-
     # Set `upload_to` function for attachments.
     # 'attachment_upload_to': my_custom_upload_to_func(),
-
     # Set custom storage class for attachments.
     # 'attachment_storage_class': 'my.custom.storage.class.name',
-
     # Set custom model for attachments (default: 'django_summernote.Attachment')
     # 'attachment_model': 'my.custom.attachment.model',  # must inherit 'django_summernote.AbstractAttachment'
-
     # You can disable attachment feature.
     # Currently only works for images anyway.  Turn on when it works with other files
     # Images can still be embedded with the image tool
     'disable_attachment': False,
-
     # Set `True` to return attachment paths in absolute URIs.
     'attachment_absolute_uri': False,
-
     # You can also add custom css/js for SummernoteInplaceWidget.
     # !!! Be sure to put {{ form.media }} in template before initiate summernote.
     'css_for_inplace': (
@@ -699,7 +650,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-classes.js'),
     ),
-
     # Codemirror as codeview
     # If any codemirror settings are defined, it will include codemirror files automatically.
     'css': (
@@ -715,7 +665,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
-
     # To use external plugins,
     # Include them within `css` and `js`.
     'js': (
@@ -730,29 +679,24 @@ SUMMERNOTE_CONFIG = {
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
     ),
-
     'popover': {
         'image': [
             ['custom', ['imageShapes']],
             ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
             ['float', ['floatLeft', 'floatRight', 'floatNone']],
-            ['remove', ['removeMedia']]
+            ['remove', ['removeMedia']],
         ],
-        'link': [
-            ['link', ['linkDialogShow', 'unlink']]
-        ],
+        'link': [['link', ['linkDialogShow', 'unlink']]],
         'table': [
             ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
             ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeaders', 'tableStyles']]
+            ['custom', ['tableHeaders', 'tableStyles']],
         ],
     },
-
     # Lazy initialize
     # If you want to initialize summernote at the bottom of page, set this as True
     # and call `initSummernote()` on your page.
     # 'lazy': True,
-
 }
 
 # django-rseized
@@ -767,8 +711,8 @@ TAGGIT_CASE_INSENSITIVE = True
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
 if DEBUG:
-
     import socket
+
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
 
     # Solves an issue where django-debug-toolbar is not showing when running inside a docker container
@@ -781,10 +725,12 @@ if DEBUG:
             ip = '{}.1'.format(ip.rsplit('.', 1)[0])
             INTERNAL_IPS.append(ip)
     except (socket.gaierror, socket.herror, socket.timeout) as exc:
-        print(f"Error resolving hostname: {exc}. Defaulting to {INTERNAL_IPS} hosts.")
+        print(f'Error resolving hostname: {exc}. Defaulting to {INTERNAL_IPS} hosts.')
 
     # DEBUG TOOLBAR
-    MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
+    MIDDLEWARE += [
+        'debug_toolbar.middleware.DebugToolbarMiddleware',
+    ]
     INSTALLED_APPS += (
         'debug_toolbar',
         'template_timings_panel',
@@ -826,7 +772,4 @@ if TESTING:
 
     # django.test.override_settings does not simply work as expected.
     # overriding settings here instead
-    CACHES['default'] = {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'test-loc'
-    }
+    CACHES['default'] = {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'test-loc'}

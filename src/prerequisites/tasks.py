@@ -50,12 +50,12 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     quest = Quest.objects.filter(id=quest_id).first()
     if not quest:
         # If the quest is deleted while this task is running.
-        return f"Quest {quest_id} no longer exists."
+        return f'Quest {quest_id} no longer exists.'
 
     # check if this already started recently, if so, don't need to start a new one.
     cache_key = f'update_conditions_for_quest_{quest_id}_wait'
     if start_from_user_id == 1 and cache.get(cache_key):
-        return f"Skipping task for quest {quest_id}, already started."
+        return f'Skipping task for quest {quest_id}, already started.'
 
     # Set a 1 second cache to prevent this task from running multiple times concurrently for the same quest
     # for example, when prereqs are updated, one might be deleted and two more added, that will result in 3 signals!
@@ -66,7 +66,7 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     else:
         users = CourseStudent.objects.all_users_for_active_semester()
 
-    users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
+    users = users.order_by('id').filter(id__gte=start_from_user_id)[: settings.CELERY_TASKS_BUNCH_SIZE]
     user = None
 
     for user in users:
@@ -102,28 +102,33 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
                     queue='default',
                     # doesn't seem necessary, each group of 10 only takes about 0.1 seconds?
                     countdown=1,  # delay a bit to give some time for the last group to finish, so we don't hog all the resources.
-                    kwargs={'quest_id': quest.id, 'start_from_user_id': minimum_user_id}
+                    kwargs={'quest_id': quest.id, 'start_from_user_id': minimum_user_id},
                 )
     # Return value is displayed at the end of the celery log
     return quest.name
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
+@app.task(
+    base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES
+)  # noqa
 def update_quest_conditions_for_user(self, user_id):
     user = User.objects.filter(id=user_id).first()
     if not user:
         return None
     pk_met_list = [obj.pk for obj in Quest.objects.all() if Prereq.objects.all_conditions_met(obj, user)]
     met_list, created = PrereqAllConditionsMet.objects.update_or_create(
-        user=user, model_name=Quest.get_model_name(), defaults={'ids': str(pk_met_list)})
+        user=user, model_name=Quest.get_model_name(), defaults={'ids': str(pk_met_list)}
+    )
 
-    logger.info(f"Task prerequisites.tasks.update_quest_conditions_for_user: Cache of available quests udpated for {user.username}")
+    logger.info(f'Task prerequisites.tasks.update_quest_conditions_for_user: Cache of available quests udpated for {user.username}')
     # Return value is displayed at the end of the celery log
     # This return value is used to assign new quest cache, so don't change it, print useful info instead for celery log
     return met_list.id
 
 
-@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
+@app.task(
+    base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_all_users', max_retries=settings.CELERY_TASK_MAX_RETRIES
+)  # noqa
 def update_quest_conditions_all_users(self, start_from_user_id):
     """Cycles through all quests for all users to update the cache of available quests (PreqAllConditionsMet)
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
@@ -134,7 +139,7 @@ def update_quest_conditions_all_users(self, start_from_user_id):
 
     if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
         # Return value is displayed at the end of the celery log
-        return "Skipping task, already running."
+        return 'Skipping task, already running.'
 
     cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
@@ -142,7 +147,7 @@ def update_quest_conditions_all_users(self, start_from_user_id):
     users = CourseStudent.objects.all_users_for_active_semester()
     users = users.order_by('id').filter(id__gte=start_from_user_id)
 
-    users = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])  # noqa
+    users = list(users.values_list('id', flat=True)[: settings.CELERY_TASKS_BUNCH_SIZE])  # noqa
     for uid in users:
         update_quest_conditions_for_user.apply_async(args=[uid], queue='default')
 

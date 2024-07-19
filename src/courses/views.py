@@ -17,6 +17,7 @@ from hackerspace_online.decorators import staff_member_required
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
 from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
+
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
@@ -39,7 +40,7 @@ def mark_calculations(request, user_id=None):
     # Mark calculation not activated on this deck
     if not SiteConfig.get().display_marks_calculation:
         if request.user.is_staff:
-            template_name = "courses/mark_calculations_deactivated.html"
+            template_name = 'courses/mark_calculations_deactivated.html'
             return render(request, template_name)
         else:
             # Students should be here, they must have entered URL manually
@@ -102,7 +103,6 @@ class MarkRangeCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('courses:markranges')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Create New Mark Range'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -116,7 +116,6 @@ class MarkRangeUpdate(NonPublicOnlyViewMixin, UpdateView):
     success_url = reverse_lazy('courses:markranges')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Update Mark Range'
         kwargs['submit_btn_value'] = 'Update'
 
@@ -140,7 +139,6 @@ class RankCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('courses:ranks')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Create New Rank'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -178,7 +176,6 @@ class CourseCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy('courses:course_list')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = 'Create New Course'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -202,7 +199,7 @@ class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Course
     success_url = reverse_lazy('courses:course_list')
-    success_message = "Course deleted."
+    success_message = 'Course deleted.'
 
     def get_success_url(self) -> str:
         """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
@@ -213,11 +210,11 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["course"] = self.get_object()
+        context['course'] = self.get_object()
 
         course_student_qs = self.get_object().coursestudent_set
-        context["population"] = course_student_qs.count()
-        context["populated"] = course_student_qs.exists()
+        context['population'] = course_student_qs.count()
+        context['populated'] = course_student_qs.exists()
         return context
 
 
@@ -241,7 +238,7 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         return ctx
 
     def get_success_url(self):
-        return reverse('profiles:profile_detail', args=(self.object.user.profile.id, ))
+        return reverse('profiles:profile_detail', args=(self.object.user.profile.id,))
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -257,7 +254,7 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
-        ctx['heading'] = f'Update {self.object.user.username}\'s course'
+        ctx['heading'] = f"Update {self.object.user.username}'s course"
         ctx['submit_btn_value'] = 'Update'
         return ctx
 
@@ -267,7 +264,6 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 # Student Course Registration View
 class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
-
     # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
     def test_func(self):
         return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
@@ -276,7 +272,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s course"
+    success_message = 'You have been added to the %(course)s course'
 
     def get(self, request, *args, **kwargs):
         # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
@@ -284,26 +280,26 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         simpleregistration = SiteConfig.get().simplified_course_registration
         form = self.get_form()
         form_auto_create_condition = (
-            simpleregistration and
-            form.fields['semester'].widget.input_type == 'hidden' and
-            form.fields['block'].widget.input_type == 'hidden' and
-            form.fields['course'].widget.input_type == 'hidden'
+            simpleregistration
+            and form.fields['semester'].widget.input_type == 'hidden'
+            and form.fields['block'].widget.input_type == 'hidden'
+            and form.fields['course'].widget.input_type == 'hidden'
         )
 
         if form_auto_create_condition:
             # form_auto_create_condition == True means only 1 active Semester, Block, Course object exists
             # can get active objects directly with first() and siteconfig.active_semester
             obj, created = CourseStudent.objects.get_or_create(
-                    user=self.request.user,
-                    semester=SiteConfig.get().active_semester,
-                    block=Block.objects.filter(active=True).first(),
-                    course=Course.objects.filter(active=True).first()
+                user=self.request.user,
+                semester=SiteConfig.get().active_semester,
+                block=Block.objects.filter(active=True).first(),
+                course=Course.objects.filter(active=True).first(),
             )
 
             # after object has been created, redirect to normal success url and display normal success message
             # fstring used instead of self.success_message because form context not available
             if created:
-                messages.success(request, f"You have been added to the {obj.course} Course")
+                messages.success(request, f'You have been added to the {obj.course} Course')
             return redirect(self.success_url)
         else:
             return super().get(request, *args, **kwargs)
@@ -316,8 +312,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
 
         # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
         # user is always hidden and semester always sets default, so can set both non-conditionally
-        kwargs['instance'] = CourseStudent(user=self.request.user,
-                                           semester=SiteConfig.get().active_semester)
+        kwargs['instance'] = CourseStudent(user=self.request.user, semester=SiteConfig.get().active_semester)
 
         # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
         block_qs = Block.objects.filter(active=True)
@@ -345,7 +340,7 @@ class CourseStudentDelete(NonPublicOnlyViewMixin, DeleteView):
     model = CourseStudent
 
     def get_success_url(self) -> str:
-        return reverse("profiles:profile_detail", args=[self.object.user.profile.id])
+        return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -362,13 +357,13 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
-    success_message = "Semester deleted."
+    success_message = 'Semester deleted.'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
-        context["registrations"] = registrations
+        context['registrations'] = registrations
         return context
 
     def get_success_url(self) -> str:
@@ -459,7 +454,6 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterActivate(View):
-
     def get(self, request, *args, **kwargs):
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
@@ -482,7 +476,6 @@ class BlockCreate(NonPublicOnlyViewMixin, LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('courses:block_list')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = f'Create New {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Create'
 
@@ -496,7 +489,6 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy('courses:block_list')
 
     def get_context_data(self, **kwargs):
-
         kwargs['heading'] = f'Update {SiteConfig.get().custom_name_for_group}'
         kwargs['submit_btn_value'] = 'Update'
 
@@ -507,7 +499,7 @@ class BlockUpdate(NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
 class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Block
     success_url = reverse_lazy('courses:block_list')
-    success_message = "Block deleted."
+    success_message = 'Block deleted.'
 
     def get_success_url(self) -> str:
         """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
@@ -537,14 +529,11 @@ def end_active_semester(request):
         announcements have been archived.',
     }
 
-    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL,
-                   Semester.STUDENTS_WITH_NEGATIVE_XP):
+    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
         sem.reset_students_xp_cached()
         Announcement.objects.archive_announcements()
 
-    messages.warning(
-        request,
-        semester_warnings.get(sem, semester_warnings['success']))
+    messages.warning(request, semester_warnings.get(sem, semester_warnings['success']))
 
     return redirect('courses:semester_list')
 
@@ -557,7 +546,7 @@ def ajax_progress_chart(request, user_id=0):
     else:
         user = get_object_or_404(User, pk=user_id)
 
-    if request.is_ajax() and request.method == "POST":
+    if request.is_ajax() and request.method == 'POST':
         sem = SiteConfig.get().active_semester
 
         # generate a list of dates, from first date of semester to today
@@ -602,8 +591,8 @@ def ajax_progress_chart(request, user_id=0):
                 xp_data[-1]['y'] += difference
 
         progress_chart = {
-            "days_in_semester": sem.num_days(),
-            "xp_data": xp_data,
+            'days_in_semester': sem.num_days(),
+            'xp_data': xp_data,
         }
         json_data = json.dumps(progress_chart)
 
@@ -687,23 +676,24 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
 
         # labels
         # 0%, 10%, 20%, ... , 100%+
-        bin_labels = [str(bin_) + "%" for bin_ in bins[:len(bins) - 1]]
-        bin_labels[-1] += "+"
+        bin_labels = [str(bin_) + '%' for bin_ in bins[: len(bins) - 1]]
+        bin_labels[-1] += '+'
         # last dataset (index 11) will be hidden with maintainAspectRatio=False
         # add empty label so it can show
-        bin_labels.append("")
+        bin_labels.append('')
 
-        return json.dumps({
-            'labels': bin_labels,  # list[str]
-            'data': {
-                'user_id': user_id,  # int
-                'students': student_histogram,  # list[int]
+        return json.dumps(
+            {
+                'labels': bin_labels,  # list[str]
+                'data': {
+                    'user_id': user_id,  # int
+                    'students': student_histogram,  # list[int]
+                },
             }
-        })
+        )
 
 
 class Ajax_TagChart(NonPublicOnlyViewMixin, View):
-
     def dispatch(self, request, *args, **kwargs):
         is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
         if not is_ajax or not request.user.is_authenticated:
@@ -722,7 +712,7 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
         return get_object_or_404(User, pk=pk)
 
     def get_quest_dataset(self, user_tags):
-        """  Quest dataset for chart.js to use to display bar chart for quest objects
+        """Quest dataset for chart.js to use to display bar chart for quest objects
 
         Args:
             user_tags (str, QS[Tag]): all tags related to user
@@ -745,7 +735,6 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
         quest_ids = submissions_queryset.filter(quest__max_xp__gt=-1).distinct('quest').values_list('quest', flat=True)
         keep_submissions_id = []
         for quest_id in quest_ids:
-
             submissions_for_quest = submissions_queryset.filter(quest_id=quest_id)
             current_xp_total = 0
             for submission in submissions_for_quest:
@@ -777,14 +766,14 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
             # account for ordinal in name
             name = quest.name
             if submissions_queryset.filter(quest__id=quest.id).count() > 1:
-                name += f" ({submission.ordinal})"
+                name += f' ({submission.ordinal})'
 
             submission_dataset.append({'name': name, 'dataset': xp_in_tag})
 
         return submission_dataset
 
     def get_badge_dataset(self, user_tags):
-        """  Badge dataset for chart.js to use to display bar chart for badge objects
+        """Badge dataset for chart.js to use to display bar chart for badge objects
 
         Args:
             user_tags (str, QS[Tag]): all tags related to user
@@ -811,7 +800,7 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
             # account for ordinal in name
             name = badge.name
             if assertion_queryset.filter(badge__id=badge.id).count() > 1:
-                name += f" ({assertion.ordinal})"
+                name += f' ({assertion.ordinal})'
 
             assertion_dataset.append({'name': name, 'dataset': xp_in_tag})
 
@@ -826,10 +815,12 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
         quest_dataset = self.get_quest_dataset(names)
         badge_dataset = self.get_badge_dataset(names)
 
-        return json.dumps({
-            'labels': names,  # list[str]
-            'data': {
-                'quest_dataset': quest_dataset,  # list[dict[str, list[int]]]
-                'badge_dataset': badge_dataset,  # list[dict[str, list[int]]]
+        return json.dumps(
+            {
+                'labels': names,  # list[str]
+                'data': {
+                    'quest_dataset': quest_dataset,  # list[dict[str, list[int]]]
+                    'badge_dataset': badge_dataset,  # list[dict[str, list[int]]]
+                },
             }
-        })
+        )

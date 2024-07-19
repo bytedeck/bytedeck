@@ -23,19 +23,18 @@ User = get_user_model()
 
 
 class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_rank_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to login page '''
+        """If not logged in then all views should redirect to login page"""
 
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:rank_create')
@@ -43,7 +42,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:rank_delete', args=[1])
 
     def test_all_rank_page_status_codes_for_students(self):
-        ''' If logged in as student then all views except ranks list view should redirect to login page '''
+        """If logged in as student then all views except ranks list view should redirect to login page"""
         self.client.force_login(self.test_student1)
         self.assert200('courses:ranks')
 
@@ -53,7 +52,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('courses:rank_delete', args=[1])
 
     def test_all_rank_page_status_codes_for_staff(self):
-        ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
+        """If logged in as staff then all views should return code 200 for successful retrieval of page"""
         self.client.force_login(self.test_teacher)
 
         self.assert200('courses:ranks')
@@ -62,7 +61,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('courses:rank_delete', args=[1])
 
     def test_RanksList_view(self):
-        """ Admin and students should be able to view ranks. Anonymous users should be asked to login if they attempt to view ranks. """
+        """Admin and students should be able to view ranks. Anonymous users should be asked to login if they attempt to view ranks."""
 
         # Anonymous user
         self.assertRedirectsLogin('courses:ranks')
@@ -81,13 +80,9 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['object_list'].count(), 13)
 
     def test_RankCreate_view(self):
-        """ Admin should be able to create a rank """
+        """Admin should be able to create a rank"""
         self.client.force_login(self.test_teacher)
-        data = {
-            'name': 'My Sample rank',
-            'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
-        }
+        data = {'name': 'My Sample rank', 'xp': 23, 'fa_icon': 'fa fa-circle-o'}
         response = self.client.post(reverse('courses:rank_create'), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
 
@@ -95,13 +90,9 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(rank.name, data['name'])
 
     def test_RankUpdate_view(self):
-        """ Admin should be able to update a rank """
+        """Admin should be able to update a rank"""
         self.client.force_login(self.test_teacher)
-        data = {
-            'name': 'My updated rank',
-            'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
-        }
+        data = {'name': 'My updated rank', 'xp': 23, 'fa_icon': 'fa fa-circle-o'}
         response = self.client.post(reverse('courses:rank_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
         rank = Rank.objects.get(id=1)
@@ -109,7 +100,7 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(rank.xp, data['xp'])
 
     def test_RankDelete_view(self):
-        """ Admin should be able to delete a rank """
+        """Admin should be able to delete a rank"""
         self.client.force_login(self.test_teacher)
 
         before_delete_count = Rank.objects.count()
@@ -120,12 +111,11 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -143,7 +133,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         }
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page '''
+        """If not logged in then all views should redirect to home page"""
         self.assertRedirectsLogin('courses:create')
         self.assertRedirectsLogin('courses:join', args=[1])
         self.assertRedirectsLogin('courses:coursestudent_delete', args=[1])
@@ -177,7 +167,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Refer to rank specific tests for Rank CRUD views
 
     def test_all_page_status_codes_for_students(self):
-        ''' Test student access to views '''
+        """Test student access to views"""
         self.client.force_login(self.test_student1)
         self.assert200('courses:create')
         self.assert200('courses:ranks')
@@ -258,7 +248,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.logout()
 
     def test_end_active_semester__staff(self):
-        ''' End_active_semester view should redirect to semester list view '''
+        """End_active_semester view should redirect to semester list view"""
         self.client.force_login(self.test_teacher)
         active_sem = SiteConfig.get().active_semester
         self.assertFalse(active_sem.closed)
@@ -271,7 +261,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SemesterActivate(self):
         """When this view is accessed, the siteconfig's active semester should be changed
-        and the view should redirect tot he semester_list """
+        and the view should redirect tot he semester_list"""
         self.client.force_login(self.test_teacher)
         new_semester = baker.make('courses.semester')
         response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
@@ -279,7 +269,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
     def test_CourseList_view(self):
-        """ Admin should be able to view course list """
+        """Admin should be able to view course list"""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:course_list'))
         self.assertEqual(response.status_code, 200)
@@ -288,12 +278,9 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['object_list'].count(), 2)
 
     def test_CourseCreate_view(self):
-        """ Admin should be able to create a course """
+        """Admin should be able to create a course"""
         self.client.force_login(self.test_teacher)
-        data = {
-            'title': 'My Sample Course',
-            'xp_for_100_percent': 2000
-        }
+        data = {'title': 'My Sample Course', 'xp_for_100_percent': 2000}
         response = self.client.post(reverse('courses:course_create'), data=data)
         self.assertRedirects(response, reverse('courses:course_list'))
 
@@ -301,7 +288,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.title, data['title'])
 
     def test_CourseUpdate_view(self):
-        """ Admin should be able to update a course """
+        """Admin should be able to update a course"""
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'My Updated Title',
@@ -314,7 +301,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.xp_for_100_percent, data['xp_for_100_percent'])
 
     def test_CourseDelete_view__no_students(self):
-        """ Admin should be able to delete a course """
+        """Admin should be able to delete a course"""
         self.client.force_login(self.test_teacher)
 
         before_delete_count = Course.objects.count()
@@ -325,14 +312,20 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_CourseDelete_view__with_students(self):
         """
-            Admin should not be able to delete course with a student registered
-            Also checks if course can be deleted with a forced post method
+        Admin should not be able to delete course with a student registered
+        Also checks if course can be deleted with a forced post method
         """
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
 
         # register student to course
-        course_student = baker.make(CourseStudent, user=self.test_student1, semester=self.sem, block=self.block, course=self.course,)
+        course_student = baker.make(
+            CourseStudent,
+            user=self.test_student1,
+            semester=self.sem,
+            block=self.block,
+            course=self.course,
+        )
         self.assertEqual(CourseStudent.objects.count(), 1)
         self.assertEqual(CourseStudent.objects.first().pk, course_student.pk)
 
@@ -343,20 +336,19 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('courses:course_delete', args=[self.course.pk]))
 
         dt_ptag = f"Unable to delete '{self.course.title}' as it still has students registered. Consider disabling the course by toggling the"
-        dt_atag_link = reverse("courses:course_update", args=[self.course.pk])
-        dt_well_ptag = f"Registered Students: {self.course.coursestudent_set.count()}"
+        dt_atag_link = reverse('courses:course_update', args=[self.course.pk])
+        dt_well_ptag = f'Registered Students: {self.course.coursestudent_set.count()}'
         self.assertContains(response, dt_ptag)
         self.assertContains(response, dt_atag_link)
         self.assertContains(response, dt_well_ptag)
 
 
 class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -374,14 +366,10 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         }
 
     def test_CourseStudentUpdate_view(self):
-        """ Staff can update a student's course """
+        """Staff can update a student's course"""
 
         course_student = baker.make(
-            CourseStudent,
-            user=self.test_student1,
-            course=self.course,
-            block=self.block,
-            semester=SiteConfig.get().active_semester
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block, semester=SiteConfig.get().active_semester
         )
         new_course = baker.make(Course)
 
@@ -396,7 +384,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course_student.course.pk, new_course.pk)
 
     def test_CourseAddStudent_view(self):
-        '''Staff can add a student to a course'''
+        """Staff can add a student to a course"""
 
         # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
         # and redirects to profiles:profile_detail
@@ -441,8 +429,8 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
 
     def test_CourseStudentDelete_view(self):
-        """ Teacher should be able to delete a student from a course (StudentCourse object)
-        and should redirect to the student's profile when complete. """
+        """Teacher should be able to delete a student from a course (StudentCourse object)
+        and should redirect to the student's profile when complete."""
         self.client.force_login(self.test_teacher)
         course_student = baker.make(CourseStudent, user=self.test_student1)
 
@@ -457,7 +445,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
     def test_CourseStudentCreate_view(self):
-        '''Students can register themselves in a course. Illegally accessing the registration view after registering will give an error 403'''
+        """Students can register themselves in a course. Illegally accessing the registration view after registering will give an error 403"""
         self.client.force_login(self.test_student1)
 
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
@@ -598,7 +586,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # assert form redirects to list view and that new MarkRange object exists (creation successful)
         self.assertRedirects(response, reverse('courses:markranges'))
-        self.assertTrue(MarkRange.objects.filter(name="TestMarkRange").exists())
+        self.assertTrue(MarkRange.objects.filter(name='TestMarkRange').exists())
 
     def test_MarkRangeUpdate_view(self):
         """Staff users can edit existing MarkRange objects through the update view form"""
@@ -611,7 +599,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # assert form redirects to list view and that MarkRange object with id=1 has updated name (update successful)
         self.assertRedirects(response, reverse('courses:markranges'))
-        self.assertEqual(MarkRange.objects.get(id=1).name, "TestMarkRange")
+        self.assertEqual(MarkRange.objects.get(id=1).name, 'TestMarkRange')
 
     def test_MarkRangeDelete_view(self):
         """Staff users can delete MarkRange objects through the delete view"""
@@ -631,10 +619,9 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def generate_dates(quantity, dates=None):
         """
-            Small recursive function that gets n unique dates
+        Small recursive function that gets n unique dates
         """
         if dates is None:
             dates = []
@@ -642,11 +629,14 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         if max(quantity, 0) == 0:
             return dates
 
-        dates += [datetime.date(
-            random.randint(2000, 2020),  # year
-            random.randint(1, 12),  # month
-            random.randint(1, 28),  # day
-        ) for i in range(quantity)]
+        dates += [
+            datetime.date(
+                random.randint(2000, 2020),  # year
+                random.randint(1, 12),  # month
+                random.randint(1, 28),  # day
+            )
+            for i in range(quantity)
+        ]
         dates = list(set(dates))  # make it so unique only
 
         leftover = quantity - len(dates)
@@ -672,8 +662,10 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
 
         post_data = {
-            'name': 'semester', 'first_day': '2020-10-15', 'last_day': '2020-12-15',
-            **generate_formset_data(ExcludedDateFormset, quantity=0)
+            'name': 'semester',
+            'first_day': '2020-10-15',
+            'last_day': '2020-12-15',
+            **generate_formset_data(ExcludedDateFormset, quantity=0),
         }
         response = self.client.post(reverse('courses:semester_create'), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
@@ -682,8 +674,8 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SemesterCreate__with_ExcludedDates__view(self):
         """
-            Test for SemesterCreate with correct/valid post data.
-            valid post data includes default values for SemesterForm, randomly generated values for ExcludedDateFormset
+        Test for SemesterCreate with correct/valid post data.
+        valid post data includes default values for SemesterForm, randomly generated values for ExcludedDateFormset
         """
         self.client.force_login(self.test_teacher)
 
@@ -707,12 +699,12 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SemesterCreate__add_without_required_fields__view(self):
         """
-            Test for SemesterCreate with leaving required fields blank
+        Test for SemesterCreate with leaving required fields blank
         """
         self.client.force_login(self.test_teacher)
 
         form_data = generate_form_data(model_form=SemesterForm)
-        formset_data = generate_formset_data(ExcludedDateFormset, quantity=5, label="filler text", date=None)
+        formset_data = generate_formset_data(ExcludedDateFormset, quantity=5, label='filler text', date=None)
 
         # test with response
         response = self.client.post(reverse('courses:semester_create'), data={**form_data, **formset_data})
@@ -723,19 +715,15 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_SemesterUpdate_view(self):
         self.client.force_login(self.test_teacher)
 
-        post_data = {
-            'first_day': '2020-10-16',
-            'last_day': '2020-12-16',
-            **generate_formset_data(ExcludedDateFormset, quantity=0)
-        }
+        post_data = {'first_day': '2020-10-16', 'last_day': '2020-12-16', **generate_formset_data(ExcludedDateFormset, quantity=0)}
         response = self.client.post(reverse('courses:semester_update', args=[1]), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
 
     def test_SemesterUpdate__add_data__view(self):
         """
-             Test for SemesterUpdate with correct/valid post data.
-             Only add data for ExcludeDateFormset related fields
+        Test for SemesterUpdate with correct/valid post data.
+        Only add data for ExcludeDateFormset related fields
         """
         self.client.force_login(self.test_teacher)
 
@@ -757,8 +745,8 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SemesterUpdate__update_data__view(self):
         """
-             Test for SemesterUpdate with correct/valid post data.
-             Only update/add data for ExcludeDateFormset related fields
+        Test for SemesterUpdate with correct/valid post data.
+        Only update/add data for ExcludeDateFormset related fields
         """
         self.client.force_login(self.test_teacher)
         semester = SiteConfig.get().active_semester
@@ -774,9 +762,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         formset_data = generate_formset_data(ExcludedDateFormset, quantity=len(updated_exclude_dates), date=itertools.cycle(updated_exclude_dates))
 
         # update management form
-        formset_data.update({
-            'form-INITIAL_FORMS': len(old_exclude_dates)
-        })
+        formset_data.update({'form-INITIAL_FORMS': len(old_exclude_dates)})
         # give existing dates an id
         for index in range(len(old_exclude_dates)):
             formset_data[f'form-{index}-id'] = excludeddates_set[index].id
@@ -790,8 +776,8 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_SemesterUpdate__delete_data__view(self):
         """
-             Test for SemesterUpdate with correct/valid post data.
-             Only delete data for ExcludeDateFormset related fields
+        Test for SemesterUpdate with correct/valid post data.
+        Only delete data for ExcludeDateFormset related fields
         """
         self.client.force_login(self.test_teacher)
         semester = SiteConfig.get().active_semester
@@ -803,9 +789,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         formset_data = generate_formset_data(ExcludedDateFormset, quantity=len(dates), date=itertools.cycle(dates))
 
         # update management form
-        formset_data.update({
-            'form-INITIAL_FORMS': len(dates)
-        })
+        formset_data.update({'form-INITIAL_FORMS': len(dates)})
 
         # give existing dates an id + delete=on
         for index in range(len(dates)):
@@ -820,16 +804,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
     @patch('profile_manager.models.Profile.xp_per_course')
     def test_SemesterDCloses__student_with_negative_xp__view(self, xp_per_course):
         """
-            Test if SemesterClose returns a warning when there is a course student with
-            a negative xp.
+        Test if SemesterClose returns a warning when there is a course student with
+        a negative xp.
         """
         xp_per_course.return_value = -10
         self.client.force_login(self.test_teacher)
 
-        post_data = {
-            'first_day': '2020-10-15', 'last_day': '2020-12-15',
-            **generate_formset_data(ExcludedDateFormset, quantity=0)
-        }
+        post_data = {'first_day': '2020-10-15', 'last_day': '2020-12-15', **generate_formset_data(ExcludedDateFormset, quantity=0)}
         response = self.client.post(reverse('courses:semester_create'), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.count(), 2)
@@ -846,11 +827,11 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn('There are some students with negative XP', str(message))
 
     def test_SemesterDelete_view(self):
-        """ Admin should be able to delete a semester, as long as:
-            - it is not the active semester
-            - it has no coursesstudent objects (students registered in a course in the semester)
-            - it is not closes
-            ^ However, all of the above 3 exceptions are checked in the template and not in the view
+        """Admin should be able to delete a semester, as long as:
+        - it is not the active semester
+        - it has no coursesstudent objects (students registered in a course in the semester)
+        - it is not closes
+        ^ However, all of the above 3 exceptions are checked in the template and not in the view
         """
         self.client.force_login(self.test_teacher)
         semester = baker.make(Semester)
@@ -861,13 +842,12 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
 
     def test_BlockList_view(self):
-        """ Admin should be able to view block list """
+        """Admin should be able to view block list"""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:block_list'))
         self.assertEqual(response.status_code, 200)
@@ -876,7 +856,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['object_list'].count(), 1)
 
     def test_BlockCreate_view(self):
-        """ Admin should be able to create a block """
+        """Admin should be able to create a block"""
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'My Block',
@@ -889,7 +869,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(block.name, data['name'])
 
     def test_BlockUpdate_view(self):
-        """ Admin should be able to update a block """
+        """Admin should be able to update a block"""
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'Updated Block',
@@ -900,7 +880,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(block.name, data['name'])
 
     def test_BlockDelete_view__no_students(self):
-        """ Admin should be able to delete a block """
+        """Admin should be able to delete a block"""
         self.client.force_login(self.test_teacher)
 
         before_delete_count = Block.objects.count()
@@ -911,8 +891,8 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_BlockDelete_view__with_students(self):
         """
-            Admin should not be able to delete block with a student registered
-            Also checks if block can be deleted with a forced post method
+        Admin should not be able to delete block with a student registered
+        Also checks if block can be deleted with a forced post method
         """
         student = baker.make(User)
         block = baker.make(Block)
@@ -933,14 +913,14 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         dt_ptag = f"Unable to delete '{block.name}' as it still has students registered. Consider disabling the block by toggling the"
         dt_atag_link = reverse('courses:block_update', args=[block.pk])
-        dt_well_ptag = f"Registered Students: {block.coursestudent_set.count()}"
+        dt_well_ptag = f'Registered Students: {block.coursestudent_set.count()}'
         self.assertContains(response, dt_ptag)
         self.assertContains(response, dt_atag_link)
         self.assertContains(response, dt_well_ptag)
 
     def test_BlockForm_initial_values(self):
         """
-            Test if the form passed through context has correct initial values
+        Test if the form passed through context has correct initial values
         """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:block_create'))
@@ -950,7 +930,6 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, is_staff=True)
@@ -998,11 +977,11 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_no_users_outside_active_semester_in_histogram_values(self):
-        """ histogram values should only belong to users who belong in the active semester"""
+        """histogram values should only belong to users who belong in the active semester"""
         # create inactive semester students
         inactive_sem_students = [self.create_student_course(100) for i in range(5)]
         for cs in inactive_sem_students:
-            cs.semester = (self.inactive_semester)
+            cs.semester = self.inactive_semester
             cs.save()
 
         # create active semester students
@@ -1010,8 +989,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.teacher)
         response = self.client.get(
-            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1023,7 +1001,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(total_students, len(active_sem_students))
 
     def test_no_test_users_in_histogram_values(self):
-        """ test users should not show up in histogram values """
+        """test users should not show up in histogram values"""
         # create test users students
         test_account_students = [self.create_student_course(100) for i in range(5)]
         for cs in test_account_students:
@@ -1035,8 +1013,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.teacher)
         response = self.client.get(
-            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            reverse('courses:mark_distribution_chart', args=[active_sem_students[0].user.id]), HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1049,7 +1026,6 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
 
 
 class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
@@ -1064,13 +1040,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         self.semester.last_day = self.semester.first_day + datetime.timedelta(days=135)
         self.semester.save()
 
-        self.student_course = baker.make(
-            CourseStudent,
-            user=self.student,
-            semester=self.semester,
-            course=self.course,
-            block=self.block
-        )
+        self.student_course = baker.make(CourseStudent, user=self.student, semester=self.semester, course=self.course, block=self.block)
 
         # use this to make aware datetime objects
         # (UTC-8) for datetime.date(2024, 1, 1)
@@ -1120,7 +1090,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
-        """ tests if xp_data from ajax request holds the correct xp on different days of the week.
+        """tests if xp_data from ajax request holds the correct xp on different days of the week.
         uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
         """
         self.client.force_login(self.student)
@@ -1147,10 +1117,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
 
         # create a submission on saturday
         saturday_xp = self.base_xp * 5
-        self.create_quest_and_submissions(
-            saturday_xp,
-            datetime.datetime(2024, 1, 6, tzinfo=self.tz)
-        )
+        self.create_quest_and_submissions(saturday_xp, datetime.datetime(2024, 1, 6, tzinfo=self.tz))
 
         # XP earned in SAT + SUN while being on a week end will add the xp to Friday
         # test for correct xp on week end
@@ -1165,10 +1132,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
 
         # create a submission on sunday
         sunday_xp = saturday_xp
-        self.create_quest_and_submissions(
-            sunday_xp,
-            datetime.datetime(2024, 1, 7, tzinfo=self.tz)
-        )
+        self.create_quest_and_submissions(sunday_xp, datetime.datetime(2024, 1, 7, tzinfo=self.tz))
 
         # XP earned in SAT + SUN while being on a week end will add the xp to Friday
         # test for correct xp on week end
@@ -1191,14 +1155,13 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
             self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
 
     def test_ajax_xp_data__equals_xp_cache_on_weekend(self):
-        """ test if the xp_data equals xp on weekend """
+        """test if the xp_data equals xp on weekend"""
         self.client.force_login(self.student)
 
         # exclude monday to check if excluded date
         baker.make(
             'courses.ExcludedDate',
             semester=self.semester,
-
             # use datetime.date instead of datetime.datetime
             # see the "Anything Else?" section "Bug 2"
             # https://github.com/bytedeck/bytedeck/pull/1606
@@ -1206,10 +1169,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         )
 
         # submission on saturday
-        self.create_quest_and_submissions(
-            self.base_xp,
-            datetime.datetime(2024, 1, 13, tzinfo=self.tz)
-        )
+        self.create_quest_and_submissions(self.base_xp, datetime.datetime(2024, 1, 13, tzinfo=self.tz))
         # profile.xp_cached == 0 without doing this
         self.student.profile.xp_invalidate_cache()
 
@@ -1223,10 +1183,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
             self.assertEqual(total_xp, self.student.profile.xp_cached)
 
         # submission on monday
-        self.create_quest_and_submissions(
-            self.base_xp,
-            datetime.datetime(2024, 1, 14, tzinfo=self.tz)
-        )
+        self.create_quest_and_submissions(self.base_xp, datetime.datetime(2024, 1, 14, tzinfo=self.tz))
 
         # update the cache
         self.student.profile.xp_invalidate_cache()
@@ -1251,7 +1208,6 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
 
 
 class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.student = baker.make(User)

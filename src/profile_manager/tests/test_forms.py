@@ -14,9 +14,8 @@ User = get_user_model()
 
 
 class ProfileFormTest(TenantTestCase):
-
     def setUp(self) -> None:
-        self.user = User.objects.create_user('test_student', password="test_password")
+        self.user = User.objects.create_user('test_student', password='test_password')
 
     def test_init(self):
         # Without request
@@ -30,10 +29,7 @@ class ProfileFormTest(TenantTestCase):
         """
         Test to increase coverage for ProfileForm
         """
-        form_data = generate_form_data(
-            model_form=ProfileForm,
-            grad_year=Profile.get_grad_year_choices()[0][0]
-        )
+        form_data = generate_form_data(model_form=ProfileForm, grad_year=Profile.get_grad_year_choices()[0][0])
         form = ProfileForm(instance=self.user.profile, data=form_data)
         form.is_valid()
         form.save()
@@ -59,13 +55,12 @@ class ProfileFormTest(TenantTestCase):
         """
         form = ProfileForm(instance=self.user.profile, data={'email': 'notanemail', 'grad_year': Profile.get_grad_year_choices()[0][0]})
         self.assertFalse(form.is_valid())
-        self.assertIn("Enter a valid email address.", form.errors["email"])
+        self.assertIn('Enter a valid email address.', form.errors['email'])
 
     def test_clean_email__invalid_domain(self):
-        """ Mock the NXDOMAIN error from non-existant domains, email field should raise a ValidationError """
+        """Mock the NXDOMAIN error from non-existant domains, email field should raise a ValidationError"""
         form = ProfileForm(
-            instance=self.user.profile,
-            data={'email': 'example@nonexistentdomain.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
+            instance=self.user.profile, data={'email': 'example@nonexistentdomain.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
         )
 
         # Mock the NXDOMAIN error from DNS resolution
@@ -74,16 +69,12 @@ class ProfileFormTest(TenantTestCase):
 
             form.is_valid()
             # Assert that the expected validation message is present in the form errors
-            self.assertIn(
-                "nonexistentdomain.com doesn't appear to exist. Enter a valid email address or leave it blank.",
-                form.errors['email']
-            )
+            self.assertIn("nonexistentdomain.com doesn't appear to exist. Enter a valid email address or leave it blank.", form.errors['email'])
 
     def test_clean_email__domain_no_answer(self):
-        """ Mock a NoAnswer exception and mack sure it passes email validation.  Some domains don't answer, such as sd72.bc.ca!"""
+        """Mock a NoAnswer exception and mack sure it passes email validation.  Some domains don't answer, such as sd72.bc.ca!"""
         form = ProfileForm(
-            instance=self.user.profile,
-            data={'email': 'example@domainwithnoanswer.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
+            instance=self.user.profile, data={'email': 'example@domainwithnoanswer.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
         )
         with patch('dns.resolver.resolve') as mock_resolve:
             mock_resolve.side_effect = dns.resolver.NoAnswer

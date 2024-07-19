@@ -13,7 +13,6 @@ PUBLIC_SCHEMA = get_public_schema_name()
 
 
 class AnnouncementsSignalsTest(TenantTestCase):
-
     def setUp(self):
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
@@ -81,7 +80,7 @@ class AnnouncementsSignalsTest(TenantTestCase):
         task = PeriodicTask.objects.get(name__contains=announcement.id)
 
         # change the announcement and resave to force recall of `save_announcement_signal()`
-        announcement.title = "New Title"
+        announcement.title = 'New Title'
         announcement.save()
         task2 = PeriodicTask.objects.get(name__contains=announcement.id)
         # Didn't create a new PeriodicTask object

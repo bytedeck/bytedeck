@@ -19,7 +19,7 @@ from .models import Category, Quest, CommonData
 
 class BadgeLabel:
     def label_from_instance(self, obj):
-        return f"{str(obj)} ({obj.xp} XP)"
+        return f'{str(obj)} ({obj.xp} XP)'
 
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
@@ -27,7 +27,6 @@ class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
 
 
 class QuestForm(forms.ModelForm):
-
     new_quest_prerequisite = forms.ModelChoiceField(
         # to_field_name="name",
         required=False,
@@ -48,24 +47,43 @@ class QuestForm(forms.ModelForm):
         ),
     )
 
-    campaign = forms.ModelChoiceField(
-        queryset=Category.objects.all(),
-        required=False,
-        limit_choices_to={'active': True}
-    )
+    campaign = forms.ModelChoiceField(queryset=Category.objects.all(), required=False, limit_choices_to={'active': True})
 
     class Meta:
         model = Quest
-        fields = ('name', 'visible_to_students', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
-                  'verification_required', 'instructions',
-                  'campaign', 'common_data', 'submission_details', 'instructor_notes',
-                  'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
-                  'map_transition', 'tags',
-                  'new_quest_prerequisite',
-                  'new_badge_prerequisite',
-                  'specific_teacher_to_notify', 'blocking',
-                  'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
-                  'available_outside_course', 'archived', 'editor')
+        fields = (
+            'name',
+            'visible_to_students',
+            'xp',
+            'xp_can_be_entered_by_students',
+            'icon',
+            'short_description',
+            'verification_required',
+            'instructions',
+            'campaign',
+            'common_data',
+            'submission_details',
+            'instructor_notes',
+            'repeat_per_semester',
+            'max_repeats',
+            'max_xp',
+            'hours_between_repeats',
+            'map_transition',
+            'tags',
+            'new_quest_prerequisite',
+            'new_badge_prerequisite',
+            'specific_teacher_to_notify',
+            'blocking',
+            'hideable',
+            'sort_order',
+            'date_available',
+            'time_available',
+            'date_expired',
+            'time_expired',
+            'available_outside_course',
+            'archived',
+            'editor',
+        )
 
         date_options = {
             'showMeridian': False,
@@ -84,26 +102,22 @@ class QuestForm(forms.ModelForm):
             'instructions': ByteDeckSummernoteAdvancedInplaceWidget(),
             'submission_details': ByteDeckSummernoteAdvancedInplaceWidget(),
             'instructor_notes': ByteDeckSummernoteAdvancedInplaceWidget(),
-
             'date_available': DatePickerInput(format='%Y-%m-%d'),
-
             'time_available': TimePickerInput(),
             'date_expired': DatePickerInput(format='%Y-%m-%d'),
             'time_expired': TimePickerInput(),
-
             # TODO: Campaign Autocomplete
             # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
             # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
             # 'specific_teacher_to_notify': Select2Widget(),
-
             # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
-            'tags': BootstrapTaggitSelect2Widget()
+            'tags': BootstrapTaggitSelect2Widget(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
+        self.fields['date_available'].initial = (date.today().strftime('%Y-%m-%d'),)
 
         self.fields['common_data'].label = 'Common Quest Info'
         self.fields['common_data'].queryset = CommonData.objects.filter(active=True)
@@ -111,11 +125,13 @@ class QuestForm(forms.ModelForm):
         cancel_btn = '<a href="{{ cancel_url }}" role="button" class="btn btn-danger">Cancel</a> '
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
-        prereqs_btn = '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'quests:quest_prereqs_update\' object.id %}">' \
-            'Edit Prerequisites</a>' \
-            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
-            'before you can add prerequisites.">Edit Prerequisites</button>' \
+        prereqs_btn = (
+            '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'quests:quest_prereqs_update\' object.id %}">'
+            'Edit Prerequisites</a>'
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, '
+            'before you can add prerequisites.">Edit Prerequisites</button>'
             '{% endif %}'
+        )
 
         self.helper = FormHelper()
         self.helper.layout = Layout(
@@ -140,17 +156,17 @@ class QuestForm(forms.ModelForm):
                 'tags',
                 Accordion(
                     AccordionGroup(
-                        "Basic Prerequisites",
+                        'Basic Prerequisites',
                         # TODO This code should be combined with its use in quest_detail_content.html
                         HTML(
                             "<div class='help-block'><p>If you only want to set a single quest and/or badge as a prerequisite, you can set them here."
-                            "{% if object.id %} Note that this will overwrite any current prerequisites that are set. </p><p>{% endif %} "
-                            "For more advanced prerequisite options you will need to "
-                            "{% if request.user.profile.is_TA %} ask a teacher to set them up for you. "
-                            "{% elif not object.id %} save this new quest first."
-                            "{% else %}use the <a href='{% url \"quests:quest_prereqs_update\" object.id %}'>Advanced Prerequisites Form</a>."
-                            "{% endif %}</p></div>"
-                            "<div>Current Prerequisites:</div>"
+                            '{% if object.id %} Note that this will overwrite any current prerequisites that are set. </p><p>{% endif %} '
+                            'For more advanced prerequisite options you will need to '
+                            '{% if request.user.profile.is_TA %} ask a teacher to set them up for you. '
+                            '{% elif not object.id %} save this new quest first.'
+                            '{% else %}use the <a href=\'{% url "quests:quest_prereqs_update" object.id %}\'>Advanced Prerequisites Form</a>.'
+                            '{% endif %}</p></div>'
+                            '<div>Current Prerequisites:</div>'
                             "{% include 'prerequisites/current_prereq_list.html' %}",
                         ),
                         'new_quest_prerequisite',
@@ -159,7 +175,7 @@ class QuestForm(forms.ModelForm):
                         template='crispy_forms/bootstrap3/accordion-group.html',
                     ),
                     AccordionGroup(
-                        "Advanced",
+                        'Advanced',
                         'map_transition',
                         'max_xp',
                         'repeat_per_semester',
@@ -180,8 +196,8 @@ class QuestForm(forms.ModelForm):
                 ),
                 HTML(cancel_btn),
                 HTML(submit_btn),
-                style="margin-top: 10px;"
-            )
+                style='margin-top: 10px;',
+            ),
         )
 
     def clean(self):
@@ -193,14 +209,12 @@ class QuestForm(forms.ModelForm):
 
         if blocking and hideable:
             # both fields are valid so far and are True
-            raise ValidationError(
-                "Blocking quests cannot be Hideable.  In the Advanced section "
-                "either turn Hidable off or turn Blocking off."
-            )
+            raise ValidationError('Blocking quests cannot be Hideable.  In the Advanced section ' 'either turn Hidable off or turn Blocking off.')
 
 
 class TAQuestForm(QuestForm):
-    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    """Modified QuestForm that removes some fields TAs should not be able to set."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # SET visible to students here to?
@@ -214,19 +228,12 @@ class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
     attachments = RestrictedMultiFileFormField(
-        required=False,
-        max_upload_size=16777216,
-        label="Attach files",
-        help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
+        required=False, max_upload_size=16777216, label='Attach files', help_text='Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file'
     )
 
 
 class SubmissionFormCustomXP(SubmissionForm):
-    xp_requested = forms.IntegerField(
-        label="Requested XP",
-        required=True,
-        help_text="You need to request an XP value for this submission."
-    )
+    xp_requested = forms.IntegerField(label='Requested XP', required=True, help_text='You need to request an XP value for this submission.')
 
     def __init__(self, *args, **kwargs):
         minimum_xp = kwargs.pop('minimum_xp', 0)
@@ -247,7 +254,7 @@ class SubmissionFormStaff(SubmissionForm):
             queryset=Badge.objects.all_manually_granted(),
             search_fields=[
                 'name__icontains',
-            ]
+            ],
         )
 
 
@@ -274,10 +281,7 @@ class SubmissionQuickReplyFormStudent(forms.Form):
 
 
 class CommonDataForm(forms.ModelForm):
-
     class Meta:
         model = CommonData
-        fields = "__all__"
-        widgets = {
-            "instructions": ByteDeckSummernoteSafeInplaceWidget()
-        }
+        fields = '__all__'
+        widgets = {'instructions': ByteDeckSummernoteSafeInplaceWidget()}

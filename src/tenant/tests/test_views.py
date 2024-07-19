@@ -71,11 +71,11 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         # create the public schema
-        self.public_tenant = Tenant(schema_name="public", name="public")
+        self.public_tenant = Tenant(schema_name='public', name='public')
         with tenant_context(self.public_tenant):
             # create superuser account
             self.superuser = User.objects.create_superuser(
-                username="admin",
+                username='admin',
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
@@ -84,7 +84,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
             # create domain object manually, since we avoided triggering the signals
-            self.public_tenant.domains.create(domain="localhost", is_primary=True)
+            self.public_tenant.domains.create(domain='localhost', is_primary=True)
 
         self.client = TenantClient(self.public_tenant)
 
@@ -94,67 +94,67 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
         # first case, access /decks/new/ page as anonymous user
         # should returns 302 (login required, note: it's admin/login/ page)
-        response = self.client.get(reverse("tenant:new"))
+        response = self.client.get(reverse('tenant:new'))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual("{}?next={}".format(reverse("admin:login"), reverse("tenant:new")), response.url)
+        self.assertEqual('{}?next={}'.format(reverse('admin:login'), reverse('tenant:new')), response.url)
 
         self.client.force_login(self.superuser)
 
         # second case, forgot to enter "first" and "last" names
         # should returns 200 (same page, but with errors)
         form_data = {
-            "name": "default",
-            "email": "john.doe@example.com",
+            'name': 'default',
+            'email': 'john.doe@example.com',
         }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
+        response = self.client.post(reverse('tenant:new'), data=form_data)
         self.assertEqual(response.status_code, 200)
 
         # third case, incorrect email address
         # should returns 200 (same page, but with errors)
         form_data = {
-            "name": "default",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example",  # incorrect email address
+            'name': 'default',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example',  # incorrect email address
         }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
+        response = self.client.post(reverse('tenant:new'), data=form_data)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Enter a valid email address")
+        self.assertContains(response, 'Enter a valid email address')
 
         # fourth (final) case, and finally trying to submit with all required (non-blank) fields
         # should returs 302 (redirect to newly created tenant)
         form_data = {
-            "name": "default",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
+            'name': 'default',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': 'john.doe@example.com',
         }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
+        response = self.client.post(reverse('tenant:new'), data=form_data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "http://default.localhost:8000")
+        self.assertEqual(response.url, 'http://default.localhost:8000')
 
         # check mailbox after submitting form
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Please Confirm Your Email Address", mail.outbox[0].subject)
+        self.assertIn('Please Confirm Your Email Address', mail.outbox[0].subject)
         # expecting to see john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
         # expecting to see correct domain name in confirmation link and make sure link is correct
-        email_address = EmailAddress.objects.get(email="john.doe@example.com")
+        email_address = EmailAddress.objects.get(email='john.doe@example.com')
         key = EmailConfirmationHMAC(email_address).key
-        confirmation_link = "".join(["http://default.localhost:8000", reverse("account_confirm_email", args=[key])])
+        confirmation_link = ''.join(['http://default.localhost:8000', reverse('account_confirm_email', args=[key])])
         self.assertIn(confirmation_link, mail.outbox[0].body)
 
         owner = SiteConfig.get().deck_owner or None
-        self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
-        self.assertEqual(owner.email, "john.doe@example.com")
+        self.assertEqual(owner.get_full_name(), 'John Doe')  # should be equal and prove the case
+        self.assertEqual(owner.email, 'john.doe@example.com')
 
         # check that the username was set to firstname.lastname (instead of "owner")
-        self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
+        self.assertEqual(owner.username, 'john.doe')  # should be equal and prove the case
         # check that the  password was set to firstname-deckname-lastname (instead of "password")
-        self.assertEqual(owner.check_password("john-default-doe"), True)
+        self.assertEqual(owner.check_password('john-default-doe'), True)
 
         # manually verify email
-        email_address_obj = owner.emailaddress_set.get(email="john.doe@example.com")
+        email_address_obj = owner.emailaddress_set.get(email='john.doe@example.com')
         get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
 
         # clear the outbox from outdated messages
@@ -164,7 +164,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         email_confirmed_handler(email_address=email_address_obj)
 
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Instructions to sign in to default", mail.outbox[0].subject)
+        self.assertIn('Instructions to sign in to default', mail.outbox[0].subject)
         # expecting to see the same john.doe@example.com as recipient
         self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
 

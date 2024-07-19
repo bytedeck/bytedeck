@@ -9,8 +9,7 @@ register = template.Library()
 
 @register.simple_tag()
 def color_style_from_mark(user):
-    """ This should go in the style tag: style="{}"
-    """
+    """This should go in the style tag: style="{}" """
     mark_range = MarkRange.objects.get_range_for_user(user)
     if mark_range:
         if user.profile.dark_theme:
@@ -18,6 +17,6 @@ def color_style_from_mark(user):
         else:
             hex_color = mark_range.color_light
 
-        return f"background-image: none !important; background-color: {hex_color} !important;"
+        return f'background-image: none !important; background-color: {hex_color} !important;'
     else:
-        return ""
+        return ''

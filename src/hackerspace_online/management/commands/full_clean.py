@@ -6,7 +6,7 @@ from tenant.models import Tenant
 
 
 class Command(BaseCommand):
-    """ Because model.save() does not call full_clean() there might be a couple of integrity issues because of that.
+    """Because model.save() does not call full_clean() there might be a couple of integrity issues because of that.
     This command can loop through every single tenant (unless specified) and call full_clean() to check for any issues.
     See "https://github.com/bytedeck/bytedeck/issues/1634" for more details.
 
@@ -21,6 +21,7 @@ class Command(BaseCommand):
         - Exception found on cleaning "5: Badge: ByteDeck Proficiency (2)" (CytoElement) of type ValidationError: {'href': ['Enter a valid URL.']}
 
     """
+
     # colors from https://stackoverflow.com/a/287944
     EXCEPTION_C = '\033[91m'
     MODEL_C = '\033[94m'
@@ -44,15 +45,18 @@ class Command(BaseCommand):
         'library',
     )
 
-    help = ("Loops through a list of tenants (all by default), and validates each object in the database using full_clean().",
-            "Any validation errors are printed to the console.")
+    help = (
+        'Loops through a list of tenants (all by default), and validates each object in the database using full_clean().',
+        'Any validation errors are printed to the console.',
+    )
 
     def add_arguments(self, parser):
-
         # optional arguments
         parser.add_argument(
-            '--tenants', action='store', nargs='+',
-            help='A space separated list of tenant schemas. Specifies which tenant to loop through. Defaults to all tenants'
+            '--tenants',
+            action='store',
+            nargs='+',
+            help='A space separated list of tenant schemas. Specifies which tenant to loop through. Defaults to all tenants',
         )
 
     def handle(self, *args, **options):
@@ -67,18 +71,16 @@ class Command(BaseCommand):
         for tenant in tenants:
             # loop through all models inside tenant
             with schema_context(tenant.schema_name):
-
                 # loop through each model
                 for app_name in self.LOCAL_APPS:
                     for model in apps.get_app_config(app_name).get_models():
-
                         # full clean each object in model
                         for object_ in model.objects.all().iterator(chunk_size=100):
                             try:
                                 object_.full_clean()
                                 object_.save()
                             except ValidationError as e:
-                                exception_string = self.EXCEPTION_C + "Exception" + self.END_C
+                                exception_string = self.EXCEPTION_C + 'Exception' + self.END_C
                                 object_string = self.OBJECT_C + str(object_) + self.END_C
                                 model_string = self.MODEL_C + model.__name__ + self.END_C
                                 error_type = self.EXCEPTION_C + type(e).__name__ + self.END_C

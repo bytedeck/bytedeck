@@ -14,7 +14,6 @@ User = get_user_model()
 
 
 class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.student = baker.make(User)
         self.teacher = baker.make(User, is_staff=True)
@@ -98,9 +97,9 @@ class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
     def test_delete_comment_path(self):
-        ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
+        """Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
         correctly contains the `comment.path` as its href attribute.
-        '''
+        """
         self.client.force_login(self.teacher)
 
         # get confirm delete content html

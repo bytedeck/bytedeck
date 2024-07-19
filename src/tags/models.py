@@ -20,8 +20,8 @@ def get_tags_from_user(user):
         list[Tag] : list of Tag models
     """
     # get models through here to prevent circular imports
-    QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
-    BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
+    QuestSubmission = apps.get_model('quest_manager', 'QuestSubmission')
+    BadgeAssertion = apps.get_model('badges', 'BadgeAssertion')
 
     # tags related to user's quests
     quest_ids = QuestSubmission.objects.all_approved(user=user).distinct().values_list('quest', flat=True)
@@ -48,13 +48,13 @@ def get_quest_submission_by_tag(user, tags):
         QS: queryset of quest submission objects that are related to tag and user
     """
     # get model through here to prevent circular imports
-    QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
+    QuestSubmission = apps.get_model('quest_manager', 'QuestSubmission')
 
-    return QuestSubmission.objects.all_approved(user, active_semester_only=True).filter(
-        quest__tags__name__in=list(tags),
-        is_completed=True,
-        do_not_grant_xp=False
-    ).distinct()
+    return (
+        QuestSubmission.objects.all_approved(user, active_semester_only=True)
+        .filter(quest__tags__name__in=list(tags), is_completed=True, do_not_grant_xp=False)
+        .distinct()
+    )
 
 
 def get_badge_assertion_by_tags(user, tags):
@@ -70,13 +70,13 @@ def get_badge_assertion_by_tags(user, tags):
         QS: queryset of badge assertion objects that are related to tag and user
     """
     # get model through here to prevent circular imports
-    BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
+    BadgeAssertion = apps.get_model('badges', 'BadgeAssertion')
 
-    return BadgeAssertion.objects.all_for_user(user).filter(
-        badge__tags__name__in=list(tags),
-        semester=SiteConfig.get().active_semester,
-        do_not_grant_xp=False
-    ).distinct()
+    return (
+        BadgeAssertion.objects.all_for_user(user)
+        .filter(badge__tags__name__in=list(tags), semester=SiteConfig.get().active_semester, do_not_grant_xp=False)
+        .distinct()
+    )
 
 
 def get_quest_submission_total_xp(user, tags):
@@ -136,7 +136,7 @@ def get_badge_assertion_total_xp(user, tags):
     """
     # sum can be none since aggregate() will always return a dictionary of keys of whatever arg you put in.
     # if there are no badges or quests linked to the user, aggregate will return a dictionary like: { 'badge__xp__sum': None }
-    return get_badge_assertion_by_tags(user, tags).aggregate(Sum("badge__xp"))['badge__xp__sum'] or 0
+    return get_badge_assertion_by_tags(user, tags).aggregate(Sum('badge__xp'))['badge__xp__sum'] or 0
 
 
 def total_xp_by_tags(user, tags):

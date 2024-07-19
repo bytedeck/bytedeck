@@ -14,12 +14,11 @@ User = get_user_model()
 
 
 class ViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -28,7 +27,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.map = baker.make('djcytoscape.CytoScape')
 
     def test_all_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page  '''
+        """If not logged in then all views should redirect to home page"""
 
         self.assertRedirectsLogin('djcytoscape:index')
 
@@ -88,7 +87,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # self.assert200('djcytoscape:regenerate_all')
 
     def test_ScapeGenerateMap__POST(self):
-        """ Assert a teacher can generate a map using ScapeGenerateMapView """
+        """Assert a teacher can generate a map using ScapeGenerateMapView"""
         from djcytoscape.forms import GenerateQuestMapForm
 
         self.client.force_login(self.test_teacher)
@@ -118,7 +117,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[map_.pk]))
 
     def test_ScapeUpdateView__POST(self):
-        """ Assert a teacher can update a map using ScapeGenerateMapView """
+        """Assert a teacher can update a map using ScapeGenerateMapView"""
         from djcytoscape.forms import QuestMapForm
 
         self.client.force_login(self.test_teacher)
@@ -144,15 +143,14 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
 
 class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def test_initial_map_generated_on_first_view(self):
         # shouldn't be any maps from the start
         self.assertFalse(CytoScape.objects.exists())
 
         # log in anoyone
         self.client = TenantClient(self.tenant)
-        anyone = User.objects.create_user('anyone', password="password")
-        success = self.client.login(username=anyone.username, password="password")
+        anyone = User.objects.create_user('anyone', password='password')
+        success = self.client.login(username=anyone.username, password='password')
         self.assertTrue(success)
 
         # Access the primary map view
@@ -160,17 +158,16 @@ class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Should have generated the "Main" map
         self.assertEqual(CytoScape.objects.count(), 1)
-        self.assertTrue(CytoScape.objects.filter(name="Main").exists())
+        self.assertTrue(CytoScape.objects.filter(name='Main').exists())
 
 
 class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         from .test_models import generate_real_primary_map
 
         self.map = generate_real_primary_map()
         self.client = TenantClient(self.tenant)
-        self.staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
+        self.staff_user = User.objects.create_user(username='test_staff_user', password='password', is_staff=True)
         self.client.force_login(self.staff_user)
 
     def test_regenerate(self):
@@ -181,7 +178,7 @@ class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_regenerate_with_deleted_object(self):
         bad_map = CytoScape.objects.create(
-            name="bad map",
+            name='bad map',
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
         )
@@ -198,7 +195,7 @@ class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_regenerate_all_with_bad_map(self):
         CytoScape.objects.create(
-            name="bad map",
+            name='bad map',
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
         )

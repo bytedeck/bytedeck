@@ -12,11 +12,11 @@ class HasPrereqsMixin:
     """
 
     def prereqs(self):
-        """ A queryset of all the object's prerequisites """
+        """A queryset of all the object's prerequisites"""
         return Prereq.objects.all_parent(self)
 
     def add_simple_prereqs(self, prereq_objects_list):
-        """ Adds each object in the list as a simple pre-requisite requirement to this parent object """
+        """Adds each object in the list as a simple pre-requisite requirement to this parent object"""
         for prereq_object in prereq_objects_list:
             if prereq_object:
                 if not isinstance(prereq_object, IsAPrereqMixin):
@@ -25,7 +25,7 @@ class HasPrereqsMixin:
                     Prereq.add_simple_prereq(self, prereq_object)
 
     def clear_all_prereqs(self):
-        """ Removes all pre-requisite requirements from this parent object """
+        """Removes all pre-requisite requirements from this parent object"""
         num_deleted = self.prereqs().delete()
         return num_deleted
 
@@ -55,13 +55,13 @@ class HasPrereqsMixin:
         # Then filter those for prereqs that have the provided object in either spot
         if exclude_NOT:
             qs = qs.filter(
-                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id, or_prereq_invert=False) |  # or
-                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id, prereq_invert=False)
+                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id, or_prereq_invert=False)  # or
+                | Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id, prereq_invert=False)
             )
         else:
             qs = qs.filter(
-                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id) |  # or
-                Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id)
+                Q(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id)  # or
+                | Q(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id)
             )
         if qs:
             return True
@@ -84,7 +84,7 @@ class HasPrereqsMixin:
         (content_type/model) ObjectName
         """
         content_type = ContentType.objects.get_for_model(self).name
-        return f"({content_type}) {str(self)}"
+        return f'({content_type}) {str(self)}'
 
     @staticmethod
     def content_type_is_registered(content_type):
@@ -125,7 +125,7 @@ class IsAPrereqMixin:
         :return: True if the user meets the requirements for this object as a prerequisite, otherwise False.
 
         """
-        raise NotImplementedError(f"{self.__class__.__name__} model must implement a condition_met_as_prerequisite() method")
+        raise NotImplementedError(f'{self.__class__.__name__} model must implement a condition_met_as_prerequisite() method')
 
     def is_used_prereq(self):
         """
@@ -166,23 +166,18 @@ class IsAPrereqMixin:
         https://django-grappelli.readthedocs.io/en/latest/customization.html#autocomplete-lookups
         override this static method in the class to choose different search fields
         """
-        return ("name__icontains",)
+        return ('name__icontains',)
 
     @staticmethod
     def all_registered_content_types():
         """Returns a queryset of ContentType objects for all models inheriting IsAPrereqMixin"""
-        registered_list = [
-            ct.pk for ct in ContentType.objects.all()
-            if IsAPrereqMixin.content_type_is_registered(ct)
-        ]
+        registered_list = [ct.pk for ct in ContentType.objects.all() if IsAPrereqMixin.content_type_is_registered(ct)]
         return ContentType.objects.filter(pk__in=registered_list)
 
     @staticmethod
     def all_registered_model_classes():
         """Returns a list of all models inheriting IsAPrereqMixin"""
-        registered_list = [
-            ct.model_class() for ct in IsAPrereqMixin.all_registered_content_types()
-        ]
+        registered_list = [ct.model_class() for ct in IsAPrereqMixin.all_registered_content_types()]
         return registered_list
 
     @staticmethod
@@ -205,7 +200,7 @@ class IsAPrereqMixin:
 
         Override this static method in the class to choose different search fields
         """
-        return ["name__icontains"]
+        return ['name__icontains']
 
 
 # class PrereqQuerySet(models.query.QuerySet):
@@ -255,21 +250,18 @@ class IsAPrereqMixin:
 class PrereqQuerySet(models.query.QuerySet):
     def get_all_for_parent_object(self, parent_object):
         ct = ContentType.objects.get_for_model(parent_object)
-        return self.filter(parent_content_type__pk=ct.id,
-                           parent_object_id=parent_object.id)
+        return self.filter(parent_content_type__pk=ct.id, parent_object_id=parent_object.id)
 
     def get_all_for_prereq_object(self, prereq_object, exclude_NOT=False):
         ct = ContentType.objects.get_for_model(prereq_object)
-        qs = self.filter(prereq_content_type__pk=ct.id,
-                         prereq_object_id=prereq_object.id)
+        qs = self.filter(prereq_content_type__pk=ct.id, prereq_object_id=prereq_object.id)
         if exclude_NOT:
             qs = qs.exclude(prereq_invert=True)
         return qs
 
     def get_all_for_or_prereq_object(self, prereq_object, exclude_NOT=False):
         ct = ContentType.objects.get_for_model(prereq_object)
-        qs = self.filter(or_prereq_content_type__pk=ct.id,
-                         or_prereq_object_id=prereq_object.id)
+        qs = self.filter(or_prereq_content_type__pk=ct.id, or_prereq_object_id=prereq_object.id)
         if exclude_NOT:
             qs.exclude(or_prereq_invert=True)
         return qs
@@ -367,14 +359,16 @@ class Prereq(IsAPrereqMixin, models.Model):
     """
 
     name = models.CharField(
-        max_length=256, null=True, blank=True,
-        help_text="Providing a name to a prereq allows it to be used itself as a prerequisite. "
-        "One use for this to to chain more than two OR conditions."
+        max_length=256,
+        null=True,
+        blank=True,
+        help_text='Providing a name to a prereq allows it to be used itself as a prerequisite. '
+        'One use for this to to chain more than two OR conditions.',
     )
 
     parent_content_type = models.ForeignKey(ContentType, related_name='prereq_parent', on_delete=models.CASCADE)
     parent_object_id = models.PositiveIntegerField()
-    parent_object = GenericForeignKey("parent_content_type", "parent_object_id")
+    parent_object = GenericForeignKey('parent_content_type', 'parent_object_id')
 
     def limit_prereq_choices():
         registered_pk_list = IsAPrereqMixin.all_registered_content_types().values_list('pk', flat=True)
@@ -382,35 +376,32 @@ class Prereq(IsAPrereqMixin, models.Model):
 
     # the required prerequisite object and options
     prereq_content_type = models.ForeignKey(
-        ContentType, related_name='prereq_item',
-        verbose_name="Type of Prerequisite",
-        on_delete=models.CASCADE,
-        limit_choices_to=limit_prereq_choices
+        ContentType, related_name='prereq_item', verbose_name='Type of Prerequisite', on_delete=models.CASCADE, limit_choices_to=limit_prereq_choices
     )
-    prereq_object_id = models.PositiveIntegerField(verbose_name="Prerequisite")
-    prereq_object = GenericForeignKey("prereq_content_type", "prereq_object_id")
+    prereq_object_id = models.PositiveIntegerField(verbose_name='Prerequisite')
+    prereq_object = GenericForeignKey('prereq_content_type', 'prereq_object_id')
     prereq_count = models.PositiveIntegerField(
         default=1,
         help_text="The number of times the 'prereq object' must be met before this prerequisite is considered complete. "
-        "This value will only be meaningful for certain kinds of prereq objects such as repeatable quests, or badges."
+        'This value will only be meaningful for certain kinds of prereq objects such as repeatable quests, or badges.',
     )
     prereq_invert = models.BooleanField(
-        default=False, verbose_name="NOT",
-        help_text="This prerequisite is considered complete if they do NOT meet the criteria."
+        default=False, verbose_name='NOT', help_text='This prerequisite is considered complete if they do NOT meet the criteria.'
     )
 
     # an optional alternate prerequisite object and options
     or_prereq_content_type = models.ForeignKey(
-        ContentType, related_name='or_prereq_item',
-        verbose_name="OR Type of Prerequisite",
-        blank=True, null=True,
+        ContentType,
+        related_name='or_prereq_item',
+        verbose_name='OR Type of Prerequisite',
+        blank=True,
+        null=True,
         on_delete=models.SET_NULL,
-        limit_choices_to=limit_prereq_choices
+        limit_choices_to=limit_prereq_choices,
     )
-    or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True,
-                                                      verbose_name="OR Prerequisite")
-    or_prereq_object = GenericForeignKey("or_prereq_content_type", "or_prereq_object_id")
-    or_prereq_count = models.PositiveIntegerField(default=1, verbose_name="Alternate prereq object count")
+    or_prereq_object_id = models.PositiveIntegerField(blank=True, null=True, verbose_name='OR Prerequisite')
+    or_prereq_object = GenericForeignKey('or_prereq_content_type', 'or_prereq_object_id')
+    or_prereq_count = models.PositiveIntegerField(default=1, verbose_name='Alternate prereq object count')
     or_prereq_invert = models.BooleanField(default=False, verbose_name='NOT alternate prereq object')
 
     objects = PrereqManager()
@@ -421,21 +412,21 @@ class Prereq(IsAPrereqMixin, models.Model):
         square bracketed content only if not None
         example: "(Quest) Blender Intro OR NOT (Badge) Hackerspace Alumni"
         """
-        s = ""
+        s = ''
         if self.prereq_invert:
-            s += "NOT "
-        s += "(" + self.prereq_content_type.name + ") "
+            s += 'NOT '
+        s += '(' + self.prereq_content_type.name + ') '
         s += str(self.get_prereq())
         if self.prereq_count > 1:
-            s += " x" + str(self.prereq_count)
+            s += ' x' + str(self.prereq_count)
         if self.or_prereq_object_id and self.or_prereq_content_type:
-            s += " OR "
+            s += ' OR '
             if self.or_prereq_invert:
-                s += "NOT "
-            s += "(" + self.or_prereq_content_type.name + ") "
+                s += 'NOT '
+            s += '(' + self.or_prereq_content_type.name + ') '
             s += str(self.get_or_prereq())
             if self.or_prereq_count > 1:
-                s += " x" + str(self.or_prereq_count)
+                s += ' x' + str(self.or_prereq_count)
         return s
 
     def parent(self):
@@ -524,9 +515,9 @@ class Prereq(IsAPrereqMixin, models.Model):
         # This breaks some data migrations because custom methods are not available during
         # migrations, and it seems the objects don't get their Mixin during the data migrations?
         if not isinstance(parent_object, HasPrereqsMixin):
-            raise TypeError("parent_object does not implement HasPrereqsMixin")
+            raise TypeError('parent_object does not implement HasPrereqsMixin')
         if not isinstance(prereq_object, IsAPrereqMixin):
-            raise TypeError("prereq_object does not implement IsAPrereqMixin")
+            raise TypeError('prereq_object does not implement IsAPrereqMixin')
 
         # prereq_object can be sent empty for convenience
         if not parent_object or not prereq_object:

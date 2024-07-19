@@ -12,9 +12,8 @@ PUBLIC_SCHEMA = get_public_schema_name()
 
 
 class PeriodicTaskSignalsTest(TenantTestCase):
-
     def test_save_CronSchedule_signal(self):
-        """ Saving a CronSchedule model should also save it in the public schema """
+        """Saving a CronSchedule model should also save it in the public schema"""
 
         cron_schedule = CrontabSchedule(minute=5, hour=23, day_of_month=26, month_of_year=11)
         cron_schedule.save()
@@ -34,7 +33,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(cron_schedule.month_of_year, public_cron_schedule.month_of_year)
 
     def test_save_ClockedSchedule_signal(self):
-        """ Saving a ClockedSchedule model should also save it in the public schema """
+        """Saving a ClockedSchedule model should also save it in the public schema"""
 
         now = timezone.now()
         clocked_schedule = ClockedSchedule(clocked_time=now)
@@ -50,7 +49,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(clocked_schedule.clocked_time, public_clocked_schedule.clocked_time)
 
     def test_save_IntervalSchedule_signal(self):
-        """ Saving an IntervalSchedule model should also save it in the public schema """
+        """Saving an IntervalSchedule model should also save it in the public schema"""
 
         interval_schedule = IntervalSchedule(every=5, period=IntervalSchedule.DAYS)
         interval_schedule.save()
@@ -67,13 +66,9 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(str(interval_schedule), str(public_interval_schedule))
 
     def test_save_SolarSchedule_signal(self):
-        """ Saving a SolarSchedule model should also save it in the public schema """
+        """Saving a SolarSchedule model should also save it in the public schema"""
 
-        params = {
-            'event': 'sunrise',
-            'latitude': 37.281248,
-            'longitude': -122.000218
-        }
+        params = {'event': 'sunrise', 'latitude': 37.281248, 'longitude': -122.000218}
         solar_schedule = SolarSchedule(**params)
         solar_schedule.save()
 
@@ -89,7 +84,7 @@ class PeriodicTaskSignalsTest(TenantTestCase):
         self.assertEqual(solar_schedule.longitude, public_solar_schedule.longitude)
 
     def test_save_PeriodicTask_signal(self):
-        """ Saving a periodic task should also save it in the public schema """
+        """Saving a periodic task should also save it in the public schema"""
 
         schedule = CrontabSchedule(minute='5')
         schedule.save()
@@ -99,9 +94,11 @@ class PeriodicTaskSignalsTest(TenantTestCase):
             'crontab': schedule,
             'task': 'just_a_random.task.run',
             'queue': 'default',
-            'headers': json.dumps({
-                '_schema_name': connection.schema_name,
-            }),
+            'headers': json.dumps(
+                {
+                    '_schema_name': connection.schema_name,
+                }
+            ),
             'one_off': True,
             'enabled': True,
         }

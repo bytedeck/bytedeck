@@ -17,11 +17,9 @@ from django.db.models.signals import pre_delete
 
 
 class CommentQuerySet(models.query.QuerySet):
-
     def get_object_target(self, object):
         object_type = ContentType.objects.get_for_model(object)
-        return self.filter(target_content_type__pk=object_type.id,
-                           target_object_id=object.id)
+        return self.filter(target_content_type__pk=object_type.id, target_object_id=object.id)
 
     def get_no_parents(self):
         return self.filter(parent=None)
@@ -40,9 +38,9 @@ class CommentManager(models.Manager):
 
     def create_comment(self, user=None, text=None, path=None, target=None, parent=None, convert_newlines=True):
         if not path:
-            raise ValueError("Must include a path when adding a comment")
+            raise ValueError('Must include a path when adding a comment')
         if not user:
-            raise ValueError("Must include a user when adding a comment")
+            raise ValueError('Must include a user when adding a comment')
 
         text = clean_html(text, convert_newlines)
 
@@ -63,14 +61,14 @@ class CommentManager(models.Manager):
         comment.save(using=self._db)
 
         # add anchor target to Comment path now that id assigned when saved
-        comment.path += "#comment-" + str(comment.id)
+        comment.path += '#comment-' + str(comment.id)
         comment.save(using=self._db)
 
         return comment
 
 
 def clean_html(text, convert_newlines=True):
-    """ Several steps to clean HTML input by user:
+    """Several steps to clean HTML input by user:
     1. formats unformatted links
     2. sets all links to target="_blank"
     3. fixes broken lists (missing closing ul tags etc)
@@ -79,7 +77,7 @@ def clean_html(text, convert_newlines=True):
     # format unformatted links
     # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
 
-    soup = BeautifulSoup(text, "html.parser")
+    soup = BeautifulSoup(text, 'html.parser')
     text_nodes = soup.find_all(text=True)
     # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
     # text_nodes2 = [escape(x) for x in soup.strings]
@@ -91,10 +89,10 @@ def clean_html(text, convert_newlines=True):
         if textNode.parent and textNode.parent.name == 'a':
             continue  # skip already formatted links
         urlized_text = urlize(escaped_text, trim_url_limit=50)
-        textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
+        textNode.replace_with(BeautifulSoup(urlized_text, 'html.parser'))
 
     # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
-    soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
+    soup = BeautifulSoup(soup.renderContents(), 'html.parser', from_encoding='UTF-8')
 
     # All links in comments: force open in new tab
     links = soup.find_all('a')
@@ -113,7 +111,7 @@ def clean_html(text, convert_newlines=True):
         # if <li> is the first element of a <li> group, wrap it in a new <ul>
         if not previous_element or previous_element.name != 'li':
             ulgroup += 1
-            ul = soup.new_tag("ul")
+            ul = soup.new_tag('ul')
             li.wrap(ul)
             uls.append(ul)
         # append rest of <li> group to previously created <ul>
@@ -128,7 +126,7 @@ def clean_html(text, convert_newlines=True):
 
 class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
     path = models.CharField(max_length=350)
     text = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -136,10 +134,9 @@ class Comment(models.Model):
     active = models.BooleanField(default=True)
     flagged = models.BooleanField(default=False)
 
-    target_content_type = models.ForeignKey(ContentType, related_name='comment_target',
-                                            null=True, blank=True, on_delete=models.SET_NULL)
+    target_content_type = models.ForeignKey(ContentType, related_name='comment_target', null=True, blank=True, on_delete=models.SET_NULL)
     target_object_id = models.PositiveIntegerField(null=True, blank=True)
-    target_object = GenericForeignKey("target_content_type", "target_object_id")
+    target_object = GenericForeignKey('target_content_type', 'target_object_id')
 
     objects = CommentManager()
 
@@ -156,7 +153,7 @@ class Comment(models.Model):
             return None
 
     def get_absolute_url(self):
-        """ Find the aboslute url of the target object, then add the comment"""
+        """Find the aboslute url of the target object, then add the comment"""
         return self.path
 
     def get_origin(self):
@@ -206,6 +203,7 @@ class Document(models.Model):
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!
         from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
+
         filename = os.path.basename(self.docfile.name)
         return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
 

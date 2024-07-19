@@ -19,10 +19,8 @@ User = get_user_model()
 
 
 class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
-
     @classmethod
     def setUpClass(cls):
-
         # Save current tenant
         _public_tenant = connection.tenant
 
@@ -59,7 +57,7 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -86,16 +84,15 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotEqual(len(response.context['library_quests']), non_library_quest_count)
 
     def test_import_non_existing_quest_to_current_deck(self):
-
         url = reverse('library:import_quest', args=[str(uuid.uuid4())])
 
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
     def test_import_quest_already_exists_locally(self):
-        """ Currently we don't support overwriting existing quests (based on import_id),
+        """Currently we don't support overwriting existing quests (based on import_id),
         so make sure the import feature rejects already existing import_ids
-        TODO: When we add an overwrite feature, this quest will need to be modified to test that feature """
+        TODO: When we add an overwrite feature, this quest will need to be modified to test that feature"""
 
         # Create quest in the test tenant
         quest = baker.make(Quest)

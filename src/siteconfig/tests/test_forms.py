@@ -11,8 +11,7 @@ from hackerspace_online.tests.utils import generate_form_data, model_to_form_dat
 
 
 class SiteConfigFormTest(TenantTestCase):
-    """Tests for the SiteConfig Form
-    """
+    """Tests for the SiteConfig Form"""
 
     def setUp(self):
         """TenantTestCase generates a tenant for tests.
@@ -26,24 +25,24 @@ class SiteConfigFormTest(TenantTestCase):
         Tests CSS validation for form uploads done by `clean_custom_stylesheet` method.
         """
         form_data = model_to_form_data(self.config, SiteConfigForm)
-        del form_data["custom_stylesheet"]
+        del form_data['custom_stylesheet']
 
         # trying to upload "wrong" content,
         # here "wrong" content means any textual, but non-stylesheet content
         wrong_content = b"""Lorem ipsum dolor sit amet..."""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(wrong_content),
-            field_name="tempfile",
-            name="custom.md",
+            field_name='tempfile',
+            name='custom.md',
             content_type='text/plain',
             size=len(wrong_content),
-            charset="utf-8",
+            charset='utf-8',
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={'custom_stylesheet': custom_stylesheet}, instance=self.config)
         self.assertFalse(form.is_valid())
         self.assertIn(
             "CSSStyleRule: No start { of style declaration found: 'Lorem ipsum dolor sit amet...' [1:30: ]",
-            form.errors["custom_stylesheet"],
+            form.errors['custom_stylesheet'],
         )
 
         # trying to upload "invalid" stylesheet,
@@ -51,27 +50,27 @@ class SiteConfigFormTest(TenantTestCase):
         invalid_css = b"""body { colour: bleck; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(invalid_css),
-            field_name="tempfile",
-            name="custom.css",
+            field_name='tempfile',
+            name='custom.css',
             content_type='text/css',
             size=len(invalid_css),
-            charset="utf-8",
+            charset='utf-8',
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={'custom_stylesheet': custom_stylesheet}, instance=self.config)
         self.assertFalse(form.is_valid())
-        self.assertIn("This stylesheet is not valid CSS.", form.errors["custom_stylesheet"])
+        self.assertIn('This stylesheet is not valid CSS.', form.errors['custom_stylesheet'])
 
         # trying to upload "correct" stylesheet
         valid_css = b"""body { color: black; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(valid_css),
-            field_name="tempfile",
-            name="custom.css",
+            field_name='tempfile',
+            name='custom.css',
             content_type='text/css',
             size=len(valid_css),
-            charset="utf-8",
+            charset='utf-8',
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={'custom_stylesheet': custom_stylesheet}, instance=self.config)
         # print(form.errors)
         self.assertTrue(form.is_valid())
 
@@ -83,11 +82,11 @@ class SiteConfigFormTest(TenantTestCase):
         valid_css = b"""body { color: black; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(valid_css),
-            field_name="tempfile",
-            name="custom.css",
+            field_name='tempfile',
+            name='custom.css',
             content_type='text/css',
             size=len(valid_css),
-            charset="utf-8",
+            charset='utf-8',
         )
 
         form_data = generate_form_data(model_form=SiteConfigForm)
@@ -98,7 +97,9 @@ class SiteConfigFormTest(TenantTestCase):
         with self.assertRaises(ValueError):
             SiteConfig.get().custom_stylesheet.read()
         form = SiteConfigForm(
-            form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config,
+            form_data,
+            files={'custom_stylesheet': custom_stylesheet},
+            instance=self.config,
             is_deck_owner=True,
         )
         form.save()

@@ -53,18 +53,19 @@ class FutureModelForm(forms.ModelForm):
 class VideoForm(forms.ModelForm):
     class Meta:
         model = VideoResource
-        fields = ["title", "video_file"]
+        fields = ['title', 'video_file']
 
 
 class CustomFlatpageForm(FlatpageForm):
-
     class Meta:
         model = FlatPage
-        exclude = ('enable_comments', 'template_name',)
+        exclude = (
+            'enable_comments',
+            'template_name',
+        )
 
         widgets = {
             'content': ByteDeckSummernoteAdvancedInplaceWidget(),
-
             # https://code.djangoproject.com/ticket/24453
             'sites': forms.MultipleHiddenInput(),
         }

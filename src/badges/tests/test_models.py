@@ -26,7 +26,6 @@ class BadgeRarityModelTest(TenantTestCase):
         self.assertEqual(str(self.common), self.common.name)
 
     def test_get_rarity(self):
-
         self.assertEqual(BadgeRarity.objects.get_rarity(69.0), self.ultrarare)
         self.assertEqual(BadgeRarity.objects.get_rarity(79.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(80.0), self.rare)
@@ -48,7 +47,7 @@ class BadgeTypeModelTest(TenantTestCase):
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
     def test_model_protection(self):
-        """ Badge types shouldn't be deleted if they have any assigned badges """
+        """Badge types shouldn't be deleted if they have any assigned badges"""
 
         # make sure initial variables are in place
         badge = baker.make(Badge, xp=5, badge_type=self.badge_type)
@@ -69,7 +68,6 @@ class BadgeSeriesTestModel(TenantTestCase):
 
 
 class BadgeTestModel(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.badge = baker.make(Badge)
@@ -85,7 +83,7 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(self.badge.get_icon_url(), SiteConfig.get().get_default_icon_url())
 
         # give it an icon
-        self.badge.icon = "test_icon.png"
+        self.badge.icon = 'test_icon.png'
         self.badge.save()
         self.assertEqual(self.badge.get_icon_url(), self.badge.icon.url)
 
@@ -118,7 +116,6 @@ class BadgeTestModel(TenantTestCase):
 
 
 class BadgeAssertionManagerTest(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
@@ -134,7 +131,7 @@ class BadgeAssertionManagerTest(TenantTestCase):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
         the correct number of assertions for each user as an "assertion_count" annotation on the queryset"""
 
-        badge = baker.make(Badge, name="badge1")
+        badge = baker.make(Badge, name='badge1')
         user2 = baker.make(User)
         user3 = baker.make(User)
 
@@ -202,7 +199,6 @@ class BadgeAssertionManagerTest(TenantTestCase):
 
 
 class BadgeAssertionTestModel(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
@@ -224,11 +220,7 @@ class BadgeAssertionTestModel(TenantTestCase):
     def test_badge_assertion_count(self):
         num = 5
         for _ in range(num):
-            badge_assertion = BadgeAssertion.objects.create_assertion(
-                self.student,
-                self.badge,
-                issued_by=self.teacher
-            )
+            badge_assertion = BadgeAssertion.objects.create_assertion(self.student, self.badge, issued_by=self.teacher)
 
         # Why doesn't below work?
         # badge_assertion = self.badge_assertion_recipe.make()
@@ -239,15 +231,11 @@ class BadgeAssertionTestModel(TenantTestCase):
     def test_badge_assertion_count_bootstrap_badge(self):
         """Returns empty string if count < 2, else returns proper count"""
         badge_assertion = baker.make(BadgeAssertion, semester=self.sem)
-        self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
+        self.assertEqual(badge_assertion.count_bootstrap_badge(), '')
 
         num = 4
         for _ in range(num):
-            badge_assertion = BadgeAssertion.objects.create_assertion(
-                self.student,
-                self.badge,
-                issued_by=self.teacher
-            )
+            badge_assertion = BadgeAssertion.objects.create_assertion(self.student, self.badge, issued_by=self.teacher)
             # Why doesn't below work?
             # badge_assertion = self.badge_assertion_recipe.make()
         count = badge_assertion.count_bootstrap_badge()
@@ -262,16 +250,14 @@ class BadgeAssertionTestModel(TenantTestCase):
             values.append(repr(badge_assertion))
 
         qs = badge_assertion.get_duplicate_assertions()
-        self.assertQuerysetEqual(list(qs), values, )
+        self.assertQuerysetEqual(
+            list(qs),
+            values,
+        )
 
     def test_badge_assertion_manager_create_assertion(self):
-
         # no semester
-        new_assertion = BadgeAssertion.objects.create_assertion(
-            self.student,
-            baker.make(Badge),
-            self.teacher
-        )
+        new_assertion = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), self.teacher)
         self.assertIsInstance(new_assertion, BadgeAssertion)
 
         # no teacher
@@ -286,11 +272,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(xp, 0)
 
         # give them a badge assertion and make sure the XP works
-        BadgeAssertion.objects.create_assertion(
-            self.student,
-            self.badge,
-            self.teacher
-        )
+        BadgeAssertion.objects.create_assertion(self.student, self.badge, self.teacher)
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, self.badge.xp)
 

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 
 class FilenameFilterTests(TestCase):
-
     def test_filename_existing_file(self):
         file_field_mock = MagicMock()
         file_field_mock.file = MagicMock(spec=File)
@@ -17,7 +16,7 @@ class FilenameFilterTests(TestCase):
         rendered = template.render(context)
 
         # Assert that the rendered output matches the expected filename
-        self.assertEqual(rendered, "file.txt")
+        self.assertEqual(rendered, 'file.txt')
 
     # TODO: Can't figure out how to get the method to raise the FileNotFoundError
     # Does that piece fo code do anything?

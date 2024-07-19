@@ -19,23 +19,18 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-
-    help = ('Used to initialize the database, creates a Sites object, creates the public Tenant object, '
-            'and creates a superuser for the public schema/tenant.'
-            '\nThis should only be run on a fresh db')
+    help = (
+        'Used to initialize the database, creates a Sites object, creates the public Tenant object, '
+        'and creates a superuser for the public schema/tenant.'
+        '\nThis should only be run on a fresh db'
+    )
 
     def setup_shared_library(self):
         self.stdout.write('\n** Setting up shared library...')
-        library_tenant, created = Tenant.objects.get_or_create(
-            schema_name='library',
-            name='Shared Library'
-        )
+        library_tenant, created = Tenant.objects.get_or_create(schema_name='library', name='Shared Library')
 
         if not created:
-            library_tenant.domains.create(
-                domain='library.' + settings.ROOT_DOMAIN,
-                is_primary=True
-            )
+            library_tenant.domains.create(domain='library.' + settings.ROOT_DOMAIN, is_primary=True)
         from django.db import models
         from django.db.models.functions import Concat
         from quest_manager.models import Quest
@@ -45,36 +40,33 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-
         # Check if we are connected to the database
         try:
             connections['default'].cursor()
         except OperationalError:
             self.stdout.write("I can't connect to the database.  Are you sure it's running?")
-            self.stdout.write("Try `docker compose up -d db` then give it a few seconds to boot up")
-            self.stdout.write(self.style.NOTICE("Bailing..."))
+            self.stdout.write('Try `docker compose up -d db` then give it a few seconds to boot up')
+            self.stdout.write(self.style.NOTICE('Bailing...'))
             return
 
         self.stdout.write('\n** Running initial migrations on the public schema...')
-        call_command("migrate_schemas", "--shared")
+        call_command('migrate_schemas', '--shared')
 
         # Create super user on the public schema ###############################################
         self.stdout.write('\n** Creating superuser...')
         if User.objects.filter(username=settings.DEFAULT_SUPERUSER_USERNAME).exists():
             self.stdout.write(self.style.NOTICE(f'A superuser with username `{settings.DEFAULT_SUPERUSER_USERNAME}` already exists'))
-            self.stdout.write(self.style.NOTICE("Bailing..."))
+            self.stdout.write(self.style.NOTICE('Bailing...'))
             return
 
         User.objects.create_superuser(
-            username=settings.DEFAULT_SUPERUSER_USERNAME,
-            email=settings.DEFAULT_SUPERUSER_EMAIL,
-            password=settings.DEFAULT_SUPERUSER_PASSWORD
+            username=settings.DEFAULT_SUPERUSER_USERNAME, email=settings.DEFAULT_SUPERUSER_EMAIL, password=settings.DEFAULT_SUPERUSER_PASSWORD
         )
 
-        self.stdout.write("Superuser")
-        self.stdout.write(f" username: {settings.DEFAULT_SUPERUSER_USERNAME}")
-        self.stdout.write(f" password: {settings.DEFAULT_SUPERUSER_PASSWORD}")
-        self.stdout.write(f" email: {settings.DEFAULT_SUPERUSER_EMAIL}")
+        self.stdout.write('Superuser')
+        self.stdout.write(f' username: {settings.DEFAULT_SUPERUSER_USERNAME}')
+        self.stdout.write(f' password: {settings.DEFAULT_SUPERUSER_PASSWORD}')
+        self.stdout.write(f' email: {settings.DEFAULT_SUPERUSER_EMAIL}')
 
         # Create the `public` Tenant object ###############################################
 
@@ -86,23 +78,17 @@ class Command(BaseCommand):
         post_save.disconnect(tenant_save_callback, sender=Tenant)
 
         self.stdout.write(self.style.SUCCESS('\n** Creating `public` Tenant object...'))
-        public_tenant, created = Tenant.objects.get_or_create(
-            schema_name='public',
-            name='public'
-        )
+        public_tenant, created = Tenant.objects.get_or_create(schema_name='public', name='public')
 
-        public_tenant.domains.create(
-            domain=settings.ROOT_DOMAIN,
-            is_primary=True
-        )
+        public_tenant.domains.create(domain=settings.ROOT_DOMAIN, is_primary=True)
 
         if not created:
             self.stdout.write(self.style.NOTICE('\nA schema with the name `public` already existed.  A new one was not created.'))
 
         self.stdout.write(self.style.SUCCESS('\nPublic Tenant object'))
-        self.stdout.write(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
-        self.stdout.write(f" tenant.schema_name: {public_tenant.schema_name}")
-        self.stdout.write(f" tenant.name: {public_tenant.name}")
+        self.stdout.write(f' tenant.domain_url: {public_tenant.get_primary_domain().domain}')
+        self.stdout.write(f' tenant.schema_name: {public_tenant.schema_name}')
+        self.stdout.write(f' tenant.name: {public_tenant.name}')
 
         self.stdout.write(self.style.SUCCESS('\n** Updating Sites object...'))
         site = Site.objects.first()
@@ -110,10 +96,10 @@ class Command(BaseCommand):
         site.name = settings.ROOT_DOMAIN[:45]  # Can be too long if using an AWS public DNS
         site.save()
 
-        self.stdout.write("\nSites object")
-        self.stdout.write(f" site.domain: {site.domain}")
-        self.stdout.write(f" site.name: {site.name}")
-        self.stdout.write(f" site.id: {site.id}")
+        self.stdout.write('\nSites object')
+        self.stdout.write(f' site.domain: {site.domain}')
+        self.stdout.write(f' site.name: {site.name}')
+        self.stdout.write(f' site.id: {site.id}')
 
         # Create the homepage, which is a flatpage object for easier
         self.stdout.write(self.style.SUCCESS('\n** Creating homepage...'))
@@ -127,7 +113,7 @@ class Command(BaseCommand):
         )
         homepage.sites.add(site)
         absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])
-        self.stdout.write(f" homepage: {public_tenant.get_root_url()}{absolute_url}\n")
+        self.stdout.write(f' homepage: {public_tenant.get_root_url()}{absolute_url}\n')
 
         # Connect again
         post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)

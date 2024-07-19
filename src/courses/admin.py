@@ -27,7 +27,9 @@ class CourseStudentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = ('__str__', 'user', 'semester', 'course', 'final_grade', 'active')
     # actions = [convert_selected_grade_to_fk]
 
-    list_filter = ['course', ]
+    list_filter = [
+        'course',
+    ]
     search_fields = ['user__username']
 
 

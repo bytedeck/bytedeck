@@ -24,18 +24,17 @@ def email_notification_to_users_on_all_schemas():
             root_url = tenant.get_root_url()
             email_notifications_to_users_on_schema.apply_async(args=[root_url], queue='default')
 
-    return "Scheduled email_notifications_to_users_on_schema for all schemas"
+    return 'Scheduled email_notifications_to_users_on_schema for all schemas'
 
 
 @app.task(name='notifications.tasks.email_notifications_to_users_on_schema')
 def email_notifications_to_users_on_schema(root_url):
-
     notification_emails = get_notification_emails(root_url)
     connection = mail.get_connection()
     connection.send_messages(notification_emails)
     # send_email_notification_tenant.delay(root_url)
 
-    return f"Sent {len(notification_emails)} notification emails"
+    return f'Sent {len(notification_emails)} notification emails'
 
 
 def get_notification_emails(root_url):
@@ -69,15 +68,17 @@ def generate_notification_email(user, root_url):
     if unread_notifications or submissions_awaiting_approval:
         text_content = str(unread_notifications)
 
-        html_content = html_template.render({
-            'user': user,
-            'notifications': unread_notifications,
-            'submissions': submissions_awaiting_approval,
-            'root_url': root_url,
-            'profile_edit_url': reverse('profiles:profile_edit_own')
-        })
+        html_content = html_template.render(
+            {
+                'user': user,
+                'notifications': unread_notifications,
+                'submissions': submissions_awaiting_approval,
+                'root_url': root_url,
+                'profile_edit_url': reverse('profiles:profile_edit_own'),
+            }
+        )
         email_msg = EmailMultiAlternatives(subject, text_content, to=[to_email_address])
-        email_msg.attach_alternative(html_content, "text/html")
+        email_msg.attach_alternative(html_content, 'text/html')
 
         return email_msg
     else:

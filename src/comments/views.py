@@ -33,16 +33,20 @@ def flag(request, id):
     comment = get_object_or_404(Comment, pk=id)
     comment.flag()
 
-    icon = "<span class='fa-stack'>" + \
-           "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
-           "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
-           "</span>"
+    icon = (
+        "<span class='fa-stack'>"
+        + "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>"
+        + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
+        + '</span>'
+    )
 
     notify.send(
         request.user,
         target=comment,
         recipient=comment.user,
-        affected_users=[comment.user, ],
+        affected_users=[
+            comment.user,
+        ],
         verb='flagged',
         icon=icon,
     )

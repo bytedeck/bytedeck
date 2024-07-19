@@ -15,18 +15,18 @@ from .widgets import GFKSelect2Widget
 
 IMAGE_MIME_TYPES = [
     'image/jpeg',  # JPEG images
-    'image/png',   # PNG images
-    'image/gif',   # GIF images
+    'image/png',  # PNG images
+    'image/gif',  # GIF images
     'image/webp',  # WEBP images
     'image/tiff',  # TIFF images
-    'image/bmp',   # BMP images
-    'image/svg+xml'  # SVG vector images
+    'image/bmp',  # BMP images
+    'image/svg+xml',  # SVG vector images
 ]
 
 VIDEO_MIME_TYPES = [
-    'video/mp4',   # MP4 videos
+    'video/mp4',  # MP4 videos
     'video/webm',  # WebM videos
-    'video/ogg',   # OGG videos
+    'video/ogg',  # OGG videos
     'video/quicktime',  # MOV videos
     'video/x-msvideo',  # AVI videos
     'video/x-ms-wmv',  # WMV videos
@@ -34,18 +34,13 @@ VIDEO_MIME_TYPES = [
     'video/3gpp',  # 3GP videos
     'video/3gpp2',  # 3G2 videos
     'video/x-flv',  # FLV videos
-    'video/x-m4v'  # M4V videos
+    'video/x-m4v',  # M4V videos
 ]
 
-FILE_MIME_TYPES = {
-    'image': IMAGE_MIME_TYPES,
-    'video': VIDEO_MIME_TYPES,
-    'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES
-}
+FILE_MIME_TYPES = {'image': IMAGE_MIME_TYPES, 'video': VIDEO_MIME_TYPES, 'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES}
 
 
 class GFKChoiceIterator(ModelChoiceIterator):
-
     def __iter__(self):
         if self.field.empty_label is not None:
             yield ('', self.field.empty_label)
@@ -155,7 +150,6 @@ class GFKChoiceField(QuerySetSequenceFieldMixin, forms.ModelChoiceField):
 
 
 class AllowedGFKChoiceField(GFKChoiceField):
-
     widget = GFKSelect2Widget
 
     def __init__(self, *args, **kwargs):
@@ -174,25 +168,19 @@ class AllowedGFKChoiceField(GFKChoiceField):
             # django_content_type (e.g. sqlite)
             pass
 
-        querysetsequence = self.overridden_querysetsequence(
-            QuerySetSequence(*[x.objects.all() for x in model_classes])
-        )
+        querysetsequence = self.overridden_querysetsequence(QuerySetSequence(*[x.objects.all() for x in model_classes]))
         super().__init__(querysetsequence, *args, **kwargs)
 
         search_fields = {}
         for qs in self.queryset.get_querysets():
             klass = qs.model
-            search_fields.setdefault(klass._meta.app_label, {}).update({
-                klass._meta.model_name: klass.gfk_search_fields()
-            })
+            search_fields.setdefault(klass._meta.app_label, {}).update({klass._meta.model_name: klass.gfk_search_fields()})
         self.widget.search_fields = search_fields
         self.widget.attrs['data-placeholder'] = 'Type to search'
 
     def get_allowed_model_classes(self):
         """Returns a list of allowed Model classes"""
-        raise NotImplementedError(
-            '%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__
-        )
+        raise NotImplementedError('%s, must implement "get_allowed_model_classes" method.' % self.__class__.__name__)
 
     def overridden_querysetsequence(self, querysetsequence: QuerySetSequence) -> QuerySetSequence:
         """
@@ -204,7 +192,6 @@ class AllowedGFKChoiceField(GFKChoiceField):
 
 
 class MultipleFileInput(forms.ClearableFileInput):
-
     allow_multiple_selected = True
 
     def __init__(self, *args, **kwargs):
@@ -218,28 +205,19 @@ class MultipleFileInput(forms.ClearableFileInput):
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 class RestrictedFileFormField(forms.FileField):
-
     def __init__(self, *args, **kwargs):
-        self.content_types = kwargs.pop("content_types", "All")
-        self.max_upload_size = kwargs.pop("max_upload_size", 512000)
+        self.content_types = kwargs.pop('content_types', 'All')
+        self.max_upload_size = kwargs.pop('max_upload_size', 512000)
         super().__init__(*args, **kwargs)
 
     def validate_file(self, file):
         try:
             content_type = file.content_type
-            if self.content_types == "All" or content_type in self.content_types:
+            if self.content_types == 'All' or content_type in self.content_types:
                 if file.size > self.max_upload_size:
-                    raise ValidationError(
-                        "Max filesize is {}. Current filesize {}".format(
-                            filesizeformat(self.max_upload_size),
-                            filesizeformat(file.size),
-                        )
-                    )
+                    raise ValidationError(f'Max filesize is {filesizeformat(self.max_upload_size)}. Current filesize {filesizeformat(file.size)}')
             else:
-                raise ValidationError(
-                    "Filetype not supported. Acceptable filetypes are: %s"
-                    % (str(self.content_types))
-                )
+                raise ValidationError('Filetype not supported. Acceptable filetypes are: %s' % (str(self.content_types)))
         except AttributeError:
             pass
 
@@ -263,6 +241,7 @@ class RestrictedMultiFileFormField(RestrictedFileFormField):
     https://docs.djangoproject.com/en/4.2/topics/http/file-uploads/#uploading-multiple-files
 
     """
+
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault("widget", MultipleFileInput())
+        kwargs.setdefault('widget', MultipleFileInput())
         super().__init__(*args, **kwargs)

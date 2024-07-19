@@ -20,9 +20,9 @@ User = get_user_model()
 #     update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
 
 
-@receiver([post_save, post_delete], dispatch_uid="prerequisites.signals.update_cache_triggered_by_task_completion")
+@receiver([post_save, post_delete], dispatch_uid='prerequisites.signals.update_cache_triggered_by_task_completion')
 def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs):
-    """ When a user completes a task (e.g. earns a badge, has a quest submission approved or rejected, or joins a course)
+    """When a user completes a task (e.g. earns a badge, has a quest submission approved or rejected, or joins a course)
     Recalculate what is available to them.
     """
 
@@ -55,12 +55,12 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
 
 
 # @receiver([post_save, post_delete], sender=Prereq)
-@receiver([post_save, post_delete], sender=Badge, dispatch_uid="prerequisites.signals.update_conditions_met")
+@receiver([post_save, post_delete], sender=Badge, dispatch_uid='prerequisites.signals.update_conditions_met')
 def update_conditions_met(sender, instance, *args, **kwargs):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
-@receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quest_without_prereqs")
+@receiver([post_save], sender=Quest, dispatch_uid='prerequisites.signals.update_cache_triggered_by_quest_without_prereqs')
 def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest does not contain any prerequisites
@@ -69,7 +69,7 @@ def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **k
         update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
-@receiver(post_save, sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quests_available_outside_course")
+@receiver(post_save, sender=Quest, dispatch_uid='prerequisites.signals.update_cache_triggered_by_quests_available_outside_course')
 def update_cache_triggered_by_quests_available_outside_course(sender, instance, created, update_fields, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest is available outside a course
@@ -78,9 +78,9 @@ def update_cache_triggered_by_quests_available_outside_course(sender, instance, 
         update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.id, 'start_from_user_id': 1}, queue='default')
 
 
-@receiver([post_save, post_delete], sender=Prereq, dispatch_uid="prerequisites.signals.update_cache_triggered_by_prereq")
+@receiver([post_save, post_delete], sender=Prereq, dispatch_uid='prerequisites.signals.update_cache_triggered_by_prereq')
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
-    """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
+    """Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
     """
     if instance.parent_content_type.model == 'quest':
@@ -92,7 +92,7 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
 
 @receiver(post_save, sender=Prereq)
 def on_quest_badge_save_with_rank_prereq(sender, instance, *args, **kwargs):
-    """ Handles the post-save signal for Prereq objects to ensure the creation of a CytoScape map if certain conditions are met.
+    """Handles the post-save signal for Prereq objects to ensure the creation of a CytoScape map if certain conditions are met.
 
     This function is triggered after a Prereq object is saved.
     If a prerequisite involving a rank and a map for the referenced rank does not already exist, a new CytoScape map is generated.

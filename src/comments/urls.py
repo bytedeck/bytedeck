@@ -10,5 +10,4 @@ urlpatterns = [
     url(r'^(?P<id>\d+)/unflag/$', views.unflag, name='unflag'),
     url(r'^(?P<id>\d+)/delete/$', views.delete, name='delete'),
     # url(r'^create/$', views.comment_create, name='create'),
-
 ]

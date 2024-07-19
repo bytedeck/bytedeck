@@ -27,7 +27,7 @@ def send_notifications(user_id, announcement_id):
         recipient=sending_user,
         affected_users=affected_users,
         icon="<i class='fa fa-lg fa-fw fa-newspaper-o text-info'></i>",
-        verb='posted'
+        verb='posted',
     )
 
 
@@ -37,13 +37,15 @@ def send_announcement_emails(content, root_url, absolute_url):
     subject = f'{siteconfig.site_name_short} Announcement'
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
-    html_content = html_template.render({
-        'content': content,
-        'absolute_url': absolute_url,
-        'root_url': root_url,
-        'config': siteconfig,
-        'profile_edit_url': reverse('profiles:profile_edit_own')
-    })
+    html_content = html_template.render(
+        {
+            'content': content,
+            'absolute_url': absolute_url,
+            'root_url': root_url,
+            'config': siteconfig,
+            'profile_edit_url': reverse('profiles:profile_edit_own'),
+        }
+    )
 
     profile_emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
 
@@ -53,7 +55,7 @@ def send_announcement_emails(content, root_url, absolute_url):
         to=['contact@bytedeck.com'],
         bcc=profile_emails,
     )
-    email_msg.attach_alternative(html_content, "text/html")
+    email_msg.attach_alternative(html_content, 'text/html')
     email_msg.send()
 
     return profile_emails
@@ -62,10 +64,10 @@ def send_announcement_emails(content, root_url, absolute_url):
 
 @app.task(name='announcements.tasks.publish_announcement')
 def publish_announcement(user_id, announcement_id, root_url):
-    """ Publish the announcement, including:
-            - edit model instance
-            - push notifications
-            - send announcement emails
+    """Publish the announcement, including:
+    - edit model instance
+    - push notifications
+    - send announcement emails
     """
     # update model instance
     announcement = get_object_or_404(Announcement, pk=announcement_id)

@@ -35,7 +35,7 @@ def home(request):
 
 @non_public_only_view
 def simple(request):
-    return render(request, "secret.html", {})
+    return render(request, 'secret.html', {})
 
 
 class FaviconRedirectView(RedirectView):
@@ -68,7 +68,7 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
         if success:
             self.success_message = "Thank you for contacting us!  We'll be in touch soon."
         else:
-            self.success_message = "There was an error submitting the form.  Please try contacting us direct by email at <a href=\"mailto:contact@bytedeck.com\">contact@bytedeck.com</a>"  # noqa
+            self.success_message = 'There was an error submitting the form.  Please try contacting us direct by email at <a href="mailto:contact@bytedeck.com">contact@bytedeck.com</a>'  # noqa
 
         return super().form_valid(form)
 
@@ -78,7 +78,6 @@ class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
 
 # apply `NonPublicOnlyViewMixin` mixin, fix #1214
 class CustomPasswordResetView(NonPublicOnlyViewMixin, PasswordResetView):
-
     form_class = CustomResetPasswordForm
 
 
@@ -88,4 +87,4 @@ class CustomPasswordResetFromKeyView(NonPublicOnlyViewMixin, PasswordResetFromKe
 
 
 def landing(request):
-    return render(request, "index.html", {})
+    return render(request, 'index.html', {})

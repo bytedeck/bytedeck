@@ -7,9 +7,15 @@ from .models import Announcement
 
 
 class AnnouncementAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteSafeModelAdmin):
-    list_display = ('title', 'datetime_released',)
+    list_display = (
+        'title',
+        'datetime_released',
+    )
     list_filter = ['datetime_released']
-    search_fields = ['title', 'content', ]
+    search_fields = [
+        'title',
+        'content',
+    ]
     summernote_fields = ('content',)
 
 

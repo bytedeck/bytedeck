@@ -7,6 +7,7 @@ What this currently does is that any PeriodicTask created in a tenant schema wil
 
 For more details on why this exists, see https://github.com/bernardopires/django-tenant-schemas/issues/526#issuecomment-388101839
 """
+
 from django.db import connection
 from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
@@ -23,7 +24,6 @@ PUBLIC_SCHEMA = get_public_schema_name()
 @receiver(pre_save, sender=SolarSchedule)
 @receiver(pre_save, sender=IntervalSchedule)
 def save_schedule_to_public_schema(sender, instance, **kwargs):
-
     if connection.schema_name == PUBLIC_SCHEMA:
         return
 
@@ -36,7 +36,6 @@ def save_schedule_to_public_schema(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=PeriodicTask)
 def save_task_to_public_schema(sender, instance, **kwargs):
-
     if connection.schema_name == PUBLIC_SCHEMA:
         return
 
@@ -46,12 +45,7 @@ def save_task_to_public_schema(sender, instance, **kwargs):
     # Remove id since it will be a different id in the public schema
     del task_dict['id']
 
-    schedules_map = {
-        'clocked': ClockedSchedule,
-        'interval': IntervalSchedule,
-        'crontab': CrontabSchedule,
-        'solar': SolarSchedule
-    }
+    schedules_map = {'clocked': ClockedSchedule, 'interval': IntervalSchedule, 'crontab': CrontabSchedule, 'solar': SolarSchedule}
 
     # Since a `clocked`, `interval`, `crontab`, or `solar` schedule are created in the current schema
     # We would want to change the `id` used by the `PeriodicTask` object.
@@ -88,7 +82,6 @@ def save_task_to_public_schema(sender, instance, **kwargs):
 
 @receiver(pre_delete, sender=PeriodicTask)
 def delete_task_in_public_schema(sender, instance, **kwargs):
-
     if connection.schema_name == PUBLIC_SCHEMA:
         return
 

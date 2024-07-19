@@ -5,13 +5,7 @@ from .models import CytoScape
 
 
 class CytoScapeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    fields = [
-        'name',
-        'initial_content_type', 'initial_object_id',
-        'parent_scape',
-        'is_the_primary_scape',
-        'autobreak'
-    ]
+    fields = ['name', 'initial_content_type', 'initial_object_id', 'parent_scape', 'is_the_primary_scape', 'autobreak']
 
     autocomplete_lookup_fields = {
         'generic': [

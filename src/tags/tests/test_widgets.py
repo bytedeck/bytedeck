@@ -6,7 +6,6 @@ from django_tenants.test.cases import TenantTestCase
 
 
 class TestTaggitSelect2Widget(TenantTestCase):
-
     def test_get_url(self):
         widget = TaggitSelect2Widget()
         assert isinstance(widget.get_url(), text_type)

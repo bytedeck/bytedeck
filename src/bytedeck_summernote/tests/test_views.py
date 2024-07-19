@@ -10,7 +10,7 @@ class TestByteDeckSummernoteView(TenantTestCase):
 
     def test_url(self):
         """Customized view class is configured and respond"""
-        url = reverse("bytedeck_summernote-editor", kwargs={"id": "foobar"})
+        url = reverse('bytedeck_summernote-editor', kwargs={'id': 'foobar'})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)

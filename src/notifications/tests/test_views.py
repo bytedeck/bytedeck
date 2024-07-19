@@ -11,7 +11,6 @@ User = get_user_model()
 
 
 class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
@@ -19,7 +18,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client = TenantClient(self.tenant)
 
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        self.test_password = 'password'
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -27,7 +26,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student2 = baker.make(User)
 
     def test_all_notification_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to home page '''
+        """If not logged in then all views should redirect to home page"""
 
         self.assertRedirectsLogin('notifications:list')
         self.assertRedirectsLogin('notifications:list_unread')
@@ -80,8 +79,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
 
     def test_ajax_mark_read(self):
-        """ Marks a Notification as read via Ajax (by setting unread = FALSE)
-        """
+        """Marks a Notification as read via Ajax (by setting unread = FALSE)"""
         # log in student1
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)

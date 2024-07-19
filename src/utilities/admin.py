@@ -9,7 +9,11 @@ from .models import ImageResource, MenuItem, VideoResource
 
 
 class FlatPageAdmin2(FlatPageAdmin, ByteDeckSummernoteAdvancedModelAdmin):
-    list_display = ('url', 'title', 'registration_required',)
+    list_display = (
+        'url',
+        'title',
+        'registration_required',
+    )
     summernote_fields = ('content',)
 
 

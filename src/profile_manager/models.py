@@ -87,19 +87,9 @@ class ProfileManager(models.Manager):
         empty_emails = models.Q(email='') | models.Q(email__isnull=True)
         verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
-        students_to_email = (
-            CourseStudent.objects.all_users_for_active_semester()
-                                 .filter(verified_emails)
-                                 .exclude(empty_emails)
-                                 .filter(email_filter)
-        )
+        students_to_email = CourseStudent.objects.all_users_for_active_semester().filter(verified_emails).exclude(empty_emails).filter(email_filter)
 
-        teachers_to_email = (
-            User.objects.filter(is_staff=True)
-                        .filter(verified_emails)
-                        .exclude(empty_emails)
-                        .filter(email_filter)
-        )
+        teachers_to_email = User.objects.filter(is_staff=True).filter(verified_emails).exclude(empty_emails).filter(email_filter)
 
         # Merge the two querysets and remove duplicates
         users_to_email = (students_to_email | teachers_to_email).distinct()
@@ -137,19 +127,25 @@ class Profile(models.Model):
         return grad_year_choices
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
-                             help_text='You can leave this blank, or enter anything you like here.')
+    alias = models.CharField(
+        max_length=50, unique=False, null=True, blank=True, default=None, help_text='You can leave this blank, or enter anything you like here.'
+    )
     avatar = ResizedImageField(upload_to='avatars/', null=True, blank=True)
-    preferred_name = models.CharField(max_length=50, null=True, blank=True,
-                                      verbose_name='Preferred first name',
-                                      help_text='If you would prefer your teacher to call you by a name other than \
-                                      the name on your school records, please put it here.')
+    preferred_name = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        verbose_name='Preferred first name',
+        help_text='If you would prefer your teacher to call you by a name other than \
+                                      the name on your school records, please put it here.',
+    )
     # student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
     #                                              validators=[student_number_validator])
     grad_year = models.PositiveIntegerField(null=True, blank=False)
-    is_test_account = models.BooleanField(default=False,
-                                          help_text="A test account that won't show up in student lists",
-                                          )
+    is_test_account = models.BooleanField(
+        default=False,
+        help_text="A test account that won't show up in student lists",
+    )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
@@ -158,32 +154,36 @@ class Profile(models.Model):
     # Student options
     get_announcements_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get announcements emailed to you when they are published."  # noqa
+        help_text='If you provided an email address on your profile, you will get announcements emailed to you when they are published.',  # noqa
     )
     get_notifications_by_email = models.BooleanField(
         default=False,
-        help_text="If you provided an email address on your profile, you will get unread notifications emailed to you once per day."  # noqa
+        help_text='If you provided an email address on your profile, you will get unread notifications emailed to you once per day.',  # noqa
     )
     get_messages_by_email = models.BooleanField(
         default=True,
-        help_text="If your teacher sends you a message, get an instance email."  # noqa
+        help_text='If your teacher sends you a message, get an instance email.',  # noqa
     )
-    visible_to_other_students = models.BooleanField(
-        default=False, help_text="Your marks will be visible to other students through the student list.")
+    visible_to_other_students = models.BooleanField(default=False, help_text='Your marks will be visible to other students through the student list.')
     preferred_internal_only = models.BooleanField(
         verbose_name='Use preferred first name internally only',
-        default=False, help_text="Check this if you want your preferred name used ONLY in the classroom, but NOT in other places such as on your report card.")  # noqa
+        default=False,
+        help_text='Check this if you want your preferred name used ONLY in the classroom, but NOT in other places such as on your report card.',
+    )  # noqa
     dark_theme = models.BooleanField(default=False)
     silent_mode = models.BooleanField(default=False, help_text="Don't play the gong sounds.")
-    hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=1023,
-                                     null=True, blank=True)  # list of quest IDs
-    is_TA = models.BooleanField(default=False, help_text="TAs can create new quests for teacher approval.")
+    hidden_quests = models.CharField(validators=[validate_comma_separated_integer_list], max_length=1023, null=True, blank=True)  # list of quest IDs
+    is_TA = models.BooleanField(default=False, help_text='TAs can create new quests for teacher approval.')
 
-    custom_stylesheet = RestrictedFileField(null=True, blank=True, upload_to=user_directory_path,
-                                            content_types=['text/css', 'text/plain'],
-                                            max_upload_size=512000,
-                                            help_text='ADVANCED: A CSS file to customize this site!  You can use  \
-                                                   this to tweak something, or create a completely new theme.')
+    custom_stylesheet = RestrictedFileField(
+        null=True,
+        blank=True,
+        upload_to=user_directory_path,
+        content_types=['text/css', 'text/plain'],
+        max_upload_size=512000,
+        help_text='ADVANCED: A CSS file to customize this site!  You can use  \
+                                                   this to tweak something, or create a completely new theme.',
+    )
 
     # Fields for caching data
     time_of_last_submission = models.DateTimeField(null=True, blank=True)
@@ -202,10 +202,10 @@ class Profile(models.Model):
         if self.user.first_name:
             profile = self.user.first_name
             if self.preferred_name:
-                profile += " (" + self.preferred_name + ")"
-            profile += " " + self.user.last_name
+                profile += ' (' + self.preferred_name + ')'
+            profile += ' ' + self.user.last_name
             if self.alias:
-                profile += ", aka " + self.alias_clipped()
+                profile += ', aka ' + self.alias_clipped()
         else:
             profile = self.user.username
         return profile
@@ -220,17 +220,17 @@ class Profile(models.Model):
         elif self.user.first_name:
             return self.user.first_name
         else:
-            return ""
+            return ''
 
     def alias_clipped(self):
         if self.alias is None:
-            return "-"
-        return self.alias if len(self.alias) < 15 else self.alias[:13] + "..."
+            return '-'
+        return self.alias if len(self.alias) < 15 else self.alias[:13] + '...'
 
     def preferred_full_name(self):
         name = self.get_preferred_name()
         if self.user.last_name:
-            name += " " + self.user.last_name
+            name += ' ' + self.user.last_name
         return name if name else str(self.user)
 
     def public_name(self):
@@ -242,7 +242,7 @@ class Profile(models.Model):
     def internal_name(self):
         name = self.preferred_full_name()
         if self.alias:
-            name += ", aka " + self.alias_clipped()
+            name += ', aka ' + self.alias_clipped()
         return name
 
     def formal_name(self):
@@ -293,7 +293,7 @@ class Profile(models.Model):
             return smart_list(self.hidden_quests)
 
     def save_hidden_quests_from_list(self, hidden_quest_list):
-        hidden_quest_csv = ",".join(hidden_quest_list)
+        hidden_quest_csv = ','.join(hidden_quest_list)
         self.hidden_quests = hidden_quest_csv
         self.save()
 
@@ -424,7 +424,7 @@ class Profile(models.Model):
     #################################
 
     def gone_stale(self):
-        """ Return True if the user has not submitted a quest in the last 5 days"""
+        """Return True if the user has not submitted a quest in the last 5 days"""
         if self.time_of_last_submission is None:
             return True
         else:
@@ -440,9 +440,9 @@ def create_profile(sender, **kwargs):
     from django.db import connection
 
     if connection.schema_name != get_public_schema_name():
-        current_user = kwargs["instance"]
+        current_user = kwargs['instance']
 
-        if kwargs["created"]:
+        if kwargs['created']:
             new_profile = Profile(user=current_user)
 
             new_profile.save()
@@ -454,13 +454,13 @@ def create_profile(sender, **kwargs):
                 recipient=staff_list[0],
                 affected_users=staff_list,
                 icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-                verb='.  New user registered: ')
+                verb='.  New user registered: ',
+            )
 
 
 @receiver(post_delete, sender=Profile)
 def post_delete_user(sender, instance, *args, **kwargs):
-    """If a profile is deleted, then that to cascade and delete profile as well.
-    """
+    """If a profile is deleted, then that to cascade and delete profile as well."""
     if instance.user:  # just in case user is not specified or was already deleted
         instance.user.delete()
 
@@ -496,8 +496,8 @@ def email_confirmed_handler(email_address, **kwargs):
         # because django-allauth uses a different implementation of JSONField.
         # See: https://github.com/pennersr/django-allauth/issues/2599
         social_emails = []
-        for data in user.socialaccount_set.values_list("extra_data", flat=True):
-            email = data.get("email")
+        for data in user.socialaccount_set.values_list('extra_data', flat=True):
+            email = data.get('email')
             if email:
                 social_emails.append(email)
 
@@ -535,10 +535,10 @@ def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
     # Only send the email when they login again
     if not recently_signed_up_with_email:
         if email_address and email_address.verified is False:
-            messages.info(request, f"Please verify your email address: {user.email}.")
+            messages.info(request, f'Please verify your email address: {user.email}.')
 
 
-def smart_list(value, delimiter=",", func=None):
+def smart_list(value, delimiter=',', func=None):
     """Convert a value to a list, if possible.
     http://tech.yunojuno.com/working-with-django-s-commaseparatedintegerfield
 
@@ -564,7 +564,7 @@ def smart_list(value, delimiter=",", func=None):
 
     """
 
-    if value in ["", "[]", "[ ]", None]:
+    if value in ['', '[]', '[ ]', None]:
         return []
 
     if isinstance(value, list):
@@ -581,7 +581,7 @@ def smart_list(value, delimiter=",", func=None):
     elif isinstance(value, int):
         ls = [value]
     else:
-        raise ValueError("Unparseable smart_list value: %s" % value)
+        raise ValueError('Unparseable smart_list value: %s' % value)
 
     try:
         func = func or (lambda x: x)

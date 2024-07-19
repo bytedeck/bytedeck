@@ -19,26 +19,27 @@ class ByteDeckSummernoteWidget(SummernoteWidget):
     Simplify upgrading to a newer `django_summernote.widgets.SummernoteWidget` class in a future.
 
     """
+
     def render(self, name, value, attrs=None, **kwargs):
         """Override default `render` method to use customized template file"""
         summernote_settings = self.summernote_settings()
-        summernote_settings.update(self.attrs.get("summernote", {}))
+        summernote_settings.update(self.attrs.get('summernote', {}))
 
         html = super(SummernoteWidget, self).render(name, value, attrs=attrs, **kwargs)
         context = {
-            "id": attrs["id"],
-            "id_safe": attrs["id"].replace("-", "_"),
-            "flat_attrs": flatatt(self.final_attr(attrs)),
-            "settings": json.dumps(summernote_settings),
+            'id': attrs['id'],
+            'id_safe': attrs['id'].replace('-', '_'),
+            'flat_attrs': flatatt(self.final_attr(attrs)),
+            'settings': json.dumps(summernote_settings),
             # using customized url here (mandatory for ByteDeck project)
-            "src": reverse("bytedeck_summernote-editor", kwargs={"id": attrs["id"]}),
+            'src': reverse('bytedeck_summernote-editor', kwargs={'id': attrs['id']}),
             # width and height have to be pulled out to create an iframe with correct size
-            "width": summernote_settings["width"],
-            "height": summernote_settings["height"],
+            'width': summernote_settings['width'],
+            'height': summernote_settings['height'],
         }
 
         # using customized template here (mandatory for ByteDeck project)
-        html += render_to_string("bytedeck_summernote/widget_iframe.html", context)
+        html += render_to_string('bytedeck_summernote/widget_iframe.html', context)
         return mark_safe(html)
 
 
@@ -47,23 +48,24 @@ class ByteDeckSummernoteInplaceWidget(SummernoteInplaceWidget):
     Simplify upgrading to a newer `django_summernote.widgets.SummernoteInplaceWidget` class in a future.
 
     """
+
     def render(self, name, value, attrs=None, **kwargs):
         """Override default `render` method to use customized template file"""
         summernote_settings = self.summernote_settings()
-        summernote_settings.update(self.attrs.get("summernote", {}))
+        summernote_settings.update(self.attrs.get('summernote', {}))
 
         html = super(SummernoteInplaceWidget, self).render(name, value, attrs=attrs, **kwargs)
         context = {
-            "id": attrs["id"],
-            "id_safe": attrs["id"].replace("-", "_"),
-            "attrs": self.final_attr(attrs),
-            "config": get_config(),
-            "settings": json.dumps(summernote_settings),
-            "CSRF_COOKIE_NAME": django_settings.CSRF_COOKIE_NAME,
+            'id': attrs['id'],
+            'id_safe': attrs['id'].replace('-', '_'),
+            'attrs': self.final_attr(attrs),
+            'config': get_config(),
+            'settings': json.dumps(summernote_settings),
+            'CSRF_COOKIE_NAME': django_settings.CSRF_COOKIE_NAME,
         }
 
         # using customized template here (mandatory for ByteDeck project)
-        html += render_to_string("bytedeck_summernote/widget_inplace.html", context)
+        html += render_to_string('bytedeck_summernote/widget_inplace.html', context)
         return mark_safe(html)
 
 
@@ -83,8 +85,8 @@ class ByteDeckSummernoteSafeWidgetMixin:
                 # Whitelist filter is turned on by default, but filtering tags is not.
                 # You can turn them on and off by options like below.
                 #
-                "codeviewFilter": True,  # set this to true (safe option) to filter entities (tags, attributes or styles).
-                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                'codeviewFilter': True,  # set this to true (safe option) to filter entities (tags, attributes or styles).
+                'codeviewIframeFilter': False,  # disable whitelist for iframe, fix #1340
                 # And, you can also add your own whitelist domains and use custom tag filters.
                 #
                 # "codeviewFilterRegex": 'custom-regex',
@@ -103,7 +105,7 @@ class ByteDeckSummernoteSafeWidgetMixin:
         value = super().value_from_datadict(data, files, name)
         # HTML escaping done with "bleach" library
         return bleach.clean(
-            value or "",
+            value or '',
             tags=ALLOWED_TAGS,
             # skip attributes sanitization (always allowed), fix #1340
             # for reference https://bleach.readthedocs.io/en/latest/clean.html#using-functions
@@ -130,8 +132,8 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
                 # Whitelist filter is turned on by default, but filtering tags is not.
                 # You can turn them on and off by options like below.
                 #
-                "codeviewFilter": False,  # set this to false (advanced option) to skip filterng entities (tags, attributes or styles).
-                "codeviewIframeFilter": False,  # disable whitelist for iframe, fix #1340
+                'codeviewFilter': False,  # set this to false (advanced option) to skip filterng entities (tags, attributes or styles).
+                'codeviewIframeFilter': False,  # disable whitelist for iframe, fix #1340
                 # And, you can also add your own whitelist domains and use custom tag filters.
                 #
                 # "codeviewFilterRegex": 'custom-regex',
@@ -142,9 +144,11 @@ class ByteDeckSummernoteAdvancedWidgetMixin:
             }
         )
         # replace original language js file (mandatory for ByteDeck project)
-        summernote_settings["url"].update({
-            'language': static('bytedeck_summernote/lang/bytedeck_summernote-advanced-' + lang + '.min.js'),
-        })
+        summernote_settings['url'].update(
+            {
+                'language': static('bytedeck_summernote/lang/bytedeck_summernote-advanced-' + lang + '.min.js'),
+            }
+        )
 
         return summernote_settings
 

@@ -19,7 +19,7 @@ from siteconfig.models import SiteConfig
 
 class MarkRangeManager(models.Manager):
     def get_range(self, mark, courses=None):
-        """ return the MarkRange encompassed by this mark adn the list of courses """
+        """return the MarkRange encompassed by this mark adn the list of courses"""
         self.get_queryset().filter(active=True)
         day = timezone.localtime(timezone.now()).isoweekday()
         # ranges for all courses
@@ -44,8 +44,8 @@ class MarkRangeManager(models.Manager):
 
 
 class MarkRange(models.Model):
-    name = models.CharField(max_length=50, default="Chillax Line")
-    minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
+    name = models.CharField(max_length=50, default='Chillax Line')
+    minimum_mark = models.FloatField(default=72.5, help_text='Minimum mark as a percentage from 0 to 100 (or higher)')
     active = models.BooleanField(default=True)
     color_light = RGBColorField(default='#BEFFFA', help_text='Color to be used in the light theme')
     color_dark = RGBColorField(default='#337AB7', help_text='Color to be used in the dark theme')
@@ -54,12 +54,10 @@ class MarkRange(models.Model):
         max_length=13,
         help_text='Comma seperated list of weekdays that this range is active, where Monday=1 and Sunday=7. \
                    E.g.: "1,3,5" for M, W, F.',
-        default="1,2,3,4,5,6,7"
+        default='1,2,3,4,5,6,7',
     )
     courses = models.ManyToManyField(
-        "courses.course",
-        blank=True,
-        help_text="Which courses this Mark Range will be used for; if left blank it will apply to all courses."
+        'courses.course', blank=True, help_text='Which courses this Mark Range will be used for; if left blank it will apply to all courses.'
     )
 
     objects = MarkRangeManager()
@@ -68,7 +66,7 @@ class MarkRange(models.Model):
         ordering = ['minimum_mark']
 
     def __str__(self):
-        return self.name + " (" + str(self.minimum_mark) + "%)"
+        return self.name + ' (' + str(self.minimum_mark) + '%)'
 
 
 class RankQuerySet(models.query.QuerySet):
@@ -100,7 +98,7 @@ class RankManager(models.Manager):
         return self.get_queryset().get_ranks_gt(user_xp).first()
 
     def create_zero_rank(self):
-        zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
+        zero_rank = Rank(xp=0, name='None', icon='fa fa-circle-o')
         zero_rank.save()
         return zero_rank
 
@@ -108,10 +106,10 @@ class RankManager(models.Manager):
 class Rank(IsAPrereqMixin, models.Model):
     name = models.CharField(max_length=50, unique=False, null=True)
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
-    icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
-                             help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
-    fa_icon = models.TextField(null=True, blank=True,
-                               help_text='html to render a font-awesome icon or icon stack etc.')
+    icon = models.ImageField(
+        upload_to='icons/ranks/', null=True, blank=True, help_text="A backup where fa_icon can't be used.  E.g. in the quest maps."
+    )
+    fa_icon = models.TextField(null=True, blank=True, help_text='html to render a font-awesome icon or icon stack etc.')
 
     objects = RankManager()
 
@@ -137,6 +135,7 @@ class Rank(IsAPrereqMixin, models.Model):
 
     def get_map(self):
         from djcytoscape.models import CytoScape
+
         return CytoScape.objects.get_map_for_init(self)
 
 
@@ -148,7 +147,7 @@ class Grade(IsAPrereqMixin, models.Model):
         return str(self.name)
 
     class Meta:
-        ordering = ["value"]
+        ordering = ['value']
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -160,7 +159,6 @@ class Grade(IsAPrereqMixin, models.Model):
 
 
 class SemesterManager(models.Manager):
-
     def get_queryset(self):
         return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
 
@@ -171,7 +169,6 @@ class SemesterManager(models.Manager):
             return SiteConfig.get().active_semester
 
     def complete_active_semester(self):
-
         active_sem = self.get_current()
 
         # This semester has already been closed
@@ -206,25 +203,24 @@ class Semester(models.Model):
     STUDENTS_WITH_NEGATIVE_XP = -3
 
     name = models.CharField(
-        blank=True, unique=False, max_length=50,
-        help_text="If left blank, the semester will display it's First Day as a default name, in the form: mmm-YYYY."
+        blank=True,
+        unique=False,
+        max_length=50,
+        help_text="If left blank, the semester will display it's First Day as a default name, in the form: mmm-YYYY.",
     )
 
     first_day = models.DateField(null=True, default=date.today)
     last_day = models.DateField(null=True, default=default_end_date)
-    closed = models.BooleanField(
-        default=False,
-        help_text="All student courses in this semester have been closed and final marks recorded."
-    )
+    closed = models.BooleanField(default=False, help_text='All student courses in this semester have been closed and final marks recorded.')
 
     objects = SemesterManager()
 
     class Meta:
-        get_latest_by = "first_day"
+        get_latest_by = 'first_day'
         ordering = ['first_day']
 
     def __str__(self):
-        return self.name or self.first_day.strftime("%b-%Y")
+        return self.name or self.first_day.strftime('%b-%Y')
 
     def active_by_date(self):
         # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
@@ -239,8 +235,8 @@ class Semester(models.Model):
         return self.first_day <= date.today() <= self.last_day
 
     def num_days(self, upto_today=False):
-        '''The number of classes in the semester (from start date to end date
-        excluding weekends and ExcludedDates). '''
+        """The number of classes in the semester (from start date to end date
+        excluding weekends and ExcludedDates)."""
 
         excluded_days = self.excluded_days()
         if upto_today and date.today() < self.last_day:
@@ -280,17 +276,16 @@ class Semester(models.Model):
         return self.last_day
 
     def get_date(self, fraction_complete):
-        """ Gets the closest date, rolling back if it falls on a weekend or excluded
-        after a fraction of the semester is over """
+        """Gets the closest date, rolling back if it falls on a weekend or excluded
+        after a fraction of the semester is over"""
         days = self.num_days()
         days_to_fraction = int(days * fraction_complete)
         excluded_days = self.excluded_days()
-        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward',
-                                                  holidays=excluded_days)
+        date_after_fraction = numpy.busday_offset(self.first_day, offsets=days_to_fraction, roll='backward', holidays=excluded_days)
         return date_after_fraction.item()
 
     def get_datetime_by_days_since_start(self, class_days, add_holidays=False):
-        """ The date `class days` from the start of the semester
+        """The date `class days` from the start of the semester
 
         Arguments:
             class_days {int} -- number of days since start
@@ -320,10 +315,9 @@ class Semester(models.Model):
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
     def reset_students_xp_cached(self):
-
         from profile_manager.models import Profile
-        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile',
-                                                                                                          flat=True)
+
+        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile', flat=True)
         profile_ids = set(profile_ids)
         profiles = Profile.objects.filter(id__in=profile_ids)
 
@@ -341,7 +335,6 @@ class Semester(models.Model):
 
 
 class BlockManager(models.Manager):
-
     def grouped_teachers_blocks(self):
         blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'name')
         grouped = {}
@@ -357,10 +350,9 @@ class BlockManager(models.Manager):
 class Block(IsAPrereqMixin, models.Model):
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True, null=True)
-    current_teacher = models.ForeignKey(settings.AUTH_USER_MODEL,
-                                        null=True, blank=True,
-                                        limit_choices_to={'is_staff': True},
-                                        on_delete=models.SET_NULL)
+    current_teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, limit_choices_to={'is_staff': True}, on_delete=models.SET_NULL
+    )
     active = models.BooleanField(default=True)
 
     objects = BlockManager()
@@ -373,8 +365,7 @@ class Block(IsAPrereqMixin, models.Model):
         return self.name
 
     def condition_met_as_prerequisite(self, user, num_required=1):
-        """ Returns True if the user has a current course in this block/group.  `num_required` is not used.
-        """
+        """Returns True if the user has a current course in this block/group.  `num_required` is not used."""
         # num_required is not used for this one
         return CourseStudent.objects.current_courses(user).filter(block=self).exists()
 
@@ -382,10 +373,10 @@ class Block(IsAPrereqMixin, models.Model):
 class ExcludedDate(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
     date = models.DateField(unique=True)
-    label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
+    label = models.CharField(max_length=100, blank=True, null=True, help_text='An optional label for this date.')
 
     def __str__(self):
-        return self.date.strftime("%d-%b-%Y")
+        return self.date.strftime('%d-%b-%Y')
 
 
 class Course(IsAPrereqMixin, models.Model):
@@ -401,7 +392,7 @@ class Course(IsAPrereqMixin, models.Model):
         return reverse('courses:course_list')
 
     class Meta:
-        ordering = ["title"]
+        ordering = ['title']
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -413,11 +404,11 @@ class Course(IsAPrereqMixin, models.Model):
 
     @staticmethod
     def autocomplete_search_fields():  # for grapelli prereq selection
-        return ("title__icontains",)
+        return ('title__icontains',)
 
     @staticmethod
     def gfk_search_fields():
-        return ["title__icontains"]
+        return ['title__icontains']
 
 
 class CourseStudentQuerySet(models.query.QuerySet):
@@ -473,8 +464,7 @@ class CourseStudentManager(models.Manager):
         for coursestudent in coursestudents:
             coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
             if coursestudent.final_xp < 0:
-                raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                 f"Fix it before closing the semester")
+                raise ValueError(f'{coursestudent.user.get_full_name()} has a negative XP. ' f'Fix it before closing the semester')
             coursestudent.active = False
             coursestudent.save()
 
@@ -513,13 +503,14 @@ class CourseStudentManager(models.Manager):
 class CourseStudent(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)
-    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True, verbose_name="Group")
+    block = models.ForeignKey(Block, on_delete=models.PROTECT, null=True, verbose_name='Group')
     course = models.ForeignKey(Course, on_delete=models.PROTECT, null=True)
     # grade is deprecated, shouldn't be used anywhere any more
-    grade_fk = models.ForeignKey(Grade, verbose_name="Grade", on_delete=models.SET_NULL, null=True, blank=True)
+    grade_fk = models.ForeignKey(Grade, verbose_name='Grade', on_delete=models.SET_NULL, null=True, blank=True)
     xp_adjustment = models.IntegerField(default=0, help_text="A one-time adjustment to the the user's XP for this course.")
-    xp_adjust_explanation = models.CharField(max_length=255, blank=True, null=True,
-                                             help_text="An optional reminder why an XP Adjustment was provided.")
+    xp_adjust_explanation = models.CharField(
+        max_length=255, blank=True, null=True, help_text='An optional reminder why an XP Adjustment was provided.'
+    )
     final_xp = models.PositiveIntegerField(blank=True, null=True)
     final_grade = models.PositiveIntegerField(blank=True, null=True)
     active = models.BooleanField(default=True)
@@ -531,14 +522,16 @@ class CourseStudent(models.Model):
             ('semester', 'block', 'user'),
             ('user', 'course', 'grade_fk'),
         )
-        verbose_name = "Student Course"
+        verbose_name = 'Student Course'
         ordering = ['-semester', 'block']
 
     def __str__(self):
-        return f"{self.user.get_username()}" \
-               f'{", " + str(self.semester) if self.semester else ""}' \
-               f'{", " + str(self.block.name) if self.block else ""}' \
-               f': {self.course}'
+        return (
+            f"{self.user.get_username()}"
+            f'{", " + str(self.semester) if self.semester else ""}'
+            f'{", " + str(self.block.name) if self.block else ""}'
+            f': {self.course}'
+        )
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')

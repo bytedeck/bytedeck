@@ -42,16 +42,16 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
     def dehydrate_prereq_import_ids(self, quest):
         # save basic single/simple prerequisites, if there are any (no OR).
         # save as an & seperated list of import_ids (UUIDs)
-        prereq_import_ids = ""
+        prereq_import_ids = ''
         for p in quest.prereqs():
             if p.prereq_content_type == ContentType.objects.get_for_model(Quest):
-                prereq_import_ids += "&" + str(p.get_prereq().import_id)
+                prereq_import_ids += '&' + str(p.get_prereq().import_id)
             elif p.prereq_content_type == ContentType.objects.get_for_model(Badge):
-                prereq_import_ids += "&" + str(p.get_prereq().import_id)
+                prereq_import_ids += '&' + str(p.get_prereq().import_id)
         return prereq_import_ids
 
     def dehydrate_badge_type_name(self, badge):
-        """ For processing "badge_type_name" field on export
+        """For processing "badge_type_name" field on export
 
         Using the name instead of id.
         We cannot guarantee exportee's ids are the same as import's ids
@@ -66,8 +66,7 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         return str(badge.badge_type)
 
     def dehydrate_badge_type_sort(self, badge):
-        """ For processing "badge_type_sort" field on export
-        """
+        """For processing "badge_type_sort" field on export"""
         # dehydrate runs twice per row during import.
         # (despite import_export docs saying nothing about it running in import)
         # first run every variable is "None" and the only
@@ -77,8 +76,7 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         return badge.badge_type.sort_order
 
     def dehydrate_badge_type_icon(self, badge):
-        """ For processing "badge_type_icon" field on export
-        """
+        """For processing "badge_type_icon" field on export"""
         # dehydrate runs twice per row during import.
         # (despite import_export docs saying nothing about it running in import)
         # first run every variable is "None" and the only
@@ -90,7 +88,7 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
     def generate_simple_prereqs(self, parent_object, data_dict):
         # check that the prereq quest exists as an import-linked quest via import_id
 
-        prereq_import_ids = data_dict["prereq_import_ids"]
+        prereq_import_ids = data_dict['prereq_import_ids']
         prereq_import_ids = prereq_import_ids.split('&')
         prereq_object = None
 
@@ -105,7 +103,6 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
                         pass
 
             if prereq_object:
-
                 existing_prereqs_groups = parent_object.prereqs()
                 # generate list of objects for already existing primary prereq
                 existing_primary_prereqs = [p.get_prereq() for p in existing_prereqs_groups]
@@ -118,7 +115,7 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
                     Prereq.add_simple_prereq(parent_object, prereq_object)
 
     def generate_badge_type(self, row):
-        """ modifies the row "badge_type" to the correct BadgeType.id defined by
+        """modifies the row "badge_type" to the correct BadgeType.id defined by
          + badge_type_name
          + badge_type_sort
          + badge_type_icon
@@ -144,15 +141,15 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
             row['badge_type'] = badge_type.id
 
     def before_import_row(self, row, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.before_import_row """
+        """https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.before_import_row"""
         # can create badge type here as it seems like the new badgetype will be saved only be saved
         # after admin has accepted the import changes
         self.generate_badge_type(row)
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.after_import """
+        """https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.after_import"""
         for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
+            import_id = data_dict['import_id']
             parent_badge = Badge.objects.get(import_id=import_id)
             self.generate_simple_prereqs(parent_badge, data_dict)
 
@@ -165,11 +162,11 @@ class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdm
     ]
 
     def get_import_formats(self):
-        """ file formats for importing """
+        """file formats for importing"""
         return [CSV]
 
     def get_export_formats(self):
-        """ file formats for exporting """
+        """file formats for exporting"""
         return [CSV]
 
 

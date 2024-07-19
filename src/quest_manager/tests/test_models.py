@@ -22,15 +22,15 @@ User = get_user_model()
 class CategoryTestModel(TenantTestCase):  # aka Campaigns
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.category = baker.make(Category, title="Test Campaign")
+        self.category = baker.make(Category, title='Test Campaign')
 
     def test_category_type_creation(self):
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
     def test_condition_met_as_prerequisite(self):
-        """ Test that all unique quests in a campaign are completed before the campaign is considered completed
-        for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
+        """Test that all unique quests in a campaign are completed before the campaign is considered completed
+        for prerequisite purposes. Make sure multiple completions of repeatable quests don't count."""
 
         user = baker.make('user')
         user2 = baker.make('user')
@@ -58,7 +58,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertFalse(self.category.condition_met_as_prerequisite(user2))
 
     def test_condition_met_as_prerequisite__draft_and_archived_quests(self):
-        """ Test that visible_to_students=False (draft) and archived quests
+        """Test that visible_to_students=False (draft) and archived quests
         are not needed when checking if campaign is met as a prerequisite.
         """
         user = baker.make('user')
@@ -86,7 +86,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
 
     def test_current_quests(self):
-        """ Test that the queryset of all quests in a campaign is returned correctly """
+        """Test that the queryset of all quests in a campaign is returned correctly"""
 
         # assert that the current campaign has no quests
         self.assertEqual(self.category.current_quests().count(), 0)
@@ -102,7 +102,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertEqual(self.category.current_quests().count(), 2)
 
     def test_xp_sum(self):
-        """ Test that the XP sum of all quests in a campaign is returned correctly """
+        """Test that the XP sum of all quests in a campaign is returned correctly"""
 
         # create some quests as part of the test campaign
         baker.make(Quest, campaign=self.category, xp=1)
@@ -112,7 +112,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertEqual(self.category.xp_sum(), 3)
 
     def test_quest_count(self):
-        """ Test that the number of all quests in a campaign is returned correctly """
+        """Test that the number of all quests in a campaign is returned correctly"""
 
         # assert that the current campaign has no quests
         self.assertEqual(self.category.quest_count(), 0)
@@ -135,7 +135,6 @@ class CommonDataTestModel(TenantTestCase):
 
 
 class QuestTestModel(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.quest = baker.make(Quest)
@@ -174,11 +173,7 @@ class QuestTestModel(TenantTestCase):
         # using freeze_time to prevent time_available from looping from 23:00 to 0:00 when adding 1 hour
         dt = datetime.datetime(2024, 1, 1, 6, tzinfo=timezone.get_current_timezone())
         with freeze_time(dt):
-            q = baker.make(
-                Quest,
-                date_available=timezone.localdate(),
-                time_available=(timezone.localtime() + timezone.timedelta(hours=1)).time()
-            )
+            q = baker.make(Quest, date_available=timezone.localdate(), time_available=(timezone.localtime() + timezone.timedelta(hours=1)).time())
             self.assertFalse(q.active)
 
         dt = timezone.get_current_timezone().localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
@@ -194,7 +189,7 @@ class QuestTestModel(TenantTestCase):
             self.assertFalse(q.active)
 
         # create and test a quest that's a part of an inactive campaign
-        inactive_campaign = baker.make(Category, title="inactive-campaign", active=False)
+        inactive_campaign = baker.make(Category, title='inactive-campaign', active=False)
         q = baker.make(Quest, campaign=inactive_campaign)
         self.assertFalse(q.active)
 
@@ -230,8 +225,7 @@ class QuestTestModel(TenantTestCase):
             self.assertTrue(quest.expired())
 
     def test_expired__time_blank(self):
-        """If `time_expired` is blank, then assume expiry at midnight on `date_expired`
-        """
+        """If `time_expired` is blank, then assume expiry at midnight on `date_expired`"""
 
         # Get the current local time zone
         local_tz = timezone.get_current_timezone()
@@ -254,7 +248,7 @@ class QuestTestModel(TenantTestCase):
             self.assertTrue(quest.expired())
 
     def test_quest_html_formatting(self):
-        test_markup = "<p>this <span>span</span> tag should not break</p>"
+        test_markup = '<p>this <span>span</span> tag should not break</p>'
         self.quest.instructions = test_markup
         # Auto formatting on save
         self.quest.save()
@@ -278,12 +272,11 @@ class QuestTestModel(TenantTestCase):
 
         baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = baker.make(User)
-        quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
-        quest_infinite_repeat = baker.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
-        quest_repeat_1hr = baker.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
-        quest_semester_repeat = baker.make(Quest, name="quest-semester-repeatable", max_repeats=1,
-                                           repeat_per_semester=True)
-        quest_semester = baker.make(Quest, name="quest-semester", max_repeats=0, repeat_per_semester=True)
+        quest_not_repeatable = baker.make(Quest, name='quest-not-repeatable')
+        quest_infinite_repeat = baker.make(Quest, name='quest-infinite-repeatable', max_repeats=-1)
+        quest_repeat_1hr = baker.make(Quest, name='quest-repeatable-1hr', max_repeats=1, hours_between_repeats=1)
+        quest_semester_repeat = baker.make(Quest, name='quest-semester-repeatable', max_repeats=1, repeat_per_semester=True)
+        quest_semester = baker.make(Quest, name='quest-semester', max_repeats=0, repeat_per_semester=True)
 
         # TESTS WITH NOT REPEATABLE QUEST
         sub_not_repeatable = QuestSubmission.objects.create_submission(student, quest_not_repeatable)
@@ -393,18 +386,17 @@ class QuestTestModel(TenantTestCase):
 
 
 class SubmissionManagerTest(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.active_semester = SiteConfig.get().active_semester
 
     def test_all_approved(self):
-        """ Tests of QuestSubmissionManager.all_approved()
+        """Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
         """
 
-        quest = baker.make(Quest, name="test quest")
-        user = baker.make(User, username="test_user")
+        quest = baker.make(Quest, name='test quest')
+        user = baker.make(User, username='test_user')
 
         # various submissions
         baker.make(QuestSubmission, semester=self.active_semester)  # in progress shoulnd't appear
@@ -412,59 +404,46 @@ class SubmissionManagerTest(TenantTestCase):
         sub_approved = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
         sub_approved_different_quest = baker.make(QuestSubmission, is_completed=True, is_approved=True, semester=self.active_semester)
         sub_approved_other_semester = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True)
-        sub_approved_no_xp = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True,
-                                        do_not_grant_xp=True, semester=self.active_semester)
-        sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True,
-                                       semester=self.active_semester)
+        sub_approved_no_xp = baker.make(
+            QuestSubmission, quest=quest, is_completed=True, is_approved=True, do_not_grant_xp=True, semester=self.active_semester
+        )
+        sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
 
         # Default parameters, all submissions this semester, as would be shown in staff "Approved" tab
         all_approved = QuestSubmission.objects.all_approved()
-        self.assertQuerysetEqual(
-            all_approved,
-            [sub_approved, sub_approved_no_xp, sub_approved_different_quest, sub_approved_user],
-            ordered=False
-        )
+        self.assertQuerysetEqual(all_approved, [sub_approved, sub_approved_no_xp, sub_approved_different_quest, sub_approved_user], ordered=False)
 
         # active_semester_only=False should include sub_approved_other_semester
         all_approved = QuestSubmission.objects.all_approved(active_semester_only=False)
         self.assertQuerysetEqual(
             all_approved,
             [sub_approved, sub_approved_different_quest, sub_approved_other_semester, sub_approved_no_xp, sub_approved_user],
-            ordered=False
+            ordered=False,
         )
 
         # quest=quest should not include sub_approved_different_quest
         all_approved = QuestSubmission.objects.all_approved(quest=quest)
-        self.assertQuerysetEqual(
-            all_approved,
-            [sub_approved, sub_approved_no_xp, sub_approved_user],
-            ordered=False
-        )
+        self.assertQuerysetEqual(all_approved, [sub_approved, sub_approved_no_xp, sub_approved_user], ordered=False)
 
         # user=test_user should only include sub_approved_user
         all_approved = QuestSubmission.objects.all_approved(user=user)
-        self.assertQuerysetEqual(
-            all_approved,
-            [sub_approved_user],
-            ordered=False
-        )
+        self.assertQuerysetEqual(all_approved, [sub_approved_user], ordered=False)
 
 
 class SubmissionTestModel(TenantTestCase):
-
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.semester = baker.make(Semester)
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = baker.make(User)
-        self.submission = baker.make(QuestSubmission, quest__name="Test")
+        self.submission = baker.make(QuestSubmission, quest__name='Test')
         # self.badge = Recipe(Badge, xp=20).make()
 
         # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
 
     def test_submission_creation(self):
         self.assertIsInstance(self.submission, QuestSubmission)
-        self.assertEqual("Test", self.submission.quest.name)
+        self.assertEqual('Test', self.submission.quest.name)
 
     def test_submission_url(self):
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
@@ -474,7 +453,7 @@ class SubmissionTestModel(TenantTestCase):
         sub = baker.make(QuestSubmission, user=user)
         draft_comment = Comment.objects.create_comment(
             user=self.student,
-            text="draft comment",
+            text='draft comment',
             target=sub,
             path=sub.get_absolute_url(),
         )
@@ -491,8 +470,8 @@ class SubmissionTestModel(TenantTestCase):
         self.assertIsNone(sub.draft_comment)
 
     def test_submission_get_previous(self):
-        """ If this is a repeatable quest and has been completed already, return that previous submission """
-        repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
+        """If this is a repeatable quest and has been completed already, return that previous submission"""
+        repeat_quest = baker.make(Quest, name='repeatable-quest', max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
         self.assertIsNone(first_sub.get_previous())
         # need to complete so can make another
@@ -503,7 +482,7 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_get_previous_automatic_fix_ordinal(self):
         """Submissions that have the same ordinals will be automatically fixed"""
-        repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
+        repeat_quest = baker.make(Quest, name='repeatable-quest', max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
         self.assertIsNone(first_sub.get_previous())
         self.assertEqual(first_sub.ordinal, 1)

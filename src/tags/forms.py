@@ -13,9 +13,7 @@ class BootstrapTaggitSelect2Widget(TaggitSelect2Widget):
 
     class Media:
         js = ('/static/js/select2-set-theme-bootstrap.js',)
-        css = {
-            'all': ('https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css',)
-        }
+        css = {'all': ('https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css',)}
 
 
 def validate_unique_slug(value):
@@ -28,11 +26,10 @@ def validate_unique_slug(value):
 
     if duplicate_slug.exists():
         # if true, duplicate_slug is a 1-item queryset, calling .first() retrieves that item as a callable object
-        raise ValidationError(f"Tag name too similar to existing tag: {duplicate_slug.first()}")
+        raise ValidationError(f'Tag name too similar to existing tag: {duplicate_slug.first()}')
 
 
 class TagForm(forms.ModelForm):
-
     class Meta:
         model = Tag
         fields = ['name']

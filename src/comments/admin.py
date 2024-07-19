@@ -12,7 +12,6 @@ class CommentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
 
 class DocumentAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-
     class Meta:
         model = Document
 

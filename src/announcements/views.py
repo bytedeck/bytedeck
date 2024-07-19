@@ -33,14 +33,13 @@ def comment(request, ann_id):
     announcement = get_object_or_404(Announcement, pk=ann_id)
     origin_path = announcement.get_absolute_url()
 
-    if request.method == "POST":
-
+    if request.method == 'POST':
         form = CommentForm(request.POST)
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
             if not comment_text:
-                comment_text = ""
+                comment_text = ''
             comment_new = Comment.objects.create_comment(
                 user=request.user,
                 path=origin_path,
@@ -49,19 +48,21 @@ def comment(request, ann_id):
             )
 
             if 'comment_button' in request.POST:
-                note_verb = "commented on"
+                note_verb = 'commented on'
                 # icon = "<i class='fa fa-lg fa-comment-o text-info'></i>"
-                icon = "<span class='fa-stack'>" + \
-                       "<i class='fa fa-newspaper-o fa-stack-1x'></i>" + \
-                       "<i class='fa fa-comment-o fa-stack-2x text-info'></i>" + \
-                       "</span>"
+                icon = (
+                    "<span class='fa-stack'>"
+                    + "<i class='fa fa-newspaper-o fa-stack-1x'></i>"
+                    + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
+                    + '</span>'
+                )
                 if request.user.is_staff:
                     # get other commenters on this announcement
                     affected_users = None
                 else:  # student comment
                     affected_users = User.objects.filter(is_staff=True)
             else:
-                raise Http404("unrecognized submit button")
+                raise Http404('unrecognized submit button')
 
             notify.send(
                 request.user,
@@ -72,10 +73,10 @@ def comment(request, ann_id):
                 verb=note_verb,
                 icon=icon,
             )
-            messages.success(request, (f"{SiteConfig.get().custom_name_for_announcement} " + note_verb))
+            messages.success(request, (f'{SiteConfig.get().custom_name_for_announcement} ' + note_verb))
             return redirect(origin_path)
         else:
-            messages.error(request, "There was an error with your comment.")
+            messages.error(request, 'There was an error with your comment.')
             return redirect(origin_path)
     else:
         raise Http404
@@ -84,7 +85,6 @@ def comment(request, ann_id):
 @non_public_only_view
 @login_required
 def list(request, ann_id=None, template='announcements/list.html'):
-
     active_object = None
     if ann_id:
         active_object = get_object_or_404(Announcement, pk=ann_id)
@@ -123,7 +123,7 @@ def list(request, ann_id=None, template='announcements/list.html'):
         # If page is out of range (e.g. 9999), deliver last page of results.
         object_list = paginator.page(paginator.num_pages)
 
-    comment_form = CommentForm(request.POST or None, label="")
+    comment_form = CommentForm(request.POST or None, label='')
 
     context = {
         'comment_form': comment_form,
@@ -140,7 +140,7 @@ def list(request, ann_id=None, template='announcements/list.html'):
 def copy(request, ann_id):
     new_ann = get_object_or_404(Announcement, pk=ann_id)
     new_ann.pk = None  # autogen a new primary key (quest_id by default)
-    new_ann.title = "Copy of " + new_ann.title
+    new_ann.title = 'Copy of ' + new_ann.title
     new_ann.draft = True
     new_ann.archived = False
     new_ann.datetime_released = new_ann.datetime_released + timedelta(days=7)
@@ -159,12 +159,12 @@ def copy(request, ann_id):
         return redirect(new_announcement)
 
     context = {
-        "title": "",
-        "heading": f"Copy another {SiteConfig.get().custom_name_for_announcement}",
-        "form": form,
-        "submit_btn_value": "Create",
+        'title': '',
+        'heading': f'Copy another {SiteConfig.get().custom_name_for_announcement}',
+        'form': form,
+        'submit_btn_value': 'Create',
     }
-    return render(request, "announcements/form.html", context)
+    return render(request, 'announcements/form.html', context)
 
 
 @non_public_only_view
@@ -192,16 +192,16 @@ class Create(NonPublicOnlyViewMixin, SuccessMessageMixin, CreateView):
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:
-            return f"Draft {SiteConfig.get().custom_name_for_announcement} created."
+            return f'Draft {SiteConfig.get().custom_name_for_announcement} created.'
         else:
-            return f"New {SiteConfig.get().custom_name_for_announcement} published and broadcast to {SiteConfig.get().custom_name_for_student}s!"
+            return f'New {SiteConfig.get().custom_name_for_announcement} published and broadcast to {SiteConfig.get().custom_name_for_student}s!'
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
         # Add in a QuerySet of all the books
-        context['heading'] = f"Create New {SiteConfig.get().custom_name_for_announcement}"
-        context['submit_btn_value'] = "Save"
+        context['heading'] = f'Create New {SiteConfig.get().custom_name_for_announcement}'
+        context['submit_btn_value'] = 'Save'
         return context
 
     @method_decorator(staff_member_required)
@@ -218,17 +218,17 @@ class Update(NonPublicOnlyViewMixin, SuccessMessageMixin, UpdateView):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
         # Add in a QuerySet of all the books
-        context['heading'] = f"Edit {SiteConfig.get().custom_name_for_announcement}"
-        context['submit_btn_value'] = "Update"
+        context['heading'] = f'Edit {SiteConfig.get().custom_name_for_announcement}'
+        context['submit_btn_value'] = 'Update'
         return context
 
         # return super(Update, self).form_valid(form)
 
     def get_success_message(self, cleaned_data):
         if self.object.draft:
-            return f"Draft {SiteConfig.get().custom_name_for_announcement} updated."
+            return f'Draft {SiteConfig.get().custom_name_for_announcement} updated.'
         else:
-            return f"{SiteConfig.get().custom_name_for_announcement} updated but NOT (re-)broadcasted to {SiteConfig.get().custom_name_for_student}s."
+            return f'{SiteConfig.get().custom_name_for_announcement} updated but NOT (re-)broadcasted to {SiteConfig.get().custom_name_for_student}s.'
 
     @method_decorator(staff_member_required)
     def dispatch(self, *args, **kwargs):

@@ -27,18 +27,15 @@ class NotificationQuerySet(models.query.QuerySet):
     # object matching sender, target or action object
     def get_object_anywhere(self, object):
         object_type = ContentType.objects.get_for_model(object)
-        return self.filter(Q(target_content_type__pk=object_type.id,
-                             target_object_id=object.id)
-                           | Q(sender_content_type__pk=object_type.id,
-                               sender_object_id=object.id)
-                           | Q(action_content_type__pk=object_type.id,
-                               action_object_id=object.id)
-                           )
+        return self.filter(
+            Q(target_content_type__pk=object_type.id, target_object_id=object.id)
+            | Q(sender_content_type__pk=object_type.id, sender_object_id=object.id)
+            | Q(action_content_type__pk=object_type.id, action_object_id=object.id)
+        )
 
     def get_object_target(self, object):
         object_type = ContentType.objects.get_for_model(object)
-        return self.filter(target_content_type__pk=object_type.id,
-                           target_object_id=object.id)
+        return self.filter(target_content_type__pk=object_type.id, target_object_id=object.id)
 
     # def mark_targetless(self, recipient):
     #     qs = self.get_unread().get_user(recipient)
@@ -100,19 +97,17 @@ class NotificationManager(models.Manager):
 class Notification(models.Model):
     sender_content_type = models.ForeignKey(ContentType, related_name='notify_sender', on_delete=models.CASCADE)
     sender_object_id = models.PositiveIntegerField()
-    sender_object = GenericForeignKey("sender_content_type", "sender_object_id")
+    sender_object = GenericForeignKey('sender_content_type', 'sender_object_id')
 
     verb = models.CharField(max_length=255)
 
-    action_content_type = models.ForeignKey(ContentType, related_name='notify_action',
-                                            null=True, blank=True, on_delete=models.SET_NULL)
+    action_content_type = models.ForeignKey(ContentType, related_name='notify_action', null=True, blank=True, on_delete=models.SET_NULL)
     action_object_id = models.PositiveIntegerField(null=True, blank=True)
-    action_object = GenericForeignKey("action_content_type", "action_object_id")
+    action_object = GenericForeignKey('action_content_type', 'action_object_id')
 
-    target_content_type = models.ForeignKey(ContentType, related_name='notify_target',
-                                            null=True, blank=True, on_delete=models.SET_NULL)
+    target_content_type = models.ForeignKey(ContentType, related_name='notify_target', null=True, blank=True, on_delete=models.SET_NULL)
     target_object_id = models.PositiveIntegerField(null=True, blank=True)
-    target_object = GenericForeignKey("target_content_type", "target_object_id")
+    target_object = GenericForeignKey('target_content_type', 'target_object_id')
 
     font_icon = models.CharField(max_length=255, default="<i class='fa fa-info-circle'></i>")
 
@@ -127,16 +122,17 @@ class Notification(models.Model):
 
     def html_strip(string, char_limit=50, tag_size=1, resize_image=True, image_height=20, **kwargs) -> str:
         """
-            Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
+        Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
 
-            tag_size: how many letters an image should count as
+        tag_size: how many letters an image should count as
 
-            resize_image: enables image resizing
-            image_height: image height after resizing in pixels
+        resize_image: enables image resizing
+        image_height: image height after resizing in pixels
         """
         if not string:
-            return ""
-        if type(string) is not str:
+            return ''
+
+        if not isinstance(string, str):
             string = str(string)
 
         limit_imposed = False
@@ -149,11 +145,11 @@ class Notification(models.Model):
             char = string[index]
 
             # check for open img
-            if char == "<" and string[index:].startswith("<img"):
+            if char == '<' and string[index:].startswith('<img'):
                 cache_open_index = index
 
             # check for closed if open already found
-            elif cache_open_index is not None and char == ">":
+            elif cache_open_index is not None and char == '>':
                 # position img tag would be without html tags
                 offset = cache_open_index - len(strip_tags(string[:cache_open_index]))
 
@@ -186,15 +182,15 @@ class Notification(models.Model):
 
         # resizes all images in string
         if resize_image:
-            soup = BeautifulSoup(text, features="html.parser")
+            soup = BeautifulSoup(text, features='html.parser')
             for img in soup.findAll('img'):
-                img['style'] = ""  # remove style as it always comes with width/height modifiers
-                img['height'] = f"{image_height}px"
-                img['width'] = "auto"
+                img['style'] = ''  # remove style as it always comes with width/height modifiers
+                img['height'] = f'{image_height}px'
+                img['width'] = 'auto'
 
             text = str(soup)
 
-        return text + ("..." if limit_imposed else "")
+        return text + ('...' if limit_imposed else '')
 
     def __str__(self):
         try:
@@ -214,12 +210,12 @@ class Notification(models.Model):
         # absolute url needed for when notifications are sent via email
         root_url = get_root_url()
         context = {
-            "sender": self.sender_object,
-            "verb": self.verb,
-            "action": action,  # notif text
-            "target": self.target_object,  # basically quest name
-            "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
-            "target_url": target_url,
+            'sender': self.sender_object,
+            'verb': self.verb,
+            'action': action,  # notif text
+            'target': self.target_object,  # basically quest name
+            'verify_read': '{}{}'.format(root_url, reverse('notifications:read', kwargs={'id': self.id})),
+            'target_url': target_url,
         }
 
         url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
@@ -227,9 +223,9 @@ class Notification(models.Model):
             if self.action_object:
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
-                url = url_common_part + " <em>%(target)s</em></a>" % context
+                url = url_common_part + ' <em>%(target)s</em></a>' % context
         else:
-            url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
+            url = url_common_part + '</a>'  # this is for 'teacher returned/approved ...'
         return url
 
     def mark_read(self):
@@ -245,12 +241,9 @@ class Notification(models.Model):
             # TODO make this except explicit, don't remember what it's doing
             target_url = reverse('notifications:list')
 
-        context = {
-            "verify_read": reverse('notifications:read', kwargs={"id": self.id}),
-            "target_url": target_url
-        }
+        context = {'verify_read': reverse('notifications:read', kwargs={'id': self.id}), 'target_url': target_url}
 
-        return "%(verify_read)s?next=%(target_url)s" % context
+        return '%(verify_read)s?next=%(target_url)s' % context
 
     def get_link(self):
         # print("***** NOTIFICATION.get_link **********")
@@ -269,14 +262,14 @@ class Notification(models.Model):
         action = Notification.html_strip(str(self.action_object))
 
         context = {
-            "sender": self.sender_object,
-            "verb": self.verb,
-            "action": action,
-            "target": self.target_object,
+            'sender': self.sender_object,
+            'verb': self.verb,
+            'action': action,
+            'target': self.target_object,
             # "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             # "target_url": target_url,
-            "url": self.get_url(),
-            "icon": self.font_icon
+            'url': self.get_url(),
+            'icon': self.font_icon,
         }
 
         url_common_part = "<a href='%(url)s'>%(icon)s&nbsp;&nbsp; %(sender)s %(verb)s" % context
@@ -284,9 +277,9 @@ class Notification(models.Model):
             if self.action_object:
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
-                url = url_common_part + " <em>%(target)s</em></a>" % context
+                url = url_common_part + ' <em>%(target)s</em></a>' % context
         else:
-            url = url_common_part + "</a>"
+            url = url_common_part + '</a>'
 
         return url
 
@@ -313,7 +306,12 @@ def new_notification(sender, **kwargs):
     recipient = kwargs.pop('recipient')  # required
     verb = kwargs.pop('verb')  # required
     icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
-    affected_users = kwargs.pop('affected_users', [recipient, ])
+    affected_users = kwargs.pop(
+        'affected_users',
+        [
+            recipient,
+        ],
+    )
 
     # try:
     #     affected_users = kwargs.pop('affected_users')
@@ -321,7 +319,9 @@ def new_notification(sender, **kwargs):
     #     affected_users = [recipient, ]
 
     if affected_users is None:
-        affected_users = [recipient, ]
+        affected_users = [
+            recipient,
+        ]
 
     for u in affected_users:
         # don't send a notification to yourself/themself
@@ -336,13 +336,13 @@ def new_notification(sender, **kwargs):
                 font_icon=icon,
             )
             # Set the target if provided.  Action not currently used...
-            for option in ("target", "action"):
+            for option in ('target', 'action'):
                 # obj = kwargs.pop(option, None) #don't want to remove option with pop
                 try:
                     obj = kwargs[option]
                     if obj is not None:
-                        setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
-                        setattr(new_note, "%s_object_id" % option, obj.id)
+                        setattr(new_note, '%s_content_type' % option, ContentType.objects.get_for_model(obj))
+                        setattr(new_note, '%s_object_id' % option, obj.id)
                 except:  # noqa
                     # TODO make this except explicit, don't remember what it's doing
                     pass
@@ -357,6 +357,6 @@ def deleted_object_receiver(sender, **kwargs):
     # print("************delete signal ****************")
     # print(sender)
     # print(kwargs)
-    object = kwargs["instance"]
+    object = kwargs['instance']
     # print(object)
     Notification.objects.get_queryset().get_object_anywhere(object).delete()

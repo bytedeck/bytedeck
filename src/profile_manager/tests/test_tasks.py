@@ -25,7 +25,7 @@ class ProfleTasksTests(TenantTestCase):
         self.course = baker.make(Course)
         self.active_semester = SiteConfig().get().active_semester
 
-        names = [f"user-{index}" for index in range(8)][::-1]
+        names = [f'user-{index}' for index in range(8)][::-1]
 
         active_semester_students = baker.make(User, username=names.pop, _quantity=2)
 

@@ -15,9 +15,7 @@ class AnnouncementForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['datetime_released'].initial = (
-            datetime.now().strftime('%Y-%m-%d %H:%M')
-        )
+        self.fields['datetime_released'].initial = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     class Meta:
         model = Announcement
@@ -41,9 +39,9 @@ class AnnouncementForm(forms.ModelForm):
         archived = data.get('archived')
 
         if auto_publish and datetime_released < timezone.now():
-            self.add_error("datetime_released", forms.ValidationError('An Announcement that is auto published cannot have a past release date.'))
+            self.add_error('datetime_released', forms.ValidationError('An Announcement that is auto published cannot have a past release date.'))
 
         if auto_publish and archived:
-            self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
+            self.add_error('auto_publish', forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
         return data

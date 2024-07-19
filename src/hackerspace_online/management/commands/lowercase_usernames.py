@@ -10,12 +10,10 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-
     help = 'Used to lowercase usernames'
 
     @transaction.atomic
     def handle(self, *args, **options):
-
         # Let's take a list of users that have duplicate usernames
         users = User.objects.values(lowercase_username=Lower('username')).annotate(existing_count=models.Count('lowercase_username'))
         duplicate_usernames = users.filter(existing_count__gt=1).values_list('lowercase_username', flat=True)
@@ -38,4 +36,4 @@ class Command(BaseCommand):
         if duplicate_users.exists():
             self.stdout.write(self.style.NOTICE('List of users with multiple usernames:'))
             for user in duplicate_users:
-                self.stdout.write(f"user_id: {user.id}, username: {user.username}")
+                self.stdout.write(f'user_id: {user.id}, username: {user.username}')

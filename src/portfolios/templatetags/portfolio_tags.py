@@ -17,6 +17,6 @@ def youthumb(value, args):
     video_id = parse_qs(qs[1])['v'][0]
 
     if args == 'l':
-        return "http://img.youtube.com/vi/%s/0.jpg" % video_id
+        return 'http://img.youtube.com/vi/%s/0.jpg' % video_id
     else:
-        return "http://img.youtube.com/vi/%s/2.jpg" % video_id
+        return 'http://img.youtube.com/vi/%s/2.jpg' % video_id

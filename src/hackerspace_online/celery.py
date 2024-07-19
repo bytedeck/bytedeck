@@ -29,19 +29,19 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 # always attempt to run a schedule that is listed in the database even if
 # it is not listed here or the name of the task is changed.
 app.conf.beat_schedule = {
-    "Send daily email of notifications to all schemas": {
-        "task": "notifications.tasks.email_notification_to_users_on_all_schemas",
-        "schedule": crontab(minute=0, hour=5),
-        "options": {
-            "queue": "default",
-        }
+    'Send daily email of notifications to all schemas': {
+        'task': 'notifications.tasks.email_notification_to_users_on_all_schemas',
+        'schedule': crontab(minute=0, hour=5),
+        'options': {
+            'queue': 'default',
+        },
     },
-    "Invalidate Profile XP Cache for all schemas daily task": {
-        "task": "profile_manager.tasks.invalidate_profile_xp_cache_in_all_schemas",
-        "schedule": crontab(minute=0, hour=0),
-        "options": {
-            "queue": "default",
-        }
+    'Invalidate Profile XP Cache for all schemas daily task': {
+        'task': 'profile_manager.tasks.invalidate_profile_xp_cache_in_all_schemas',
+        'schedule': crontab(minute=0, hour=0),
+        'options': {
+            'queue': 'default',
+        },
     },
 }
 

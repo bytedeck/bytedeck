@@ -35,7 +35,8 @@ User = get_user_model()
 
 
 class ViewTypes:
-    """ enum for ProfileList and its descendants """
+    """enum for ProfileList and its descendants"""
+
     LIST = 0
     CURRENT = 1
     STAFF = 2
@@ -94,6 +95,7 @@ class ProfileListCurrent(ProfileList):
     Arguments:
         ProfileList -- Base class
     """
+
     view_type = ViewTypes.CURRENT
 
     # override the staff requirement for ProfileList
@@ -108,6 +110,7 @@ class ProfileListCurrent(ProfileList):
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListBlock(ProfileList):
     """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
+
     view_type = ViewTypes.BLOCK
     block_object = None
 
@@ -123,7 +126,7 @@ class ProfileListBlock(ProfileList):
         context = super().get_context_data(**kwargs)
 
         # block object is queried again to pull name + description data from
-        context["block_object"] = self.block_object
+        context['block_object'] = self.block_object
 
         return context
 
@@ -215,7 +218,6 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
 
 
 class ProfileOwnerOrIsStaffMixin:
-
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
         profile_user = self.get_object().user
@@ -231,7 +233,7 @@ class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateVi
     template_name = 'profile_manager/form.html'
 
     def get_object(self):
-        return get_object_or_404(self.model, pk=self.kwargs["pk"])
+        return get_object_or_404(self.model, pk=self.kwargs['pk'])
 
     # returns a list of existing form instances or new ones
     def get_forms(self):
@@ -256,8 +258,8 @@ class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateVi
         # return instance of form or new form instance
         context['forms'] = kwargs.get('form', self.get_forms())
 
-        context['heading'] = "Editing " + profile.user.get_username() + "'s Profile"
-        context['submit_btn_value'] = "Update"
+        context['heading'] = 'Editing ' + profile.user.get_username() + "'s Profile"
+        context['submit_btn_value'] = 'Update'
         context['profile'] = profile
 
         return context
@@ -290,11 +292,11 @@ class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateVi
         return response
 
     def get_success_url(self):
-        return reverse("profiles:profile_detail", args=[self.get_object().pk])
+        return reverse('profiles:profile_detail', args=[self.get_object().pk])
 
 
 class ProfileUpdateOwn(ProfileUpdate):
-    """ Provides a single url for users to edit only their own profile, so the link can be included in emails """
+    """Provides a single url for users to edit only their own profile, so the link can be included in emails"""
 
     def get_object(self):
         return self.request.user.profile
@@ -312,15 +314,15 @@ class PasswordReset(FormView):
     def dispatch(self, *args, **kwargs):
         user = self.get_instance()
         if user.is_staff:
-            return HttpResponseForbidden("Staff users are forbidden")
+            return HttpResponseForbidden('Staff users are forbidden')
         return super().dispatch(*args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.get_instance().profile
 
-        context['heading'] = "Changing " + profile.user.get_username() + "'s Password"
-        context['submit_btn_value'] = "Update"
+        context['heading'] = 'Changing ' + profile.user.get_username() + "'s Password"
+        context['submit_btn_value'] = 'Update'
 
         return context
 
@@ -335,16 +337,10 @@ class PasswordReset(FormView):
         return reverse('profiles:profile_update', args=[self.get_instance().profile.pk])
 
 
-class ProfileResendEmailVerification(
-    NonPublicOnlyViewMixin,
-    ProfileOwnerOrIsStaffMixin,
-    DetailView
-):
-
+class ProfileResendEmailVerification(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, DetailView):
     model = Profile
 
     def get(self, request, *args, **kwargs):
-
         profile = self.get_object()
         user = profile.user
 
@@ -355,12 +351,12 @@ class ProfileResendEmailVerification(
 
         # This condition exists in case a user with an empty User.email tries to access this URL
         if not user_has_email:
-            messages.error(request, "User does not have an email")
+            messages.error(request, 'User does not have an email')
             return redirect_to_previous_page(request)
 
         # This condition exists in case an already verified user tries to access this URL
         if email_address and email_address.verified:
-            messages.info(request, "Your email address has already been verified.")
+            messages.info(request, 'Your email address has already been verified.')
             return redirect_to_previous_page(request)
 
         send_email_confirmation(
@@ -378,18 +374,16 @@ class TagChart(NonPublicOnlyViewMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["user"] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
+        context['user'] = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
         return context
 
 
 @non_public_only_view
 def oauth_merge_account(request):
-
     merge_with_user_id = request.session.get('merge_with_user_id')
     user = get_object_or_404(User, id=merge_with_user_id)
 
-    if request.method == "POST":
-
+    if request.method == 'POST':
         merge_account = request.POST.get('submit') == 'yes'
 
         # The socialaccount_sociallogin must've been removed from the session
@@ -480,28 +474,28 @@ def comment_ban(request, profile_id, toggle=False):
     profile.save()
 
     if profile.banned_from_comments:
-        icon = "<span class='fa-stack'>" + \
-               "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
-               "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
-               "</span>"
+        icon = (
+            "<span class='fa-stack'>"
+            + "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>"
+            + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
+            + '</span>'
+        )
 
         notify.send(
             request.user,
             # action=profile.user,
             target=profile.user,
             recipient=request.user,
-            affected_users=[profile.user, ],
+            affected_users=[
+                profile.user,
+            ],
             verb='banned you from making public comments',
             icon=icon,
         )
 
-        messages.warning(request,
-                         "<a href='" + profile.get_absolute_url() + "'>" +
-                         profile.user.username + "</a> banned from commenting publicly")
+        messages.warning(request, "<a href='" + profile.get_absolute_url() + "'>" + profile.user.username + '</a> banned from commenting publicly')
     else:
-        messages.success(
-            request, "Commenting ban removed for <a href='" + profile.get_absolute_url() + "'>" +
-                     profile.user.username + "</a>")
+        messages.success(request, "Commenting ban removed for <a href='" + profile.get_absolute_url() + "'>" + profile.user.username + '</a>')
 
     return redirect_to_previous_page(request)
 

@@ -12,35 +12,42 @@ from siteconfig.models import SiteConfig
 
 
 class ProfileForm(forms.ModelForm):
-
     # this will be saved in User model
     email = forms.EmailField(required=False)
 
     class Meta:
         model = Profile
-        fields = ['preferred_name', 'preferred_internal_only',
-                  'alias', 'avatar', 'grad_year', 'email',
-                  'get_announcements_by_email', 'get_notifications_by_email',
-                  'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
+        fields = [
+            'preferred_name',
+            'preferred_internal_only',
+            'alias',
+            'avatar',
+            'grad_year',
+            'email',
+            'get_announcements_by_email',
+            'get_notifications_by_email',
+            'visible_to_other_students',
+            'dark_theme',
+            'silent_mode',
+            'custom_stylesheet',
+        ]
 
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
 
         super().__init__(*args, **kwargs)
 
-        self.fields['grad_year'] = forms.ChoiceField(
-            choices=Profile.get_grad_year_choices()
-        )
+        self.fields['grad_year'] = forms.ChoiceField(choices=Profile.get_grad_year_choices())
 
         self.fields['email'].initial = self.instance.user.email
 
         # gets value from deck's custom_name_for_student field in siteconfig.models
         custom_student_name = SiteConfig.get().custom_name_for_student
         # sets visible_to_other_students field name and help text on student profile settings page
-        self.fields['visible_to_other_students'].label = f"Visible to other {custom_student_name.lower()}s"
+        self.fields['visible_to_other_students'].label = f'Visible to other {custom_student_name.lower()}s'
         # setting help text with a variable in two steps isn't ideal but linebreaking with a backslash breaks tests that parse for exact help text.
         # maybe another solution exists to cut down on line size?
-        helptext = f"Your marks will be visible to other {custom_student_name.lower()}s through the {custom_student_name.lower()} list."
+        helptext = f'Your marks will be visible to other {custom_student_name.lower()}s through the {custom_student_name.lower()} list.'
         self.fields['visible_to_other_students'].help_text = helptext
 
         user = self.instance.user
@@ -80,7 +87,7 @@ class ProfileForm(forms.ModelForm):
                 raise forms.ValidationError(f"{domain} doesn't appear to exist. Enter a valid email address or leave it blank.")
 
         if email and email_address_exists(email, exclude_user=self.instance.user):
-            raise forms.ValidationError("A user is already registered with this email address.")
+            raise forms.ValidationError('A user is already registered with this email address.')
 
         return email
 
@@ -95,6 +102,7 @@ class ProfileForm(forms.ModelForm):
             user.save()
 
         from allauth.account.utils import send_email_confirmation
+
         if self.request and modified_email:
             send_email_confirmation(
                 request=self.request,
@@ -108,7 +116,7 @@ class ProfileForm(forms.ModelForm):
 
 class UserForm(forms.ModelForm):
     """
-        Staff only form for profile update view
+    Staff only form for profile update view
     """
 
     is_TA = forms.BooleanField(required=False)
@@ -116,7 +124,12 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = get_user_model()
         fields = [
-            'username', 'first_name', 'last_name', 'is_TA', 'is_staff', 'is_active',
+            'username',
+            'first_name',
+            'last_name',
+            'is_TA',
+            'is_staff',
+            'is_active',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -124,7 +137,7 @@ class UserForm(forms.ModelForm):
         self.__cached_username = self.instance.username
 
         self.fields['username'].help_text = (
-            'WARNING: If you change this user\'s username they will no longer be able to log in with their old username.'
+            "WARNING: If you change this user's username they will no longer be able to log in with their old username."
             'Make sure to inform the user of their new username!'
         )
 

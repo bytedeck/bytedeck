@@ -18,12 +18,11 @@ User = get_user_model()
 
 
 class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
-
     def setUp(self):
         # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.client = TenantClient(self.tenant)
 
-        self.test_password = "password"
+        self.test_password = 'password'
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
@@ -33,7 +32,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.ann_pk = self.test_announcement.pk
 
     def test_all_announcement_page_status_codes_for_anonymous(self):
-        ''' If not logged in then all views should redirect to login page '''
+        """If not logged in then all views should redirect to login page"""
 
         self.assertRedirectsLogin('announcements:list')
         self.assertRedirectsLogin('announcements:archived')
@@ -113,11 +112,11 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_teachers_have_archive_button(self):
         self.client.force_login(self.test_teacher)
-        self.assertContains(self.client.get(reverse('announcements:list')), "Archived")
+        self.assertContains(self.client.get(reverse('announcements:list')), 'Archived')
 
     def test_students_do_not_see_archive_button(self):
         self.client.force_login(self.test_student1)
-        self.assertNotContains(self.client.get(reverse('announcements:list')), "Archived")
+        self.assertNotContains(self.client.get(reverse('announcements:list')), 'Archived')
 
     def test_draft_announcement(self):
         draft_announcement = baker.make(Announcement)  # default is draft
@@ -194,17 +193,14 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(success)
 
         form_data = {
-            'comment_text': "test comment",
+            'comment_text': 'test comment',
         }
         response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
         self.assertEqual(response.status_code, 404)  # invalid submit button
 
         # make sure it was submitted with the 'comment_button'
         form_data['comment_button'] = True
-        response = self.client.post(
-            reverse('announcements:comment', args=[self.test_announcement.id]),
-            data=form_data
-        )
+        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), data=form_data)
 
         # Empty comment strings should be replaced with blank string or we get an error
         # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
@@ -232,24 +228,18 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # So, instead we'll manually create valid form data for post request:
         form_data = {
-            'title': "Copy test",
-            'content': "test content",
-            'datetime_released': "2006-10-25 14:30:59"  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
+            'title': 'Copy test',
+            'content': 'test content',
+            'datetime_released': '2006-10-25 14:30:59',  # https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-DATETIME_INPUT_FORMATS
         }
 
-        response = self.client.post(
-            reverse('announcements:copy', args=[self.test_announcement.id]),
-            data=form_data
-        )
+        response = self.client.post(reverse('announcements:copy', args=[self.test_announcement.id]), data=form_data)
 
         # Get the newest announcement
         new_ann = Announcement.objects.latest('datetime_created')
-        self.assertEqual(new_ann.title, "Copy test")
+        self.assertEqual(new_ann.title, 'Copy test')
         # if successful, should redirect to the new announcement
-        self.assertRedirects(
-            response,
-            new_ann.get_absolute_url()
-        )
+        self.assertRedirects(response, new_ann.get_absolute_url())
 
     # Custom label tests
     def test_announcement_views__header_custom_label_displayed(self):
@@ -263,15 +253,15 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
-        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.custom_name_for_announcement = 'CustomAnnouncement'
         config.save()
 
         # Get Create view and assert header is correct
         request = self.client.get(reverse('announcements:create'))
-        self.assertContains(request, "Create New CustomAnnouncement")
+        self.assertContains(request, 'Create New CustomAnnouncement')
         # Get Copy view and assert header is correct
         request = self.client.get(reverse('announcements:copy', args=[self.test_announcement.id]))
-        self.assertContains(request, "Copy another CustomAnnouncement")
+        self.assertContains(request, 'Copy another CustomAnnouncement')
         # Get Edit view and assert header is correct
         request = self.client.get(reverse('announcements:update', args=[self.test_announcement.id]))
         self.assertContains(request, 'Edit CustomAnnouncement')
@@ -293,27 +283,24 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
-        config.custom_name_for_announcement = "CustomAnnouncement"
+        config.custom_name_for_announcement = 'CustomAnnouncement'
         config.save()
 
         # set form data for test comment (comment itself isn't being tested, we just need to make one successfully to redirect with success message)
         form_data = {
-            'comment_text': "test comment",
+            'comment_text': 'test comment',
             'comment_button': True,
         }
 
         # make the comment and follow redirect to list view, with success message displayed (follow=True)
-        response = self.client.post(
-            reverse('announcements:comment', args=[self.test_announcement.id]),
-            data=form_data, follow=True
-        )
+        response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), data=form_data, follow=True)
 
         # assert the custom label (and the success message) are displayed
-        self.assertContains(response, "CustomAnnouncement commented on")
+        self.assertContains(response, 'CustomAnnouncement commented on')
 
 
 class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
-    """ Tests for archived announcements view and other archived processes
+    """Tests for archived announcements view and other archived processes
 
     Mostly this one:
     def list(request, ann_id=None, template='announcements/list.html'):
@@ -327,7 +314,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_announcement = baker.make(Announcement, draft=False)
 
     def test_archived_announcement(self):
-        """ Archived announcements should not appear in announcements list"""
+        """Archived announcements should not appear in announcements list"""
         archived_announcement = baker.make(Announcement, archived=True)
         self.assertTrue(archived_announcement.archived)
 
@@ -349,8 +336,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(self.client.get(reverse('announcements:archived')), archived_announcement.title)
 
     def test_archived_announcements_are_paginated(self):
-        """2nd page after 20 announcements, and view forwards to announcements on 2nd page
-        """
+        """2nd page after 20 announcements, and view forwards to announcements on 2nd page"""
         # create enough announcements to create a second page, oldest should be on second page
         for _ in range(21):
             baker.make(Announcement, archived=True, draft=False)
@@ -358,8 +344,8 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Make sure 2nd page exists
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('announcements:archived'))
-        self.assertContains(response, "/announcements/archived/?page=2")
-        self.assertNotContains(response, "/announcements/archived/?page=3")
+        self.assertContains(response, '/announcements/archived/?page=2')
+        self.assertNotContains(response, '/announcements/archived/?page=3')
 
     def test_get_absolute_url_for_archived(self):
         """get_absolute_url should redirect/load the proper page with the archived announcement"""
@@ -378,7 +364,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
             baker.make(Announcement, archived=True, draft=False)
 
         # Make sure the oldest announcement is accessible there
-        response = self.client.get("/announcements/archived/?page=2")
+        response = self.client.get('/announcements/archived/?page=2')
         self.assertContains(response, oldest_announcement.title)
 
         # get_absolute_url still works for archived announcements on second page
@@ -387,7 +373,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, oldest_announcement.title)
 
     def test_announcement_draft_not_archived_after_semester_close(self):
-        """ Draft announcements should not be archived when a semester is closed """
+        """Draft announcements should not be archived when a semester is closed"""
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 
         self.client.force_login(self.test_teacher)

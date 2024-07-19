@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime
+
 # from django.test import tag
 from freezegun import freeze_time
 from model_bakery import baker
@@ -17,12 +18,11 @@ User = get_user_model()
 
 
 class QuestQuerysetTest(TenantTestCase):
-
     def setUp(self):
         self.student = baker.make(User, username='student', is_staff=False)
 
     def test_not_in_progress_completed_or_cooldown(self):
-        """ Test that all 5 conditions are met for this queryset method:
+        """Test that all 5 conditions are met for this queryset method:
         it should remove quests that are:
           1. already inprogress for the user (is_completed=False)
           2. completed and not repeatable (is_completed=True and max_repeats=0 and repeatable_per_semester=False )
@@ -33,20 +33,11 @@ class QuestQuerysetTest(TenantTestCase):
         """
         active_sem = SiteConfig.get().active_semester
         quest_not_repeatable = baker.make(Quest, name='Quest-not-repeatable')
-        quest_repeatable_once_per_sem = baker.make(Quest,
-                                                   name='Quest-once-per-sem',
-                                                   max_repeats=1,
-                                                   hours_between_repeats=1,
-                                                   repeat_per_semester=True)
-        quest_repeatable_twice_all_time = baker.make(Quest,
-                                                     name='Quest-thrice-all-time',
-                                                     max_repeats=2,
-                                                     hours_between_repeats=2,
-                                                     repeat_per_semester=False)
-        quest_infinite_repeatables = baker.make(Quest,
-                                                name='Quest-infinite-repeatables',
-                                                max_repeats=-1,
-                                                hours_between_repeats=0)
+        quest_repeatable_once_per_sem = baker.make(Quest, name='Quest-once-per-sem', max_repeats=1, hours_between_repeats=1, repeat_per_semester=True)
+        quest_repeatable_twice_all_time = baker.make(
+            Quest, name='Quest-thrice-all-time', max_repeats=2, hours_between_repeats=2, repeat_per_semester=False
+        )
+        quest_infinite_repeatables = baker.make(Quest, name='Quest-infinite-repeatables', max_repeats=-1, hours_between_repeats=0)
 
         # our repeatable quests should not be in cooldown to start, so should appear with the other 6 default quests
         qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
@@ -173,7 +164,6 @@ class QuestQuerysetTest(TenantTestCase):
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(TenantTestCase):
-
     def setUp(self):
         # get a list all quests created in data migrations
         # convert to list for ease of comparison, and also to force
@@ -212,7 +202,7 @@ class QuestManagerTest(TenantTestCase):
 
     def test_quest_qs_block_if_needed(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
-        otherwise, return full qs """
+        otherwise, return full qs"""
         baker.make(Quest, name='Quest-blocking', blocking=True)
         baker.make(Quest, name='Quest-also-blocking', blocking=True)
         baker.make(Quest, name='Quest-not-blocked')
@@ -243,10 +233,7 @@ class QuestManagerTest(TenantTestCase):
         baker.make(Quest, name='Quest-yesterday', date_available=yesterday, time_available=time_later)
 
         qs = Quest.objects.order_by('id').datetime_available().values_list('name', flat=True)
-        self.assertSetEqual(
-            set(qs),
-            set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list)
-        )
+        self.assertSetEqual(set(qs), set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list))
 
     def test_quest_qs_not_expired(self):
         """
@@ -366,12 +353,14 @@ class QuestManagerTest(TenantTestCase):
         # compare sets so order doesn't matter
         self.assertSetEqual(
             set(qs.values_list('name', flat=True)),
-            set(['Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed',
-                 'Quest-1hr-cooldown'] + self.initial_quest_name_list)
+            set(
+                ['Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-completed', 'Quest-1hr-cooldown']
+                + self.initial_quest_name_list
+            ),
         )
 
     def test_get_available(self):
-        """ DESCRIPTION FROM METHOD:
+        """DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
         2. Quests that are not visible to students or archived  <<<< COVERED HERE
@@ -443,9 +432,7 @@ class QuestManagerTest(TenantTestCase):
         with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
             qs = Quest.objects.get_available(self.student)
             self.assertQuerysetEqual(
-                list(qs.values_list('name', flat=True)),
-                ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'],
-                ordered=False
+                list(qs.values_list('name', flat=True)), ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'], ordered=False
             )
 
             #########################################
@@ -458,11 +445,7 @@ class QuestManagerTest(TenantTestCase):
             # increment time another hour just be sure it doesn't appear (max repeats of 1 reached)
             with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
                 qs = Quest.objects.get_available(self.student)
-                self.assertQuerysetEqual(
-                    list(qs.values_list('name', flat=True)),
-                    ['Quest-not-started', 'Welcome to ByteDeck!'],
-                    ordered=False
-                )
+                self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_get_available__student_outside_course(self, mock_task):
@@ -480,7 +463,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertEqual(Quest.objects.get_available(new_student).count(), 1)
 
         # And then create a new quest
-        new_quest = baker.make(Quest, name="Quest, anew!", available_outside_course=True)
+        new_quest = baker.make(Quest, name='Quest, anew!', available_outside_course=True)
 
         self.assertTrue(new_quest.available_outside_course)
         self.assertTrue(mock_task.called)
@@ -491,6 +474,7 @@ class QuestManagerTest(TenantTestCase):
         # but it didn't do anything so we'll need to call it manually.
         # Probably has to do something with it being a celery task.
         from prerequisites.tasks import update_conditions_for_quest
+
         update_conditions_for_quest(quest_id=new_quest.id, start_from_user_id=1)
 
         # Now the student should be able to see the new quest even if they are not in any courses
@@ -498,7 +482,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertEqual(Quest.objects.get_available(new_student).count(), 2)
 
     def make_test_quests_and_submissions_stack(self):
-        """  Creates 6 quests with related submissions
+        """Creates 6 quests with related submissions
         Quest                   sub     .completed   .semester
         Quest-inprogress-sem2   Y       False        2
         Quest-completed-sem2    Y       True         2
@@ -530,8 +514,7 @@ class QuestManagerTest(TenantTestCase):
         sub_complete = baker.make(QuestSubmission, user=self.student, quest=quest_completed, semester=active_semester)
         sub_complete.mark_completed()
         quest_1hr_cooldown = baker.make(Quest, name='Quest-1hr-cooldown', max_repeats=1, hours_between_repeats=1)
-        sub_cooldown_complete = baker.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown,
-                                           semester=active_semester)  # noqa
+        sub_cooldown_complete = baker.make(QuestSubmission, user=self.student, quest=quest_1hr_cooldown, semester=active_semester)  # noqa
         sub_cooldown_complete.mark_completed()
 
         return active_semester
@@ -539,7 +522,6 @@ class QuestManagerTest(TenantTestCase):
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestSubmissionQuerysetTest(TenantTestCase):
-
     def setUp(self):
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
@@ -554,7 +536,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
     def test_quest_submission_qs_block_if_needed(self):
         """QuestSubmissionQuerySet.block_if_needed:
-        if there are blocking quests, only return them.  Otherwise, return full qs """
+        if there are blocking quests, only return them.  Otherwise, return full qs"""
         first = baker.make(QuestSubmission)
 
         # No blocking quests yet, so should be all
@@ -653,7 +635,6 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestSubmissionManagerTest(TenantTestCase):
-
     def setUp(self):
         self.teacher = baker.make(User, username='teacher', is_staff=True)
         self.student = baker.make(User, username='student', is_staff=False)
@@ -672,8 +653,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.assertQuerysetEqual(qs, [repr(self.sub1)])
 
     def test_get_queryset_for_all_quests(self):
-        qs = QuestSubmission.objects.get_queryset(
-            exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
         self.assertEqual(qs.count(), 7)
 
     def test_all_for_user_quest(self):
@@ -717,27 +697,33 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.assertEqual(xp, 13)
 
     def test_calculate_xp_to_date(self):
-        """QuestSubmissionManager.calculate_xp_to_date should not include xp earned up to and including the date.
-        """
+        """QuestSubmissionManager.calculate_xp_to_date should not include xp earned up to and including the date."""
         # Create some approved submissions from after the `to_date``, should show up in XP
         baker.make(
-            QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True,
-            quest__xp=10, time_approved=datetime(2017, 10, 13, tzinfo=timezone.utc)
+            QuestSubmission,
+            user=self.student,
+            semester=self.active_semester,
+            is_approved=True,
+            quest__xp=10,
+            time_approved=datetime(2017, 10, 13, tzinfo=timezone.utc),
         )
         xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
         self.assertEqual(xp, 0)
 
         # Approve a sub on the same date and time, should show up in xp calculation
         baker.make(
-            QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True,
-            quest__xp=3, time_approved=datetime(2017, 10, 12, tzinfo=timezone.utc)
+            QuestSubmission,
+            user=self.student,
+            semester=self.active_semester,
+            is_approved=True,
+            quest__xp=3,
+            time_approved=datetime(2017, 10, 12, tzinfo=timezone.utc),
         )
         xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
         self.assertEqual(xp, 3)
 
     def test_calculate_xp__with_xp_requested(self):
-        """If student can request a custom xp value for a submission, that xp should be properly included
-        """
+        """If student can request a custom xp value for a submission, that xp should be properly included"""
         # Create an approved submission
         baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
 
@@ -755,8 +741,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         """
         quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
         baker.make(
-            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
-            semester=self.active_semester, is_approved=True, _quantity=3
+            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True, _quantity=3
         )
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
@@ -766,8 +751,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
     def test_calculate_xp__ith_xp_requested_and_max_xp(self):
-        """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
-        """
+        """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp"""
         # Create an approved submission
         baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
 
@@ -792,17 +776,13 @@ class QuestSubmissionManagerTest(TenantTestCase):
         self.assertEqual(xp, 30)
 
     def test_calculate_xp__with_deleted_quest(self):
-        """This method shouldn't break if a submission's quest has been deleted
-        """
+        """This method shouldn't break if a submission's quest has been deleted"""
         # Give student 10 XP
         baker.make(QuestSubmission, user=self.student, quest__xp=10, semester=self.active_semester, is_approved=True)
 
         # Another quest that we'll delete
         quest_5xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
-        baker.make(
-            QuestSubmission, user=self.student, quest=quest_5xp,
-            semester=self.active_semester, is_approved=True
-        )
+        baker.make(QuestSubmission, user=self.student, quest=quest_5xp, semester=self.active_semester, is_approved=True)
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 

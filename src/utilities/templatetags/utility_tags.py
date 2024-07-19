@@ -56,6 +56,7 @@ def group_name():
 
 # https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
 
+
 @register.inclusion_tag('utilities/list_of_links.html')
 def menu_list():
     links = MenuItem.objects.filter(visible=True)
