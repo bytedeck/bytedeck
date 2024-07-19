@@ -4,8 +4,32 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.24.1] 2024-07-15 - Loads of Tweaks Update
+* Tweaks:
+  - Adding a Rank as a prerew to an object automatically generates a map for that Rank on the Rank list page #88
+  - New Site Config option added to only show tags that students have earned XP on (instead of all tags) #1143
+  - Add Mark Range values below the XP progress chart if using Mark Calculations option #1508
+  - Added name field to Semesters # 1565
+  - Added "Intro" tags to starter quests and badges for new decks #1207
+* Bugfixes:
+  - XP Progress Chart not showing XP earned over weekends and excluded days until next day of class #1513
+  - Fixed spacing in some comments #1235
+  - Delete Comment form's Cancel button did nothing #1497
+  - Tag detail view showed duplicate ordinals for repeatable quests #1210
+  - XP earned by tag on profiles showed unapproved quests #1208
+  - Clicking student list from portfolios pages gave an error #1539
+  - Importing a Badge with a new Badge Type no longer fails. #794
+  - Fix error in certbot override command.
+* Devops:
+  - Fix failing tests due to extra Library tenant #1590
+  - Fix github actions crash/test fail at 11pm Pacific Time #1327
+  - Add configuration for @coderabbitai #1626
+  - `generate_content` refactored as management command and now creatses campaigns (Category objects) for quests #1014
+  - Flake8 local run, precommit hook, and github action all use same config file #1623
+
+
 ### [1.24.0] 2024-05-19 - Quest Library MVP
-* Feature:
+* Features:
   - Minimally viable Quest Library Feature!!  Turn on this feature in the Site Settings which will enable a new "Library" tab when viewing your quests. This allows you to import quests shared from the special Library deck.  Currently the feature is very limited.
 * Tweaks:
   - Verify existance of email domains to prevent some typos and fake user email addresses [#1562](https://github.com/bytedeck/bytedeck/issues/1562)

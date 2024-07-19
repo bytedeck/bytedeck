@@ -14,4 +14,4 @@ sudo systemctl daemon-reload
 sudo systemctl enable bytedeck.com.service
 sudo systemctl restart bytedeck.com
 
-docker compose logs -f
+docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs -f
