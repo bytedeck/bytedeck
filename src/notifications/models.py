@@ -241,6 +241,9 @@ class Notification(models.Model):
         # print("***** NOTIFICATION.get_url **********")
         try:
             target_url = self.target_object.get_absolute_url()
+
+            if 'commented on' in self.verb:
+                target_url += f'#comment-{self.action_object_id}'
         except:  # noqa
             # TODO make this except explicit, don't remember what it's doing
             target_url = reverse('notifications:list')
@@ -297,7 +300,7 @@ def new_notification(sender, **kwargs):
     :param sender: the object (any Model) initiating/causing the notification
     :param kwargs:
         target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
-        action (any Model): Not sure... not used I assume.
+        action (any Model): Used alongside "verb" to create syntax of notification ie. "<user> <verb> with <action>"
         recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
         affected_users (list of Users): everyone who should receive the notification
         verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
@@ -335,7 +338,7 @@ def new_notification(sender, **kwargs):
                 sender_object_id=sender.id,
                 font_icon=icon,
             )
-            # Set the target if provided.  Action not currently used...
+            # Set the target if provided.
             for option in ("target", "action"):
                 # obj = kwargs.pop(option, None) #don't want to remove option with pop
                 try:
