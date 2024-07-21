@@ -1,59 +1,37 @@
 {% extends "quest_manager/base.html" %}
-
-{% block head_title %}Campaigns | {% endblock %}
+{% block head_title %}Campaigns |{% endblock %}
 {% block head %}{% endblock %}
-
 {% block content_first %}{% endblock %}
-{% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %}Campaigns
-{% if request.user.is_staff %}
-  <a class="btn btn-primary" href="{% url 'quest_manager:category_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
-{% endif %}
-{% endblock %}{% endblock %}
-
+{% block heading %}
+  <i class="fa fa-compass pull-right"></i>
+  {% block heading_inner %}
+    Campaigns
+    {% if request.user.is_staff %}
+      <a class="btn btn-primary"
+         href="{% url 'quest_manager:category_create' %}"
+         role="button"><i class="fa fa-plus-circle"></i> Create</a>
+    {% endif %}
+  {% endblock %}
+{% endblock %}
 {% block content %}
-<p>This page is visible to staff only.</p>
-
-<table
-  data-toggle='table'
-  data-search='true'
-  data-classes="table"
-  data-pagination='true'
-  data-page-size=15
-  data-page-list="[15, 50, 100, all]"
->
-  <thead>
-    <tr>
-      <th data-sortable='true' data-field='title'>Title</th>
-      <th>Icon</th>
-      <th data-sortable='true' data-field='count'># of Quests</th>
-      <th data-sortable='true' data-field='xp'>XP Available</th>
-      <th data-sortable='true' data-field='active'>Active</th>
-      <th>Action</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    {% for object in object_list %}
-    <tr {% if not object.active %} class="text-muted" {% endif %}>
-      <td>{{ object.title }}</td>
-      <td><img class="img-responsive panel-title-img img-rounded" src="{{ object.get_icon_url }}"></td>
-      <td>{{ object.quest_count }}</td>
-      <td>{{ object.xp_sum }}</td>
-      <td>{{ object.active }}</td>
-      <td>
-        <a class="btn btn-info" href="{% url 'quests:category_detail' object.id %}" role="button" title="View Details: view the content of this campaign.">
-         <i class="fa fa-fw fa-info-circle"></i>
-        </a>
-        <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button" title="Edit this campaign">
-          <i class="fa fa-edit"></i>
-        </a>
-        <a class="btn btn-danger" href="{% url 'quests:category_delete' object.id %}" role="button" title="Delete this campaign">
-          <i class="fa fa-trash-o"></i>
-        </a>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
+  <p>This page is visible to staff only.</p>
+  <ul id="campaign-tabs" class="nav nav-tabs nav-justified" role="tablist">
+    <li role="presentation"
+        class="{% if available_tab_active %}active{% endif %}">
+      <a href="{% url 'quests:categories' %}">Available</a>
+    </li>
+    <li role="presentation"
+        class="{% if inactive_tab_active %}active{% endif %}">
+      <a href="{% url 'quests:categories_inactive' %}">Inactive</a>
+    </li>
+  </ul>
+  <!-- Tab panes -->
+  <div class="tab-content">
+    <div role="tabpanel"
+         class="tab-pane fade {% if available_tab_active %}in active{% endif %}"
+         id="campaign-available">{% include 'quest_manager/tab_campaigns_list.html' %}</div>
+    <div role="tabpanel"
+         class="tab-pane fade {% if inactive_tab_active %}in active{% endif %}"
+         id="campaign-inactive">{% include 'quest_manager/tab_campaigns_list.html' %}</div>
+  </div>
 {% endblock %}

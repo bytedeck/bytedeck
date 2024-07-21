@@ -62,9 +62,35 @@ def is_staff_or_TA(user):
     return False
 
 
-@method_decorator(staff_member_required, name="dispatch")
+@method_decorator(staff_member_required, name='dispatch')
 class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Category
+
+    @property
+    def inactive_tab_active(self):
+        return '/inactive/' in self.request.path
+
+    @property
+    def available_tab_active(self):
+        return not self.inactive_tab_active
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        if self.inactive_tab_active:
+            queryset = queryset.filter(active=False)
+        else:
+            queryset = queryset.filter(active=True)
+
+        return queryset
+
+    def get_context_data(self, *args, **kwargs):
+        context_data = super().get_context_data(*args, **kwargs)
+
+        context_data['available_tab_active'] = self.available_tab_active
+        context_data['inactive_tab_active'] = self.inactive_tab_active
+
+        return context_data
 
 
 class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
