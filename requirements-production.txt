@@ -28,7 +28,7 @@ numpy==1.22
 psycopg2-binary>=2.8.6,<2.10
 python-memcached>=1.58,<2.0
 tenant-schemas-celery>=2.2,<3.1
-future>=0.18.2,<0.19
+future>=0.18.2,<1.1
 django-environ>=0.4.5,<0.12
 django-recaptcha>=2.0.6,<3.1
 tzdata
