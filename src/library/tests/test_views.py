@@ -15,6 +15,7 @@ from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.models import TenantDomain
 
+
 User = get_user_model()
 
 
@@ -145,3 +146,22 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
 
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
+
+    def test_side_bar_library_drop_down(self):
+        """ Checks if library drop down is available when siteconfig.enable_shared_library is true """
+        staff = baker.make(User, is_staff=True)
+        self.client.force_login(staff)
+
+        config = SiteConfig.get()
+
+        # if `enable_shared_library=False` then "Quest Library" should not exist
+        config.enable_shared_library = False
+        config.save()
+        response = self.assert200('library:library_quest_list')
+        self.assertNotContains(response, '</i>&nbsp; Quest Library</a>')
+
+        # if `enable_shared_library=True` then "Quest Library" should exist
+        config.enable_shared_library = True
+        config.save()
+        response = self.assert200('library:library_quest_list')
+        self.assertContains(response, '</i>&nbsp; Quest Library</a>')
