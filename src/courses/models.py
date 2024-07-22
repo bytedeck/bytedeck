@@ -101,6 +101,7 @@ class RankManager(models.Manager):
 
     def create_zero_rank(self):
         zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
+        zero_rank.full_clean()
         zero_rank.save()
         return zero_rank
 
@@ -191,6 +192,7 @@ class SemesterManager(models.Manager):
         QuestSubmission.objects.remove_in_progress()
 
         active_sem.closed = True
+        active_sem.full_clean()
         active_sem.save()
 
         return active_sem
@@ -476,6 +478,7 @@ class CourseStudentManager(models.Manager):
                 raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
                                  f"Fix it before closing the semester")
             coursestudent.active = False
+            coursestudent.full_clean()
             coursestudent.save()
 
     def all_for_semester(self, semester, students_only=False):

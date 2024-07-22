@@ -484,6 +484,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # enable simplified_course_registration in siteconfig
         config = SiteConfig.get()
         config.simplified_course_registration = True
+        config.full_clean()
         config.save()
 
         # by default, Course/Block have 2 objects defined and will be visible
@@ -498,6 +499,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # set one course object to inactive so only block field is visible
         toggle_course = Course.objects.first()
         toggle_course.active = False
+        toggle_course.full_clean()
         toggle_course.save()
 
         # access view and assert course, semester fields are hidden while block is visible
@@ -511,8 +513,10 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # re-activate course object, de-activate one block object
         toggle_course.active = True
         toggle_course.save()
+        toggle_course.full_clean()
         toggle_block = Block.objects.first()
         toggle_block.active = False
+        toggle_block.full_clean()
         toggle_block.save()
 
         # access view and assert course field is visible while other two are hidden
@@ -538,6 +542,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         # enable simplified_course_registration in siteconfig
         config = SiteConfig.get()
         config.simplified_course_registration = True
+        config.full_clean()
         config.save()
 
         # by default, 2 block and course objects exist but we can delete 1 of each because we won't access later
@@ -973,6 +978,8 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         user = baker.make(User)
 
         user.profile.xp_cached = xp
+        user.profile.grad_year = 2020
+        user.profile.full_clean()
         user.profile.save()
 
         return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
@@ -1003,6 +1010,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         inactive_sem_students = [self.create_student_course(100) for i in range(5)]
         for cs in inactive_sem_students:
             cs.semester = (self.inactive_semester)
+            cs.full_clean()
             cs.save()
 
         # create active semester students
@@ -1028,6 +1036,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         test_account_students = [self.create_student_course(100) for i in range(5)]
         for cs in test_account_students:
             cs.user.profile.is_test_account = True
+            cs.user.profile.full_clean()
             cs.user.profile.save()
 
         # create active semester students
@@ -1062,6 +1071,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         self.semester = SiteConfig.get().active_semester
         self.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
         self.semester.last_day = self.semester.first_day + datetime.timedelta(days=135)
+        self.semester.full_clean()
         self.semester.save()
 
         self.student_course = baker.make(
@@ -1270,6 +1280,7 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
         # to show mark calculation page without 404 you need to turn this on
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
+        siteconfig.full_clean()
         siteconfig.save()
 
     @patch('courses.models.Semester.fraction_complete')
