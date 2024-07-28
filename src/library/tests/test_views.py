@@ -9,7 +9,7 @@ from django_tenants.utils import tenant_context
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
 from model_bakery import baker
-from quest_manager.models import Quest
+from quest_manager.models import Category, Quest
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.models import TenantDomain
@@ -18,7 +18,10 @@ from tenant.models import TenantDomain
 User = get_user_model()
 
 
-class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
+class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, TenantTestCase):
+    library_tenant = None
+    library_domain = None
+
     @classmethod
     def setUpClass(cls):
         # Save current tenant
@@ -29,8 +32,9 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         # Need to do this since the setupClass sets the current tenant connection to
         # cls.tenant. We cannot create the library tenant if we are not using the public schema
         # But check first if the library tenant already exists
+        cls.library_tenant = Tenant.objects.filter(schema_name=get_library_schema_name()).first()
 
-        if not Tenant.objects.filter(schema_name=get_library_schema_name()).exists():
+        if not cls.library_tenant:
             with tenant_context(_public_tenant):
                 cls._setup_library_tenant()
 
@@ -49,6 +53,8 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         cls.library_domain = TenantDomain(tenant=cls.library_tenant, domain=library_domain)
         cls.library_domain.save()
 
+
+class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
@@ -157,3 +163,47 @@ class QuestLibraryTestsCase(ViewTestUtilsMixin, TenantTestCase):
         config.save()
         response = self.assert200('library:quest_list')
         self.assertContains(response, '</i>&nbsp; Quest Library</a>')
+
+
+class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.sem = SiteConfig.get().active_semester
+
+        self.test_password = 'password'
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+
+    def test_import_campaign_already_exists(self):
+        current_category = Category.objects.first()
+
+        import_url = reverse('library:import_category', args=(current_category.name,))
+        response = self.client.get(import_url)
+
+        self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
+
+    def test_import_campaign_success(self):
+        self.assertEqual(Category.objects.count(), 1)
+
+        with library_schema_context():
+            library_campaign = baker.make(Category)
+            baker.make(Quest, campaign=library_campaign, _quantity=3)
+            self.assertEqual(library_campaign.quest_set.count(), 3)
+
+        import_url = reverse('library:import_category', args=(library_campaign.name,))
+
+        response = self.client.post(import_url)
+        self.assertEqual(response.url, reverse('quests:categories_inactive'))
+        self.assertEqual(Category.objects.count(), 2)
+
+        imported_library_campaign = Category.objects.filter(title=library_campaign.name).first()
+
+        self.assertIsNotNone(imported_library_campaign)
+        self.assertFalse(imported_library_campaign.active)
+
+        # ensure all 3 quests were imported
+        self.assertEqual(imported_library_campaign.quest_set.count(), 3)
+
+        # all imported quests should be inactive for this campaign
+        self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
