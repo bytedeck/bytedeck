@@ -16,11 +16,7 @@ def from_library_schema_first(request):
 
     current_schema_name = request.tenant.schema_name
     use_schema_name = request.POST.get('use_schema')
-
-    if use_schema_name:
-        schema_name = use_schema_name
-    else:
-        schema_name = current_schema_name
+    schema_name = use_schema_name if use_schema_name else current_schema_name
 
     force_schema_func = functools.partial(schema_context, schema_name)
 
