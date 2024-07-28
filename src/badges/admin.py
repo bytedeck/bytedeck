@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from import_export import resources
 from import_export.admin import ImportExportActionModelAdmin
 from import_export.fields import Field
+from import_export.formats.base_formats import CSV
 
 from prerequisites.models import Prereq
 from prerequisites.admin import PrereqInline
@@ -143,13 +144,13 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
             row['badge_type'] = badge_type.id
 
     def before_import_row(self, row, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/2.0.2/api_resources.html#import_export.resources.Resource.before_import_row """
+        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.before_import_row """
         # can create badge type here as it seems like the new badgetype will be saved only be saved
         # after admin has accepted the import changes
         self.generate_badge_type(row)
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/2.0.2/api_resources.html#import_export.resources.Resource.after_import """
+        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.after_import """
         for data_dict in dataset.dict:
             import_id = data_dict["import_id"]
             parent_badge = Badge.objects.get(import_id=import_id)
@@ -162,6 +163,14 @@ class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdm
     inlines = [
         PrereqInline,
     ]
+
+    def get_import_formats(self):
+        """ file formats for importing """
+        return [CSV]
+
+    def get_export_formats(self):
+        """ file formats for exporting """
+        return [CSV]
 
 
 class BadgeSeriesAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

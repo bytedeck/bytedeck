@@ -1,14 +1,28 @@
 from bs4 import BeautifulSoup
 from bs4.formatter import HTMLFormatter
-from django.db.models.signals import pre_save
+from django.contrib.contenttypes.models import ContentType
+from django.db.models.signals import pre_save, pre_delete
 from django.dispatch import receiver
 
-from quest_manager.models import Quest
+from quest_manager.models import Quest, QuestSubmission
+from comments.models import Comment
 
 
 @receiver(pre_save, sender=Quest)
 def quest_pre_save_callback(sender, instance, **kwargs):
     instance.instructions = tidy_html(instance.instructions)
+
+
+@receiver(pre_delete, sender=QuestSubmission)
+def submission_pre_delete_callback(sender, instance, **kwargs):
+    """ QuestSubmission pre-delete signal """
+
+    # Because of how comments work, cascade on delete does not work. So we have to do it in a signal
+    # delete all comments relating to submission.
+    Comment.objects.filter(
+        target_content_type=ContentType.objects.get_for_model(QuestSubmission),
+        target_object_id=instance.id,
+    ).delete()
 
 
 def tidy_html(markup, fix_runaway_newlines=False):

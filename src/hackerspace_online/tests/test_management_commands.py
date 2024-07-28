@@ -1,4 +1,5 @@
 from io import StringIO
+from contextlib import redirect_stdout
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
@@ -7,7 +8,9 @@ from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
-from django_tenants.utils import tenant_context
+from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
+
+from model_bakery import baker
 
 # from hackerspace_online.management.commands import find_replace
 from quest_manager.models import Quest, Category
@@ -128,3 +131,73 @@ class GenerateContentTest(TenantTestCase, CommandMixin):
         self.assertEqual(Quest.objects.count(), expected_quest_count)
         self.assertEqual(Category.objects.count(), expected_campaign_count)
         self.assertEqual(User.objects.count(), expected_user_count)
+
+
+class FullCleanTest(TestCase, CommandMixin):
+    name = 'full_clean'
+
+    def setUp(self):
+        call_command('initdb')
+
+        # have to create tenant this way to prevent errors
+        # + "you cant create a tenant outside public schema"
+        with schema_context(get_public_schema_name()):
+            self.tenant1 = Tenant.objects.create(schema_name='test_schema1', name='Test Tenant 1')
+        with schema_context(get_public_schema_name()):
+            self.tenant2 = Tenant.objects.create(schema_name='test_schema2', name='Test Tenant 2')
+
+        # add two different errors to each tenant
+        with schema_context(self.tenant1.schema_name):
+            # will cause an error because author is None because of
+            # `null=True` without `blank=True`
+            #  ie. `{'author': ['this field cannot be blank.']}`
+            baker.make('announcements.Announcement')
+
+        with schema_context(self.tenant2.schema_name):
+            # will cause an error because semester is None because of
+            # `null=True` without `blank=True`
+            #  ie. `{'semester': ['this field cannot be blank.']}`
+            baker.make('quest_manager.QuestSubmission')
+
+    def test_full_clean(self):
+        """ Checks if full clean captures expected validation errors from "full_clean" management command
+        See setUp for the expected errors.
+        """
+        # capture stdout through contextlib.redirect_stdout, as the return value in call_command only works sometimes?
+
+        with StringIO() as buf, redirect_stdout(buf):
+            self.call_command(
+                '--tenants', 'test_schema1'
+            )
+            # should capture any print statements by self.call_command
+            # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
+            log = buf.getvalue()
+
+            # profile is here because of grad_year being `None` for admin and owner
+            # grad_year is `null=True` and `blank=False`. Which means that objects with None will fail full clean.
+            # ie. `{'grad_year': ['this field cannot be blank.']}`
+            # This issue might be fixed once full clean is implemented for tenants app https://github.com/bytedeck/bytedeck/issues/1630
+            self.assertTrue('Profile' in log)
+
+            # will cause an error because author is None because of
+            # `null=True` without `blank=True`
+            #  ie. `{'author': ['this field cannot be blank.']}`
+            self.assertTrue('Announcement' in log)
+            self.assertFalse('QuestSubmission' in log)
+
+        with StringIO() as buf, redirect_stdout(buf):
+            self.call_command(
+                '--tenants', 'test_schema2'
+            )
+            # should capture any print statements by self.call_command
+            # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
+            log = buf.getvalue()
+
+            # check explanation comment above for why profile is here
+            self.assertTrue('Profile' in log)
+
+            # will cause an error because semester is None because of
+            # `null=True` without `blank=True`
+            #  ie. `{'semester': ['this field cannot be blank.']}`
+            self.assertTrue('QuestSubmission' in log)
+            self.assertFalse('Announcement' in log)

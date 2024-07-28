@@ -39,7 +39,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(wrong_content),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         self.assertFalse(form.is_valid())
         self.assertIn(
             "CSSStyleRule: No start { of style declaration found: 'Lorem ipsum dolor sit amet...' [1:30: ]",
@@ -57,7 +57,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(invalid_css),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         self.assertFalse(form.is_valid())
         self.assertIn("This stylesheet is not valid CSS.", form.errors["custom_stylesheet"])
 
@@ -71,7 +71,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(valid_css),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         # print(form.errors)
         self.assertTrue(form.is_valid())
 

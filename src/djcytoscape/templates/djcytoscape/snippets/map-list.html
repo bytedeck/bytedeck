@@ -1,0 +1,23 @@
+<div class='tags-list'>
+    <ul class='left-aligned'>
+    {% if maps.count > 4 %}
+        {% for map in maps %}
+
+        <a href={% if request.user.is_staff %} "{% url 'djcytoscape:quest_map' map.id %}" {% else %} "{% url 'djcytoscape:quest_map_personalized' scape_id=map.id user_id=request.user.id %}" {% endif %}>
+            {{ map.name }}{% if not forloop.last %}, {% endif %}
+        </a>
+
+        {% empty %} None
+        {% endfor %}
+    {% else %}
+        {% for map in maps %}
+
+        <li><a href={% if request.user.is_staff %} "{% url 'djcytoscape:quest_map' map.id %}" {% else %} "{% url 'djcytoscape:quest_map_personalized' scape_id=map.id user_id=request.user.id %}" {% endif %}>
+            {{ map.name }}
+        </a></li>
+
+        {% empty %} <li>None</li>
+        {% endfor %}
+    {% endif %}
+    </ul>
+</div>
