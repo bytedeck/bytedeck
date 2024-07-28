@@ -95,9 +95,7 @@ class QuestResource(resources.ModelResource):
         # save as an & seperated list of import_ids (UUIDs)
         prereq_import_ids = ''
         for p in quest.prereqs():
-            if p.prereq_content_type == ContentType.objects.get_for_model(Quest):
-                prereq_import_ids += '&' + str(p.get_prereq().import_id)
-            elif p.prereq_content_type == ContentType.objects.get_for_model(Badge):
+            if p.prereq_content_type in [ContentType.objects.get_for_model(Quest), ContentType.objects.get_for_model(Badge)]:
                 prereq_import_ids += '&' + str(p.get_prereq().import_id)
         return prereq_import_ids
 
