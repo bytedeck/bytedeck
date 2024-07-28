@@ -117,6 +117,7 @@
                 url: ajax_url,
                 data: {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
+                    use_schema: "{{ use_schema }}"
                 },
                 success: function (data) {
                     //console.log(data)

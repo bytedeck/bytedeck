@@ -79,7 +79,7 @@ back to its original look.
     {% if config.enable_shared_library %}
       {% if request.user.profile.is_TA or request.user.is_staff %}
         <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
-          <a href="{% url 'library:library_quest_list' %}">
+          <a href="{% url 'library:quest_list' %}">
             Library
           </a>
         </li>

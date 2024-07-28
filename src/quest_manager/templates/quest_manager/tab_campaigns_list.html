@@ -26,24 +26,30 @@
         <td>{{ object.xp_sum }}</td>
         <td>{{ object.active }}</td>
         <td>
-          <a class="btn btn-info"
-             href="{% url 'quests:category_detail' object.id %}"
-             role="button"
-             title="View Details: view the content of this campaign.">
-            <i class="fa fa-fw fa-info-circle"></i>
-          </a>
-          <a class="btn btn-warning"
-             href="{% url 'quests:category_update' object.id %}"
-             role="button"
-             title="Edit this campaign">
-            <i class="fa fa-edit"></i>
-          </a>
-          <a class="btn btn-danger"
-             href="{% url 'quests:category_delete' object.id %}"
-             role="button"
-             title="Delete this campaign">
-            <i class="fa fa-trash-o"></i>
-          </a>
+          {% if not library_tab_active %}
+            <a class="btn btn-info"
+               href="{% url 'quests:category_detail' object.id %}"
+               role="button"
+               title="View Details: view the content of this campaign.">
+              <i class="fa fa-fw fa-info-circle"></i>
+            </a>
+            <a class="btn btn-warning"
+               href="{% url 'quests:category_update' object.id %}"
+               role="button"
+               title="Edit this campaign">
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-danger"
+               href="{% url 'quests:category_delete' object.id %}"
+               role="button"
+               title="Delete this campaign">
+              <i class="fa fa-trash-o"></i>
+            </a>
+          {% else %}
+            <a href="{% url 'library:import_category' object.title %}"
+               class="btn btn-sm btn-default"
+               title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab."><i class="fa fa-download"></i></a>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

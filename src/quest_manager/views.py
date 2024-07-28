@@ -25,6 +25,7 @@ from hackerspace_online.decorators import staff_member_required
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
+from library.utils import from_library_schema_first
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -54,9 +55,7 @@ def is_staff_or_TA(user):
     try:
         if user.profile.is_TA:
             return True
-    except (
-        AttributeError
-    ):  # probably because the user is not logged in, so AnonymousUser and has no profile
+    except AttributeError:  # probably because the user is not logged in, so AnonymousUser and has no profile
         pass
 
     return False
@@ -72,7 +71,7 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
     @property
     def available_tab_active(self):
-        return not self.inactive_tab_active
+        return self.request.path in [reverse('quest_manager:categories'), reverse('quest_manager:categories_available')]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -114,16 +113,12 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         appropriate quests a user will see; "category_displayed_quests".
         """
         if self.request.user.is_staff:
-            kwargs["category_displayed_quests"] = Quest.objects.filter(
-                campaign=self.object
-            )
+            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
         else:
             # students shouldn't be able to see inactive quests when they access this view
             # filtering before calling get_active, while likely less costly, changes the object
             # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
-            kwargs["category_displayed_quests"] = Quest.objects.get_active().filter(
-                campaign=self.object
-            )
+            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
 
         return super().get_context_data(**kwargs)
 
@@ -205,9 +200,7 @@ class QuestFormViewMixin:
             return QuestForm
 
 
-class QuestCreate(
-    NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView
-):
+class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
@@ -220,9 +213,7 @@ class QuestCreate(
         return context
 
 
-class QuestUpdate(
-    NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView
-):
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -543,34 +534,29 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
-    if request.is_ajax() and request.method == "POST":
-        template = "quest_manager/preview_content_quests_avail.html"
+    if request.is_ajax() and request.method == 'POST':
+        template = 'quest_manager/preview_content_quests_avail.html'
 
-        if quest_id:
-            quest = get_object_or_404(Quest, pk=quest_id)
+        with from_library_schema_first(request):
+            if quest_id:
+                quest = get_object_or_404(Quest, pk=quest_id)
 
-            template = "quest_manager/preview_content_quests_avail.html"
-            quest_info_html = render_to_string(template, {"q": quest}, request=request)
+                template = 'quest_manager/preview_content_quests_avail.html'
+                quest_info_html = render_to_string(template, {'q': quest}, request=request)
 
-            data = {
-                "quest_info_html": quest_info_html
-            }
+                data = {'quest_info_html': quest_info_html}
 
-            # JsonResponse new in Django 1.7 is equivalent to:
-            # return HttpResponse(json.dumps(data), content_type='application/json')
-            return JsonResponse(data)
+                return JsonResponse(data)
 
-        else:  # all quests, used for staff only.
-            quests = Quest.objects.all()
-            all_quest_info_html = {}
+            else:  # all quests, used for staff only.
+                quests = Quest.objects.all()
+                all_quest_info_html = {}
 
-            for q in quests:
-                all_quest_info_html[q.id] = render_to_string(
-                    template, {"q": q}, request=request
-                )
+                for q in quests:
+                    all_quest_info_html[q.id] = render_to_string(template, {'q': q}, request=request)
 
-            data = json.dumps(all_quest_info_html)
-            return JsonResponse(data, safe=False)
+                data = json.dumps(all_quest_info_html)
+                return JsonResponse(data, safe=False)
 
     else:
         raise Http404
@@ -579,16 +565,14 @@ def ajax_quest_info(request, quest_id=None):
 @non_public_only_view
 @login_required
 def ajax_approval_info(request, submission_id=None):
-    if request.is_ajax() and request.method == "POST":
-        qs = QuestSubmission.objects.get_queryset(
-            exclude_archived_quests=False, exclude_quests_not_visible_to_students=False
-        )
+    if request.is_ajax() and request.method == 'POST':
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
 
         sub = get_object_or_404(qs, pk=submission_id)
-        template = "quest_manager/preview_content_approvals.html"
-        quest_info_html = render_to_string(template, {"s": sub}, request=request)
+        template = 'quest_manager/preview_content_approvals.html'
+        quest_info_html = render_to_string(template, {'s': sub}, request=request)
 
-        return JsonResponse({"quest_info_html": quest_info_html})
+        return JsonResponse({'quest_info_html': quest_info_html})
     else:
         raise Http404
 
