@@ -1109,4 +1109,24 @@ padding-right: 20px !important;
 }
 
 
+/************** QUESTIONS *******************/
 
+.pt-4 {
+    padding-top: 1.5rem;
+}
+
+.p-4 {
+    padding: 1.5rem;
+}
+
+/*
+The bootstrap-table.min.css file messes up the styling for this table.
+This rule essentially undoes a few rules from that file.
+*/
+table.comment-question-table>thead>tr>th,
+table.comment-question-table>tr>th,
+table.comment-question-table>tbody>tr>td,
+table.comment-question-table>tr>td {
+    padding: 8px !important;
+    vertical-align: middle !important;
+}

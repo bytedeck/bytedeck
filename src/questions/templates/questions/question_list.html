@@ -1,0 +1,32 @@
+{% extends 'questions/base.html' %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block heading_inner %}Question List for <a href="{% url 'quests:quest_detail' quest.id %}">{{ quest.name }}</a>
+{% if request.user.is_staff %}
+<div class="btn-toolbar pt-4">
+   {% for value, verbose_name in type_choices %}
+      <a class="btn btn-primary"
+            href="{% url 'questions:create' quest.id value %}"
+            title="Create {{ verbose_name }} Question"><i class="fa fa-plus-circle"></i> {{ verbose_name }}</a>
+   {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<p>This page is visible to staff only.</p>
+<div class="container-fixed">
+  {% include 'questions/snippets/question_table.html' %}
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+    // initialize popover
+    $(document).ready(function(){
+        $('[data-toggle="popover"]').popover();
+        $('[data-toggle="tooltip"]').tooltip();
+    });
+</script>
+{% endblock %}

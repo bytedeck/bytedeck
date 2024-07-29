@@ -122,8 +122,8 @@ def generate_formset_data(model_formset, prefix='form', quantity=1, **kwargs):
         True
     """
     model = model_formset.model
-    form_fields = list(model_formset.form._meta.fields)
     formset_added = ['id', 'DELETE']  # form fields im pretty sure are added by formset factory. wont do anything if it not needed anyway
+    form_fields = list(set(model_formset.form._meta.fields) - set(formset_added))  # if using existing fields for forms like 'id' will crash
 
     model_instances = [] if not quantity else baker.prepare(model, _quantity=quantity, **kwargs)
 
