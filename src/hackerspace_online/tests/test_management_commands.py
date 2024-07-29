@@ -173,6 +173,9 @@ class FullCleanTest(TestCase, CommandMixin):
             # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
             log = buf.getvalue()
 
+            # capture schema name
+            self.assertTrue('test_schema1' in log)
+
             # profile is here because of grad_year being `None` for admin and owner
             # grad_year is `null=True` and `blank=False`. Which means that objects with None will fail full clean.
             # ie. `{'grad_year': ['this field cannot be blank.']}`
@@ -192,6 +195,9 @@ class FullCleanTest(TestCase, CommandMixin):
             # should capture any print statements by self.call_command
             # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
             log = buf.getvalue()
+
+            # capture schema name
+            self.assertTrue('test_schema2' in log)
 
             # check explanation comment above for why profile is here
             self.assertTrue('Profile' in log)
