@@ -176,12 +176,6 @@ class FullCleanTest(TestCase, CommandMixin):
             # capture schema name
             self.assertTrue('test_schema1' in log)
 
-            # profile is here because of grad_year being `None` for admin and owner
-            # grad_year is `null=True` and `blank=False`. Which means that objects with None will fail full clean.
-            # ie. `{'grad_year': ['this field cannot be blank.']}`
-            # This issue might be fixed once full clean is implemented for tenants app https://github.com/bytedeck/bytedeck/issues/1630
-            self.assertTrue('Profile' in log)
-
             # will cause an error because author is None because of
             # `null=True` without `blank=True`
             #  ie. `{'author': ['this field cannot be blank.']}`
@@ -198,9 +192,6 @@ class FullCleanTest(TestCase, CommandMixin):
 
             # capture schema name
             self.assertTrue('test_schema2' in log)
-
-            # check explanation comment above for why profile is here
-            self.assertTrue('Profile' in log)
 
             # will cause an error because semester is None because of
             # `null=True` without `blank=True`

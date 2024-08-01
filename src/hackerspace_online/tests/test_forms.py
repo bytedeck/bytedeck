@@ -10,7 +10,6 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.shortcuts import reverse
-from django.utils import timezone
 from hackerspace_online.tests.utils import generate_form_data
 from profile_manager.forms import ProfileForm
 from profile_manager.models import email_confirmed_handler
@@ -598,7 +597,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.assertTrue(user.socialaccount_set.exists())
 
         # Change email and then verify
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm)
         old_email = user.email
         new_email = "my_new_email@example.com"
         form_data.update({
