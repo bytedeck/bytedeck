@@ -73,6 +73,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_name_for_group",
                 "custom_name_for_student",
                 "custom_name_for_tag",
+                "custom_profile_field",
                 "show_all_tags_on_profiles",
                 Accordion(
                     AccordionGroup(
@@ -143,3 +144,9 @@ class SiteConfigForm(forms.ModelForm):
             deck_owner.is_superuser = True
             deck_owner.save()
         return deck_owner
+
+    def clean_custom_profile_field(self):
+        """
+        Ensure custom_profile_field with only whitespaces is not valid
+        """
+        return self.cleaned_data.get("custom_profile_field").strip()

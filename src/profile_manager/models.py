@@ -28,8 +28,6 @@ from allauth.account.models import EmailAddress, EmailConfirmationHMAC
 
 
 class ProfileQuerySet(models.query.QuerySet):
-    def get_grad_year(self, year):
-        return self.filter(grad_year=year)
 
     def announcement_email(self):
         return self.filter(get_announcements_by_email=True)
@@ -129,13 +127,6 @@ class Profile(models.Model):
     #                                           message="Invalid student number.",
     #                                           code='invalid_student_number',)
 
-    @staticmethod
-    def get_grad_year_choices():
-        grad_year_choices = []
-        for year in range(timezone.now().year, timezone.now().year + 5):
-            grad_year_choices.append((year, year))  # (actual value, human readable name) tuples
-        return grad_year_choices
-
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     alias = models.CharField(max_length=50, unique=False, null=True, blank=True, default=None,
                              help_text='You can leave this blank, or enter anything you like here.')
@@ -146,7 +137,7 @@ class Profile(models.Model):
                                       the name on your school records, please put it here.')
     # student_number = models.PositiveIntegerField(unique=True, blank=False, null=True,
     #                                              validators=[student_number_validator])
-    grad_year = models.PositiveIntegerField(null=True, blank=False)
+    custom_profile_field = models.CharField(null=True, blank=True, max_length=50)
     is_test_account = models.BooleanField(default=False,
                                           help_text="A test account that won't show up in student lists",
                                           )

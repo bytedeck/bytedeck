@@ -4,7 +4,6 @@ from django_tenants.test.cases import TenantTestCase
 
 from hackerspace_online.tests.utils import generate_form_data
 from profile_manager.forms import ProfileForm
-from profile_manager.models import Profile
 
 from unittest.mock import patch, MagicMock
 import dns.resolver
@@ -30,10 +29,7 @@ class ProfileFormTest(TenantTestCase):
         """
         Test to increase coverage for ProfileForm
         """
-        form_data = generate_form_data(
-            model_form=ProfileForm,
-            grad_year=Profile.get_grad_year_choices()[0][0]
-        )
+        form_data = generate_form_data(model_form=ProfileForm)
         form = ProfileForm(instance=self.user.profile, data=form_data)
         form.is_valid()
         form.save()
@@ -45,7 +41,7 @@ class ProfileFormTest(TenantTestCase):
         """
         Valid emails should pass validation and resolve (mocked)
         """
-        form = ProfileForm(instance=self.user.profile, data={'email': 'example@gmail.com', 'grad_year': Profile.get_grad_year_choices()[0][0]})
+        form = ProfileForm(instance=self.user.profile, data={'email': 'example@gmail.com'})
         with patch('dns.resolver.resolve') as mock_resolve:
             mock_resolve.return_value = MagicMock()  # Mocking resolve() because we may not have interent access during tests.
             form.is_valid()
@@ -57,16 +53,13 @@ class ProfileFormTest(TenantTestCase):
         Entering a non-email string should raise a ValidationError.  It will actually be caught on the browser side preventing form submission
         but entering it server side shouldn't break the form.
         """
-        form = ProfileForm(instance=self.user.profile, data={'email': 'notanemail', 'grad_year': Profile.get_grad_year_choices()[0][0]})
+        form = ProfileForm(instance=self.user.profile, data={'email': 'notanemail'})
         self.assertFalse(form.is_valid())
         self.assertIn("Enter a valid email address.", form.errors["email"])
 
     def test_clean_email__invalid_domain(self):
         """ Mock the NXDOMAIN error from non-existant domains, email field should raise a ValidationError """
-        form = ProfileForm(
-            instance=self.user.profile,
-            data={'email': 'example@nonexistentdomain.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
-        )
+        form = ProfileForm(instance=self.user.profile, data={'email': 'example@nonexistentdomain.com'})
 
         # Mock the NXDOMAIN error from DNS resolution
         with patch('dns.resolver.resolve') as mock_resolve:
@@ -81,10 +74,7 @@ class ProfileFormTest(TenantTestCase):
 
     def test_clean_email__domain_no_answer(self):
         """ Mock a NoAnswer exception and mack sure it passes email validation.  Some domains don't answer, such as sd72.bc.ca!"""
-        form = ProfileForm(
-            instance=self.user.profile,
-            data={'email': 'example@domainwithnoanswer.com', 'grad_year': Profile.get_grad_year_choices()[0][0]}
-        )
+        form = ProfileForm(instance=self.user.profile, data={'email': 'example@domainwithnoanswer.com'})
         with patch('dns.resolver.resolve') as mock_resolve:
             mock_resolve.side_effect = dns.resolver.NoAnswer
             form.is_valid()

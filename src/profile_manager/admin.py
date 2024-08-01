@@ -35,12 +35,12 @@ def migrate_names_to_user_model(modeladmin, request, queryset):
 
 @admin.register(Profile)
 class ProfileAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):  # use SummenoteModelAdmin
-    list_display = ('id', 'get_username', 'get_full_name', 'preferred_name', 'xp_cached', 'grad_year', 'is_TA', 'banned_from_comments')
+    list_display = ('id', 'get_username', 'get_full_name', 'preferred_name', 'xp_cached', 'custom_profile_field', 'is_TA', 'banned_from_comments')
 
     actions = [create_missing_profiles, migrate_names_to_user_model]
 
-    list_filter = ['is_TA', 'grad_year', 'banned_from_comments', 'get_announcements_by_email', 'get_notifications_by_email']
-    search_fields = ['user__username', 'user__first_name', 'user__first_name', 'preferred_name']
+    list_filter = ['is_TA', 'custom_profile_field', 'banned_from_comments', 'get_announcements_by_email', 'get_notifications_by_email']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'preferred_name']
 
     def get_username(self, obj):
         return obj.user.get_username()

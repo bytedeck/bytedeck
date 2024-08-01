@@ -290,13 +290,12 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             (They shouldn't)
         """
         User = get_user_model()
-        Profile = ProfileForm._meta.model
 
         user_instance = baker.make(User, email="old@email.com")
         profile_instance = user_instance.profile
 
         # ProfileForm form data
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=Profile.get_grad_year_choices()[0][0])
+        form_data = generate_form_data(model_form=ProfileForm)
         # UserForm form data
         form_data.update({
             "username": "NEWUSERNAME",
@@ -328,13 +327,12 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             (They can)
         """
         User = get_user_model()
-        Profile = ProfileForm._meta.model
 
         user_instance = baker.make(User, email="old@email.com", is_staff=True)
         profile_instance = user_instance.profile
 
         # ProfileForm form data
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=Profile.get_grad_year_choices()[0][0])
+        form_data = generate_form_data(model_form=ProfileForm)
         # UserForm form data
         form_data.update({
             "username": "NEWUSERNAME",
@@ -516,7 +514,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Prepare new data for student
         email = f"{self.test_student1.username}@example.com"
 
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm, custom_profile_field=timezone.now().date().year + 2)
         form_data.update({
             "email": email,
         })
@@ -602,7 +600,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student2.save()
         self.client.force_login(self.test_student2)
 
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm, custom_profile_field=timezone.now().date().year + 2)
         form_data.update({
             "email": self.test_student1.email,  # Use test_student1 email
         })
@@ -631,7 +629,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_student1)
 
         new_email = "new@example.com"
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm, custom_profile_field=timezone.now().date().year + 2)
         form_data.update({
             "email": new_email,
         })
@@ -648,7 +646,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(message, f"Confirmation e-mail sent to {new_email}.")
 
         # Revert back to the original email, ignore the confirmation email
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm, custom_profile_field=timezone.now().date().year + 2)
         form_data.update({
             "email": orig_email,
         })
