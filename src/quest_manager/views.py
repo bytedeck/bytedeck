@@ -387,6 +387,17 @@ def get_minutes_to_complete_list(quest):
     return minutes_list
 
 
+class QuestListViewTabTypes:
+    """ enum for quest_list's tabs.
+    Note: using enum.auto() will not work as django template tags cant properly define its value.
+    """
+    AVAILABLE = 0
+    IN_PROGRESS = 1
+    COMPLETED = 2
+    PAST = 3
+    DRAFT = 4
+
+
 @non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
@@ -396,11 +407,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     past_submissions = []
     draft_quests = []
 
-    available_tab_active = False
-    in_progress_tab_active = False
-    completed_tab_active = False
-    past_tab_active = False
-    drafts_tab_active = False
+    view_type = QuestListViewTabTypes.AVAILABLE
     remove_hidden = True
 
     active_quest_id = 0
@@ -409,18 +416,18 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if quest_id is not None:
         # if a quest_id was provided, got to the Available tab
         active_quest_id = int(quest_id)
-        available_tab_active = True
+        view_type = QuestListViewTabTypes.AVAILABLE
     # otherwise look at the path
     elif "/inprogress/" in request.path_info:
-        in_progress_tab_active = True
+        view_type = QuestListViewTabTypes.IN_PROGRESS
     elif "/completed/" in request.path_info:
-        completed_tab_active = True
+        view_type = QuestListViewTabTypes.COMPLETED
     elif "/past/" in request.path_info:
-        past_tab_active = True
+        view_type = QuestListViewTabTypes.PAST
     elif "/drafts/" in request.path_info:
-        drafts_tab_active = True
+        view_type = QuestListViewTabTypes.DRAFT
     else:
-        available_tab_active = True
+        view_type = QuestListViewTabTypes.AVAILABLE
         if "/all/" in request.path_info:
             remove_hidden = False
 
@@ -468,14 +475,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
 
-    if in_progress_tab_active:
+    if view_type == QuestListViewTabTypes.IN_PROGRESS:
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
-    elif completed_tab_active:
+    elif view_type == QuestListViewTabTypes.COMPLETED:
         # completed_submissions_count = completed_submissions.count()
         completed_submissions = paginate(completed_submissions, page)
         # available_quests = []
-    elif past_tab_active:
+    elif view_type == QuestListViewTabTypes.PAST:
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
 
@@ -499,11 +506,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
         "active_q_id": active_quest_id,
-        "available_tab_active": available_tab_active,
-        "inprogress_tab_active": in_progress_tab_active,
-        "completed_tab_active": completed_tab_active,
-        "past_tab_active": past_tab_active,
-        "drafts_tab_active": drafts_tab_active,
+        "VIEW_TYPES": QuestListViewTabTypes,
+        "view_type": view_type,
         "quick_reply_form": quick_reply_form,
     }
     return render(request, template, context)
@@ -826,6 +830,16 @@ def paginate(object_list, page, per_page=30):
     return object_list
 
 
+class ApprovalsViewTabTypes:
+    """ enum for approvals's tabs.
+    Note: using enum.auto() will not work as django template tags cant properly define its value.
+    """
+    SUBMITTED = 0
+    APPROVED = 1
+    RETURNED = 2
+    FLAGGED = 3
+
+
 @non_public_only_view
 @staff_member_required
 def approvals(request, quest_id=None, template="quest_manager/quest_approval.html"):
@@ -869,30 +883,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     returned_submissions = []
     flagged_submissions = []
 
-    submitted_tab_active = False
-    returned_tab_active = False
-    approved_tab_active = False
-    flagged_tab_active = False
+    view_type = ApprovalsViewTabTypes.SUBMITTED
 
     page = request.GET.get("page")
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if "/returned/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.RETURNED
         returned_submissions = QuestSubmission.objects.all_returned()
-        returned_tab_active = True
         returned_submissions = paginate(returned_submissions, page)
     elif "/approved/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only
         )
-        approved_tab_active = True
         approved_submissions = paginate(approved_submissions, page)
     elif "/flagged/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
-        flagged_tab_active = True
         flagged_submissions = paginate(flagged_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
-        submitted_tab_active = True
+        view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
             teacher = request.user
         else:
@@ -906,28 +917,28 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         {
             "name": "Submitted",
             "submissions": submitted_submissions,
-            "active": submitted_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.SUBMITTED,
             "time_heading": "Submitted",
             "url": reverse("quests:submitted"),
         },
         {
             "name": "Returned",
             "submissions": returned_submissions,
-            "active": returned_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.RETURNED,
             "time_heading": "Returned",
             "url": reverse("quests:returned"),
         },
         {
             "name": "Approved",
             "submissions": approved_submissions,
-            "active": approved_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.APPROVED,
             "time_heading": "Approved",
             "url": reverse("quests:approved"),
         },
         {
             "name": "Flagged",
             "submissions": flagged_submissions,
-            "active": flagged_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.FLAGGED,
             "time_heading": "Transferred",
             "url": reverse("quests:flagged"),
         },
@@ -948,7 +959,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "heading": "Quest Approval",
         "tab_list": tab_list,
         "quick_reply_form": quick_reply_form,
-        "submitted_tab_active": submitted_tab_active,
+        "VIEW_TYPES": ApprovalsViewTabTypes,
+        "view_type": view_type,
         "current_teacher_only": current_teacher_only,
         "past_approvals_all": past_approvals_all,
         "quest": quest,

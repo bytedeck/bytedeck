@@ -27,6 +27,7 @@ from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from siteconfig.models import SiteConfig
 from comments.models import Comment
+from profile_manager.models import Profile
 
 User = get_user_model()
 
@@ -1498,7 +1499,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('quests:quest_active', args=[self.quest1.id]))
 
         # should be on the available tab, since this quest is available (quest defaults make them available)
-        self.assertTrue(response.context['available_tab_active'])
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
         self.assertEqual(response.context['active_q_id'], self.quest1.id)
 
         # TODO: test the actual content properly with selenium?
@@ -1540,7 +1541,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # {% if available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
 
         response = self.client.get(reverse('quests:available'))
-        self.assertEqual(response.context['available_tab_active'], True)
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
         self.assertEqual(response.context['remove_hidden'], True)
 
         # Still not there though, because student doesn't have an active course
@@ -1585,6 +1586,48 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
 
             # assert ordered view is unchanged from displayed view
             self.assertQuerysetEqual(displayed_order, intended_order)
+
+    def test_context_correct_tab_types(self):
+        """ Checks each possible tab for student and teacher individually if it can be activated
+        by accessing the tabs corresponding url
+        """
+        self.client.force_login(self.test_student)
+
+        # available (student)
+        response = self.client.get(reverse('quests:available'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
+        self.assertContains(response, 'class="active"')
+
+        # in progress
+        response = self.client.get(reverse('quests:inprogress'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].IN_PROGRESS)
+        self.assertContains(response, 'class="active"')
+
+        # completed
+        response = self.client.get(reverse('quests:completed'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].COMPLETED)
+        self.assertContains(response, 'class="active"')
+
+        # past
+        # have to patch 'Profile' or else it wont affect user.profile.has_past_courses
+        with patch.object(Profile, 'has_past_courses', new=True):
+            response = self.client.get(reverse('quests:past'))
+
+            self.assertTrue(response.context['request'].user.profile.has_past_courses)
+            self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].PAST)
+            self.assertContains(response, 'class="active"')
+
+        self.client.force_login(self.test_teacher)
+
+        # available (teacher)
+        response = self.client.get(reverse('quests:available'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
+        self.assertContains(response, 'class="active"')
+
+        # draft
+        response = self.client.get(reverse('quests:drafts'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].DRAFT)
+        self.assertContains(response, 'class="active"')
 
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -2426,7 +2469,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:submitted'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        self.assertTrue(response.context['submitted_tab_active'])  # ? Is this used anymore?
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].SUBMITTED)
         # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][0]['active'])
         self.assertTrue(response.context['current_teacher_only'])
@@ -2535,6 +2578,30 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         # "current_teacher" is now the only user with assigned blocks
         response = self.client.get(reverse('quests:approvals'))
         self.assertNotContains(response, 'My groups')
+
+    def test_context_correct_tab_types(self):
+        """ Checks each possible tab if it can be activated by accessing the tabs corresponding url
+        """
+
+        # SUBMITTED
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].SUBMITTED)
+        self.assertContains(response, 'class="active"')
+
+        # APPROVED
+        response = self.client.get(reverse('quests:approved'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].APPROVED)
+        self.assertContains(response, 'class="active"')
+
+        # RETURNED
+        response = self.client.get(reverse('quests:returned'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].RETURNED)
+        self.assertContains(response, 'class="active"')
+
+        # FLAGGED
+        response = self.client.get(reverse('quests:flagged'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].FLAGGED)
+        self.assertContains(response, 'class="active"')
 
 
 class Is_staff_or_TA_test(TenantTestCase):
