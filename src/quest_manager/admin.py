@@ -59,6 +59,7 @@ class FeedbackAdmin(admin.ModelAdmin):
 # class TaggedItemInline(GenericTabularInline):
 #     model = TaggedItem
 
+
 class CommonDataAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteSafeModelAdmin):
     pass
 
@@ -92,19 +93,16 @@ class QuestResource(resources.ModelResource):
     def dehydrate_prereq_import_ids(self, quest):
         # save basic single/simple prerequisites, if there are any (no OR).
         # save as an & seperated list of import_ids (UUIDs)
-        prereq_import_ids = ""
+        prereq_import_ids = ''
         for p in quest.prereqs():
-            if p.prereq_content_type == ContentType.objects.get_for_model(Quest):
-                prereq_import_ids += "&" + str(p.get_prereq().import_id)
-            elif p.prereq_content_type == ContentType.objects.get_for_model(Badge):
-                prereq_import_ids += "&" + str(p.get_prereq().import_id)
+            if p.prereq_content_type in [ContentType.objects.get_for_model(Quest), ContentType.objects.get_for_model(Badge)]:
+                prereq_import_ids += '&' + str(p.get_prereq().import_id)
         return prereq_import_ids
 
     def dehydrate_campaign_title(self, quest):
         if quest.campaign:
             return quest.campaign.title
-        else:
-            return None
+        return None
 
     def dehydrate_campaign_icon(self, quest):
         if quest.campaign:
@@ -115,7 +113,7 @@ class QuestResource(resources.ModelResource):
     def generate_simple_prereqs(self, parent_object, data_dict):
         # check that the prereq quest exists as an import-linked quest via import_id
 
-        prereq_import_ids = data_dict["prereq_import_ids"]
+        prereq_import_ids = data_dict['prereq_import_ids']
         prereq_import_ids = prereq_import_ids.split('&')
         prereq_object = None
 
@@ -130,7 +128,6 @@ class QuestResource(resources.ModelResource):
                         pass
 
             if prereq_object:
-
                 existing_prereqs_groups = parent_object.prereqs()
                 # generate list of objects for already existing primary prereq
                 existing_primary_prereqs = [p.get_prereq() for p in existing_prereqs_groups]
@@ -143,8 +140,8 @@ class QuestResource(resources.ModelResource):
                     Prereq.add_simple_prereq(parent_object, prereq_object)
 
     def generate_campaign(self, quest, data_dict):
-        campaign_title = data_dict["campaign_title"]
-        campaign_icon = data_dict["campaign_icon"]
+        campaign_title = data_dict['campaign_title']
+        campaign_icon = data_dict['campaign_icon']
 
         # Might not have a campaign.
         if campaign_title:
@@ -159,7 +156,7 @@ class QuestResource(resources.ModelResource):
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         if not dry_run:
             for data_dict in dataset.dict:
-                import_id = data_dict["import_id"]
+                import_id = data_dict['import_id']
                 parent_quest = Quest.objects.get(import_id=import_id)
 
                 self.generate_simple_prereqs(parent_quest, data_dict)

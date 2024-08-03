@@ -13,6 +13,7 @@ Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
     2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
 """
+
 from quest_manager import views
 
 from django.conf.urls import url
@@ -92,6 +93,8 @@ urlpatterns = [
 
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
+    path('campaigns/available/', views.CategoryList.as_view(), name='categories_available'),
+    path('campaigns/inactive/', views.CategoryList.as_view(), name='categories_inactive'),
     path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),

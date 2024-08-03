@@ -31,7 +31,7 @@
           {% if request.user.is_staff %}
             <li><a href="{% url 'quests:drafts' %}"><i class="fa fa-shield fa-flip-horizontal fa-fw"></i>&nbsp; Draft Quests</a></li>
             {% if config.enable_shared_library %}
-            <li><a href="{% url 'library:library_quest_list' %}"><i class="fa fa-book fa-fw"></i>&nbsp; Quest Library</a></li>
+            <li><a href="{% url 'library:quest_list' %}"><i class="fa fa-book fa-fw"></i>&nbsp; Quest Library</a></li>
             {% endif %}
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Quest Setup</li>

@@ -7,7 +7,9 @@ class QuestLibraryUtilsTestCase(SimpleTestCase):
 
     def test_library_schema_context(self):
 
+        previous_schema = connection.schema_name
+
         with library_schema_context():
             self.assertEqual(connection.schema_name, 'library')
 
-        self.assertEqual(connection.schema_name, 'public')
+        self.assertEqual(connection.schema_name, previous_schema)
