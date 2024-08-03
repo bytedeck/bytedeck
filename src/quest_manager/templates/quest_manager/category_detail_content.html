@@ -50,12 +50,17 @@
              role="tablist"
              aria-multiselectable="true">
         {% for q in category_displayed_quests %}
-          <tr class="accordian-trigger panel-title {% if not q.visible_to_students %}danger {% elif q.expired %}warning {% else %}default{% endif %} {% if q.id == active_q_id %}active{% endif %}"
-            role="tab"
-            aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
-            aria-controls="collapse-quest-{{ q.id }}"
-            {# ID makes the ajax_content_loading.html file populate detailed content #}
-            id="heading-quest-{{ q.id }}">
+          <tr class="accordian-trigger panel-title
+              {% if not q.visible_to_students %}danger
+              {% elif q.expired %}warning
+              {% else %}default{% endif %}
+              {% if q.id == active_q_id %} active {% endif %}"
+              role="tab"
+              aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
+              aria-controls="collapse-quest-{{q.id}}"
+              {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
+              id="heading-quest-{{q.id}}"
+          >
             <!-- COLUMNS -->
             <td class="col-sm-1 col-xs-2 col-icon">
               <img class="img-responsive panel-title-img img-rounded"
@@ -74,8 +79,7 @@
         <!-- for each quest -->
       </tbody>
     </table>
-  </div>
-  <!-- #available -->
+  </div><!-- #available -->
   {% for q in category_displayed_quests %}
     {% comment %}
       ### COLLAPSING CONTENT ###
@@ -98,10 +102,8 @@
           </p>
         </li>
       </ul>
-    </div>
-    <!-- accordian panel-collapse -->
-  {% endfor %}
-  <!-- for each quest -->
+    </div><!-- accordian panel-collapse -->
+  {% endfor %} <!-- for each quest -->
 {% else %}
   <p>There are no quests in this campaign.</p>
 {% endif %}

@@ -24,6 +24,7 @@ app_name = 'quest_manager'
 urlpatterns = [
     url(r'^$', views.quest_list, name=''),
     # url(r'^create/$', views.quest_create, name='quest_create'),
+
     # Ajax
     url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
     url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
@@ -36,6 +37,7 @@ urlpatterns = [
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
     url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
+
     # Lists
     url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
     url(r'^available/$', views.quest_list, name='quests'),
@@ -45,6 +47,7 @@ urlpatterns = [
     url(r'^completed/$', views.quest_list, name='completed'),
     url(r'^past/$', views.quest_list, name='past'),
     url(r'^drafts/$', views.quest_list, name='drafts'),
+
     # Approvals
     url(r'^approvals/$', views.approvals, name='approvals'),
     url(r'^approvals/submitted/$', views.approvals, name='submitted'),
@@ -58,6 +61,7 @@ urlpatterns = [
     url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
     url(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
     # url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'),  # Not used
+
     # Quests
     url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
     url(r'^create/$', views.QuestCreate.as_view(), name='quest_create'),
@@ -69,9 +73,11 @@ urlpatterns = [
     url(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     url(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
     url(r'^(?P<quest_id>[0-9]+)/skip/$', views.skipped, name='skip_for_quest'),
+
     # Quest/Submission Summary Metrics
     path('<int:pk>/summary/', views.QuestSubmissionSummary.as_view(), name='summary'),
     path('<int:pk>/summary/ajax', views.ajax_summary_histogram, name='ajax_summary_histogram'),
+
     # Submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
     url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
@@ -80,9 +86,11 @@ urlpatterns = [
     url(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
     url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
     url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
+
     # Flagged submissions
     url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
+
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
     path('campaigns/available/', views.CategoryList.as_view(), name='categories_available'),
@@ -91,6 +99,7 @@ urlpatterns = [
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
+
     path('common-quest-info/list/', views.CommonDataListView.as_view(), name='commonquestinfo_list'),
     path('common-quest-info/create/', views.CommonDataCreateView.as_view(), name='commonquestinfo_create'),
     path('common-quest-info/update/<pk>/', views.CommonDataUpdateView.as_view(), name='commonquestinfo_update'),
