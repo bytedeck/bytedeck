@@ -31,6 +31,8 @@ urlpatterns = [
     path('ranks/create/', views.RankCreate.as_view(), name='rank_create'),
     path('ranks/<pk>/edit/', views.RankUpdate.as_view(), name='rank_update'),
     path('ranks/<pk>/delete/', views.RankDelete.as_view(), name='rank_delete'),
+    path('ajax/on_show_ranked_popup/', views.Ajax_OnShowRankPopup.as_view(), name='ajax_on_show_ranked_popup'),
+    path('ajax/on_close_ranked_popup/', views.Ajax_OnCloseRankPopup.as_view(), name='ajax_on_close_ranked_popup'),
 
     # Marks
     path('marks/', views.mark_calculations, name='my_marks'),

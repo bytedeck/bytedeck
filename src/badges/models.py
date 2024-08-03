@@ -16,6 +16,7 @@ from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
+from notifications.models import notify_rank_up
 
 
 # Create your models here.
@@ -425,3 +426,13 @@ def post_save_receiver(sender, **kwargs):
             affected_users=[assertion.user, ],
             icon=icon,
             verb="granted you a")
+
+        # if user ranked up notify them
+        if not assertion.do_not_grant_xp:
+            notify_rank_up(
+                assertion.user,
+                assertion.user.profile.xp_cached,
+
+                # since post-save signal. this is before user.profile.xp_invalidate_cache()
+                assertion.user.profile.xp_cached + assertion.badge.xp,
+            )

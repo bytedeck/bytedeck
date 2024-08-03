@@ -19,9 +19,9 @@ from django.http import JsonResponse
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from unittest.mock import patch
-from model_bakery import baker
+from model_bakery import baker, recipe
 
-from courses.models import Block
+from courses.models import Block, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -632,6 +632,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
+        self.semester = SiteConfig.get().active_semester
         self.quest = baker.make(Quest, xp=5)
         self.draft_comment = baker.make(Comment, text="test draft comment")
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
@@ -668,6 +669,62 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
+
+    def test_complete__no_verification(self):
+        """ Checks if a student completing a submission that causes their XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        # digital novice is 60 xp
+        # create quest that can hit that rank with 2 submissions
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+        quest = baker.make(Quest, xp=40, max_repeats=-1, verification_required=False)
+        sub_recipe = recipe.Recipe(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+
+        # confirm theres no false positive with the notification
+        # as 40 xp (submission) < 60 xp (rank)
+        submission1 = sub_recipe.make()
+        response = self.client.post(reverse('quests:complete', args=[submission1.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 302)
+
+        # Should be no notifications since no approval and no rank up
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 0)
+
+        # another completed submission should rank self.test_student up
+        # as 80 xp (40 + 40 xp) > 60 xp (rank)
+        submission2 = sub_recipe.make()
+        response = self.client.post(reverse('quests:complete', args=[submission2.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_complete__no_verification_and_custom_xp(self):
+        """ Checks if a student completing a submission with custom xp that causes their XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+
+        # Ensure rank popup will only show if xp_requested is taken into account.
+        # if not it wont since standard xp is 40 (40 xp < 60 xp (rank))
+        # request xp is 80 (80 xp > 60 xp (rank))
+        quest = baker.make(Quest, xp=40, xp_can_be_entered_by_students=True, verification_required=False)
+        # complete view doesn't take in xp_request attribute, only as form data
+        submission_custom_xp = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+
+        #
+        response = self.client.post(reverse('quests:complete', args=[submission_custom_xp.id]), data={'complete': True, 'xp_requested': 80})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
 
     def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
@@ -2457,6 +2514,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         # other_teacher_block = baker.make('courses.Block', current_teacher=self.other_teacher)
         # baker.make('courses.CourseStudent', block=other_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
 
+        self.semester = SiteConfig.get().active_semester
         self.quest = baker.make(Quest, name="Test Quest")
         self.sub = baker.make(QuestSubmission, quest=self.quest)
 
@@ -2513,6 +2571,62 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_approve__normal_quest(self):
+        """ Checks if approving a quest submission that causes a user's XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        # digital novice is 60 xp
+        # create quest that can hit that rank with 2 submissions
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+        quest = baker.make(Quest, xp=40, max_repeats=-1)
+
+        # confirm theres no false positive with the notification
+        # as 40 xp (submission) < 60 xp (rank)
+        submission1 = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+        response = self.client.post(reverse('quests:approve', args=[submission1.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: approved
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # another approved submission should rank self.test_student up
+        # as 80 xp (40 + 40 xp) > 60 xp (rank)
+        submission2 = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+        response = self.client.post(reverse('quests:approve', args=[submission2.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 2 approved, 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 3)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_approve__custom_xp(self):
+        """ Checks if approving a quest submission with custom xp that causes user's XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+
+        # Ensure rank popup will only show if xp_requested is taken into account.
+        # if not it wont since standard xp is 40 (40 xp < 60 xp (rank))
+        # request xp is 80 (80 xp > 60 xp (rank))
+        quest = baker.make(Quest, xp=40, xp_can_be_entered_by_students=True)
+        submission_custom_xp = baker.make(
+            QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester, xp_requested=80
+        )
+
+        #
+        response = self.client.post(reverse('quests:approve', args=[submission_custom_xp.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 approved, 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 2)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
 
     def test_flagged(self):
         with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):

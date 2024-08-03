@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
@@ -11,8 +12,10 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.template.loader import render_to_string
+from django.http import JsonResponse
 
-from hackerspace_online.decorators import staff_member_required
+from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
@@ -22,6 +25,8 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
+from djcytoscape.models import CytoScape
+from notifications.models import Notification
 
 from django.db.models import Q
 from django.db.models.functions import Greatest
@@ -833,3 +838,79 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                 'badge_dataset': badge_dataset,  # list[dict[str, list[int]]]
             }
         })
+
+
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_RankPopup(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
+
+    def get_latest_unread_ranked_notification(self):
+        """ returns a qs of unread notifications for user with rank as target """
+        notifications = Notification.objects.all_for_user(self.user).get_unread().filter(
+            target_content_type=ContentType.objects.get_for_model(Rank),
+            verb__contains='promoted',
+        ).order_by('-timestamp').first()
+
+        return notifications
+
+
+class Ajax_OnShowRankPopup(Ajax_RankPopup):
+    """ This is responsible for giving the html for 'ajaxNewRankPopup' in 'javascript.js' """
+
+    def get(self, *args, **kwargs):
+        self.user = self.request.user
+        json_data = self.get_json_data()
+        return JsonResponse(data=json_data)
+
+    def get_json_data(self):
+        """ returns json data for ajax request """
+        rank = self.get_rank()
+        show = rank is not None
+        html_text = self.get_html_text(rank) if show else None
+
+        return {
+            'show': show,
+            'html': html_text,
+        }
+
+    def get_html_text(self, rank):
+        """ returns context filled template """
+        template_name = 'courses/snippets/rank_notification_popup.html'
+
+        user_xp = self.request.user.profile.xp_cached
+        next_rank = Rank.objects.get_next_rank(user_xp)
+
+        # rank should really only have 1 related map
+        # since ranks dont have prereq
+        related_map = CytoScape.objects.get_related_maps(rank).first()
+
+        context = {
+            'request': self.request,
+            'earned_rank': rank,
+            'earned_xp': user_xp,
+            'next_rank': next_rank,
+            'related_map': related_map,
+        }
+        return render_to_string(template_name, context)
+
+    def get_rank(self):
+        """ gets rank based on latest unread ranked notification """
+        notification = self.get_latest_unread_ranked_notification()
+        if not notification:
+            return None
+
+        rank = Rank.objects.get(id=notification.target_object_id)
+        return rank
+
+
+class Ajax_OnCloseRankPopup(Ajax_RankPopup):
+    """ When user dismisses rank popup. Mark rank notifications as read """
+
+    def get(self, *args, **kwargs):
+        self.user = self.request.user
+
+        # mark notification as read
+        notification = self.get_latest_unread_ranked_notification()
+        if notification:
+            notification.mark_read()
+
+        return JsonResponse(data={})
