@@ -4,14 +4,11 @@
       <div class="modal-content">
         <div class="modal-header">
           <h4 class="modal-title" id="newBadgeLabel">
-            {% if badge_total == 1 %}
-            Congratulations! You've gained a badge!
-            {% else %}
-            Congratulations! You have earned {{ badge_total }} new {{ badge_name }}s!
-            {% endif %}
+            Congratulations! You've earned {{ badge_total }} new
+            <i class="fa fa-fw fa-certificate"></i> {{ badge_name }}{{ badge_total|pluralize}}
           </h4>
         </div>
-        <div class="modal-body row">
+        <div class="modal-body">
           {% for type, badges in new_badges_by_type.items %}
             <div class="list-group-item list-group-item-info">
                 <i class="pull-right fa fa-fw {{type.fa_icon}}"></i>
@@ -24,24 +21,14 @@
               {# only use popover on wider screens #}
               <span class="hidden-xs">
                 <a {% include 'badges/snippets/badge_popover.html' with object=badge user_obj=request.user %} >
-                  <div class="icon-badge-container">
-                    <img class="icon-xl img-rounded" src="{{badge.get_icon_url}}">
-                    {% if badge.duplicates > 1 %}
-                      <span class="badge badge-icon-lg progress-bar-info">{{badge.duplicates}}</span>
-                    {% endif %}
-                  </div>
+                  {% include 'badges/snippets/badge_notification_popup_bs_badge.html' %}
                 </a>
               </span>
 
               {# direct link on mobile #}
               <span class="visible-xs-inline-block">
                 <a href="{{badge.get_absolute_url}}">
-                  <div inert class="icon-badge-container">
-                    <img class="icon-xl img-rounded" src="{{badge.get_icon_url}}">
-                    {% if badge.duplicates > 1 %}
-                      <span class="badge badge-icon-lg progress-bar-info">{{badge.duplicates}}</span>
-                    {% endif %}
-                  </div>
+                  {% include 'badges/snippets/badge_notification_popup_bs_badge.html' %}
                 </a>
               </span>
 

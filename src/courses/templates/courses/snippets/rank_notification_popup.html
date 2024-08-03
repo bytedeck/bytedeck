@@ -3,38 +3,27 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h4 class="modal-title" id="newRankLabel">New Rank!</h4>
+        <h4 class="modal-title" id="newRankLabel">Congratulations! You've achieved a new Rank</h4>
       </div>
-      <div class="modal-body text-center">
+      <div class="modal-body">
 
-
-        <div class="row align-items-center">
-          <div>
-            <p>Congratulations! Your <strong>{{ earned_xp }} XP</strong> has earned you the rank of <strong>{{ earned_rank }}</strong>.</p>
-            <i class="text-warning {{ earned_rank.fa_icon }} fa-3x"></i>
-          </div>
-        </div>
-
+        <p>Your <strong>{{ earned_xp }} XP</strong> has earned you the rank of:</p>
+        <h3 class="text-center"><i class="text-warning fa-fw {{ earned_rank.fa_icon }}"></i>
+          <strong>{{ earned_rank }}</strong> <small>({{earned_rank.xp}} XP)</small>
+        </h3>
+        <br>
         {% if related_map %}
-
-          <p>You have gained access to a new Quest Map by earning this rank:</p>
-
-          <a href={% if request.user.is_staff %} "{% url 'djcytoscape:quest_map' related_map.id %}" {% else %} "{% url 'djcytoscape:quest_map_personalized' scape_id=related_map.id user_id=request.user.id %}" {% endif %}>
-            {{ related_map.name }}{% if not forloop.last %}, {% endif %}
+          <p>This rank gives you access to
+          <a href="{% url 'djcytoscape:quest_map_personalized' scape_id=related_map.id user_id=request.user.id %}">
+            new quests.
           </a>
-
         {% endif %}
 
-        <div class="row align-items-center">
         {% if next_rank %}
-          <div>
-            <p>To hit the next rank, <strong>{{ next_rank }}</strong>, you need <strong>{{ next_rank.xp }} XP</strong>.</p>
-            <i class="text-warning {{ next_rank.fa_icon }} fa-3x"></i>
-          </div>
+          <p>Your next rank is <i class="text-warning fa-fw {{ next_rank.fa_icon }}"></i><strong>{{ next_rank }}</strong> ({{ next_rank.xp }} XP).</p>
         {% else %}
-          <p>You've achieved the highest rank</p>
+          <p>You've achieved the highest rank possible!</p>
         {% endif %}
-        </div>
 
       </div>
       <div class="modal-footer">
