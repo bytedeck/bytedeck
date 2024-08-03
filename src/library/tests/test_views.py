@@ -51,6 +51,7 @@ class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, TenantTestCase):
         # Setup the domain
         library_domain = cls.get_library_tenant_domain()
         cls.library_domain = TenantDomain(tenant=cls.library_tenant, domain=library_domain)
+        cls.library_domain.full_clean()
         cls.library_domain.save()
 
 
