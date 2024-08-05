@@ -1,5 +1,3 @@
-version: '2.2'
-
 ###############################################################################
 #
 # FOR DOCKER_COMPOSE SETTINGS SPECIFIC TO CI TESTS WITH GIT HUB WORKFLOWS

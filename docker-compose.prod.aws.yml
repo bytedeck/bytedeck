@@ -1,5 +1,3 @@
-version: '2.2'
-
 ###############################################################################
 #
 # FOR DOCKER-COMPOSE SETTINGS SPECIFIC TO AWS PRODUCTION
