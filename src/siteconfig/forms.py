@@ -74,6 +74,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_name_for_student",
                 "custom_name_for_tag",
                 "show_all_tags_on_profiles",
+                "map_auto_update",
                 Accordion(
                     AccordionGroup(
                         "Advanced",
