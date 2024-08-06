@@ -32,3 +32,19 @@ def regenerate_all_maps(requesting_user_id):
         icon="<i class='fa fa-lg fa-fw fa-map-signs text-success'></i>",
         verb="completed regeneration of all valid maps."
     )
+
+
+@app.task(name='djcytoscape.tasks.regenerate_map')
+def regenerate_map(map_ids):
+    """ Regenerates each map in map_ids.
+    Since this function will be mainly used by post signals, notifications to a user wont be functional
+    Unlike `regenerate_all_maps`
+
+    ARGS:
+        map_ids (list[int]): list of ids belonging to Cytoscape maps
+    """
+    for scape in CytoScape.objects.filter(id__in=map_ids):
+        try:
+            scape.regenerate()
+        except scape.InitialObjectDoesNotExist:
+            pass

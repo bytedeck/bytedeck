@@ -14,6 +14,7 @@ from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Ra
 from notifications.models import Notification, notify_rank_up
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
+from djcytoscape.models import CytoScape
 
 import random
 import datetime
@@ -118,6 +119,30 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         after_delete_count = Rank.objects.count()
         self.assertRedirects(response, reverse('courses:ranks'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
+
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a rank is related to map """
+        # setup
+        rank = baker.make(Rank, name='rank')
+        scape = CytoScape.generate_map(rank, name='unique scape name')
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('courses:rank_update', args=[rank.id]), data={
+            'name': 'rank', 'xp': 0, 'fa_icon': 'fa fa-circle-o'
+        })
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('courses:rank_delete', args=[rank.id]))
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
 
 
 class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):

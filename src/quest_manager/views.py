@@ -30,6 +30,7 @@ from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import (
     QuestForm,
@@ -154,7 +155,7 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy("quests:categories")
 
 
-class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
+class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
@@ -212,7 +213,7 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         return context
 
 
-class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView):
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin

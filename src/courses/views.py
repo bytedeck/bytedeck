@@ -20,13 +20,14 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
 from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
+from djcytoscape.models import CytoScape
+from notifications.models import Notification
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
-from djcytoscape.models import CytoScape
-from notifications.models import Notification
 
 from django.db.models import Q
 from django.db.models.functions import Greatest
@@ -153,7 +154,7 @@ class RankCreate(NonPublicOnlyViewMixin, CreateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class RankUpdate(NonPublicOnlyViewMixin, UpdateView):
+class RankUpdate(NonPublicOnlyViewMixin, UpdateMapMessageMixin, UpdateView):
     fields = ('name', 'xp', 'icon', 'fa_icon')
     model = Rank
     success_url = reverse_lazy('courses:ranks')
@@ -166,7 +167,7 @@ class RankUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class RankDelete(NonPublicOnlyViewMixin, DeleteView):
+class RankDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 
