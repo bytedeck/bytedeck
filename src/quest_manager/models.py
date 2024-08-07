@@ -882,7 +882,7 @@ class QuestSubmission(models.Model):
     # while the user is working on their submission, this will store the comment that we will
     # post when they submit. If this field currently stores a comment, we know that they are
     # currently working on a submission.
-    draft_comment = models.ForeignKey(Comment, null=True, on_delete=models.SET_NULL)
+    draft_comment = models.ForeignKey(Comment, null=True, blank=True, on_delete=models.SET_NULL)
     xp_requested = models.PositiveIntegerField(
         default=0,
         help_text='The number of XP you are requesting for this submission.'
