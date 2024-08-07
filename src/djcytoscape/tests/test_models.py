@@ -1,5 +1,6 @@
 import json
 
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
@@ -125,6 +126,44 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
             self.assertIn('data', json_dict)
             if element.is_node():  # Quests, Campaigns and Badges should have a class
                 self.assertIn('classes', json_dict)
+
+    def test_valid_urls(self):
+        """ tests if valid urls wont throw ValidationErrors """
+        element = baker.make(CytoElement)
+        valid_urls = [
+            '/',
+            '/quests/',
+            '/quests/1/2/',
+            'http://example.com',
+
+            # what we will typically encounter for CytoElement href
+            '/quests/1/',
+            '/badges/1/',
+            '/ranks/',
+            '/maps/2/1/1/',
+            '/maps/2/1/',
+            '/maps/2/',
+        ]
+        for url in valid_urls:
+            try:
+                element.href = url
+                element.full_clean()
+            except ValidationError:
+                self.fail(f"{url} is not a valid URL")
+
+    def test_invalid_urls(self):
+        """ tests if invalid urls throw ValidationErrors """
+        element = baker.make(CytoElement)
+        invalid_urls = [
+            ' ',  # space
+            '/ ',  # space
+            '/quests /',  # space
+            'quests-quests/',  # -
+        ]
+        for url in invalid_urls:
+            with self.assertRaises(ValidationError):
+                element.href = url
+                element.full_clean()
 
 
 class TempCampaignNodeTest(TenantTestCase):
