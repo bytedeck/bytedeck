@@ -81,10 +81,14 @@ data-classes="table table-no-bordered table-hover"
         </th>
 
         {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
-            <th data-sortable='true' data-field='grad'
+
+            {% if config.custom_profile_field %}
+            <th data-sortable='true' data-field='custom_profile_field'
                 {% if request.user.is_staff %}data-visible="false"{% endif %}>
-                Grad
+                {{ config.custom_profile_field }}
             </th>
+            {% endif %}
+
             <th data-sortable='true' data-field='blocks'
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 {% group_name %}s
@@ -167,7 +171,9 @@ data-classes="table table-no-bordered table-hover"
 
                 {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
 
-                    <td>{{ object.grad_year|default:"-" }}</td>
+                    {% if config.custom_profile_field %}
+                    <td>{{ object.custom_profile_field|default:"None." }}</td>
+                    {% endif %}
 
                     <td>
                         {% for course in object.user.coursestudent_set.all %}{{ course.block }}{% if not forloop.last %}, {% endif %} {% endfor %}

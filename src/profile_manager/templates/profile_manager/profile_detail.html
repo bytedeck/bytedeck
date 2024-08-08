@@ -103,7 +103,9 @@
       </div>
       <div class="panel-body">
         <p>Username: {{ object.user.get_username}}</p>
-        <p>Grad Year: {% if object.grad_year %}{{ object.grad_year}}{% else %}<i>None. Edit your profile!</i>{% endif %}</p>
+        {% if config.custom_profile_field %}
+        <p>{{ config.custom_profile_field }}: {{ object.custom_profile_field|default:"<i>None.</i>"}}</p>
+        {% endif %}
         <p>Account Created: {{ object.datetime_created}} ({{ object.datetime_created|timesince}} ago)</p>
         {% if request.user.is_staff %}
           <p>Last Login: {% if object.user.last_login %} {{ object.user.last_login}} ({{ object.user.last_login|timesince }} ago) {% else %}&mdash;{% endif %}</p>

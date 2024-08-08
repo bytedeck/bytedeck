@@ -598,7 +598,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.assertTrue(user.socialaccount_set.exists())
 
         # Change email and then verify
-        form_data = generate_form_data(model_form=ProfileForm, grad_year=timezone.now().date().year + 2)
+        form_data = generate_form_data(model_form=ProfileForm, custom_profile_field=timezone.now().date().year + 2)
         old_email = user.email
         new_email = "my_new_email@example.com"
         form_data.update({
