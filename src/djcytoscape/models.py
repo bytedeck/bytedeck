@@ -12,6 +12,8 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from url_or_relative_url_field.fields import URLOrRelativeURLField
+
 from quest_manager.models import Category
 
 
@@ -119,7 +121,7 @@ class CytoElement(models.Model):
                              help_text="if present, will be used as node label instead of id")
     min_len = models.IntegerField(default=1,
                                   help_text="number of ranks to keep between the source and target of the edge")
-    href = models.URLField(blank=True, null=True)
+    href = URLOrRelativeURLField(blank=True, null=True, max_length=50)
     is_transition = models.BooleanField(default=False,
                                         help_text="Whether this node transitions to a new map")
     objects = CytoElementManager()
