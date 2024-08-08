@@ -16,7 +16,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
-from django.views.generic import DetailView
+from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from hackerspace_online.decorators import staff_member_required
@@ -649,192 +649,288 @@ def detail(request, quest_id):
 #
 # #################################
 
+class ApproveView(NonPublicOnlyViewMixin, View):
+    """ When staff approves, returns, skips, or comments on a quest submission, this view is called.
+    """
 
-@non_public_only_view
-@staff_member_required
-def approve(request, submission_id):
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
-    origin_path = submission.get_absolute_url()
+    def get_submission(self, submission_id):
+        """ gets the main model of this view: QuestSubmission.
+        functions like CRUD view's self.get_object()
+        """
+        return get_object_or_404(QuestSubmission, pk=submission_id)
 
-    if request.method == "POST":
-        # currently only the big form has files.  Need a more robust way to determine...
-        if request.FILES or request.POST.get("awards"):
-            if request.user.is_staff:
-                form = SubmissionFormStaff(request.POST, request.FILES)
-            else:
-                form = SubmissionForm(request.POST, request.FILES)
-        else:
-            form = SubmissionQuickReplyForm(request.POST)
+    def get_form(self):
+        """ Multiple forms because staff can either
+        - use standard approve view
+        - use quick reply view
+        """
+        # standard view
+        if self.request.FILES or self.request.POST.get("awards"):
+            return SubmissionFormStaff(self.request.POST, self.request.FILES)
 
-        if form.is_valid():
-            # handle badge assertion
-            comment_text_addition = ""
+        # quick reply
+        return SubmissionQuickReplyForm(self.request.POST)
 
-            badge = form.cleaned_data.get("award")
-
-            if badge:
-                badges = [badge]
-            else:
-                badges = form.cleaned_data.get("awards")
-            if badges:
-                for badge in badges:
-                    # badge = get_object_or_404(Badge, pk=badge_id)
-                    new_assertion = BadgeAssertion.objects.create_assertion(
-                        submission.user, badge, request.user
-                    )
-                    messages.success(
-                        request,
-                        (
-                            "Badge "
-                            + str(new_assertion)
-                            + " granted to "
-                            + str(new_assertion.user)
-                        ),
-                    )
-                    rarity_icon = badge.get_rarity_icon()
-                    comment_text_addition += (
-                        "<p></br>"
-                        + rarity_icon
-                        + "The <b>"
-                        + badge.name
-                        + "</b> badge was granted for this quest "
-                        + rarity_icon
-                        + "</p>"
-                    )
-
-            # handle with quest comments
-            blank_comment_text = ""
-            if "approve_button" in request.POST:
-                note_verb = "approved"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-check fa-stack-2x text-success'></i>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
-                submission.mark_approved()
-            elif "comment_button" in request.POST:
-                note_verb = "commented on"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = "<p>(no comment added)</p>"
-            elif "return_button" in request.POST:
-                note_verb = "returned"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
-                submission.mark_returned()
-            elif "skip_button" in request.POST:
-                note_verb = "skipped"
-                icon = (
-                    "<span class='fa-stack text-muted'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = (
-                    "<p>(Skipped - You were not granted XP for this quest)</p>"
-                )
-                submission.mark_approved(transfer=True)
-            else:
-                raise Http404("unrecognized submit button")
-
-            comment_text_form = form.cleaned_data.get("comment_text")
-            if not comment_text_form or comment_text_form == "<p><br></p>":
-                comment_text = blank_comment_text
-            else:
-                comment_text = comment_text_form
-            comment_new = Comment.objects.create_comment(
-                user=request.user,
-                path=origin_path,
-                text=comment_text + comment_text_addition,
-                target=submission,
-            )
-
-            # handle files
-            if request.FILES:
-                for afile in request.FILES.getlist("attachments"):
-                    newdoc = Document(docfile=afile, comment=comment_new)
-                    newdoc.save()
-
-            # don't say "with" in notification if no comment was entered
-            if not comment_text_form:
-                action = None
-            else:
-                action = comment_new
-
-            affected_users = [
-                submission.user,
-            ]
-
-            # if the staff member approving/commenting/retruning the submission isn't
-            # one of the student's teachers then notify the student's teachers too
-            # If they have no teachers (e.g. this quest is available outside of a course
-            # and the student is not in a course) then nothign will be appended anyway
-            teachers_list = list(submission.user.profile.current_teachers())
-            if request.user not in teachers_list:
-                affected_users.extend(teachers_list)
-
-            notify.send(
-                request.user,
-                action=action,
-                target=submission,
-                recipient=submission.user,
-                affected_users=affected_users,
-                verb=note_verb,
-                icon=icon,
-            )
-
-            # if approving a sumbission and granting an xp.
-            if "approve_button" in request.POST and not submission.do_not_grant_xp:
-                xp = submission.xp_requested or submission.quest.xp
-                notify_rank_up(
-                    submission.user,
-                    # xp_cached is updated we have to subtract to get old xp
-                    submission.user.profile.xp_cached - xp,
-                    submission.user.profile.xp_cached,
-                )
-
-            message_string = (
-                "<a href='"
-                + origin_path
-                + "'>Submission of "
-                + submission.quest.name
-                + "</a> "
-                + note_verb
-                + " for <a href='"
-                + submission.user.profile.get_absolute_url()
-                + "'>"
-                + submission.user.username
-                + "</a>"
-            )
-            messages.success(request, message_string)
-
+    def form_valid(self):
+        """ handles response when form is valid
+        - returns HttpResponse if standard
+        - returns JsonResponse if ajax
+        """
+        if not self.is_ajax:
             return redirect("quests:approvals")
-        else:
-            # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
-            # return redirect(origin_path)
 
-            # rendering here with the context allows validation errors to be displayed
-            context = {
-                "heading": submission.quest.name,
-                "submission": submission,
-                # "comments": comments,
-                "submission_form": form,
-                "anchor": "submission-form-" + str(submission.quest.id),
-                # "reply_comment_form": reply_comment_form,
-            }
-            return render(request, "quest_manager/submission.html", context)
-    else:
-        raise Http404
+        # for ajax call. Need to replicate standard view's procedure where
+        # - quest submission container disappears  (handled client side)
+        # - message box container shows (handled here)
+        template_name = 'messages-snippet.html'
+        context = {
+            'messages': list(messages.get_messages(self.request))
+        }
+        html = render_to_string(template_name, context)
+        return JsonResponse(data={'messages_html': html})
+
+    def form_invalid(self):
+        """ handles response when form is invalid
+        - returns HttpResponse if standard
+        - returns JsonResponse if ajax
+        """
+        # need to return a failing status code for ajax request
+        # without this should return a response with 200 status code
+        if self.is_ajax:
+            return JsonResponse({'error': 'Bad Request'}, status=400)
+
+        # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
+        # return redirect(origin_path)
+
+        # rendering here with the context allows validation errors to be displayed
+        context = {
+            "heading": self.submission.quest.name,
+            "submission": self.submission,
+            # "comments": comments,
+            "submission_form": self.form,
+            "anchor": "submission-form-" + str(self.submission.quest.id),
+            # "reply_comment_form": reply_comment_form,
+        }
+        return render(self.request, "quest_manager/submission.html", context)
+
+    # button handling
+    def handle_form_button(self, notification_kwargs):
+        """ handles any of the form buttons
+        "approve_button", "comment_button", "return_button", "skip_button"
+        in request
+
+        takes in notification_kwargs and updates 'verb' and 'icon' keys
+        returns default text incase staff submits without any comments
+        """
+        blank_comment_text = ""
+        if "approve_button" in self.request.POST:
+            note_verb = "approved"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-check fa-stack-2x text-success'></i>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "</span>"
+            )
+            blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
+            self.submission.mark_approved()
+        elif "comment_button" in self.request.POST:
+            note_verb = "commented on"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
+                + "</span>"
+            )
+            blank_comment_text = "<p>(no comment added)</p>"
+        elif "return_button" in self.request.POST:
+            note_verb = "returned"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
+                + "</span>"
+            )
+            blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
+            self.submission.mark_returned()
+        elif "skip_button" in self.request.POST:
+            note_verb = "skipped"
+            icon = (
+                "<span class='fa-stack text-muted'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "</span>"
+            )
+            blank_comment_text = (
+                "<p>(Skipped - You were not granted XP for this quest)</p>"
+            )
+            self.submission.mark_approved(transfer=True)
+
+        notification_kwargs.update({
+            'verb': note_verb,
+            'icon': icon,
+        })
+
+        return blank_comment_text
+
+    def post_has_valid_button(self):
+        """ quick helper function to check if any of the valid buttons exist in POST request """
+        valid_buttons = ["approve_button", "comment_button", "return_button", "skip_button"]
+        return any(btype in self.request.POST for btype in valid_buttons)
+
+    # misc.
+    def get_notification_kwargs(self):
+        """ gets the kwargs for notifications. every key should be empty unless
+        there is something we want to put before hand.
+        similar to get_context_data """
+        kwargs = {el: None for el in [
+            "action", "target", "recipient", "affected_users", "verb", "icon"
+        ]}
+
+        # add default values here
+        kwargs["target"] = self.submission
+        kwargs["recipient"] = self.submission.user
+        kwargs["affected_users"] = [self.submission.user]
+
+        # if the staff member approving/commenting/returning the submission isn't
+        # one of the student's teachers then notify the student's teachers too
+        # If they have no teachers (e.g. this quest is available outside of a course
+        # and the student is not in a course) then nothing will be appended anyway
+        teachers_list = list(self.submission.user.profile.current_teachers())
+        if self.request.user not in teachers_list:
+            kwargs["affected_users"].extend(teachers_list)
+
+        return kwargs
+
+    def handle_rank_up_notification(self):
+        """ handles the conditions to trigger "rank up" notification.
+        - if staff pressed "approve"
+        - if quest grants xp
+        - notify_rank_up conditions (ie. xp is enough to achieve new rank)
+        """
+        # if approving a sumbission and granting an xp.
+        if "approve_button" in self.request.POST and not self.submission.do_not_grant_xp:
+            xp = self.submission.xp_requested or self.submission.quest.xp
+            notify_rank_up(
+                self.submission.user,
+                # xp_cached is updated we have to subtract to get old xp
+                self.submission.user.profile.xp_cached - xp,
+                self.submission.user.profile.xp_cached,
+            )
+
+    def save_uploaded_files(self, comment):
+        """ saves request files to comment object """
+        if self.request.FILES:
+            for afile in self.request.FILES.getlist("attachments"):
+                newdoc = Document(docfile=afile, comment=comment)
+                newdoc.save()
+
+    def handle_award(self):
+        """ for each badge in award/awards:
+        - create new assertion for student
+        - create new message for each assertion for staff
+        - add to comment text for each assertion
+
+        """
+        # handle badge assertion
+        comment_text_addition = ""
+
+        # get list of badges
+        badge = self.form.cleaned_data.get("award")
+        badges = [badge] if badge else self.form.cleaned_data.get("awards", [])
+
+        for badge in badges:
+            new_assertion = BadgeAssertion.objects.create_assertion(
+                self.submission.user, badge, self.request.user
+            )
+            messages.success(
+                self.request,
+                (
+                    "Badge "
+                    + str(new_assertion)
+                    + " granted to "
+                    + str(new_assertion.user)
+                ),
+            )
+            rarity_icon = badge.get_rarity_icon()
+            comment_text_addition += (
+                "<p></br>"
+                + rarity_icon
+                + "The <b>"
+                + badge.name
+                + "</b> badge was granted for this quest "
+                + rarity_icon
+                + "</p>"
+            )
+
+        return comment_text_addition
+
+    # django built-in methods
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, request, *args, **kwargs):
+        """ requests are only allowed if:
+        - POST method
+        - optionally POST AJAX method
+        """
+        # this is a POST only view
+        if request.method != "POST":
+            raise Http404
+
+        if not self.post_has_valid_button():
+            raise Http404("unrecognized submit button")
+
+        self.is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, submission_id, *args, **kwargs):
+        self.submission = self.get_submission(submission_id)
+        self.form = self.get_form()
+
+        if self.form.is_valid():
+            notification_kwargs = self.get_notification_kwargs()
+
+            #
+            blank_comment_text = self.handle_form_button(notification_kwargs)
+            comment_text_addition = self.handle_award()
+
+            # handle comment text
+            # if staff didnt write any text for comment use blank_comment_text
+            comment_text = self.form.cleaned_data.get("comment_text")
+            if not comment_text or comment_text == "<p><br></p>":
+                comment_text = blank_comment_text
+
+            comment_new = Comment.objects.create_comment(
+                user=self.request.user,
+                path=self.submission.get_absolute_url(),
+                text=comment_text + comment_text_addition,
+                target=self.submission,
+            )
+
+            self.save_uploaded_files(comment_new)
+
+            #
+            notify.send(
+                self.request.user,
+                **notification_kwargs
+            )
+            self.handle_rank_up_notification()
+
+            messages.success(self.request, (
+                "<a href='"
+                + self.submission.get_absolute_url()
+                + "'>Submission of "
+                + self.submission.quest.name
+                + "</a> "
+                + notification_kwargs["verb"]
+                + " for <a href='"
+                + self.submission.user.profile.get_absolute_url()
+                + "'>"
+                + self.submission.user.username
+                + "</a>"
+            ))
+
+            return self.form_valid()
+        return self.form_invalid()
 
 
 def paginate(object_list, page, per_page=30):
