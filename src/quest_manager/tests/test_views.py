@@ -29,6 +29,9 @@ from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
 
+from datetime import datetime
+
+
 User = get_user_model()
 
 
@@ -1685,6 +1688,36 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('quests:drafts'))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].DRAFT)
         self.assertContains(response, 'class="active"')
+
+    def test_available_quest_list_ordering__expired_quests(self):
+        """ Parses for queryset used as context for "Available Quests" list and asserts equal to intended order.
+        Which is expired quests first then non expired after.
+        expired quests should be sorted by date, then time.
+        """
+        # given hardcoded names to prevent baker randomly seeded names
+        # also since we sort by name we can ensure the order of the expired quests
+        expired_quest1 = baker.make(Quest, name="A", date_expired=datetime(2000, 1, 1).date)
+        expired_quest2 = baker.make(Quest, name="B", date_expired=datetime(2000, 1, 2).date,
+                                    time_expired=datetime(2000, 1, 1, 0).time())  # have to include y/m/d to get hour
+        expired_quest3 = baker.make(Quest, name="C", date_expired=datetime(2000, 1, 2).date,
+                                    time_expired=datetime(2000, 1, 1, 1).time())
+        expired_ids = [expired_quest1.id, expired_quest2.id, expired_quest3.id]
+
+        # only need to test for teacher since staff only has access to expired quests
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:available'))
+
+        # get the order displayed in 'quests:available'
+        displayed_order = response.context['available_quests']
+
+        # create the order we expect.
+        intended_order = list(displayed_order.order_by(*XPItem._meta.ordering).values_list('id', flat=True))
+        [intended_order.remove(id_) for id_ in expired_ids]  # remove the expired ids
+        intended_order = expired_ids + intended_order  # add them back in the order we expect
+
+        displayed_order = list(displayed_order.values_list('id', flat=True))
+
+        self.assertListEqual(intended_order, displayed_order)
 
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):

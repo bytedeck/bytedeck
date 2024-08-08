@@ -11,8 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db.models import F, ExpressionWrapper, fields
-from django.db.models import BooleanField, Exists, OuterRef
+from django.db.models import F, ExpressionWrapper, fields, BooleanField, Exists, OuterRef
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string

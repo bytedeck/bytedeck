@@ -149,7 +149,7 @@ class XPItem(models.Model):
         # as such, the original value for sort_order (-sort_order,) orders quests upside-down
         # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
         # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
-        ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
+        ordering = ["sort_order", "date_expired", "time_expired", "name"]
 
     def __str__(self):
         return self.name
