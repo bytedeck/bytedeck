@@ -10,6 +10,7 @@ from model_bakery import baker
 from badges.models import Badge, BadgeAssertion, BadgeType
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
+from djcytoscape.models import CytoScape
 from notifications.models import Notification
 
 import json
@@ -239,6 +240,37 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # we just bulk granted 2 badges, so there should be two more than before!
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
+
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a badge is related to map """
+        # setup
+        badge = baker.make(Badge)
+        scape = CytoScape.generate_map(badge, name='unique scape name')
+
+        form_data = {
+            'name': "badge copy test",
+            'xp': 0,
+            'content': "test content",
+            'badge_type': self.test_badge_type.id,
+            'author': self.test_teacher.id,
+            'import_id': uuid.uuid4()
+        }
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('badges:badge_update', args=[badge.id]), data=form_data)
+        self.assertEqual(response.status_code, 302)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('badges:badge_delete', args=[badge.id]))
+        self.assertEqual(response.status_code, 302)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
 
     # Custom label tests
     def test_badge_views__header_custom_label_displayed(self):

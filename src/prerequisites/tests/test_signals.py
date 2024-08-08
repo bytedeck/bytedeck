@@ -12,6 +12,7 @@ from courses.models import CourseStudent, Semester
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -156,6 +157,36 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
         quest.delete()  # doesn't call task because parent_object no longer exists.
         self.assertEqual(task.call_count, 1)
+
+    @patch('djcytoscape.tasks.regenerate_map.apply_async')
+    def test_prereq_regenerate_related_maps(self, task):
+        """ Tests if saving and deleting quest triggers `regenerate_map` task.
+        Cant check if `regenerate_map` made new CytoElements. So checking if task args are accurate
+        """
+        # setup a simple map
+        # origin -> quest
+        origin = baker.make('quest_manager.quest', name='origin')
+        quest = baker.make('quest_manager.quest', name='quest')
+        prereq = Prereq.add_simple_prereq(quest, origin)
+        scape = CytoScape.generate_map(origin, "Map")
+
+        # should regenerate map on save
+        prereq.save()
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+
+        # should regenerate map on delete
+        prereq.delete()
+        self.assertEqual(task.call_count, 2)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+
+        # test if task fires if map_auto_update is on
+        sc = SiteConfig.get()
+        sc.map_auto_update = False
+        sc.save()
+
+        prereq.save()
+        self.assertEqual(task.call_count, 2)
 
     def test_on_quest_badge_save_with_rank_prereq__creation(self):
         """  Test that creating a Prereq, where either the prereq_object or the or_prereq_object are a Rank,
