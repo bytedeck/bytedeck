@@ -102,22 +102,12 @@
         }
     }
 
-    // https://stackoverflow.com/a/42453540
-    $("body").on("DOMNodeInserted", function (e) {
+    $('body').on('focus',".datetimepickerinput", function(e) {
         $("[data-dp-config]:not([disabled])").djangoDatetimePicker();
     })
 
     function RemoveForm(index) {
         var fieldContainer = document.getElementById(`form-${index}-container`);
-
-        // // remove if its not initialized else
-        // if (index > initialForms) {
-        //     var totalForms = parseInt(formTotalForms.getAttribute("value"));
-        //     formTotalForms.setAttribute("value", totalForms-1);
-
-        //     fieldContainer.remove();
-        //     return;
-        // }
 
         // make invisible
         fieldContainer.style.display = "none";
