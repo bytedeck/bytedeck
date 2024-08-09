@@ -128,6 +128,7 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(Quest.objects.filter(name="Screenshots").exists())
         self.assertTrue(Quest.objects.filter(name="Who owns your creations?").exists())
         self.assertTrue(Quest.objects.filter(name="Send your teacher a Message").exists())
+        self.assertTrue(Quest.objects.filter(name="Owner: New Maps").exists())
 
     def test_default_quest_icons(self):
         """
@@ -153,6 +154,9 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(q_intro.filter(name="Screenshots").exists())
         self.assertTrue(q_intro.filter(name="Who owns your creations?").exists())
         self.assertTrue(q_intro.filter(name="Send your teacher a Message").exists())
+
+        q_owner = Quest.objects.filter(tags__name="owner")
+        self.assertTrue(q_owner.filter(name="Owner: New Maps").exists())
 
     def test_create_initial_badges__default_tags_created(self):
         """ test if intro tag is properly assigned to
