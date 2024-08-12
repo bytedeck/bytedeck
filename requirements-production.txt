@@ -13,7 +13,7 @@ django-datetime-widget>=0.9.3,<1.0
 django-decorator-include==3.0
 django-embed-video>=1.1.2,<1.5
 django-grappelli>=4.0.1,<5
-django-import-export==3.3.9
+django-import-export==4.1.1
 bleach[css]>=5,<6
 cssutils==2.11.1
 html2text==2020.1.16
