@@ -68,7 +68,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         group = self.groups[0]
         form = GFKSelect2WidgetForm()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['f'].widget))
+        field_id = signing.dumps(form.fields['f'].widget.uuid)
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 200
@@ -105,7 +105,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
             }
         )
         widget.render('name', None)
-        field_id = signing.dumps(id(widget))
+        field_id = signing.dumps(widget.uuid)
 
         response = self.client.get(url, {'field_id': field_id, 'term': ''})
         assert response.status_code == 200
@@ -126,7 +126,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         form = GFKSelect2WidgetForm()
         form.fields['f'].widget = CustomGFKSelect2Widget()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['f'].widget))
+        field_id = signing.dumps(form.fields['f'].widget.uuid)
 
         # artist = artists[0]
         group = self.groups[0]
@@ -143,7 +143,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         group = self.groups[0]
         form = GFKSelect2WidgetForm()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['f'].widget))
+        field_id = signing.dumps(form.fields['f'].widget.uuid)
         cache_key = form.fields['f'].widget._get_cache_key()
         widget_dict = cache.get(cache_key)
         widget_dict['url'] = 'yet/another/url'

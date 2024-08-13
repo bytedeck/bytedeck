@@ -40,7 +40,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['tag'].widget))
+        field_id = signing.dumps(form.fields['tag'].widget.uuid)
         response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.status_code, 200)
 
@@ -51,7 +51,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['tag'].widget))
+        field_id = signing.dumps(form.fields['tag'].widget.uuid)
         response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         self.assertEqual(response.json()['results'], [])
 
@@ -62,7 +62,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
         assert form.as_p()
-        field_id = signing.dumps(id(form.fields['tag'].widget))
+        field_id = signing.dumps(form.fields['tag'].widget.uuid)
         response = self.client.get(url, {'field_id': field_id, 'term': 'test-tag'})
         data = json.loads(response.content.decode('utf-8'))
         assert data['results']

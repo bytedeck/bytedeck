@@ -23,7 +23,17 @@ class BadgeLabel:
 
 
 class BadgeSelect2MultipleWidget(BadgeLabel, ModelSelect2MultipleWidget):
-    pass
+
+    def __init__(self, *args, **kwargs):
+        """ Despite what Select2 and django-select2 docs tell you. You cant actually change the default setting in javascript.
+        For now modify the `attrs` variable to set default attributes
+        """
+        attrs = kwargs.get('attrs', {})
+        # As of `django-select2 7.1.2`, Select2 by default now has a minimum input length of 2.
+        attrs.setdefault('data-minimum-input-length', '0')
+        kwargs['attrs'] = attrs
+
+        super().__init__(*args, **kwargs)
 
 
 class QuestForm(forms.ModelForm):
@@ -35,6 +45,7 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Quest,
             search_fields=['name__icontains'],
+            attrs={'data-minimum-input-length': 0},
         ),
     )
 
@@ -45,6 +56,7 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Badge,
             search_fields=['name__icontains'],
+            attrs={'data-minimum-input-length': 0},
         ),
     )
 
