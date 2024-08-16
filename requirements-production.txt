@@ -1,4 +1,4 @@
-django-tenants>=3.4,<3.6
+django-tenants>=3.5,<3.6  # latest version that supports python 3.8
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.12.3,<4.13
 celery>=5.2.2,<5.4
