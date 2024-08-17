@@ -17,6 +17,17 @@ class BootstrapTaggitSelect2Widget(TaggitSelect2Widget):
             'all': ('https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css',)
         }
 
+    def __init__(self, *args, **kwargs):
+        """ Despite what Select2 and django-select2 docs tell you. You cant actually change the default setting in javascript.
+        For now modify the `attrs` variable to set default attributes
+        """
+        attrs = kwargs.get('attrs', {})
+        # As of `django-select2 7.1.2`, Select2 by default now has a minimum input length of 2.
+        attrs.setdefault('data-minimum-input-length', '0')
+        kwargs['attrs'] = attrs
+
+        super().__init__(*args, **kwargs)
+
 
 def validate_unique_slug(value):
     """

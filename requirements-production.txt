@@ -1,8 +1,8 @@
-django-tenants>=3.4,<3.6
+django-tenants>=3.5,<3.6  # latest version that supports python 3.8
 backports.csv>=1.0.7,<1.1
 beautifulsoup4>=4.12.3,<4.13
 celery>=5.2.2,<5.4
-Django==3.2.25  # temp pinned at .19 while resolvoing issue #1353
+Django==3.2.25
 django-allauth>=0.54,<0.55
 django-querysetsequence>=0.16
 django-bootstrap-datepicker-plus>=4.0,<5.0
@@ -13,13 +13,12 @@ django-datetime-widget>=0.9.3,<1.0
 django-decorator-include==3.0
 django-embed-video>=1.1.2,<1.5
 django-grappelli>=4.0.1,<5
-django-import-export==3.3.9
+django-import-export==3.3.9  # latest version that supports django 3.2
 bleach[css]>=5,<6
 cssutils==2.11.1
 html2text==2020.1.16
-tablib==3.5.0
 django-redis>=5.2.0,<5.3
-django-select2>=6.3.1,<6.4
+django-select2>=8.2.1,<8.3
 django-summernote>=0.8,<0.9
 django-url-or-relative-url-field>=0.1.1,<0.2
 django-resized>=0.3.11,<1.1
