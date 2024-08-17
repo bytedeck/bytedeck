@@ -17,6 +17,7 @@ from queryset_sequence import QuerySetSequence
 
 from utilities.fields import GFKChoiceField
 from utilities.widgets import GFKSelect2Widget
+from quest_manager.models import Quest
 
 
 def random_string(n):
@@ -125,17 +126,17 @@ class TestGFKSelect2Widget(TenantTestCase):
 
     def test_filter_queryset(self):
         widget = CustomGFKSelect2Widget()
-        assert widget.filter_queryset(self.groups[0].name[:3]).exists()
+        assert widget.filter_queryset(None, self.groups[0].name[:3]).exists()
 
         widget = CustomGFKSelect2Widget()
-        qs = widget.filter_queryset(" ".join([self.groups[0].name[:3], self.groups[0].name[3:]]))
+        qs = widget.filter_queryset(None, " ".join([self.groups[0].name[:3], self.groups[0].name[3:]]))
         assert qs.exists()
 
     def test_queryset_kwarg(self):
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
-        result = widget.filter_queryset(group.name)
+        result = widget.filter_queryset(None, group.name)
         assert result.exists()
 
     def test_queryset_is_filterable(self):
@@ -144,13 +145,13 @@ class TestGFKSelect2Widget(TenantTestCase):
         queryset = QuerySetSequence(Group.objects.filter(~Q(name__icontains=group.name)))
         widget = GFKSelect2Widget(
             queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
-        result = widget.filter_queryset(group.name)
+        result = widget.filter_queryset(None, group.name)
         assert not result.exists()
 
         queryset = QuerySetSequence(Group.objects.filter(Q(name__icontains=group.name)))
         widget = GFKSelect2Widget(
             queryset=queryset, search_fields={'auth': {'group': ['name__icontains']}})
-        result = widget.filter_queryset(group.name)
+        result = widget.filter_queryset(None, group.name)
         assert result.exists()
 
     def test_ajax_view_registration(self):
@@ -160,7 +161,7 @@ class TestGFKSelect2Widget(TenantTestCase):
         url = reverse('utilities:querysetsequence_auto-json')
         group = Group.objects.last()
         data = {
-            'field_id': signing.dumps(id(widget)),
+            'field_id': signing.dumps(widget.uuid),
             'term': group.name
         }
         response = self.client.get(url, data=data)
@@ -186,3 +187,16 @@ class TestGFKSelect2Widget(TenantTestCase):
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         assert isinstance(widget.get_url(), text_type)
+
+    def test_order(self):
+        """ Tests if there isn't any unexpected ordering issues when getting the queryset. """
+        queryset_random = Quest.objects.order_by('name')
+        queryset_expected = queryset_random.order_by('id')
+
+        widget = GFKSelect2Widget(
+            queryset=QuerySetSequence(queryset_random),
+            search_fields={'quest_manager': {'quest': ['name__icontains']}}
+        )
+
+        self.assertQuerysetEqual(widget.get_queryset(), queryset_expected)
+        self.assertQuerysetEqual(widget.filter_queryset(None, ''), queryset_expected)
