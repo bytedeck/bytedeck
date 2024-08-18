@@ -18,7 +18,8 @@ class Command(BaseCommand):
         - Exception found on cleaning "admin" (Profile) of type ValidationError: {'grad_year': ['This field cannot be blank.']}
 
         "CytoElement" object called "5: Badge: ByteDeck Proficiency (2)" with "href" validation error
-        - Exception found on cleaning "5: Badge: ByteDeck Proficiency (2)" (CytoElement) of type ValidationError: {'href': ['Enter a valid URL.']}
+        - Exception found on cleaning "5: Badge: ByteDeck Proficiency (2)" (CytoElement) of type ValidationError:
+            {'href': ['URL is missing a trailing slash.']}
 
     """
     # colors from https://stackoverflow.com/a/287944

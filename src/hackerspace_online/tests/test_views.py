@@ -96,7 +96,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # assert (most) relevant badge views are redirected to from old urls
         self.assertRedirects(self.client.get('/achievements/'), reverse('badges:list'))
         self.assertRedirects(self.client.get('/achievements/create/'), reverse('badges:badge_create'))
-        self.assertRedirects(self.client.get('/achievements/1'), reverse('badges:badge_detail', args=[1]))
+        self.assertRedirects(self.client.get('/achievements/1/'), reverse('badges:badge_detail', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/edit/'), reverse('badges:badge_update', args=[1]))
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
 
