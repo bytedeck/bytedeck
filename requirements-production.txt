@@ -14,7 +14,7 @@ django-decorator-include==3.0
 django-embed-video>=1.1.2,<1.5
 django-grappelli>=4.0.1,<5
 django-import-export==3.3.9  # latest version that supports django 3.2
-bleach[css]>=5,<6
+bleach[css]>=5,<7
 cssutils==2.11.1
 html2text==2020.1.16
 django-redis>=5.2.0,<5.3
