@@ -104,10 +104,6 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         with library_schema_context():
             library_quest = baker.make(Quest, import_id=quest.import_id)
 
-        q = Quest.objects.get(import_id=quest.import_id)
-        print(q.import_id)
-        print(library_quest.import_id)
-
         url = reverse('library:import_quest', args=[library_quest.import_id])
 
         # Test the confirmation page

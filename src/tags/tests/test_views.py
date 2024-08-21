@@ -254,7 +254,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         Invalid slug names provided to Tag CreateView should be rejected
         validators that must be passed:
-        validate_slug https://docs.djangoproject.com/en/3.2/ref/validators/#validate-slug
+        validate_slug https://docs.djangoproject.com/en/4.2/ref/validators/#validate-slug
         validate_unique_slug (custom validator, located at tags.forms.validate_unique_slug)
         """
 

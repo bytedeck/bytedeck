@@ -265,6 +265,9 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(len(messages), 1)
         self.assertTrue(scape.name in str(messages[0]))
 
+        # to clear any messages before next test
+        self.assert200('badges:badge_list')
+
         # test messages for quest_delete
         response = self.client.post(reverse('badges:badge_delete', args=[badge.id]))
         self.assertEqual(response.status_code, 302)
@@ -485,6 +488,37 @@ class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
         self.badge_type2 = baker.make(BadgeType)
         self.badge_single = baker.make(Badge, badge_type=self.badge_type2)
         self.create_assertion_notification(self.badge_single)
+
+    def test_status_codes(self):
+        ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`
+        403 - because not ajax
+        302 - because of not logged in (LoginRequiredMixin)
+        200 - success
+        '''
+
+        # test anon
+        # ajax_on_show_badge_popup
+        self.assert403('badges:ajax_on_show_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # ajax_on_close_badge_popup
+        self.assert403('badges:ajax_on_close_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # test student
+        self.client.force_login(self.student)
+
+        # ajax_on_show_badge_popup
+        self.assert403('badges:ajax_on_show_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+        # ajax_on_close_badge_popup
+        self.assert403('badges:ajax_on_close_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
 
     def test_on_show_badge_popup(self):
         """ Checks if badge popup shows correct the correct context values and if

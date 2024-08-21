@@ -1,5 +1,6 @@
 import uuid
 import json
+import datetime
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
@@ -8,7 +9,7 @@ from django.db import models
 from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
-from django.utils import timezone, datetime_safe
+from django.utils import timezone
 
 from siteconfig.models import SiteConfig
 
@@ -135,7 +136,7 @@ class XPItem(models.Model):
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=timezone.localdate)  # timezone aware!
-    time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
+    time_available = models.TimeField(default=datetime.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')
     time_expired = models.TimeField(blank=True, null=True,  # local time
