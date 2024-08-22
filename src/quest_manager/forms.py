@@ -97,10 +97,10 @@ class QuestForm(forms.ModelForm):
             'submission_details': ByteDeckSummernoteAdvancedInplaceWidget(),
             'instructor_notes': ByteDeckSummernoteAdvancedInplaceWidget(),
 
-            'date_available': DatePickerInput(format='%Y-%m-%d'),
+            'date_available': DatePickerInput(),
 
             'time_available': TimePickerInput(),
-            'date_expired': DatePickerInput(format='%Y-%m-%d'),
+            'date_expired': DatePickerInput(),
             'time_expired': TimePickerInput(),
 
             # TODO: Campaign Autocomplete

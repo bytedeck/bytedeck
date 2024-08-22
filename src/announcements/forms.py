@@ -28,9 +28,9 @@ class AnnouncementForm(forms.ModelForm):
         # > Or if you're using django-crispy-forms, please use this.
         widgets = {
             'content': ByteDeckSummernoteSafeInplaceWidget(),
-            'sticky_until': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
-            'datetime_released': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
-            'datetime_expires': DateTimePickerInput(format='%Y-%m-%d %H:%M'),
+            'sticky_until': DateTimePickerInput(options={"format": "YYYY-MM-DD HH:mm"}),
+            'datetime_released': DateTimePickerInput(options={"format": "YYYY-MM-DD HH:mm"}),
+            'datetime_expires': DateTimePickerInput(options={"format": "YYYY-MM-DD HH:mm"}),
         }
 
     def clean(self):

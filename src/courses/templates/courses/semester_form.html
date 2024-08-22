@@ -65,9 +65,6 @@
     const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
     const initialForms = parseInt(formInitialForms.getAttribute("value"))-1;
 
-    var cached_datepicker_data = null;
-
-
     function AddForm() {
         // management form change data
         var totalForms = parseInt(formTotalForms.getAttribute("value"));
@@ -80,31 +77,28 @@
         // create input field + add button to last el
         var newIndex = totalForms
 
-        // container for field + buttons
+        // container for field + buttons [+, -]
         var formRowElement = document.createElement('div');
         formRowElement.setAttribute("class", "row");
         formRowElement.setAttribute("id", `form-${newIndex}-container`);
         container.insertAdjacentElement("beforeend", formRowElement);
 
-        // field
-        formRowElement.innerHTML = `{% crispy formset.empty_form helper  %}`.replaceAll("__prefix__", newIndex);
+        // ExcludeDate form field
+        formRowElement.innerHTML = `{% crispy formset.empty_form helper %}`.replaceAll("__prefix__", newIndex);
 
-        // container for buttons
+        // container for buttons [+, -]
         var buttonElement = document.createElement('div');
         buttonElement.setAttribute("class", "button-container col-xs-1");
         formRowElement.insertAdjacentElement("beforeend", buttonElement);
 
         buttonElement.insertAdjacentHTML("beforeend", addButtonCopy);
 
-        if (!cached_datepicker_data) {
-            var datepicker = document.getElementById(`id_form-${newIndex}-date`);
-            cached_datepicker_data = JSON.parse(datepicker.getAttribute("data-dp-config")).options;
-        }
+        // get the datepicker options from newly added form field
+        // initialize the datepicker widget using the options from its class
+        var $datepicker = $(`#id_form-${newIndex}-date`)
+        var options = JSON.parse($datepicker.attr("data-dbdp-config")).options;
+        $datepicker.datetimepicker(options);
     }
-
-    $('body').on('focus',".datetimepickerinput", function(e) {
-        $("[data-dp-config]:not([disabled])").djangoDatetimePicker();
-    })
 
     function RemoveForm(index) {
         var fieldContainer = document.getElementById(`form-${index}-container`);
