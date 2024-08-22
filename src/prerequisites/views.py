@@ -9,6 +9,8 @@ from hackerspace_online.decorators import staff_member_required
 from tenant.views import NonPublicOnlyViewMixin
 from prerequisites.forms import PrereqFormInline, PrereqFormsetHelper
 from prerequisites.models import Prereq
+from siteconfig.models import SiteConfig
+from djcytoscape.models import CytoScape
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.edit import FormView
 
@@ -48,6 +50,12 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
             self.request,
             f"Prerequisites have been updated for {self.object}."
         )
+
+        if SiteConfig.get().map_auto_update:
+            maps = CytoScape.objects.get_related_maps(self.object)
+            if maps.count() != 0:
+                messages.success(self.request, f"maps {maps.get_maps_as_formatted_string()} will be updated")
+
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):

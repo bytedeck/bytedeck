@@ -28,6 +28,7 @@ from quest_manager.models import Category, CommonData, Quest, QuestSubmission, X
 from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
+from djcytoscape.models import CytoScape
 
 from datetime import datetime
 
@@ -1185,6 +1186,28 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a quest is related to map """
+        # setup
+        quest = baker.make(Quest)
+        scape = CytoScape.generate_map(quest, name='unique scape name')
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('quests:quest_update', args=[quest.id]), data=self.minimal_valid_form_data)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('quests:quest_delete', args=[quest.id]))
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
 
     # TODO
     # TAs should not be able to make a quest visible_to_students

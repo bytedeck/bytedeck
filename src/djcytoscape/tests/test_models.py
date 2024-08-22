@@ -1,4 +1,5 @@
 import json
+from itertools import cycle
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
@@ -354,3 +355,24 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.assertEqual(CytoScape.objects.get_related_maps(self.no_maps).count(), 0)
         self.assertEqual(CytoScape.objects.get_related_maps(self.one_map).count(), 1)
         self.assertEqual(CytoScape.objects.get_related_maps(self.all_maps).count(), 3)
+
+    def test_get_maps_as_formatted_string(self):
+        """ Checks if `get_maps_as_formatted_string` returns the appropriate formatting per length """
+        names = [str(x) for x in range(4)]
+        scapes = baker.make(CytoScape, name=cycle(names), _quantity=4)
+
+        # since baker returns a list with `_quantity` > 1
+        # we have to convert it to a queryset
+        scape_ids = [s.id for s in scapes]
+        scapes = CytoScape.objects.filter(id__in=scape_ids)
+
+        expected_results = [
+            "",
+            "0",
+            "0 and 1",
+            "0, 1, and 2",
+            "0, 1, 2, and 3",
+        ]
+        for index, expected in enumerate(expected_results):
+            result = scapes[0:index].get_maps_as_formatted_string()
+            self.assertEqual(result, expected)

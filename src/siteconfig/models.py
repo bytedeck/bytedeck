@@ -270,6 +270,11 @@ class SiteConfig(models.Model):
         help_text="Only the current deck owner can change this setting."
     )
 
+    map_auto_update = models.BooleanField(
+        default=True,
+        help_text="Automatically regenerate maps when contents are changed."
+    )
+
     def __str__(self):
         return self.site_name
 

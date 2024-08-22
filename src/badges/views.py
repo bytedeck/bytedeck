@@ -21,12 +21,14 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
+from notifications.models import Notification
+from djcytoscape.models import CytoScape
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from djcytoscape.views import UpdateMapMessageMixin
+
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
-from djcytoscape.models import CytoScape
-from notifications.models import Notification
 
 
 class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, RedirectView):
@@ -57,7 +59,7 @@ class BadgePrereqsUpdate(ObjectPrereqsFormView):
     model = Badge
 
 
-class BadgeDelete(NonPublicOnlyViewMixin, DeleteView):
+class BadgeDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):
     model = Badge
     success_url = reverse_lazy('badges:list')
 
@@ -66,7 +68,7 @@ class BadgeDelete(NonPublicOnlyViewMixin, DeleteView):
         return super().dispatch(*args, **kwargs)
 
 
-class BadgeUpdate(NonPublicOnlyViewMixin, UpdateView):
+class BadgeUpdate(NonPublicOnlyViewMixin, UpdateMapMessageMixin, UpdateView):
     model = Badge
     form_class = BadgeForm
 
