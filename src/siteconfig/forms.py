@@ -73,6 +73,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_name_for_group",
                 "custom_name_for_student",
                 "custom_name_for_tag",
+                "custom_profile_field",
                 "show_all_tags_on_profiles",
                 "map_auto_update",
                 Accordion(
@@ -144,3 +145,12 @@ class SiteConfigForm(forms.ModelForm):
             deck_owner.is_superuser = True
             deck_owner.save()
         return deck_owner
+
+    def clean_custom_profile_field(self):
+        """
+        Format's custom_profile field and ensures its not completely composed of whitespace.
+        ie.
+        - '  Grad Year' => 'Grad Year'
+        - '     ' => ''  (which means custom_profile_field wont show as its empty)
+        """
+        return self.cleaned_data.get("custom_profile_field").strip()

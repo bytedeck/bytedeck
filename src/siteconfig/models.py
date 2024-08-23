@@ -246,6 +246,12 @@ class SiteConfig(models.Model):
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
     )
 
+    custom_profile_field = models.CharField(
+        default="", blank=True, max_length=20,
+        help_text="This field can be used to collect custom data such as a student's grad year or other \
+            important info you need from your users. If left blank this field will be ignored and will not appear on student profiles."
+    )
+
     show_all_tags_on_profiles = models.BooleanField(
         default=True,
         help_text="Controls the visibility of tags on user profiles. If set to False, only tags where the student has earned XP are displayed."

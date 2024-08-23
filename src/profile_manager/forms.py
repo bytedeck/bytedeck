@@ -19,7 +19,7 @@ class ProfileForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ['preferred_name', 'preferred_internal_only',
-                  'alias', 'avatar', 'grad_year', 'email',
+                  'alias', 'avatar', 'custom_profile_field', 'email',
                   'get_announcements_by_email', 'get_notifications_by_email',
                   'visible_to_other_students', 'dark_theme', 'silent_mode', 'custom_stylesheet']
 
@@ -28,9 +28,10 @@ class ProfileForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        self.fields['grad_year'] = forms.ChoiceField(
-            choices=Profile.get_grad_year_choices()
-        )
+        if not SiteConfig.get().custom_profile_field:
+            self.fields.pop('custom_profile_field')
+        else:
+            self.fields['custom_profile_field'].label = SiteConfig.get().custom_profile_field
 
         self.fields['email'].initial = self.instance.user.email
 
