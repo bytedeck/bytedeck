@@ -96,8 +96,14 @@
         // get the datepicker options from newly added form field
         // initialize the datepicker widget using the options from its class
         var $datepicker = $(`#id_form-${newIndex}-date`)
-        var options = JSON.parse($datepicker.attr("data-dbdp-config")).options;
-        $datepicker.datetimepicker(options);
+        var config = JSON.parse($datepicker.attr("data-dbdp-config"));
+
+        // have to sub in `backend_date_format` if options.format does not exist
+        // Null-coalescing operator
+        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing_assignment
+        config.options.format ??= config.backend_date_format;
+
+        $datepicker.datetimepicker(config.options);
     }
 
     function RemoveForm(index) {
