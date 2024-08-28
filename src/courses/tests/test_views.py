@@ -137,6 +137,9 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(len(messages), 1)
         self.assertTrue(scape.name in str(messages[0]))
 
+        # to clear any messages before next test
+        self.assert200('courses:ranks')
+
         # test messages for quest_delete
         response = self.client.post(reverse('courses:rank_delete', args=[rank.id]))
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
@@ -198,7 +201,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:course_update', args=[1])
         self.assertRedirectsLogin('courses:course_delete', args=[1])
         # View from external package.  Need to override view with LoginRequiredMixin if we want to bother
-        # self.assertRedirectsLogin('courses:mark_distribution_chart', args=[1])
 
         # Refer to rank specific tests for Rank CRUD views
 
@@ -1004,11 +1006,12 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
 
     def test_non_ajax_status_code(self):
-        self.assert404('courses:mark_distribution_chart', args=[self.teacher.pk])
+        self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])
 
     def test_ajax_status_code_for_anonymous(self):
+        # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
 
     def test_ajax_status_code_for_students(self):
         user = baker.make(User)
@@ -1131,19 +1134,30 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
         return quest, quest_submissions
 
     def test_non_ajax_status_code(self):
-        # 302 unless verified ajax POST request
-        self.assertRedirectsLogin('courses:ajax_progress_chart', args=[self.student.pk])
+        """ 403 unless verified ajax POST request """
+        self.assert403('courses:ajax_progress_chart', args=[self.student.pk])
 
     def test_ajax_status_code_for_anonymous(self):
-        # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
+        """ checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
+        redirects because of LoginRequiredMixin
+        """
+        # post
         response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+        # get
+        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 302)
 
     def test_ajax_status_code_for_student(self):
         self.client.force_login(self.student)
 
+        # post
         response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
+
+        # get
+        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
@@ -1361,6 +1375,37 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.student = baker.make(User)
+
+    def test_status_codes(self):
+        ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`
+        403 - because not ajax
+        302 - because of not logged in (LoginRequiredMixin)
+        200 - success
+        '''
+
+        # test anon
+        # ajax_on_show_ranked_popup
+        self.assert403('courses:ajax_on_show_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # ajax_on_close_ranked_popup
+        self.assert403('courses:ajax_on_close_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # test student
+        self.client.force_login(self.student)
+
+        # ajax_on_show_ranked_popup
+        self.assert403('courses:ajax_on_show_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+        # ajax_on_close_ranked_popup
+        self.assert403('courses:ajax_on_close_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
 
     def test_on_show_ranked_popup(self):
         """ Checks if earned_rank and next_rank are correct when requesting json from ranked popups

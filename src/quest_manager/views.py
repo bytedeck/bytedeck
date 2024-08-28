@@ -19,7 +19,7 @@ from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
-from hackerspace_online.decorators import staff_member_required
+from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
@@ -339,41 +339,38 @@ class CommonDataDeleteView(DeleteView):
     success_url = reverse_lazy("quest_manager:commonquestinfo_list")
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_summary_histogram(request, pk):
-    if request.is_ajax():
-        max = int(request.GET.get("max", 60))
-        min = int(request.GET.get("min", 1))
+    max_ = int(request.GET.get("max", 60))
+    min_ = int(request.GET.get("min", 1))
 
-        quest = get_object_or_404(Quest, pk=pk)
+    quest = get_object_or_404(Quest, pk=pk)
 
-        minutes_list = get_minutes_to_complete_list(quest)
+    minutes_list = get_minutes_to_complete_list(quest)
 
-        np_data = np.array(minutes_list)
-        # remove outliers
-        np_data = np_data[(np_data >= min) & (np_data < max + 1)]
-        # sort values
-        np_data = np.sort(np_data)
+    np_data = np.array(minutes_list)
+    # remove outliers
+    np_data = np_data[(np_data >= min_) & (np_data < max_ + 1)]
+    # sort values
+    np_data = np.sort(np_data)
 
-        histogram_values, histogram_labels = get_histogram(np_data, min, max)
+    histogram_values, histogram_labels = get_histogram(np_data, min_, max_)
 
-        size = np_data.size
-        mean = float(np.mean(np_data))
-        data = {
-            "histogram_values": histogram_values.tolist(),
-            "histogram_labels": histogram_labels[:-1].tolist(),
-            "count": size,
-            "mean": mean,
-            "percentile_50": int(np.median(np_data)) if size else None,
-            "percentile_25": int(np_data[size // 4]) if size else None,
-            "percentile_75": int(np_data[size * 3 // 4]) if size else None,
-        }
+    size = np_data.size
+    mean = float(np.mean(np_data))
+    data = {
+        "histogram_values": histogram_values.tolist(),
+        "histogram_labels": histogram_labels[:-1].tolist(),
+        "count": size,
+        "mean": mean,
+        "percentile_50": int(np.median(np_data)) if size else None,
+        "percentile_25": int(np_data[size // 4]) if size else None,
+        "percentile_75": int(np_data[size * 3 // 4]) if size else None,
+    }
 
-        return JsonResponse(data)
-
-    else:
-        raise Http404
+    return JsonResponse(data)
 
 
 def get_histogram(data_list, min, max):
@@ -531,10 +528,11 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     return render(request, template, context)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
-    if request.is_ajax() and request.method == 'POST':
+    if request.method == "POST":
         template = 'quest_manager/preview_content_quests_avail.html'
 
         with from_library_schema_first(request):
@@ -562,10 +560,11 @@ def ajax_quest_info(request, quest_id=None):
         raise Http404
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_approval_info(request, submission_id=None):
-    if request.is_ajax() and request.method == 'POST':
+    if request.method == "POST":
         qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
 
         sub = get_object_or_404(qs, pk=submission_id)
@@ -577,10 +576,11 @@ def ajax_approval_info(request, submission_id=None):
         raise Http404
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_submission_info(request, submission_id=None):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         # past means previous semester that is now closed
         past = "/past/" in request.path_info
         completed = "/completed/" in request.path_info
@@ -1396,10 +1396,11 @@ def skipped(request, quest_id):
     return skip(request, submission.id)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
-    if request.is_ajax() and request.POST:
+    if request.POST:
         response_data = {
             "result": "No changes",
         }
@@ -1514,12 +1515,13 @@ def submission(request, submission_id=None, quest_id=None):
     return render(request, "quest_manager/submission.html", context)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_submission_count(request):
     """Returns the number of submissions awaiting approval for the current user
     This is used to update the number beside the "Approvals" button in the navbar"""
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         submission_count = QuestSubmission.objects.all_awaiting_approval(
             teacher=request.user
         ).count()
@@ -1550,10 +1552,11 @@ def flag(request, submission_id):
     return redirect("quests:approvals")
 
 
+@xml_http_request_required
 @non_public_only_view
 @staff_member_required
 def ajax_flag(request):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         submission_id = request.POST.get("submission_id", None)
         sub = QuestSubmission.objects.get(id=submission_id)
         sub.flagged_by = request.user

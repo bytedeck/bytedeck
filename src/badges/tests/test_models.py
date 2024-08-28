@@ -260,7 +260,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         values = []
         for _ in range(num):
             badge_assertion = self.badge_assertion_recipe.make()
-            values.append(repr(badge_assertion))
+            values.append(badge_assertion)
 
         qs = badge_assertion.get_duplicate_assertions()
         self.assertQuerysetEqual(list(qs), values, )

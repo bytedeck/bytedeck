@@ -1,4 +1,6 @@
 from unittest.mock import patch
+from freezegun import freeze_time
+from datetime import datetime
 
 from django.conf import settings
 from django.core import mail
@@ -122,59 +124,62 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "Enter a valid email address")
 
         # fourth (final) case, and finally trying to submit with all required (non-blank) fields
-        # should returs 302 (redirect to newly created tenant)
-        form_data = {
-            "name": "default",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
-        }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "http://default.localhost:8000")
+        # should returns 302 (redirect to newly created tenant)
+        # need to freeze_time as signer keys are timestamped. Without it will fail the confirmation_link test
+        with freeze_time(datetime(2024, 3, 3)):
+            form_data = {
+                "name": "default",
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "john.doe@example.com",
+            }
+            response = self.client.post(reverse("tenant:new"), data=form_data)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.url, "http://default.localhost:8000")
 
-        # check mailbox after submitting form
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Please Confirm Your Email Address", mail.outbox[0].subject)
-        # expecting to see john.doe@example.com as recipient
-        self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
-        # expecting to see correct domain name in confirmation link and make sure link is correct
-        email_address = EmailAddress.objects.get(email="john.doe@example.com")
-        key = EmailConfirmationHMAC(email_address).key
-        confirmation_link = "".join(["http://default.localhost:8000", reverse("account_confirm_email", args=[key])])
-        self.assertIn(confirmation_link, mail.outbox[0].body)
+            # check mailbox after submitting form
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertIn("Please Confirm Your Email Address", mail.outbox[0].subject)
+            # expecting to see john.doe@example.com as recipient
+            self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+            # expecting to see correct domain name in confirmation link and make sure link is correct
+            email_address = EmailAddress.objects.get(email="john.doe@example.com")
+            key = EmailConfirmationHMAC(email_address).key
+            confirmation_link = "".join(["http://default.localhost:8000", reverse("account_confirm_email", args=[key])])
 
-        owner = SiteConfig.get().deck_owner or None
-        self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
-        self.assertEqual(owner.email, "john.doe@example.com")
+            self.assertIn(confirmation_link, mail.outbox[0].body)
 
-        # check that the username was set to firstname.lastname (instead of "owner")
-        self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
-        # check that the  password was set to firstname-deckname-lastname (instead of "password")
-        self.assertEqual(owner.check_password("john-default-doe"), True)
+            owner = SiteConfig.get().deck_owner or None
+            self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
+            self.assertEqual(owner.email, "john.doe@example.com")
 
-        # manually verify email
-        email_address_obj = owner.emailaddress_set.get(email="john.doe@example.com")
-        get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
+            # check that the username was set to firstname.lastname (instead of "owner")
+            self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
+            # check that the  password was set to firstname-deckname-lastname (instead of "password")
+            self.assertEqual(owner.check_password("john-default-doe"), True)
 
-        # clear the outbox from outdated messages
-        mail.outbox.clear()
+            # manually verify email
+            email_address_obj = owner.emailaddress_set.get(email="john.doe@example.com")
+            get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
 
-        # confirming the email/account and receiving welcome email
-        email_confirmed_handler(email_address=email_address_obj)
+            # clear the outbox from outdated messages
+            mail.outbox.clear()
 
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Instructions to sign in to default", mail.outbox[0].subject)
-        # expecting to see the same john.doe@example.com as recipient
-        self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+            # confirming the email/account and receiving welcome email
+            email_confirmed_handler(email_address=email_address_obj)
 
-        # ... make sure only non-logged users receives "welcome" email
-        self.client.force_login(owner)
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertIn("Instructions to sign in to default", mail.outbox[0].subject)
+            # expecting to see the same john.doe@example.com as recipient
+            self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
 
-        # clear the outbox from outdated messages
-        mail.outbox.clear()
+            # ... make sure only non-logged users receives "welcome" email
+            self.client.force_login(owner)
 
-        # trying to confirm email after being logged into app...
-        email_confirmed_handler(email_address=email_address_obj)
-        # expect to receive nothing...
-        self.assertEqual(len(mail.outbox), 0)
+            # clear the outbox from outdated messages
+            mail.outbox.clear()
+
+            # trying to confirm email after being logged into app...
+            email_confirmed_handler(email_address=email_address_obj)
+            # expect to receive nothing...
+            self.assertEqual(len(mail.outbox), 0)

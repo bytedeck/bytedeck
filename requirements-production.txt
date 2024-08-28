@@ -1,4 +1,4 @@
-Django==3.2.25
+Django==4.2
 django-allauth>=0.54,<0.55
 django-bootstrap-datepicker-plus>=5.0.5,<6.0
 django-celery-beat>=2.2,<2.7
