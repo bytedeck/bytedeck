@@ -10,6 +10,7 @@ from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
+from comments.models import Comment
 
 from courses.models import Semester
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
@@ -469,17 +470,25 @@ class SubmissionTestModel(TenantTestCase):
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
     def test_submission_mark_completed(self):
-        draft_text = "Draft words"
         user = baker.make(User)
-        sub = baker.make(QuestSubmission, draft_text=draft_text, user=user)
+        sub = baker.make(QuestSubmission, user=user)
+        draft_comment = Comment.objects.create_comment(
+            user=self.student,
+            text="draft comment",
+            target=sub,
+            path=sub.get_absolute_url(),
+        )
+        sub.draft_comment = draft_comment
+        sub.save()
+
         self.assertFalse(sub.is_completed)
-        self.assertEqual(sub.draft_text, draft_text)
+        self.assertEqual(sub.draft_comment, draft_comment)
         self.assertIsNone(user.profile.time_of_last_submission)
         sub.mark_completed()
         self.assertEqual(user.profile.time_of_last_submission, sub.time_completed)
         self.assertTrue(sub.is_completed)
         self.assertIsNotNone(sub.first_time_completed)
-        self.assertIsNone(sub.draft_text)
+        self.assertIsNone(sub.draft_comment)
 
     def test_submission_get_previous(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
