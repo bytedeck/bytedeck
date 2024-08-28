@@ -454,6 +454,9 @@ STATICFILES_DIRS = env(
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
+# https://django-crispy-forms.readthedocs.io/en/latest/crispy_tag_forms.html#make-crispy-forms-fail-loud
+CRISPY_FAIL_SILENTLY = not DEBUG  # logs crispy-forms failures as exceptions when True
+
 SITE_ID = 1
 
 # https://github.com/charettes/django-colorful
