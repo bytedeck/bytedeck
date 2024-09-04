@@ -3,10 +3,23 @@ from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from crispy_forms.bootstrap import Accordion, AccordionGroup
-from bootstrap_datepicker_plus.widgets import DateTimePickerInput, TimePickerInput
+from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 
 from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+
+
+class NoScriptTagDatePickerInput(DatePickerInput):
+    """ Widget to override build_attrs.
+    As of bootstrap_datepicker_plus 5.0.0 the widget when rendered comes with script tags if debug=True.
+    This script tag breaks the javascript in `semester_form.html`.
+    Furthermore, the widget.attrs responsible is 'data-dbdp-debug' which has to be removed. Not set False/True
+    to stop the script tag from showing up.
+    """
+    def build_attrs(self, *args, **kwargs):
+        attrs = super().build_attrs(*args, **kwargs)
+        attrs.pop('data-dbdp-debug', None)
+        return attrs
 
 
 class MarkRangeForm(forms.ModelForm):
@@ -110,8 +123,8 @@ class SemesterForm(forms.ModelForm):
         model = Semester
         fields = ('name', 'first_day', 'last_day')
         widgets = {
-            'first_day': DateTimePickerInput(format='%Y-%m-%d'),
-            'last_day': DateTimePickerInput(format='%Y-%m-%d'),
+            'first_day': DatePickerInput(),
+            'last_day': DatePickerInput(),
         }
 
     def __init__(self, *args, **kwargs):
@@ -135,7 +148,7 @@ class ExcludedDateForm(forms.ModelForm):
         model = ExcludedDate
         fields = ['date', 'label']
         widgets = {
-            'date': DateTimePickerInput(format='%Y-%m-%d'),
+            'date': NoScriptTagDatePickerInput(),
         }
         help_texts = {
             'label': None

@@ -1,0 +1,34 @@
+
+<div class="modal fade" id="newRankModal" tabindex="-1" role="dialog" aria-labelledby="newRankLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title" id="newRankLabel">Congratulations! You've achieved a new Rank</h4>
+      </div>
+      <div class="modal-body">
+
+        <p>Your <strong>{{ earned_xp }} XP</strong> has earned you the rank of:</p>
+        <h3 class="text-center"><i class="text-warning fa-fw {{ earned_rank.fa_icon }}"></i>
+          <strong>{{ earned_rank }}</strong> <small>({{earned_rank.xp}} XP)</small>
+        </h3>
+        <br>
+        {% if related_map %}
+          <p>This rank gives you access to
+          <a href="{% url 'djcytoscape:quest_map_personalized' scape_id=related_map.id user_id=request.user.id %}">
+            new quests.
+          </a>
+        {% endif %}
+
+        {% if next_rank %}
+          <p>Your next rank is <i class="text-warning fa-fw {{ next_rank.fa_icon }}"></i><strong>{{ next_rank }}</strong> ({{ next_rank.xp }} XP).</p>
+        {% else %}
+          <p>You've achieved the highest rank possible!</p>
+        {% endif %}
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal" id="newRankDismissButton">Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -64,7 +64,6 @@ class BulkBadgeAssertionForm(forms.Form):
             search_fields=['name__icontains'],
         )
     )
-    # students = forms.ModelMultipleChoiceField(queryset=None)
     students = forms.ModelMultipleChoiceField(
         # TODO just use the user objects here instead of profile
         # Goign back to the user just to sort by profile string is...a hack.  How to do that properly?!

@@ -1,97 +1,95 @@
 """quest_manager URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/1.8/topics/http/urls/
+    https://docs.djangoproject.com/en/4.2/topics/http/urls/
 Examples:
 Function views
     1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  url(r'^$', views.home, name='home')
+    2. Add a URL to urlpatterns:  re_path(r'^$', views.home, name='home')
 Class-based views
     1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  url(r'^$', Home.as_view(), name='home')
+    2. Add a URL to urlpatterns:  re_path(r'^$', Home.as_view(), name='home')
 Including another URLconf
     1. Add an import:  from blog import urls as blog_urls
-    2. Add a URL to urlpatterns:  url(r'^blog/', include(blog_urls))
+    2. Add a URL to urlpatterns:  re_path(r'^blog/', include(blog_urls))
 """
+
 from quest_manager import views
 
-from django.conf.urls import url
-from django.urls import path
+from django.urls import re_path, path
 
 app_name = 'quest_manager'
 
 urlpatterns = [
-    url(r'^$', views.quest_list, name=''),
-    # url(r'^create/$', views.quest_create, name='quest_create'),
+    re_path(r'^$', views.quest_list, name=''),
 
     # Ajax
-    url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
-    url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
-    url(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
-    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
-    url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
-    url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
-    url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
-    url(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
-    url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
+    re_path(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
+    re_path(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
+    re_path(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
+    re_path(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
+    re_path(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
+    re_path(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/$', views.ajax_submission_info, name='ajax_info_in_progress'),
+    re_path(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past'),
+    re_path(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info, name='ajax_info_completed'),
+    re_path(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
+    re_path(r'^ajax_submission_approve/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='ajax_approve'),
+    re_path(r'^ajax_approval_info/$', views.ajax_approval_info, name='ajax_approval_root'),
+    re_path(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
 
     # Lists
-    url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
-    url(r'^available/$', views.quest_list, name='quests'),
-    url(r'^available/$', views.quest_list, name='available'),
-    url(r'^available/all/$', views.quest_list, name='available_all'),
-    url(r'^inprogress/$', views.quest_list, name='inprogress'),
-    url(r'^completed/$', views.quest_list, name='completed'),
-    url(r'^past/$', views.quest_list, name='past'),
-    url(r'^drafts/$', views.quest_list, name='drafts'),
+    re_path(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'),
+    re_path(r'^available/$', views.quest_list, name='quests'),
+    re_path(r'^available/$', views.quest_list, name='available'),
+    re_path(r'^available/all/$', views.quest_list, name='available_all'),
+    re_path(r'^inprogress/$', views.quest_list, name='inprogress'),
+    re_path(r'^completed/$', views.quest_list, name='completed'),
+    re_path(r'^past/$', views.quest_list, name='past'),
+    re_path(r'^drafts/$', views.quest_list, name='drafts'),
 
     # Approvals
-    url(r'^approvals/$', views.approvals, name='approvals'),
-    url(r'^approvals/submitted/$', views.approvals, name='submitted'),
-    url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
-    url(r'^approvals/returned/$', views.approvals, name='returned'),
-    url(r'^approvals/approved/$', views.approvals, name='approved'),
-    url(r'^approvals/flagged/$', views.approvals, name='flagged'),
-    # url(r'^approvals/skipped/$', views.approvals, name='skipped'),
-    # url(r'^approvals/submitted/(?P<quest_id>[0-9]+)/$', views.approvals, name='submitted_for_quest'),  # Not used
-    # url(r'^approvals/returned/(?P<quest_id>[0-9]+)/$', views.approvals, name='returned_for_quest'),  # Not used
-    url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
-    url(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
-    # url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'),  # Not used
+    re_path(r'^approvals/$', views.approvals, name='approvals'),
+    re_path(r'^approvals/submitted/$', views.approvals, name='submitted'),
+    re_path(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
+    re_path(r'^approvals/returned/$', views.approvals, name='returned'),
+    re_path(r'^approvals/approved/$', views.approvals, name='approved'),
+    re_path(r'^approvals/flagged/$', views.approvals, name='flagged'),
+    re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
+    re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),
 
     # Quests
-    url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
-    url(r'^create/$', views.QuestCreate.as_view(), name='quest_create'),
-    url(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),
-    url(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.QuestPrereqsUpdate.as_view(), name='quest_prereqs_update'),
-    url(r'^(?P<quest_id>[0-9]+)/copy/$', views.QuestCopy.as_view(), name='quest_copy'),
-    url(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
-    url(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
-    url(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
-    url(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
-    url(r'^(?P<quest_id>[0-9]+)/skip/$', views.skipped, name='skip_for_quest'),
+    re_path(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
+    re_path(r'^create/$', views.QuestCreate.as_view(), name='quest_create'),
+    re_path(r'^(?P<pk>[0-9]+)/edit/$', views.QuestUpdate.as_view(), name='quest_update'),
+    re_path(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.QuestPrereqsUpdate.as_view(), name='quest_prereqs_update'),
+    re_path(r'^(?P<quest_id>[0-9]+)/copy/$', views.QuestCopy.as_view(), name='quest_copy'),
+    re_path(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
+    re_path(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
+    re_path(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
+    re_path(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
+    re_path(r'^(?P<quest_id>[0-9]+)/skip/$', views.skipped, name='skip_for_quest'),
 
     # Quest/Submission Summary Metrics
     path('<int:pk>/summary/', views.QuestSubmissionSummary.as_view(), name='summary'),
     path('<int:pk>/summary/ajax', views.ajax_summary_histogram, name='ajax_summary_histogram'),
 
     # Submissions
-    url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
-    url(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
-    url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
+    re_path(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='approve'),
+    re_path(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 
     # Flagged submissions
-    url(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
-    url(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
+    re_path(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
 
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
+    path('campaigns/available/', views.CategoryList.as_view(), name='categories_available'),
+    path('campaigns/inactive/', views.CategoryList.as_view(), name='categories_inactive'),
     path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),

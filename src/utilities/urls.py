@@ -1,13 +1,11 @@
-from django.conf.urls import url
-from django.urls import path
+from django.urls import re_path, path
 
 from utilities import views
 
 app_name = 'utilities'
 
 urlpatterns = [
-    # url(r'^$', views.suggestion_list, name='list'),
-    url(r'^videos/$', views.videos, name='videos'),
+    re_path(r'^videos/$', views.videos, name='videos'),
 
     # flatpages
     path('custom-pages/', views.FlatPageListView.as_view(), name='flatpage_list'),

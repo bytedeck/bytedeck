@@ -4,6 +4,26 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.25.0] 2024-09-04
+* New Features
+  - Maps auto-update when an item within the map is updated [#1660]
+  - Custom, otional field for student profiles. This can be set in Site Config;  Previously "Grad Year" field [#1273]
+  - When students earn badges and ranks, there is now a popup message congratulating/informing them [#551]
+  - Library feature can now import entire campaigns [#1667]
+  - Submission return and approval no longer reloads page [#1349]
+* Bugfixes:
+  - Typo in default Ranks
+  - Expired quests in the available quests tab now appear at the top of the list [#1430]
+  - Adding an Excluded Dates to a semester does not activate datepicker; [#1682]
+* Devops:
+  - Update Django to 4.2 LTS
+  - Enhance Campaign and Quest Library Management with new templates and routing
+  - Refactored approvals and quest_list to use enums for tabs [#1150]
+  - full_clean clearer error printout [#1669]
+  - add hash_to_link script to make Changelogs easier to write
+  - remove 'future' dependancy; update Dockerfile and docker-compose legacy code
+  - many dependancy updates
+  - Added CRISPY_FAIL_SILENTLY to settings.py; [#629]
 
 ### [1.24.2] 2024-07-28 - Prep for big submission questions update
 * Tweaks:
@@ -20,7 +40,7 @@ This file chronologically records all notable changes to this website, including
 
 ### [1.24.1] 2024-07-15 - Loads of Tweaks Update
 * Tweaks:
-  - Adding a Rank as a prerew to an object automatically generates a map for that Rank on the Rank list page [#88](https://github.com/bytedeck/bytedeck/issues/88)
+  - Adding a Rank as a prereq to an object automatically generates a map for that Rank on the Rank list page [#88](https://github.com/bytedeck/bytedeck/issues/88)
   - New Site Config option added to only show tags that students have earned XP on (instead of all tags) [#1143](https://github.com/bytedeck/bytedeck/issues/1143)
   - Add Mark Range values below the XP progress chart if using Mark Calculations option [#1508](https://github.com/bytedeck/bytedeck/issues/1508)
   - Added name field to Semesters # 1565

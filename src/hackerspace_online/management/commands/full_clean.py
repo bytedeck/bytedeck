@@ -14,17 +14,20 @@ class Command(BaseCommand):
         # Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>
 
     examples of full_clean validation errors:
-        "Profile" object called "admin" with a "grad_year" validation error
+        (deprecated problem)
+        "Profile" object called "admin" with a "custom_profile_field" validation error
         - Exception found on cleaning "admin" (Profile) of type ValidationError: {'grad_year': ['This field cannot be blank.']}
 
         "CytoElement" object called "5: Badge: ByteDeck Proficiency (2)" with "href" validation error
-        - Exception found on cleaning "5: Badge: ByteDeck Proficiency (2)" (CytoElement) of type ValidationError: {'href': ['Enter a valid URL.']}
+        - Exception found on cleaning "5: Badge: ByteDeck Proficiency (2)" (CytoElement) of type ValidationError:
+            {'href': ['URL is missing a trailing slash.']}
 
     """
     # colors from https://stackoverflow.com/a/287944
     EXCEPTION_C = '\033[91m'
     MODEL_C = '\033[94m'
     OBJECT_C = '\033[96m'
+    TENANT_C = '\033[92m'
     END_C = '\033[0m'
 
     LOCAL_APPS = (
@@ -44,7 +47,7 @@ class Command(BaseCommand):
         'library',
     )
 
-    help = ("Loops through a list of tenants (all by default), and validates each object in the database using full_clean().",
+    help = ("Loops through a list of tenants (all by default), and validates each object in the database using full_clean()."
             "Any validation errors are printed to the console.")
 
     def add_arguments(self, parser):
@@ -79,9 +82,13 @@ class Command(BaseCommand):
                                 object_.save()
                             except ValidationError as e:
                                 exception_string = self.EXCEPTION_C + "Exception" + self.END_C
+                                tenant_string = self.TENANT_C + str(tenant.schema_name) + self.END_C
                                 object_string = self.OBJECT_C + str(object_) + self.END_C
                                 model_string = self.MODEL_C + model.__name__ + self.END_C
                                 error_type = self.EXCEPTION_C + type(e).__name__ + self.END_C
 
-                                # Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>
-                                print(f'{exception_string} found on cleaning "{object_string}" ({model_string}) of type {error_type}:', e)
+                                # Exception found on <Tenant> cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>
+                                print(
+                                    f'{exception_string} found on {tenant_string} cleaning "{object_string}" ({model_string}) of type {error_type}:',
+                                    e
+                                )

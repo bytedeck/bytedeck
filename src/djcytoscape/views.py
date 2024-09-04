@@ -15,6 +15,7 @@ from django.urls import reverse_lazy
 from hackerspace_online.decorators import staff_member_required
 
 from quest_manager.models import QuestSubmission, Quest
+from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .models import CytoScape
@@ -22,6 +23,23 @@ from .forms import GenerateQuestMapForm, QuestMapForm
 from .tasks import regenerate_all_maps
 
 User = get_user_model()
+
+
+class UpdateMapMessageMixin:
+    """ Should be used for models that have signals which update related maps when modified/deleted
+    ie. badges, quests, ranks, prerequisites (not applicable since overridden)
+    """
+    def form_valid(self, *args, **kwargs):
+        """ Upon successful form, adds a success message listing related maps that are updated.
+        returns a response object.
+        """
+
+        if SiteConfig.get().map_auto_update:
+            maps = CytoScape.objects.get_related_maps(self.object)
+            if maps.count() != 0:
+                messages.success(self.request, f"maps {maps.get_maps_as_formatted_string()} will be updated")
+
+        return super().form_valid(*args, **kwargs)
 
 
 @method_decorator(staff_member_required, name='dispatch')

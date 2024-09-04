@@ -10,6 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 from tenant.views import non_public_only_view
 
+from hackerspace_online.decorators import xml_http_request_required
+
 from .models import Notification
 
 
@@ -81,10 +83,11 @@ def read(request, id):
         return HttpResponseRedirect(reverse('notifications:list'))
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax(request):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
 
         limit = 15
         notifications = Notification.objects.all_unread(request.user)
@@ -118,10 +121,11 @@ def ajax(request):
         raise Http404
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_mark_read(request):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
 
         id = request.POST.get('id', None)
         n = Notification.objects.get(id=id)
@@ -129,30 +133,3 @@ def ajax_mark_read(request):
         return JsonResponse(data={})
     else:
         raise Http404
-
-# class NotifcationOptionsForm(ModelForm):
-#     class Meta:
-#         model = UserNotificationOptionSet
-#         fields = '__all__'
-#
-# def server_create(request, template_name='servers/server_form.html'):
-#     form = ServerForm(request.POST or None)
-#     if form.is_valid():
-#         form.save()
-#         return redirect('server_list')
-#     return render(request, template_name, {'form':form})
-#
-# def server_update(request, pk, template_name='servers/server_form.html'):
-#     server = get_object_or_404(Server, pk=pk)
-#     form = ServerForm(request.POST or None, instance=server)
-#     if form.is_valid():
-#         form.save()
-#         return redirect('server_list')
-#     return render(request, template_name, {'form':form})
-#
-# def server_delete(request, pk, template_name='servers/server_confirm_delete.html'):
-#     server = get_object_or_404(Server, pk=pk)
-#     if request.method=='POST':
-#         server.delete()
-#         return redirect('server_list')
-#     return render(request, template_name, {'object':server})

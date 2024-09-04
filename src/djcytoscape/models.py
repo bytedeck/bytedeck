@@ -12,6 +12,8 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from url_or_relative_url_field.fields import URLOrRelativeURLField
+
 from quest_manager.models import Category
 
 
@@ -119,7 +121,7 @@ class CytoElement(models.Model):
                              help_text="if present, will be used as node label instead of id")
     min_len = models.IntegerField(default=1,
                                   help_text="number of ranks to keep between the source and target of the edge")
-    href = models.URLField(blank=True, null=True)
+    href = URLOrRelativeURLField(blank=True, null=True, max_length=50)
     is_transition = models.BooleanField(default=False,
                                         help_text="Whether this node transitions to a new map")
     objects = CytoElementManager()
@@ -368,7 +370,37 @@ class TempCampaign:
         return self.get_common_prereq_node_ids() is True
 
 
+class CytoScapeQueryset(models.QuerySet):
+
+    def get_maps_as_formatted_string(self):
+        """ returns queryset of maps as grammatically correct string
+        [map1]
+        >>> map1
+        [map1, map2]
+        >>> map1 and map2
+        [map1, map2, ..., mapN]
+        >>> map1, map2, ..., and mapN
+        """
+        # .join functions do not convert to str
+        names = [str(scape) for scape in self]
+
+        if self.count() == 0:
+            return ""
+        elif self.count() == 1:
+            return names[0]
+        # oxford comma not applicable
+        elif self.count() == 2:
+            return " and ".join(names)
+        # oxford comma
+        else:
+            return ", ".join(names[:-1]) + f", and {names[-1]}"
+
+
 class CytoScapeManager(models.Manager):
+
+    def get_queryset(self):
+        return CytoScapeQueryset(self.model, using=self._db)
+
     def generate_random_tree_scape(self, name, size=100):
         scape = CytoScape(
             name=name,
