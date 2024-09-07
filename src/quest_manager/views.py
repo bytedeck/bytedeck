@@ -158,8 +158,7 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy("quests:categories")
 
 
-@method_decorator(staff_member_required, name="dispatch")
-class CategoryShare(NonPublicOnlyViewMixin, DetailView):
+class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
 
     model = Category
     success_url = reverse_lazy("quests:categories")
@@ -203,13 +202,24 @@ class CategoryShare(NonPublicOnlyViewMixin, DetailView):
             library_category = library_category_qs.first()
 
         if library_category:
-            messages.error(request, f'Campaign with name {library_category.title} already exists in the current deck.')
+            messages.error(request, f'Campaign with name {library_category.title} already exists in the libray.')
             return redirect(self.success_url)
 
         # Import all quests from this campaign
         quest_ids = list(category.quest_set.values_list('import_id', flat=True))
         import_quests_to(destination_schema=get_library_schema_name(), quest_import_ids=quest_ids, source_schema=connection.schema_name)
         messages.success(request, f"Successfully shared '{category.name}' to the library.")
+
+        with library_schema_context():
+            site_config = SiteConfig.get()
+            library_category = Category.objects.get(title=category.title)
+            notify.send(
+                sender=site_config.deck_ai,
+                target=library_category,
+                recipient=site_config.deck_owner,
+                affected_users=[site_config.deck_owner, ],
+                verb='a new campaign has been shared to the library named'
+            )
 
         return redirect(self.success_url)
 

@@ -202,7 +202,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def test_share_existing_quest_to_library_prevented(self):
         """
-        Test that a quest is prevented from being shared when it is already in the tenant
+        Test that sharing is prevented for a quest when it is already in the library
         """
         self.client.force_login(SiteConfig.get().deck_owner)
         quest = baker.make(Quest)
@@ -217,8 +217,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         # Quest should now exist in the library tenant
         with library_schema_context():
-            quest = Quest.objects.get(import_id=quest.import_id)
-            self.assertFalse(quest.visible_to_students)
+            lib_quest = Quest.objects.get(import_id=quest.import_id)
+            self.assertFalse(lib_quest.visible_to_students)
 
         # Share the same quest
         url = reverse('quests:quest_share', args=(quest.pk, ))
@@ -229,7 +229,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertEqual(len(messages), 1)
         self.assertEqual(str(messages[0]), f"Quest with import_id {quest.import_id} already exists in the library.")
 
-    def test_library_owner_got_notified(self):
+    def test_library_owner_got_notified_when_sharing_quest(self):
         """
         Test that the library owner was notified when a quest was shared
         """
@@ -310,3 +310,116 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_site_owner_share_campaign(self):
+        """
+        Test that the site owner can share campaigns to the library
+        """
+
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign)
+
+        # Sanity check that the campaign does not exist in the library tenant
+        with library_schema_context():
+            with self.assertRaises(Category.DoesNotExist):
+                Category.objects.get(title=campaign.title)
+
+        url = reverse('quests:category_share', args=(campaign.pk, ))
+        self.client.post(url, follow=True)
+
+        # Campaign should now exist in the library tenant
+        with library_schema_context():
+            Category.objects.get(title=campaign.title)
+
+    def test_non_site_owner_share_campaign(self):
+        """
+        Test that the non site owners cannot share campaigns to the library
+        """
+        self.client.force_login(self.test_teacher)
+
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign)
+
+        # Sanity check that the campaign does not exist in the library tenant
+        with library_schema_context():
+            with self.assertRaises(Category.DoesNotExist):
+                Category.objects.get(title=campaign.title)
+
+        # Share the campaign
+        url = reverse('quests:category_share', args=(campaign.pk, ))
+        self.client.post(url, follow=True)
+
+        # Campaign should still not exist in the library tenant
+        with library_schema_context():
+            with self.assertRaises(Category.DoesNotExist):
+                Category.objects.get(title=campaign.title)
+
+    def test_share_campaign_to_library_prevented(self):
+        """
+        Test that sharing is prevented for a campaign when it is already in the tenant
+        """
+
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign)
+
+        # Sanity check that the campaign does not exist in the library tenant
+        with library_schema_context():
+            with self.assertRaises(Category.DoesNotExist):
+                Category.objects.get(title=campaign.title)
+
+        url = reverse('quests:category_share', args=(campaign.pk, ))
+        self.client.post(url, follow=True)
+
+        # Campaign should now exist in the library tenant
+        with library_schema_context():
+            Category.objects.get(title=campaign.title)
+
+        # Share the same campaign
+        url = reverse('quests:category_share', args=(campaign.pk, ))
+        response = self.client.post(url, follow=True)
+
+        messages = list(response.context['messages'])
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(str(messages[0]), f"Campaign with name {campaign.title} already exists in the libray.")
+
+    def test_library_owner_got_notified_when_sharing_campaign(self):
+        """
+        Test that the library owner was notified when a campaign was shared
+        """
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign)
+
+        with library_schema_context():
+
+            config = SiteConfig.get()
+            config.deck_ai = baker.make(User)
+            config.save()
+
+            # Sanity check that the campaign does not exist in the library tenant
+            with self.assertRaises(Category.DoesNotExist):
+                Category.objects.get(title=campaign.title)
+
+            old_notif_count = Notification.objects.count()
+
+        url = reverse('quests:category_share', args=(campaign.pk, ))
+        self.client.post(url, follow=True)
+
+        # Campaign should now exist in the library tenant
+        with library_schema_context():
+            lib_campaign = Category.objects.get(title=campaign.title)
+
+            notif = Notification.objects.filter(
+                target_object_id=lib_campaign.pk,
+                target_content_type=ContentType.objects.get_for_model(Category),
+            )
+            self.assertTrue(notif.exists())
+            new_notif_count = Notification.objects.count()
+
+            self.assertNotEqual(old_notif_count, new_notif_count)
