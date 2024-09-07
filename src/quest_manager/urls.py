@@ -64,6 +64,7 @@ urlpatterns = [
     re_path(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.QuestPrereqsUpdate.as_view(), name='quest_prereqs_update'),
     re_path(r'^(?P<quest_id>[0-9]+)/copy/$', views.QuestCopy.as_view(), name='quest_copy'),
     re_path(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
+    re_path(r'^(?P<pk>[0-9]+)/share/$', views.QuestShare.as_view(), name='quest_share'),
     re_path(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     re_path(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     re_path(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),

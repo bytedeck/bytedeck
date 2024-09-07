@@ -4,6 +4,7 @@ import uuid
 from django.utils.decorators import method_decorator
 from django.views.generic.list import ListView
 
+from django_tenants.utils import schema_context
 import numpy as np
 
 from django.contrib import messages
@@ -164,6 +165,52 @@ class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageM
 
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
+
+
+class QuestShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
+
+    template_name = 'quest_manager/quest_confirm_share.html'
+
+    model = Quest
+    success_url = reverse_lazy("quests:quests")
+
+    def test_func(self):
+        return self.get_object().is_editable(self.request.user)
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        from library.importer import import_quests_to
+        from library.utils import get_library_schema_name
+
+        tenant = request.tenant
+        quest = self.object
+
+        dest_schema = get_library_schema_name()
+
+        # Check if quest already exists in the library
+        with schema_context(dest_schema):
+            if Quest.objects.filter(import_id=quest.import_id).exists():
+                messages.error(request, f'Quest with import_id {quest.import_id} already exists in the library.')
+                return redirect('quests:quests')
+
+        import_quests_to(destination_schema=dest_schema, quest_import_ids=[quest.import_id], source_schema=tenant.schema_name)
+
+        with schema_context(dest_schema):
+            site_config = SiteConfig.get()
+            deck_owner = site_config.deck_owner
+            shared_quest = Quest.objects.get(import_id=quest.import_id)
+
+            notify.send(
+                sender=site_config.deck_ai,
+                target=shared_quest,
+                recipient=deck_owner,
+                affected_users=[deck_owner, ],
+                verb="a new quest has been shared to the library named"
+            )
+
+        messages.info(request, f'Successfully shared {quest} to the library')
+        return redirect('quests:quests')
 
 
 class QuestFormViewMixin:
