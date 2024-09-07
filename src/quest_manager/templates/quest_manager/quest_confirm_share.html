@@ -1,0 +1,16 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Share Quest {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>The following quest will be shared to the library</p>
+  <div class="well">
+    <p>Quest Name: {{object.name}}</p>
+  </div>
+  <p>By confirming, you agree to share this quest under the Creative Commons Attribution-ShareAlike license. This means others can adapt and share your work as long as they give appropriate credit and distribute their contributions under the same license.</p>
+  <a href="{% url 'quests:quest_detail' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Confirm" class="btn btn-success" />
+</form>
+{% endblock %}

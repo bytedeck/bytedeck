@@ -39,6 +39,12 @@
                title="Edit this campaign">
               <i class="fa fa-edit"></i>
             </a>
+            <a class="btn btn-default"
+               href="{% url 'quests:category_share' object.id %}"
+               role="button"
+               title="Share this Campaign to the Library">
+              <i class="fa fa-share-alt"></i>
+            </a>
             <a class="btn btn-danger"
                href="{% url 'quests:category_delete' object.id %}"
                role="button"
