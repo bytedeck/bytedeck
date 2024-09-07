@@ -8,6 +8,7 @@ def import_quests_to(*, destination_schema, quest_import_ids, source_schema=None
     """
     :param destination_schema: schema to import the quest to
     :param quest_import_ids: list of quest import ids
+    :param source_schema: Optional. The source where to import the quest import ids
     """
 
     if source_schema is None:

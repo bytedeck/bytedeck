@@ -1,0 +1,44 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+{% block head_title %}Campaigns |{% endblock %}
+{% block heading %}
+  <i class="fa fa-compass pull-right"></i>
+  {% block heading_inner %}
+    {{ object.title }}  Campaign
+  {% endblock %}
+{% endblock %}
+{% block content %}
+  {% if library_category %}
+    <p>The library already contains this campaign</p>
+    <div class="well">
+      <p>
+        Existing Campaign: <a href="{{ library_absolute_url }}">{{ library_category.name }}</a>
+      </p>
+    </div>
+  {% elif object.active or request.user.is_staff %}
+
+    <p>By confirming, you agree to share this quest under the Creative Commons Attribution-ShareAlike license. This means others can adapt and share your work as long as they give appropriate credit and distribute their contributions under the same license.</p>
+    {% with object as category %}
+      <form action="" method="post">
+        {% csrf_token %}
+        <a href="{% url 'quest_manager:categories' %}"
+           role="button"
+           class="btn btn-info">Cancel</a>
+        <input type="submit"
+               value="Confirm"
+               class="btn btn-success"
+               {% if library_category %}disabled{% endif %} />
+      </form>
+      {% include "quest_manager/category_detail_content.html" %}
+    {% endwith %}
+  {% else %}
+    <p>
+      The campaign you're trying to reach is currently unavailable. Please contact your teacher if this comes as a surprise.
+    </p>
+  {% endif %}
+{% endblock %}
+{% block js %}
+  {{ block.super }}
+  {% include "quest_manager/ajax_content_loading.html" %}
+{% endblock %}
+

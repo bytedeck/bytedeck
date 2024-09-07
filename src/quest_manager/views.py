@@ -13,6 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import F, ExpressionWrapper, fields, BooleanField, Exists, OuterRef
+from django.db import connection
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -30,6 +31,7 @@ from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
+from tenant.models import Tenant
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
@@ -156,6 +158,62 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy("quests:categories")
 
 
+@method_decorator(staff_member_required, name="dispatch")
+class CategoryShare(NonPublicOnlyViewMixin, DetailView):
+
+    model = Category
+    success_url = reverse_lazy("quests:categories")
+    template_name = 'quest_manager/category_confirm_share.html'
+
+    def test_func(self):
+        return self.request.user == SiteConfig.get().deck_owner
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+
+        from library.utils import library_schema_context
+
+        with library_schema_context():
+            library_category = Category.objects.filter(title=self.object.title).first()
+            library_url = ''
+
+            if library_category:
+                library_category_url = library_category.get_absolute_url()
+                tenant = Tenant.get()
+                library_url = f"{tenant.get_root_url()}{library_category_url}"
+
+        context.update({
+            'library_category': library_category,
+            'library_absolute_url': library_url,
+            'category_displayed_quests': Quest.objects.get_active().filter(campaign=self.object),
+        })
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        category = self.object
+
+        from library.utils import library_schema_context, get_library_schema_name
+        from library.importer import import_quests_to
+
+        with library_schema_context():
+            library_category_qs = Category.objects.filter(title=category.title)
+            library_category = library_category_qs.first()
+
+        if library_category:
+            messages.error(request, f'Campaign with name {library_category.title} already exists in the current deck.')
+            return redirect(self.success_url)
+
+        # Import all quests from this campaign
+        quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+        import_quests_to(destination_schema=get_library_schema_name(), quest_import_ids=quest_ids, source_schema=connection.schema_name)
+        messages.success(request, f"Successfully shared '{category.name}' to the library.")
+
+        return redirect(self.success_url)
+
+
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
@@ -169,10 +227,9 @@ class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageM
 
 class QuestShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
 
-    template_name = 'quest_manager/quest_confirm_share.html'
-
     model = Quest
     success_url = reverse_lazy("quests:quests")
+    template_name = 'quest_manager/quest_confirm_share.html'
 
     def test_func(self):
         return self.request.user == SiteConfig.get().deck_owner

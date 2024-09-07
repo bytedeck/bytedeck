@@ -95,6 +95,7 @@ urlpatterns = [
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
+    path('campaigns/<pk>/share/', views.CategoryShare.as_view(), name='category_share'),
 
     path('common-quest-info/list/', views.CommonDataListView.as_view(), name='commonquestinfo_list'),
     path('common-quest-info/create/', views.CommonDataCreateView.as_view(), name='commonquestinfo_create'),
