@@ -175,7 +175,7 @@ class QuestShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
     success_url = reverse_lazy("quests:quests")
 
     def test_func(self):
-        return self.get_object().is_editable(self.request.user)
+        return self.request.user == SiteConfig.get().deck_owner
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -206,7 +206,7 @@ class QuestShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
                 target=shared_quest,
                 recipient=deck_owner,
                 affected_users=[deck_owner, ],
-                verb="a new quest has been shared to the library named"
+                verb='a new quest has been shared to the library named'
             )
 
         messages.info(request, f'Successfully shared {quest} to the library')
