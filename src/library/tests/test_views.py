@@ -171,9 +171,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         quest = baker.make(Quest)
 
         # Sanity check that the quest does not exist in the library tenant
-        with library_schema_context():
-            with self.assertRaises(Quest.DoesNotExist):
-                Quest.objects.get(import_id=quest.import_id)
+        with library_schema_context(), self.assertRaises(Quest.DoesNotExist):
+            Quest.objects.get(import_id=quest.import_id)
 
         url = reverse('quests:quest_share', args=(quest.pk, ))
         self.client.post(url, follow=True)
@@ -322,9 +321,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         baker.make(Quest, campaign=campaign)
 
         # Sanity check that the campaign does not exist in the library tenant
-        with library_schema_context():
-            with self.assertRaises(Category.DoesNotExist):
-                Category.objects.get(title=campaign.title)
+        with library_schema_context(), self.assertRaises(Category.DoesNotExist):
+            Category.objects.get(title=campaign.title)
 
         url = reverse('quests:category_share', args=(campaign.pk, ))
         self.client.post(url, follow=True)
