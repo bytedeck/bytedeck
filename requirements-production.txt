@@ -11,7 +11,7 @@ django-grappelli>=4.0.1,<5
 django-import-export==3.3.9  # latest version that supports django 3.2
 django-querysetsequence>=0.16
 django-recaptcha>=2.0.6,<3.1
-django-redis>=5.2.0,<5.3
+django-redis>=5.3,<5.4
 django-resized>=0.3.11,<1.1
 django-select2>=8.2.1,<8.3
 django-storages[boto3]>=1.12,<2
