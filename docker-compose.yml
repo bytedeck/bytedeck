@@ -51,24 +51,6 @@ services:
     networks:
       - backend-network
 
-  # Redis not workng via AWS Elasticache for some reason so use dockerized Redis for now in production.
-  # also saves moeny as Elasticache is not free and can't turn off for staging.
-  redis:
-      image: "redis:5.0-alpine"
-      env_file: .env
-      sysctls:
-        # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
-        net.core.somaxconn: 512
-      networks:
-        - backend-network
-      healthcheck:
-        test: ["CMD", "redis-cli", "ping"]
-        interval: 1s
-        timeout: 3s
-        retries: 30
-      ports:
-        - 6379:6379
-
 networks:
   frontend-network:
   backend-network:
