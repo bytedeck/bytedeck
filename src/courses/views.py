@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.views import SuccessMessageMixin
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
@@ -11,14 +12,19 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from django.template.loader import render_to_string
+from django.http import JsonResponse
 
-from hackerspace_online.decorators import staff_member_required
+from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from announcements.models import Announcement
 from siteconfig.models import SiteConfig
 from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
+from djcytoscape.models import CytoScape
+from notifications.models import Notification
 # from .forms import ProfileForm
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
@@ -148,7 +154,7 @@ class RankCreate(NonPublicOnlyViewMixin, CreateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class RankUpdate(NonPublicOnlyViewMixin, UpdateView):
+class RankUpdate(NonPublicOnlyViewMixin, UpdateMapMessageMixin, UpdateView):
     fields = ('name', 'xp', 'icon', 'fa_icon')
     model = Rank
     success_url = reverse_lazy('courses:ranks')
@@ -161,7 +167,7 @@ class RankUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class RankDelete(NonPublicOnlyViewMixin, DeleteView):
+class RankDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 
@@ -402,7 +408,13 @@ class SemesterCreateUpdateFormsetMixin:
     # formsets
 
     def get_formset_queryset(self):
-        return self.get_object().excludeddate_set.all().order_by('date')
+        object_ = self.get_object()
+
+        # pk is None when creating a model without saving it
+        if object_.pk is None:
+            return self.model.objects.none()
+
+        return object_.excludeddate_set.all().order_by('date')
 
     def get_formset_kwargs(self):
         form_kwargs = super().get_form_kwargs()
@@ -549,6 +561,7 @@ def end_active_semester(request):
     return redirect('courses:semester_list')
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
@@ -557,7 +570,7 @@ def ajax_progress_chart(request, user_id=0):
     else:
         user = get_object_or_404(User, pk=user_id)
 
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         sem = SiteConfig.get().active_semester
 
         # generate a list of dates, from first date of semester to today
@@ -612,16 +625,10 @@ def ajax_progress_chart(request, user_id=0):
         raise Http404
 
 
-class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     _BINS = 10
     _BIN_WIDTH = 10
-
-    def dispatch(self, request, *args, **kwargs):
-        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
-        if not is_ajax or not request.user.is_authenticated:
-            raise Http404()
-
-        return super().dispatch(request, *args, **kwargs)
 
     def get(self, *args, **kwargs):
         self.user = self.get_user()
@@ -702,14 +709,8 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
         })
 
 
-class Ajax_TagChart(NonPublicOnlyViewMixin, View):
-
-    def dispatch(self, request, *args, **kwargs):
-        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
-        if not is_ajax or not request.user.is_authenticated:
-            raise Http404()
-
-        return super().dispatch(request, *args, **kwargs)
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_TagChart(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
 
     def get(self, *args, **kwargs):
         self.user = self.get_user()
@@ -833,3 +834,79 @@ class Ajax_TagChart(NonPublicOnlyViewMixin, View):
                 'badge_dataset': badge_dataset,  # list[dict[str, list[int]]]
             }
         })
+
+
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_RankPopup(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
+
+    def get_latest_unread_ranked_notification(self):
+        """ returns a qs of unread notifications for user with rank as target """
+        notifications = Notification.objects.all_for_user(self.user).get_unread().filter(
+            target_content_type=ContentType.objects.get_for_model(Rank),
+            verb__contains='promoted',
+        ).order_by('-timestamp').first()
+
+        return notifications
+
+
+class Ajax_OnShowRankPopup(Ajax_RankPopup):
+    """ This is responsible for giving the html for 'ajaxNewRankPopup' in 'javascript.js' """
+
+    def get(self, *args, **kwargs):
+        self.user = self.request.user
+        json_data = self.get_json_data()
+        return JsonResponse(data=json_data)
+
+    def get_json_data(self):
+        """ returns json data for ajax request """
+        rank = self.get_rank()
+        show = rank is not None
+        html_text = self.get_html_text(rank) if show else None
+
+        return {
+            'show': show,
+            'html': html_text,
+        }
+
+    def get_html_text(self, rank):
+        """ returns context filled template """
+        template_name = 'courses/snippets/rank_notification_popup.html'
+
+        user_xp = self.request.user.profile.xp_cached
+        next_rank = Rank.objects.get_next_rank(user_xp)
+
+        # rank should really only have 1 related map
+        # since ranks dont have prereq
+        related_map = CytoScape.objects.get_related_maps(rank).first()
+
+        context = {
+            'request': self.request,
+            'earned_rank': rank,
+            'earned_xp': user_xp,
+            'next_rank': next_rank,
+            'related_map': related_map,
+        }
+        return render_to_string(template_name, context)
+
+    def get_rank(self):
+        """ gets rank based on latest unread ranked notification """
+        notification = self.get_latest_unread_ranked_notification()
+        if not notification:
+            return None
+
+        rank = Rank.objects.get(id=notification.target_object_id)
+        return rank
+
+
+class Ajax_OnCloseRankPopup(Ajax_RankPopup):
+    """ When user dismisses rank popup. Mark rank notifications as read """
+
+    def get(self, *args, **kwargs):
+        self.user = self.request.user
+
+        # mark notification as read
+        notification = self.get_latest_unread_ranked_notification()
+        if notification:
+            notification.mark_read()
+
+        return JsonResponse(data={})

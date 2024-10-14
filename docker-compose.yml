@@ -1,5 +1,3 @@
-version: '2.2'
-
 ###############################################################################
 #
 # FOR DOCKER-COMPOSE SETTINGS COMMON TO BOTH DEVELOPMENT AND PRODUCTION

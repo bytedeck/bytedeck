@@ -11,24 +11,26 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db.models import F, ExpressionWrapper, fields
-from django.db.models import BooleanField, Exists, OuterRef
+from django.db.models import F, ExpressionWrapper, fields, BooleanField, Exists, OuterRef
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
-from django.views.generic import DetailView
+from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
-from hackerspace_online.decorators import staff_member_required
+from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
+from library.utils import from_library_schema_first
 from notifications.signals import notify
+from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import (
     QuestForm,
@@ -53,17 +55,41 @@ def is_staff_or_TA(user):
     try:
         if user.profile.is_TA:
             return True
-    except (
-        AttributeError
-    ):  # probably because the user is not logged in, so AnonymousUser and has no profile
+    except AttributeError:  # probably because the user is not logged in, so AnonymousUser and has no profile
         pass
 
     return False
 
 
-@method_decorator(staff_member_required, name="dispatch")
+@method_decorator(staff_member_required, name='dispatch')
 class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Category
+
+    @property
+    def inactive_tab_active(self):
+        return '/inactive/' in self.request.path
+
+    @property
+    def available_tab_active(self):
+        return self.request.path in [reverse('quest_manager:categories'), reverse('quest_manager:categories_available')]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        if self.inactive_tab_active:
+            queryset = queryset.filter(active=False)
+        else:
+            queryset = queryset.filter(active=True)
+
+        return queryset
+
+    def get_context_data(self, *args, **kwargs):
+        context_data = super().get_context_data(*args, **kwargs)
+
+        context_data['available_tab_active'] = self.available_tab_active
+        context_data['inactive_tab_active'] = self.inactive_tab_active
+
+        return context_data
 
 
 class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
@@ -87,16 +113,12 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         appropriate quests a user will see; "category_displayed_quests".
         """
         if self.request.user.is_staff:
-            kwargs["category_displayed_quests"] = Quest.objects.filter(
-                campaign=self.object
-            )
+            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
         else:
             # students shouldn't be able to see inactive quests when they access this view
             # filtering before calling get_active, while likely less costly, changes the object
             # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
-            kwargs["category_displayed_quests"] = Quest.objects.get_active().filter(
-                campaign=self.object
-            )
+            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
 
         return super().get_context_data(**kwargs)
 
@@ -133,7 +155,7 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     success_url = reverse_lazy("quests:categories")
 
 
-class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
+class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
@@ -178,9 +200,7 @@ class QuestFormViewMixin:
             return QuestForm
 
 
-class QuestCreate(
-    NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView
-):
+class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, CreateView):
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
@@ -193,9 +213,7 @@ class QuestCreate(
         return context
 
 
-class QuestUpdate(
-    NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateView
-):
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -321,41 +339,38 @@ class CommonDataDeleteView(DeleteView):
     success_url = reverse_lazy("quest_manager:commonquestinfo_list")
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_summary_histogram(request, pk):
-    if request.is_ajax():
-        max = int(request.GET.get("max", 60))
-        min = int(request.GET.get("min", 1))
+    max_ = int(request.GET.get("max", 60))
+    min_ = int(request.GET.get("min", 1))
 
-        quest = get_object_or_404(Quest, pk=pk)
+    quest = get_object_or_404(Quest, pk=pk)
 
-        minutes_list = get_minutes_to_complete_list(quest)
+    minutes_list = get_minutes_to_complete_list(quest)
 
-        np_data = np.array(minutes_list)
-        # remove outliers
-        np_data = np_data[(np_data >= min) & (np_data < max + 1)]
-        # sort values
-        np_data = np.sort(np_data)
+    np_data = np.array(minutes_list)
+    # remove outliers
+    np_data = np_data[(np_data >= min_) & (np_data < max_ + 1)]
+    # sort values
+    np_data = np.sort(np_data)
 
-        histogram_values, histogram_labels = get_histogram(np_data, min, max)
+    histogram_values, histogram_labels = get_histogram(np_data, min_, max_)
 
-        size = np_data.size
-        mean = float(np.mean(np_data))
-        data = {
-            "histogram_values": histogram_values.tolist(),
-            "histogram_labels": histogram_labels[:-1].tolist(),
-            "count": size,
-            "mean": mean,
-            "percentile_50": int(np.median(np_data)) if size else None,
-            "percentile_25": int(np_data[size // 4]) if size else None,
-            "percentile_75": int(np_data[size * 3 // 4]) if size else None,
-        }
+    size = np_data.size
+    mean = float(np.mean(np_data))
+    data = {
+        "histogram_values": histogram_values.tolist(),
+        "histogram_labels": histogram_labels[:-1].tolist(),
+        "count": size,
+        "mean": mean,
+        "percentile_50": int(np.median(np_data)) if size else None,
+        "percentile_25": int(np_data[size // 4]) if size else None,
+        "percentile_75": int(np_data[size * 3 // 4]) if size else None,
+    }
 
-        return JsonResponse(data)
-
-    else:
-        raise Http404
+    return JsonResponse(data)
 
 
 def get_histogram(data_list, min, max):
@@ -387,6 +402,17 @@ def get_minutes_to_complete_list(quest):
     return minutes_list
 
 
+class QuestListViewTabTypes:
+    """ enum for quest_list's tabs.
+    Note: using enum.auto() will not work as django template tags cant properly define its value.
+    """
+    AVAILABLE = 0
+    IN_PROGRESS = 1
+    COMPLETED = 2
+    PAST = 3
+    DRAFT = 4
+
+
 @non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
@@ -396,11 +422,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     past_submissions = []
     draft_quests = []
 
-    available_tab_active = False
-    in_progress_tab_active = False
-    completed_tab_active = False
-    past_tab_active = False
-    drafts_tab_active = False
+    view_type = QuestListViewTabTypes.AVAILABLE
     remove_hidden = True
 
     active_quest_id = 0
@@ -409,18 +431,18 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if quest_id is not None:
         # if a quest_id was provided, got to the Available tab
         active_quest_id = int(quest_id)
-        available_tab_active = True
+        view_type = QuestListViewTabTypes.AVAILABLE
     # otherwise look at the path
     elif "/inprogress/" in request.path_info:
-        in_progress_tab_active = True
+        view_type = QuestListViewTabTypes.IN_PROGRESS
     elif "/completed/" in request.path_info:
-        completed_tab_active = True
+        view_type = QuestListViewTabTypes.COMPLETED
     elif "/past/" in request.path_info:
-        past_tab_active = True
+        view_type = QuestListViewTabTypes.PAST
     elif "/drafts/" in request.path_info:
-        drafts_tab_active = True
+        view_type = QuestListViewTabTypes.DRAFT
     else:
-        available_tab_active = True
+        view_type = QuestListViewTabTypes.AVAILABLE
         if "/all/" in request.path_info:
             remove_hidden = False
 
@@ -468,14 +490,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
 
-    if in_progress_tab_active:
+    if view_type == QuestListViewTabTypes.IN_PROGRESS:
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
-    elif completed_tab_active:
+    elif view_type == QuestListViewTabTypes.COMPLETED:
         # completed_submissions_count = completed_submissions.count()
         completed_submissions = paginate(completed_submissions, page)
         # available_quests = []
-    elif past_tab_active:
+    elif view_type == QuestListViewTabTypes.PAST:
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
 
@@ -499,73 +521,66 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
         "active_q_id": active_quest_id,
-        "available_tab_active": available_tab_active,
-        "inprogress_tab_active": in_progress_tab_active,
-        "completed_tab_active": completed_tab_active,
-        "past_tab_active": past_tab_active,
-        "drafts_tab_active": drafts_tab_active,
+        "VIEW_TYPES": QuestListViewTabTypes,
+        "view_type": view_type,
         "quick_reply_form": quick_reply_form,
     }
     return render(request, template, context)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
-    if request.is_ajax() and request.method == "POST":
-        template = "quest_manager/preview_content_quests_avail.html"
+    if request.method == "POST":
+        template = 'quest_manager/preview_content_quests_avail.html'
 
-        if quest_id:
-            quest = get_object_or_404(Quest, pk=quest_id)
+        with from_library_schema_first(request):
+            if quest_id:
+                quest = get_object_or_404(Quest, pk=quest_id)
 
-            template = "quest_manager/preview_content_quests_avail.html"
-            quest_info_html = render_to_string(template, {"q": quest}, request=request)
+                template = 'quest_manager/preview_content_quests_avail.html'
+                quest_info_html = render_to_string(template, {'q': quest}, request=request)
 
-            data = {
-                "quest_info_html": quest_info_html
-            }
+                data = {'quest_info_html': quest_info_html}
 
-            # JsonResponse new in Django 1.7 is equivalent to:
-            # return HttpResponse(json.dumps(data), content_type='application/json')
-            return JsonResponse(data)
+                return JsonResponse(data)
 
-        else:  # all quests, used for staff only.
-            quests = Quest.objects.all()
-            all_quest_info_html = {}
+            else:  # all quests, used for staff only.
+                quests = Quest.objects.all()
+                all_quest_info_html = {}
 
-            for q in quests:
-                all_quest_info_html[q.id] = render_to_string(
-                    template, {"q": q}, request=request
-                )
+                for q in quests:
+                    all_quest_info_html[q.id] = render_to_string(template, {'q': q}, request=request)
 
-            data = json.dumps(all_quest_info_html)
-            return JsonResponse(data, safe=False)
+                data = json.dumps(all_quest_info_html)
+                return JsonResponse(data, safe=False)
 
     else:
         raise Http404
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_approval_info(request, submission_id=None):
-    if request.is_ajax() and request.method == "POST":
-        qs = QuestSubmission.objects.get_queryset(
-            exclude_archived_quests=False, exclude_quests_not_visible_to_students=False
-        )
+    if request.method == "POST":
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
 
         sub = get_object_or_404(qs, pk=submission_id)
-        template = "quest_manager/preview_content_approvals.html"
-        quest_info_html = render_to_string(template, {"s": sub}, request=request)
+        template = 'quest_manager/preview_content_approvals.html'
+        quest_info_html = render_to_string(template, {'s': sub}, request=request)
 
-        return JsonResponse({"quest_info_html": quest_info_html})
+        return JsonResponse({'quest_info_html': quest_info_html})
     else:
         raise Http404
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_submission_info(request, submission_id=None):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         # past means previous semester that is now closed
         past = "/past/" in request.path_info
         completed = "/completed/" in request.path_info
@@ -635,182 +650,288 @@ def detail(request, quest_id):
 #
 # #################################
 
+class ApproveView(NonPublicOnlyViewMixin, View):
+    """ When staff approves, returns, skips, or comments on a quest submission, this view is called.
+    """
 
-@non_public_only_view
-@staff_member_required
-def approve(request, submission_id):
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
-    origin_path = submission.get_absolute_url()
+    def get_submission(self, submission_id):
+        """ gets the main model of this view: QuestSubmission.
+        functions like CRUD view's self.get_object()
+        """
+        return get_object_or_404(QuestSubmission, pk=submission_id)
 
-    if request.method == "POST":
-        # currently only the big form has files.  Need a more robust way to determine...
-        if request.FILES or request.POST.get("awards"):
-            if request.user.is_staff:
-                form = SubmissionFormStaff(request.POST, request.FILES)
-            else:
-                form = SubmissionForm(request.POST, request.FILES)
-        else:
-            form = SubmissionQuickReplyForm(request.POST)
+    def get_form(self):
+        """ Multiple forms because staff can either
+        - use standard approve view
+        - use quick reply view
+        """
+        # standard view
+        if self.request.FILES or self.request.POST.get("awards"):
+            return SubmissionFormStaff(self.request.POST, self.request.FILES)
 
-        if form.is_valid():
-            # handle badge assertion
-            comment_text_addition = ""
+        # quick reply
+        return SubmissionQuickReplyForm(self.request.POST)
 
-            badge = form.cleaned_data.get("award")
-
-            if badge:
-                badges = [badge]
-            else:
-                badges = form.cleaned_data.get("awards")
-            if badges:
-                for badge in badges:
-                    # badge = get_object_or_404(Badge, pk=badge_id)
-                    new_assertion = BadgeAssertion.objects.create_assertion(
-                        submission.user, badge, request.user
-                    )
-                    messages.success(
-                        request,
-                        (
-                            "Badge "
-                            + str(new_assertion)
-                            + " granted to "
-                            + str(new_assertion.user)
-                        ),
-                    )
-                    rarity_icon = badge.get_rarity_icon()
-                    comment_text_addition += (
-                        "<p></br>"
-                        + rarity_icon
-                        + "The <b>"
-                        + badge.name
-                        + "</b> badge was granted for this quest "
-                        + rarity_icon
-                        + "</p>"
-                    )
-
-            # handle with quest comments
-            blank_comment_text = ""
-            if "approve_button" in request.POST:
-                note_verb = "approved"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-check fa-stack-2x text-success'></i>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
-                submission.mark_approved()
-            elif "comment_button" in request.POST:
-                note_verb = "commented on"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = "<p>(no comment added)</p>"
-            elif "return_button" in request.POST:
-                note_verb = "returned"
-                icon = (
-                    "<span class='fa-stack'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
-                submission.mark_returned()
-            elif "skip_button" in request.POST:
-                note_verb = "skipped"
-                icon = (
-                    "<span class='fa-stack text-muted'>"
-                    + "<i class='fa fa-shield fa-stack-1x'></i>"
-                    + "</span>"
-                )
-                blank_comment_text = (
-                    "<p>(Skipped - You were not granted XP for this quest)</p>"
-                )
-                submission.mark_approved(transfer=True)
-            else:
-                raise Http404("unrecognized submit button")
-
-            comment_text_form = form.cleaned_data.get("comment_text")
-            if not comment_text_form or comment_text_form == "<p><br></p>":
-                comment_text = blank_comment_text
-            else:
-                comment_text = comment_text_form
-            comment_new = Comment.objects.create_comment(
-                user=request.user,
-                path=origin_path,
-                text=comment_text + comment_text_addition,
-                target=submission,
-            )
-
-            # handle files
-            if request.FILES:
-                for afile in request.FILES.getlist("attachments"):
-                    newdoc = Document(docfile=afile, comment=comment_new)
-                    newdoc.save()
-
-            # don't say "with" in notification if no comment was entered
-            if not comment_text_form:
-                action = None
-            else:
-                action = comment_new
-
-            affected_users = [
-                submission.user,
-            ]
-
-            # if the staff member approving/commenting/retruning the submission isn't
-            # one of the student's teachers then notify the student's teachers too
-            # If they have no teachers (e.g. this quest is available outside of a course
-            # and the student is not in a course) then nothign will be appended anyway
-            teachers_list = list(submission.user.profile.current_teachers())
-            if request.user not in teachers_list:
-                affected_users.extend(teachers_list)
-
-            notify.send(
-                request.user,
-                action=action,
-                target=submission,
-                recipient=submission.user,
-                affected_users=affected_users,
-                verb=note_verb,
-                icon=icon,
-            )
-
-            message_string = (
-                "<a href='"
-                + origin_path
-                + "'>Submission of "
-                + submission.quest.name
-                + "</a> "
-                + note_verb
-                + " for <a href='"
-                + submission.user.profile.get_absolute_url()
-                + "'>"
-                + submission.user.username
-                + "</a>"
-            )
-            messages.success(request, message_string)
-
+    def form_valid(self):
+        """ handles response when form is valid
+        - returns HttpResponse if standard
+        - returns JsonResponse if ajax
+        """
+        if not self.is_ajax:
             return redirect("quests:approvals")
-        else:
-            # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
-            # return redirect(origin_path)
 
-            # rendering here with the context allows validation errors to be displayed
-            context = {
-                "heading": submission.quest.name,
-                "submission": submission,
-                # "comments": comments,
-                "submission_form": form,
-                "anchor": "submission-form-" + str(submission.quest.id),
-                # "reply_comment_form": reply_comment_form,
-            }
-            return render(request, "quest_manager/submission.html", context)
-    else:
-        raise Http404
+        # for ajax call. Need to replicate standard view's procedure where
+        # - quest submission container disappears  (handled client side)
+        # - message box container shows (handled here)
+        template_name = 'messages-snippet.html'
+        context = {
+            'messages': list(messages.get_messages(self.request))
+        }
+        html = render_to_string(template_name, context)
+        return JsonResponse(data={'messages_html': html})
+
+    def form_invalid(self):
+        """ handles response when form is invalid
+        - returns HttpResponse if standard
+        - returns JsonResponse if ajax
+        """
+        # need to return a failing status code for ajax request
+        # without this should return a response with 200 status code
+        if self.is_ajax:
+            return JsonResponse({'error': 'Bad Request'}, status=400)
+
+        # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
+        # return redirect(origin_path)
+
+        # rendering here with the context allows validation errors to be displayed
+        context = {
+            "heading": self.submission.quest.name,
+            "submission": self.submission,
+            # "comments": comments,
+            "submission_form": self.form,
+            "anchor": "submission-form-" + str(self.submission.quest.id),
+            # "reply_comment_form": reply_comment_form,
+        }
+        return render(self.request, "quest_manager/submission.html", context)
+
+    # button handling
+    def handle_form_button(self, notification_kwargs):
+        """ handles any of the form buttons
+        "approve_button", "comment_button", "return_button", "skip_button"
+        in request
+
+        takes in notification_kwargs and updates 'verb' and 'icon' keys
+        returns default text incase staff submits without any comments
+        """
+        blank_comment_text = ""
+        if "approve_button" in self.request.POST:
+            note_verb = "approved"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-check fa-stack-2x text-success'></i>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "</span>"
+            )
+            blank_comment_text = f"<p>{SiteConfig.get().blank_approval_text}</p>"
+            self.submission.mark_approved()
+        elif "comment_button" in self.request.POST:
+            note_verb = "commented on"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
+                + "</span>"
+            )
+            blank_comment_text = "<p>(no comment added)</p>"
+        elif "return_button" in self.request.POST:
+            note_verb = "returned"
+            icon = (
+                "<span class='fa-stack'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "<i class='fa fa-ban fa-stack-2x text-danger'></i>"
+                + "</span>"
+            )
+            blank_comment_text = f"<p>{SiteConfig.get().blank_return_text}</p>"
+            self.submission.mark_returned()
+        elif "skip_button" in self.request.POST:
+            note_verb = "skipped"
+            icon = (
+                "<span class='fa-stack text-muted'>"
+                + "<i class='fa fa-shield fa-stack-1x'></i>"
+                + "</span>"
+            )
+            blank_comment_text = (
+                "<p>(Skipped - You were not granted XP for this quest)</p>"
+            )
+            self.submission.mark_approved(transfer=True)
+
+        notification_kwargs.update({
+            'verb': note_verb,
+            'icon': icon,
+        })
+
+        return blank_comment_text
+
+    def post_has_valid_button(self):
+        """ quick helper function to check if any of the valid buttons exist in POST request """
+        valid_buttons = ["approve_button", "comment_button", "return_button", "skip_button"]
+        return any(btype in self.request.POST for btype in valid_buttons)
+
+    # misc.
+    def get_notification_kwargs(self):
+        """ gets the kwargs for notifications. every key should be empty unless
+        there is something we want to put before hand.
+        similar to get_context_data """
+        kwargs = {el: None for el in [
+            "action", "target", "recipient", "affected_users", "verb", "icon"
+        ]}
+
+        # add default values here
+        kwargs["target"] = self.submission
+        kwargs["recipient"] = self.submission.user
+        kwargs["affected_users"] = [self.submission.user]
+
+        # if the staff member approving/commenting/returning the submission isn't
+        # one of the student's teachers then notify the student's teachers too
+        # If they have no teachers (e.g. this quest is available outside of a course
+        # and the student is not in a course) then nothing will be appended anyway
+        teachers_list = list(self.submission.user.profile.current_teachers())
+        if self.request.user not in teachers_list:
+            kwargs["affected_users"].extend(teachers_list)
+
+        return kwargs
+
+    def handle_rank_up_notification(self):
+        """ handles the conditions to trigger "rank up" notification.
+        - if staff pressed "approve"
+        - if quest grants xp
+        - notify_rank_up conditions (ie. xp is enough to achieve new rank)
+        """
+        # if approving a sumbission and granting an xp.
+        if "approve_button" in self.request.POST and not self.submission.do_not_grant_xp:
+            xp = self.submission.xp_requested or self.submission.quest.xp
+            notify_rank_up(
+                self.submission.user,
+                # xp_cached is updated we have to subtract to get old xp
+                self.submission.user.profile.xp_cached - xp,
+                self.submission.user.profile.xp_cached,
+            )
+
+    def save_uploaded_files(self, comment):
+        """ saves request files to comment object """
+        if self.request.FILES:
+            for afile in self.request.FILES.getlist("attachments"):
+                newdoc = Document(docfile=afile, comment=comment)
+                newdoc.save()
+
+    def handle_award(self):
+        """ for each badge in award/awards:
+        - create new assertion for student
+        - create new message for each assertion for staff
+        - add to comment text for each assertion
+
+        """
+        # handle badge assertion
+        comment_text_addition = ""
+
+        # get list of badges
+        badge = self.form.cleaned_data.get("award")
+        badges = [badge] if badge else self.form.cleaned_data.get("awards", [])
+
+        for badge in badges:
+            new_assertion = BadgeAssertion.objects.create_assertion(
+                self.submission.user, badge, self.request.user
+            )
+            messages.success(
+                self.request,
+                (
+                    "Badge "
+                    + str(new_assertion)
+                    + " granted to "
+                    + str(new_assertion.user)
+                ),
+            )
+            rarity_icon = badge.get_rarity_icon()
+            comment_text_addition += (
+                "<p></br>"
+                + rarity_icon
+                + "The <b>"
+                + badge.name
+                + "</b> badge was granted for this quest "
+                + rarity_icon
+                + "</p>"
+            )
+
+        return comment_text_addition
+
+    # django built-in methods
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, request, *args, **kwargs):
+        """ requests are only allowed if:
+        - POST method
+        - optionally POST AJAX method
+        """
+        # this is a POST only view
+        if request.method != "POST":
+            raise Http404
+
+        if not self.post_has_valid_button():
+            raise Http404("unrecognized submit button")
+
+        self.is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, submission_id, *args, **kwargs):
+        self.submission = self.get_submission(submission_id)
+        self.form = self.get_form()
+
+        if self.form.is_valid():
+            notification_kwargs = self.get_notification_kwargs()
+
+            #
+            blank_comment_text = self.handle_form_button(notification_kwargs)
+            comment_text_addition = self.handle_award()
+
+            # handle comment text
+            # if staff didnt write any text for comment use blank_comment_text
+            comment_text = self.form.cleaned_data.get("comment_text")
+            if not comment_text or comment_text == "<p><br></p>":
+                comment_text = blank_comment_text
+
+            comment_new = Comment.objects.create_comment(
+                user=self.request.user,
+                path=self.submission.get_absolute_url(),
+                text=comment_text + comment_text_addition,
+                target=self.submission,
+            )
+
+            self.save_uploaded_files(comment_new)
+
+            #
+            notify.send(
+                self.request.user,
+                **notification_kwargs
+            )
+            self.handle_rank_up_notification()
+
+            messages.success(self.request, (
+                "<a href='"
+                + self.submission.get_absolute_url()
+                + "'>Submission of "
+                + self.submission.quest.name
+                + "</a> "
+                + notification_kwargs["verb"]
+                + " for <a href='"
+                + self.submission.user.profile.get_absolute_url()
+                + "'>"
+                + self.submission.user.username
+                + "</a>"
+            ))
+
+            return self.form_valid()
+        return self.form_invalid()
 
 
 def paginate(object_list, page, per_page=30):
@@ -824,6 +945,16 @@ def paginate(object_list, page, per_page=30):
         # If page is out of range (e.g. 9999), deliver last page of results.
         object_list = paginator.page(paginator.num_pages)
     return object_list
+
+
+class ApprovalsViewTabTypes:
+    """ enum for approvals's tabs.
+    Note: using enum.auto() will not work as django template tags cant properly define its value.
+    """
+    SUBMITTED = 0
+    APPROVED = 1
+    RETURNED = 2
+    FLAGGED = 3
 
 
 @non_public_only_view
@@ -869,30 +1000,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     returned_submissions = []
     flagged_submissions = []
 
-    submitted_tab_active = False
-    returned_tab_active = False
-    approved_tab_active = False
-    flagged_tab_active = False
+    view_type = ApprovalsViewTabTypes.SUBMITTED
 
     page = request.GET.get("page")
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if "/returned/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.RETURNED
         returned_submissions = QuestSubmission.objects.all_returned()
-        returned_tab_active = True
         returned_submissions = paginate(returned_submissions, page)
     elif "/approved/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only
         )
-        approved_tab_active = True
         approved_submissions = paginate(approved_submissions, page)
     elif "/flagged/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
-        flagged_tab_active = True
         flagged_submissions = paginate(flagged_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
-        submitted_tab_active = True
+        view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
             teacher = request.user
         else:
@@ -906,28 +1034,28 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         {
             "name": "Submitted",
             "submissions": submitted_submissions,
-            "active": submitted_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.SUBMITTED,
             "time_heading": "Submitted",
             "url": reverse("quests:submitted"),
         },
         {
             "name": "Returned",
             "submissions": returned_submissions,
-            "active": returned_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.RETURNED,
             "time_heading": "Returned",
             "url": reverse("quests:returned"),
         },
         {
             "name": "Approved",
             "submissions": approved_submissions,
-            "active": approved_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.APPROVED,
             "time_heading": "Approved",
             "url": reverse("quests:approved"),
         },
         {
             "name": "Flagged",
             "submissions": flagged_submissions,
-            "active": flagged_tab_active,
+            "active": view_type == ApprovalsViewTabTypes.FLAGGED,
             "time_heading": "Transferred",
             "url": reverse("quests:flagged"),
         },
@@ -948,7 +1076,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "heading": "Quest Approval",
         "tab_list": tab_list,
         "quick_reply_form": quick_reply_form,
-        "submitted_tab_active": submitted_tab_active,
+        "VIEW_TYPES": ApprovalsViewTabTypes,
+        "view_type": view_type,
         "current_teacher_only": current_teacher_only,
         "past_approvals_all": past_approvals_all,
         "quest": quest,
@@ -1084,6 +1213,17 @@ def complete(request, submission_id):
                 submission.mark_completed(xp_requested)
                 if not submission.quest.verification_required:
                     submission.mark_approved()
+
+                    if not submission.do_not_grant_xp:
+                        # if not requesting xp, xp_requested will default to 0
+                        # 0 or xp = xp
+                        xp = xp_requested or submission.quest.xp
+                        notify_rank_up(
+                            submission.user,
+                            # subtract from cache as mark_approved updates xp
+                            submission.user.profile.xp_cached - xp,
+                            submission.user.profile.xp_cached,
+                        )
 
             elif "comment" in request.POST:
                 note_verb = "commented on"
@@ -1256,10 +1396,11 @@ def skipped(request, quest_id):
     return skip(request, submission.id)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
-    if request.is_ajax() and request.POST:
+    if request.POST:
         response_data = {
             "result": "No changes",
         }
@@ -1374,12 +1515,13 @@ def submission(request, submission_id=None, quest_id=None):
     return render(request, "quest_manager/submission.html", context)
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_submission_count(request):
     """Returns the number of submissions awaiting approval for the current user
     This is used to update the number beside the "Approvals" button in the navbar"""
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         submission_count = QuestSubmission.objects.all_awaiting_approval(
             teacher=request.user
         ).count()
@@ -1410,10 +1552,11 @@ def flag(request, submission_id):
     return redirect("quests:approvals")
 
 
+@xml_http_request_required
 @non_public_only_view
 @staff_member_required
 def ajax_flag(request):
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         submission_id = request.POST.get("submission_id", None)
         sub = QuestSubmission.objects.get(id=submission_id)
         sub.flagged_by = request.user

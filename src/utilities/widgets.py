@@ -35,6 +35,12 @@ class GFKSelect2Mixin:
         self.queryset = kwargs.pop('queryset', self.queryset)
         self.search_fields = kwargs.pop('search_fields', self.search_fields)
         self.max_results = kwargs.pop('max_results', self.max_results)
+
+        # set the default attrs for widget
+        attrs = kwargs.get('attrs', {})
+        attrs.setdefault('data-minimum-input-length', '0')
+        kwargs['attrs'] = attrs
+
         defaults = {'data_view': 'utilities:querysetsequence_auto-json'}
         defaults.update(kwargs)
         super().__init__(*args, **defaults)
@@ -69,11 +75,12 @@ class GFKSelect2Mixin:
             '%s, must implement "search_fields".' % self.__class__.__name__
         )
 
-    def filter_queryset(self, term, queryset=None, **dependent_fields):
+    def filter_queryset(self, request, term, queryset=None, **dependent_fields):
         """
         Return QuerySetSequence filtered by search_fields matching the passed term.
 
         Args:
+            request: HTTPRequest object from view
             term (str): Search term
             queryset (queryset_sequence.QuerySetSequence): QuerySetSequence to select choices from.
 
@@ -100,7 +107,13 @@ class GFKSelect2Mixin:
             queryset_models.append(qs.filter(select))
 
         # Aggregate querysets
-        return QuerySetSequence(*queryset_models)
+        qs_sequence = QuerySetSequence(*queryset_models)
+
+        # order to silence pagination warnings
+        # UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list:....
+        qs_sequence = qs_sequence.order_by('id')
+
+        return qs_sequence
 
     def get_queryset(self):
         if self.queryset is not None:
@@ -113,7 +126,10 @@ class GFKSelect2Mixin:
                 '%(cls)s.queryset, or override '
                 '%(cls)s.get_queryset().' % {'cls': self.__class__.__name__}
             )
-        return queryset
+
+        # order to silence pagination warnings
+        # UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list:....
+        return queryset.order_by('id')
 
     def filter_choices_to_render(self, selected_choices):
         """Overwrite self.choices to exclude unselected values."""

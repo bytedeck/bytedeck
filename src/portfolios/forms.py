@@ -21,7 +21,7 @@ class ArtworkForm(forms.ModelForm):
         model = Artwork
         fields = ['title', 'description', 'date', 'image_file', 'video_file', 'video_url', ]
         widgets = {
-            'date': DatePickerInput(format='%Y-%m-%d'),
+            'date': DatePickerInput(),
         }
 
     def clean(self):

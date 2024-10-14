@@ -1,0 +1,57 @@
+<table data-toggle='table'
+       data-search='true'
+       data-classes="table"
+       data-pagination='true'
+       data-page-size="15"
+       data-page-list="[15, 50, 100, all]">
+  <thead>
+    <tr>
+      <th data-sortable='true' data-field='title'>Title</th>
+      <th>Icon</th>
+      <th data-sortable='true' data-field='count'># of Quests</th>
+      <th data-sortable='true' data-field='xp'>XP Available</th>
+      <th data-sortable='true' data-field='active'>Active</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for object in object_list %}
+      <tr {% if not object.active %}class="text-muted"{% endif %}>
+        <td>{{ object.title }}</td>
+        <td>
+          <img class="img-responsive panel-title-img img-rounded"
+               src="{{ object.get_icon_url }}">
+        </td>
+        <td>{{ object.quest_count }}</td>
+        <td>{{ object.xp_sum }}</td>
+        <td>{{ object.active }}</td>
+        <td>
+          {% if not library_tab_active %}
+            <a class="btn btn-info"
+               href="{% url 'quests:category_detail' object.id %}"
+               role="button"
+               title="View Details: view the content of this campaign.">
+              <i class="fa fa-fw fa-info-circle"></i>
+            </a>
+            <a class="btn btn-warning"
+               href="{% url 'quests:category_update' object.id %}"
+               role="button"
+               title="Edit this campaign">
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-danger"
+               href="{% url 'quests:category_delete' object.id %}"
+               role="button"
+               title="Delete this campaign">
+              <i class="fa fa-trash-o"></i>
+            </a>
+          {% else %}
+            <a href="{% url 'library:import_category' object.title %}"
+               class="btn btn-sm btn-default"
+               title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab."><i class="fa fa-download"></i></a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

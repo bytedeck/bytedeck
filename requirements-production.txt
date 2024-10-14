@@ -1,39 +1,37 @@
-django-tenants>=3.4,<3.6
-backports.csv>=1.0.7,<1.1
-beautifulsoup4>=4.12.3,<4.13
-celery>=5.2.2,<5.4
-Django==3.2.25  # temp pinned at .19 while resolvoing issue #1353
+Django>=4.2.16,<4.3
 django-allauth>=0.54,<0.55
-django-querysetsequence>=0.16
-django-bootstrap-datepicker-plus>=4.0,<5.0
+django-bootstrap-datepicker-plus>=5.0.5,<6.0
 django-celery-beat>=2.2,<2.7
 django-colorful>=1.3,<2.0
 django-crispy-forms>=1.8.1,<1.15
-django-datetime-widget>=0.9.3,<1.0
 django-decorator-include==3.0
 django-embed-video>=1.1.2,<1.5
-django-grappelli>=4.0.1,<5
-django-import-export==3.3.9
-bleach[css]>=5,<6
-cssutils==2.6.0
-html2text==2020.1.16
-tablib==3.5.0
-django-redis>=5.2.0,<5.3
-django-select2>=6.3.1,<6.4
-django-summernote>=0.8,<0.9
-django-url-or-relative-url-field>=0.1.1,<0.2
-django-resized>=0.3.11,<1.1
-django-utils-six==2.0
-numpy==1.22
-psycopg2-binary>=2.8.6,<2.10
-python-memcached>=1.58,<2.0
-tenant-schemas-celery>=2.2,<3.1
-future>=0.18.2,<0.19
 django-environ>=0.4.5,<0.12
+django-grappelli>=4.0.1,<5
+django-import-export==3.3.9  # latest version that supports django 3.2
+django-querysetsequence>=0.16
 django-recaptcha>=2.0.6,<3.1
-tzdata
-django-storages>=1.12,<2
-boto3>=1.21,<1.35
+django-redis>=5.4,<5.5
+django-resized>=0.3.11,<1.1
+django-select2>=8.2.1,<8.3
+django-storages[boto3]>=1.12,<2
+django-summernote>=0.8,<0.9
 django-taggit>=2.1,<5.0
+django-tenants>=3.5,<3.6  # latest version that supports python 3.8
+django-url-or-relative-url-field>=0.2.0,<0.3.0
+django-utils-six==2.0  # only 2.0 exists. Previous version was removed back in Django 3.0
+tenant-schemas-celery>=2.2,<3.1
+
+# non django
+beautifulsoup4>=4.12.3,<4.13
+bleach[css]>=5,<6
+celery>=5.2.2,<5.4
+cssutils==2.11.1
 dnspython>=2.6.1,<3.0
-pillow>=10.3,<11.0
+html2text==2020.1.16
+numpy==1.22
+pytz # required by django-redis which uses pickle, even though django-redis changelog says it doesn't us pickle anymore?
+
+# subdependencies
+psycopg2-binary>=2.8.6,<2.10  # since our backend is PostgreSQL, Django and django-tenants use this to interact with the db
+pillow>=10.3,<11.0  # used implicitly by django_resized (does not exist as an extra package either)

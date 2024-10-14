@@ -34,8 +34,10 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('notifications:read', kwargs={'id': 1})
         self.assertRedirectsLogin('notifications:read_all')
 
-        self.assertRedirectsLogin('notifications:ajax')  # this doesn't make sense.  Should 404
-        self.assertRedirectsLogin('notifications:ajax_mark_read')  # this doesn't make sense.  Should 404
+        self.assert403('notifications:ajax')
+        self.assert403('notifications:ajax_mark_read')
+        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
+        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
 
     def test_all_notification_page_status_codes_for_students(self):
         # log in student1
@@ -52,8 +54,11 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
 
         # Inaccessible views:
-        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires AJAX
-        self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
+        # These views require an post request via ajax
+        self.assert403('notifications:ajax_mark_read')
+        self.assert403('notifications:ajax')
+        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
+        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
 
     def test_all_notification_page_status_codes_for_teachers(self):
         # log in student1
@@ -76,8 +81,11 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         )
 
         # Inaccessible views:
-        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read')).status_code, 404)  # requires POST
-        self.assertEqual(self.client.get(reverse('notifications:ajax')).status_code, 404)  # requires POST
+        # These views require an post request via ajax
+        self.assert403('notifications:ajax_mark_read')
+        self.assert403('notifications:ajax')
+        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
+        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
 
     def test_ajax_mark_read(self):
         """ Marks a Notification as read via Ajax (by setting unread = FALSE)

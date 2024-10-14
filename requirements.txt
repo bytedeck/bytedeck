@@ -1,14 +1,16 @@
 -r requirements-production.txt
 django-debug-toolbar>=2.1
 django-debug-toolbar-template-timings>=0.9
-ipdb>=0.12
-model_bakery>=1.1,<2.0
+
+# CLI
+coveralls  # includes coverage
+flake8>=3.7
 pipdeptree>=0.13.2
+pre-commit
+
+# code debugging/tests
 freezegun>=0.3.12
 mock>=2.0,<6.0
-flake8>=3.7
-coveralls  # includes coverage
-names
+model_bakery>=1.1,<2.0
 namegenerator
-tblib
-pre-commit
+names

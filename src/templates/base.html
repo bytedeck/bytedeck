@@ -46,37 +46,9 @@
 <!-- ** end  content_first block ** -->
 {% include 'navbar-fixed.html' %}
 <div class="container-fluid" id="main-container">
-    {% if messages %}
-    {% for message in messages %}
-    {% if 'error' in message.tags %}
-        {% if not request.user.profile.silent_mode %}
-            <audio src="{% static 'sounds/error_small.mp3' %}" autoplay prelaod='auto'></audio>
-        {% endif %}
-    {% elif 'warning' in message.tags %}
-    {% elif 'info' in message.tags %}
-    {% elif 'success' in message.tags %}
-        {% if not request.user.profile.silent_mode %}
-            <audio src="{% static 'sounds/success_small.mp3' %}" autoplay prelaod='auto'></audio>
-        {% endif %}
-    {% endif %}
-    <div role="alert" class="alert alert-dismissible fade in
-          {% if 'error' in message.tags %}alert-danger
-          {% elif 'warning' in message.tags %}alert-warning
-          {% elif 'info' in message.tags %}alert-info
-          {% elif 'success' in message.tags %}alert-success
-          {% endif %}
-          ">
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-        </button>
-        {% if 'safe' in message.tags %}
-        {{ message|safe }}
-        {% else %}
-        {{ message|safe }}
-        {% endif %}
+    <div id="messages-container">
+        {% include 'messages-snippet.html' %}
     </div>
-    {% endfor %}
-    {% endif %}
 
     {% if not config.hs_closed or request.user.is_staff %}
         <!-- ** content_outer block ** -->
