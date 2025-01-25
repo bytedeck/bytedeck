@@ -60,7 +60,7 @@
       </li>
 
       {% with submission.get_comments as target_comments %}
-        {% include "comments/comments.html" %}
+        {% include "questions/comments_with_questions.html" %}
       {% endwith %}
 
     </ul>
@@ -78,6 +78,27 @@
       {% endif %}
 
         {% csrf_token %}
+
+        <!-- Formset of QuestionSubmissions, allowing student to submit questions. -->
+        {% if question_formset.forms %}
+          <!-- Question Formset Management form -->
+          {{ question_formset.management_form }}
+          <!-- End Management Form -->
+          <div class="container-fixed p-4">
+            {% if request.user.is_staff %}
+              <p>View the student's answers below.</p>
+            {% else %}
+              <p>Answer the questions below to complete this quest.</p>
+            {% endif %}
+            <div id="submission-questions-formset-{{submission.quest.id}}">
+              {% for form in question_formset %}
+                {% crispy form %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Quest comment / file attachment form -->
         {{ submission_form | crispy }}
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
@@ -113,7 +134,6 @@
         $(document).ready(function() {
             $('[data-toggle="tooltip"]').tooltip();
 
-
             {% if anchor %}
                 // http://stackoverflow.com/questions/8149155/animate-scrolltop-not-working-in-firefox
                 $('body,html').animate({
@@ -139,12 +159,10 @@
             });
 
             setInterval(save_draft, 60000); // autosave every 60 seconds
-
-
         });
 
         function save_draft() {
-            $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
+            $summernoteEditor = $('#div_id_comment_text .note-editable') // should probably use a more robust selector here?
             draftComment = $summernoteEditor.html()
             xpRequested = $('#id_xp_requested').val()
 
@@ -159,6 +177,48 @@
             $draftSpin = $('#draft-spin')
             $draftCheck = $('#draft-check')
 
+            // Store all the question responses in an array
+            let questionResponses = [];
+
+            // Select all response elements with a regex pattern
+            $("[id^='div_id_questionsubmission_set-']").each(function(index) {
+              let form_index = $(this).attr('id').split('-')[1];
+              let responseText = $(this).find(".note-editable").html();
+
+              // If .note-editable is undefined, then the response might be short answer
+              if (responseText == undefined) {
+                responseText = $(this).find(`#id_questionsubmission_set-${form_index}-response_text`).val();
+              }
+              let responseFile = $(this).find(`#id_questionsubmission_set-${form_index}-response_file`)[0]?.files[0];
+
+              questionResponses.push({
+                index: parseInt(form_index),
+                response_text: responseText,
+                response_file: responseFile
+              });
+            });
+
+            // FormData is a web API that allows you to send form data as key/value pairs using Ajax
+            // It is useful for the complex data that needs to be sent for the QuestionSubmissions,
+            // especially file uploads.
+            // https://developer.mozilla.org/en-US/docs/Web/API/FormData/Using_FormData_Objects
+            let formData = new FormData();
+            formData.append('csrfmiddlewaretoken', "{{ csrf_token }}");
+            formData.append('comment', draftComment);
+            formData.append('submission_id', {{ submission.id }});
+            formData.append('xp_requested', xpRequested);
+
+            // Appending question responses to FormData
+            for (let i = 0; i < questionResponses.length; i++) {
+              const response = questionResponses[i];
+              formData.append(`questions[${i}][index]`, response.index);
+              if (response.response_text) {
+                  formData.append(`questions[${i}][response_text]`, response.response_text);
+              } else if (response.response_file) {
+                  formData.append(`questions[${i}][response_file]`, response.response_file);
+              }
+            }
+
             if ($draftText.is(':visible')) {
 
                 $draftText.hide(0) // no delay
@@ -167,13 +227,15 @@
                 $.ajax({
                     url : "{% url 'quests:ajax_save_draft' %}",
                     type : "POST", // http method
-                    data : {
-                      csrfmiddlewaretoken: "{{ csrf_token }}",
-                      comment: draftComment,
-                      submission_id: {{ submission.id }},
-                      xp_requested: xpRequested
-                    }, // data sent with the post request
+                    data : formData,  // data sent with the post request
 
+                    // these options are for handling the response
+                    // by setting contentType to false, the browser automatically infers
+                    // what type of form data is being sent (e.g. files).
+                    // by setting processData to false, the browser doesn't try to convert
+                    // the FormData object into a string. This is only needed for file uploads.
+                    contentType: false,
+                    processData: false,
                     // handle a successful response
                     success : function(json) {
                       hide_check_show_text();

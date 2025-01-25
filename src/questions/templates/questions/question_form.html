@@ -1,0 +1,28 @@
+{% extends 'questions/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block heading_inner %}{{ heading }} <small>for <a href="{% url 'quests:quest_detail' quest.id %}">{{ quest.name }}</a></small>{% endblock %}
+
+{% block content %}
+<form method='post' enctype="multipart/form-data">{% csrf_token %}
+    {% crispy form %}
+    <a href="{% url 'questions:list' quest.id %}" role="button" class="btn btn-danger">Cancel</a>
+    <input type="submit" value="{{ submit_btn_value }}" class="btn btn-success">
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+    // Update file types info when allowed_file_types selection changes
+    $('#id_allowed_file_type').change(function() {
+        let allowed_file_type = $(this).val();
+        // get the data-title-{type} attribute value
+        console.log(`allowed file type: ${allowed_file_type}`);
+        let mimetypes = $(this).data(`mimetypes-${allowed_file_type}`);
+        console.log(`files types: ${mimetypes}`);
+        $('#file-types-info').html(mimetypes);
+    });
+</script>
+{% endblock %}

@@ -74,13 +74,13 @@ urlpatterns = [
     path('<int:pk>/summary/ajax', views.ajax_summary_histogram, name='ajax_summary_histogram'),
 
     # Submissions
-    re_path(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
-    re_path(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
-    re_path(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
-    re_path(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.complete, name='complete'),
-    re_path(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
-    re_path(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='approve'),
-    re_path(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/skip/$', views.skip, name='skip'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/$', views.submission, name='submission'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/drop/$', views.drop, name='drop'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/complete/$', views.CompleteView.as_view(), name='complete'),
+    url(r'^submission/save/$', views.ajax_save_draft, name='ajax_save_draft'),
+    url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.ApproveView.as_view(), name='approve'),
+    url(r'^submission/past/(?P<submission_id>[0-9]+)/$', views.submission, name='submission_past'),
 
     # Flagged submissions
     re_path(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),

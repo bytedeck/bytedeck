@@ -114,6 +114,7 @@ TENANT_APPS = (
     'taggit',
 
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',
@@ -198,6 +199,7 @@ INSTALLED_APPS = (
 
     # local apps
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',

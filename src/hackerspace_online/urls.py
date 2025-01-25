@@ -40,8 +40,10 @@ urlpatterns += [
     re_path(r'^$', views.home, name='home'),
     re_path(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
     # quest_manager
-    re_path(r'^library/', include('library.urls', namespace='library')),
-    re_path(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    url(r'^library/', include('library.urls', namespace='library')),
+    url(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    # questions
+    url(r'^questions/', include('questions.urls')),
     # profile_manager
     re_path(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
     re_path(r'^announcements/', include('announcements.urls', namespace='announcements')),

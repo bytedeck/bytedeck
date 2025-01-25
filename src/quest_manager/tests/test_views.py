@@ -14,23 +14,28 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
+from django.utils import timezone
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template import Template, Context
 from django.http import JsonResponse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker, recipe
+from datetime import datetime
+from freezegun import freeze_time
 
 from courses.models import Block, Rank
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, generate_formset_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from questions.models import Question, QuestionSubmission
+from questions.forms import QuestionSubmissionFormsetFactory
+from profile_manager.models import Profile
 from siteconfig.models import SiteConfig
 from comments.models import Comment
-from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
-
-from datetime import datetime
 
 
 User = get_user_model()
@@ -309,6 +314,7 @@ class SubmissionViewTests(TenantTestCase):
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
         self.quest3 = baker.make(Quest, visible_to_students=False)
+        self.question_quest = baker.make(Quest, name="Test Question Quest")
 
         self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
@@ -320,6 +326,40 @@ class SubmissionViewTests(TenantTestCase):
             is_completed=True,
             semester=SiteConfig.get().active_semester
         )
+
+        self.sub_with_questions = baker.make(QuestSubmission, quest=self.question_quest, user=self.test_student1,
+                                             semester=SiteConfig.get().active_semester,
+                                             is_completed=False, is_approved=False)
+        self.short_question = baker.make(
+            Question, type='short_answer', quest=self.question_quest, ordinal=1,
+            instructions="Test instructions 1", solution_text="Test solution 1"
+        )
+        self.long_question = baker.make(
+            Question, type='long_answer', quest=self.question_quest, ordinal=2,
+            instructions="Test instructions 2", solution_text="Test solution 2"
+        )
+        self.draft_file = SimpleUploadedFile('test.txt', b'test content', content_type='text/plain')
+        self.file_question = baker.make(
+            Question, type='file_upload', quest=self.question_quest, ordinal=3,
+            instructions="Test instructions 3", solution_file=self.draft_file
+        )
+        self.question_sub_comment1 = Comment.objects.create_comment(
+            user=self.test_student1, text="Test comment", target=self.sub_with_questions,
+            path=self.sub_with_questions.get_absolute_url()
+        )
+        self.question_sub_comment2 = Comment.objects.create_comment(
+            user=self.test_student1, text="Test comment", target=self.sub_with_questions,
+            path=self.sub_with_questions.get_absolute_url()
+        )
+        # baker.make for each question and each comment
+        for question in self.question_quest.question_set.all():
+            for comment in self.sub_with_questions.get_comments():
+                if question.type in ['short_answer', 'long_answer']:
+                    baker.make(QuestionSubmission, question=question, comment=comment,
+                               response_text=f"Test response for {comment.text}")
+                elif question.type == 'file_upload':
+                    baker.make(QuestionSubmission, question=question, comment=comment,
+                               response_file=SimpleUploadedFile('test.txt', b'test content'))
 
     def test_all_submission_page_status_codes_for_students(self):
         # log in a student
@@ -569,6 +609,125 @@ class SubmissionViewTests(TenantTestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_ajax_save_draft_question_has_changes(self):
+        """Should save if there are changes to a question's response_text"""
+        self.client.force_login(self.test_student1)
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        short_question = baker.make(Question, quest=new_quest, type="short_answer", ordinal=1)
+        long_question = baker.make(Question, quest=new_quest, type="long_answer", ordinal=2)
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission,
+                             quest=new_quest,
+                             draft_comment=draft_comment)
+        # create a question submission for each question
+        short_question_sub = baker.make(QuestionSubmission,
+                                        question=short_question,
+                                        comment=draft_comment,
+                                        response_text="I am an old short response text")
+        long_question_sub = baker.make(QuestionSubmission,
+                                       question=long_question,
+                                       comment=draft_comment,
+                                       response_text="I am an old long response text")
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test draft comment",
+                'submission_id': new_sub.id,
+                'xp_requested': 'undefined',
+                'questions[0][index]': '0',
+                'questions[0][response_text]': "Different short response text",
+                'questions[1][index]': '1',
+                'questions[1][response_text]': "Different long response text"
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], "Draft saved")
+
+        short_question_sub.refresh_from_db()
+        long_question_sub.refresh_from_db()
+        self.assertEqual("Different short response text", short_question_sub.response_text)
+        self.assertEqual("Different long response text", long_question_sub.response_text)
+
+    def test_ajax_save_draft_question_file_upload(self):
+        """Ensure that users can save file upload questions as drafts"""
+        self.client.force_login(self.test_student1)
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        file_question = baker.make(Question, quest=new_quest,
+                                   type="file_upload", ordinal=1,
+                                   allowed_file_type='video')
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission,
+                             quest=new_quest,
+                             draft_comment=draft_comment)
+        # create a question submission for each question
+        file_question_sub = baker.make(QuestionSubmission,
+                                       question=file_question,
+                                       comment=draft_comment)
+
+        file_upload = SimpleUploadedFile(
+            "file.mp4", b"file_content", content_type="video/mp4"
+        )
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test draft comment",
+                'submission_id': new_sub.id,
+                'xp_requested': 'undefined',
+                'questions[0][index]': '0',
+                'questions[0][response_file]': file_upload
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], "Draft saved")
+
+        file_question_sub.refresh_from_db()
+        self.assertEqual("file_content", file_question_sub.response_file.read().decode("utf-8"))
+
+    def test_ajax_save_draft_question_file_wrong_type_rejected(self):
+        """The allowed_file_type field on the question model should be enforced,
+        and files of the wrong type should not be saved as drafts"""
+        self.client.force_login(self.test_student1)
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        file_question = baker.make(Question, quest=new_quest,
+                                   type="file_upload", ordinal=1,
+                                   allowed_file_type='video')
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission,
+                             quest=new_quest,
+                             draft_comment=draft_comment)
+        # create a question submission for each question
+        file_question_sub = baker.make(QuestionSubmission,
+                                       question=file_question,
+                                       comment=draft_comment)
+
+        file_upload = SimpleUploadedFile(
+            "file.png", b"file_content", content_type="image/png"
+        )
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test draft comment",
+                'submission_id': new_sub.id,
+                'xp_requested': 'undefined',
+                'questions[0][index]': '0',
+                'questions[0][response_file]': file_upload
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], "No changes")
+
+        file_question_sub.refresh_from_db()
+        self.assertEqual(file_question_sub.response_file.name, '')
+        # there is no file, so trying to read it should raise an error
+        with self.assertRaises(ValueError):
+            file_question_sub.response_file.read()
+
     def test_ajax_save_draft_no_changes(self):
         """Should not save if there are no changes in the draft text"""
         # loging required for this view
@@ -616,6 +775,274 @@ class SubmissionViewTests(TenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.draft_comment.text, draft_text)
 
+    def test_ajax_save_draft_questions_no_changes(self):
+        """Should not save if there are no changes to draft comment or question submissions"""
+        self.client.force_login(self.test_student1)
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        new_question = baker.make(Question, quest=new_quest, type="short_answer", ordinal=1)
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission,
+                             quest=new_quest,
+                             draft_comment=draft_comment)
+        # set the response text to what the ajax request will change it to so that no changes are made
+        short_answer_sub = baker.make(QuestionSubmission,
+                                      question=new_question,
+                                      comment=draft_comment,
+                                      response_text="I am a test response text")
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test draft comment",
+                'submission_id': new_sub.id,
+                'xp_requested': 'undefined',
+                'questions[0][index]': '0',
+                'questions[0][response_text]': "I am a test response text"
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result'], 'No changes')
+        self.assertEqual("I am a test response text", short_answer_sub.response_text)
+
+    def test_question_submission_form_fields_for_types(self):
+        """Ensure that different types of questions have the correct form fields
+        in their question submission formset"""
+        # log in the student
+        self.client.force_login(self.test_student1)
+        # Go to the submission page
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": self.sub_with_questions.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+        forms = response.context['question_formset'].forms
+
+        # ensure the short answer question has a textarea
+        self.assertIn('textarea', forms[0].as_p())
+        # ensure the long answer question has a summernote widget
+        self.assertIn('summernote', forms[1].as_p())
+        # ensure the file upload question has a file input
+        self.assertIn('input type="file"', forms[2].as_p())
+
+    def test_students_can_view_past_question_submissions(self):
+        """Ensure that students can view their own past question submissions"""
+        # log in the student
+        self.client.force_login(self.test_student1)
+        # Go to the submission page
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": self.sub_with_questions.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        # filename template tag filter
+        # ensure the short and long answer's response text is displayed
+        question_subs = QuestionSubmission.objects.filter(comment__in=self.sub_with_questions.get_comments())
+        for question_sub in question_subs:
+            if question_sub.question.type in ['short_answer', 'long_answer']:
+                self.assertContains(response, question_sub.response_text)
+            elif question_sub.question.type == 'file_upload':
+                # use django filename template filter
+                context = Context({'question_sub': question_sub})
+                filename = Template("{% load comment_tags %}{{ question_sub.response_file|filename }}").render(context)
+                self.assertContains(response, filename)
+
+    def test_teachers_can_view_past_question_submissions(self):
+        """Ensure that teachers can view their student's past question submissions"""
+        # log in the teacher
+        self.client.force_login(self.test_teacher)
+        # Go to the submission page
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": self.sub_with_questions.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        # filename template tag filter
+        # ensure the short and long answer's response text is displayed
+        question_subs = QuestionSubmission.objects.filter(comment__in=self.sub_with_questions.get_comments())
+        for question_sub in question_subs:
+            if question_sub.question.type in ['short_answer', 'long_answer']:
+                self.assertContains(response, question_sub.response_text)
+            elif question_sub.question.type == 'file_upload':
+                # use django filename template filter
+                context = Context({'question_sub': question_sub})
+                filename = Template("{% load comment_tags %}{{ question_sub.response_file|filename }}").render(context)
+                self.assertContains(response, filename)
+
+    def test_student_cannot_see_solutions_or_notes(self):
+        """Ensure that students cannot see solutions or notes on past submissions"""
+        # log in the student
+        self.client.force_login(self.test_student1)
+        # Go to the submission page
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": self.sub_with_questions.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        question_subs = QuestionSubmission.objects.filter(comment__in=self.sub_with_questions.get_comments())
+        for question_sub in question_subs:
+            # ensure the solutions and notes are not displayed
+            if question_sub.question.solution_text is not None \
+               and question_sub.question.solution_text != '' \
+               and question_sub.question.marker_notes is not None:
+                self.assertNotContains(response, question_sub.question.solution_text)
+                self.assertNotContains(response, question_sub.question.marker_notes)
+
+    def test_teachers_can_see_solutions_and_notes(self):
+        """Ensure that teachers can see solutions and notes on past submissions"""
+        # log in the teacher
+        self.client.force_login(self.test_teacher)
+        # Go to the submission page
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": self.sub_with_questions.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        question_subs = QuestionSubmission.objects.filter(comment__in=self.sub_with_questions.get_comments())
+        for question_sub in question_subs:
+            # ensure the solutions and notes are not displayed
+            self.assertContains(response, question_sub.question.solution_text)
+            self.assertContains(response, question_sub.question.marker_notes)
+
+    def test_question_submissions_created_for_new_submission(self):
+        """If a student goes to the submission page for a quest that they have just started, this should create
+        a new set of question submissions and a comment for the submission"""
+        # log in the student
+        self.client.force_login(self.test_student1)
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        baker.make(Question, quest=new_quest, type="short_answer", ordinal=1,
+                   instructions="Test instructions")
+        baker.make(Question, quest=new_quest, type="long_answer", ordinal=2,
+                   instructions="Test instructions 2")
+
+        # create a submission for the student
+        sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student1,
+                         is_completed=False, is_approved=False)
+
+        question_sub_count_before = QuestionSubmission.objects.count()
+        comment_count_before = Comment.objects.count()
+
+        # start the quest (create a submission)
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": sub.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # the total number of quest submissions should not have changed
+        self.assertEqual(QuestionSubmission.objects.count(), question_sub_count_before + 2)
+        self.assertEqual(Comment.objects.count(), comment_count_before + 1)
+
+    def test_question_submissions_and_comment_not_created_with_existing_submissions(self):
+        """If a student goes to the submission page for a quest that they have already started, this should not create
+        a new set of question submissions"""
+        # log in the student
+        self.client.force_login(self.test_student1)
+
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        new_question = baker.make(Question, quest=new_quest, type="short_answer", ordinal=1,
+                                  instructions="Test instructions")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        # create a submission for the student
+        sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student1,
+                         is_completed=False, is_approved=False,
+                         draft_comment=draft_comment)
+
+        baker.make(QuestionSubmission, question=new_question,
+                   comment=draft_comment, response_text="old response text")
+        question_sub_count_before = QuestionSubmission.objects.count()
+        comment_count_before = Comment.objects.count()
+
+        # start the quest (create a submission)
+        response = self.client.get(
+            reverse(
+                "quests:submission",
+                kwargs={"submission_id": sub.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # the total number of quest submissions should not have changed
+        self.assertEqual(QuestionSubmission.objects.count(), question_sub_count_before)
+        self.assertEqual(Comment.objects.count(), comment_count_before)
+
+    def test_question_submission_formset_availability(self):
+        """ QuestionSubmission formset should only show up when quest has not been approved."""
+        self.client.force_login(self.test_student1)
+        self.assertEqual(self.sub_with_questions.is_approved, False)
+
+        # question formset should exist
+        response = self.client.get(reverse('quests:submission', args=[self.sub_with_questions.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response.context['question_formset'], None)
+
+        self.sub_with_questions.is_approved = True
+        self.sub_with_questions.full_clean()
+        self.sub_with_questions.save()
+
+        # question formset should not exist
+        response = self.client.get(reverse('quests:submission', args=[self.sub_with_questions.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['question_formset'], None)
+
+    def test_comment_and_questions_deleted_on_drop(self):
+        """If a student drops a quest, the comment and question submissions should be deleted"
+
+        This is due to the draft_comment foreign key of the
+        QuestSubmission model; the comment being worked-on will be deleted. And since the
+        QuestionSubmissions have a foreign key to the comment, they will be deleted as well.
+
+        """
+        self.client.force_login(self.test_student1)
+
+        # start the quest (create a submission)
+        current_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission, quest=self.question_quest, user=self.test_student1,
+                             draft_comment=current_comment, is_completed=False, is_approved=False)
+        previous_comment = Comment.objects.create_comment(
+            user=self.test_student1,
+            text="I am a test submitted comment",
+            target=new_sub,
+            path=new_sub.get_absolute_url()
+        )
+        # create a question submission for each question in both comments
+        previous_question_subs = [baker.make(QuestionSubmission, question=question, comment=previous_comment)
+                                  for question in self.question_quest.question_set.all()]
+        current_question_subs = [baker.make(QuestionSubmission, question=question, comment=current_comment)
+                                 for question in self.question_quest.question_set.all()]
+
+        # drop the quest
+        response = self.client.post(
+            reverse(
+                "quests:drop",
+                kwargs={"submission_id": new_sub.id},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+
+        # ensure the current QuestionSubmissions and comment were deleted
+        self.assertFalse(Comment.objects.filter(id=current_comment.id).exists())
+        for question_sub in current_question_subs:
+            self.assertFalse(QuestionSubmission.objects.filter(id=question_sub.id).exists())
+
+        # acknowledge that the previous QuestionSubmissions were deleted
+        self.assertFalse(Comment.objects.filter(id=previous_comment.id).exists())
+        for question_sub in previous_question_subs:
+            self.assertFalse(QuestionSubmission.objects.filter(id=question_sub.id).exists())
+
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for view.py :
@@ -640,18 +1067,34 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest, xp=5)
         self.draft_comment = baker.make(Comment, text="test draft comment")
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
-                              draft_comment=self.draft_comment)
+                              draft_comment=self.draft_comment,
+                              semester=SiteConfig.get().active_semester)
 
-    def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
+        self.draft_response = "Test draft response"
+        self.draft_long_response = "<p>long answer here!<br></p>"
+        self.draft_file = SimpleUploadedFile(
+            "file.mp4", b"file_content", content_type="video/mp4"
+        )
+        self.image_file = SimpleUploadedFile(
+            "file.png", b"image_content", content_type="image/png"
+        )
+        self.video_file = SimpleUploadedFile(
+            "file.mp4", b"video_content", content_type="video/mp4"
+        )
+
+    def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None, submission=None, **kwargs):
         """ Convenience method for posting the complete() view.
         If teachers_list is not provided, [self.test_teacher] is used.
+        Additional arguments can be passed as kwargs to the post e.g. questionsubmission_set-0-response_text
         """
+        if submission is None:
+            submission = self.sub
         if not teachers_list:
             teachers_list = [self.test_teacher]
         with patch('profile_manager.models.Profile.current_teachers', return_value=teachers_list):
             response = self.client.post(
-                reverse('quests:complete', args=[self.sub.id]),
-                data={'comment_text': submission_comment, button: True}
+                reverse('quests:complete', args=[submission.id]),
+                data={'comment_text': submission_comment, button: True, **kwargs}
             )
         return response
 
@@ -1009,6 +1452,78 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.sub.draft_comment, None)
         self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
 
+        # check if no comment overwrites (ie. comment #2 overwrites comment #1) or any extra comments occur
+        # 3 comments + 1 submit comment
+        self.assertEqual(Comment.objects.all().count(), 4)
+
+    def test_comment_multiple_comments_from_user_with_questions(self):
+        """ Tests the functionality of comments made to a quest with questions
+        by user using standard and quick reply forms.
+        """
+        # create a quest with a question + its submissions
+        # so the QuestionSubmissionFormsetFactory can be used in complete view
+        quest = baker.make(Quest)
+        question = baker.make(Question, quest=quest)
+        comment = baker.make(Comment)
+        quest_sub = baker.make(QuestSubmission, quest=quest, user=self.test_student, draft_comment=comment, semester=SiteConfig.get().active_semester)
+        question_sub = baker.make(QuestionSubmission, question=question, comment=comment)
+
+        # complete quest as the only way user can comment is if they complete
+        complete_data = generate_formset_data(QuestionSubmissionFormsetFactory, quantity=1, prefix='questionsubmission_set')
+        complete_data.update({
+            'questionsubmission_set-INITIAL_FORMS': 1,
+            'questionsubmission_set-0-id': question_sub.id,
+            'questionsubmission_set-0-comment': comment.id,
+            'questionsubmission_set-0-response_text': 'question submit',
+        })
+        self.post_complete(button='complete', submission=quest_sub, submission_comment='quest submit', **complete_data)
+
+        # comment using submission
+        self.assert200('quests:submission', args=[quest_sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission=quest_sub, submission_comment='comment from submission #1')
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #1').exists())
+
+        self.assert200('quests:submission', args=[quest_sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission=quest_sub, submission_comment='comment from submission #2')
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #2').exists())
+
+        # quick reply
+        self.post_complete(button='comment', submission=quest_sub, submission_comment='comment from quick reply #1')
+        self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
+
+        # check if no comment overwrites (ie. comment #2 overwrites comment #1)
+        # use all to account for undeleted draft comments (have no target object)
+        # 3 comments + 1 quest submit comment + draft_comment from setup
+        self.assertEqual(Comment.objects.all().count(), 5)
+
+        # check the question submission comments
+        # "question submit"
+        self.assertEqual(QuestionSubmission.objects.all().count(), 1)
+
+    def test_comment_draft_correct_timestamp(self):
+        """ Ensures draft comment's timestamp gets updated when it turns into a regular comment (gets a proper target) """
+        tz = timezone.get_default_timezone()
+        loaded_date = datetime(2024, 1, 1, 10, tzinfo=tz)
+        expected_date = datetime(2024, 1, 2, 10, tzinfo=tz)
+
+        # clear draft so we can set the timestamp organically
+        self.sub.draft_comment = None
+        self.sub.full_clean()
+        self.sub.save()
+
+        # load the draft comment
+        with freeze_time(loaded_date):
+            self.assert200('quests:submission', args=[self.sub.id])
+
+        # "wait" 1 day and post comment
+        with freeze_time(expected_date):
+            self.post_complete(submission_comment='comment from timestamp test')
+
+        # using contains because view formats comment
+        comment = Comment.objects.get(text__contains='comment from timestamp test')
+        self.assertNotEqual(comment.timestamp.date(), loaded_date.date())
+        self.assertEqual(comment.timestamp.date(), expected_date.date())
+
     def test_unrecognized_submit_button(self):
         """ Unrecognized form submit button should 404.
         In some views Summernote was causing problems by submitting the form via ajax """
@@ -1024,6 +1539,182 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         #     )
         # # bad form, just rerender
         # self.assertEqual(response.status_code, 200)
+
+    def test_submit_questions(self):
+        """Students can submit questions for quests. The questions should be updated.
+        Everything else to do with submitting should be the same as before."""
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student,
+                             draft_comment=draft_comment, is_completed=False, is_approved=False)
+        short_question = baker.make(Question, quest=new_quest, type="short_answer", ordinal=1,
+                                    instructions="Test instructions")
+        long_question = baker.make(Question, quest=new_quest, type="long_answer", ordinal=2,
+                                   instructions="Test instructions 2")
+        short_sub = baker.make(QuestionSubmission, question=short_question, comment=draft_comment,
+                               response_text="old response text")
+        long_sub = baker.make(QuestionSubmission, question=long_question, comment=draft_comment,
+                              response_text="old response text 2<br>")
+        post_data = {
+            'questionsubmission_set-TOTAL_FORMS': 2,
+            'questionsubmission_set-INITIAL_FORMS': 2,
+            'questionsubmission_set-MIN_FORMS': 0,
+            'questionsubmission_set-MAX_FORMS': 1000,
+            'questionsubmission_set-0-id': short_sub.id,
+            'questionsubmission_set-0-comment': draft_comment.id,
+            'questionsubmission_set-0-response_text': self.draft_response,
+            'questionsubmission_set-1-id': long_sub.id,
+            'questionsubmission_set-1-comment': draft_comment.id,
+            'questionsubmission_set-1-response_text': self.draft_long_response,
+        }
+        response = self.post_complete(submission=new_sub, **post_data)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.assertSuccessMessage(response)
+
+        new_sub.refresh_from_db()
+        self.assertTrue(new_sub.is_completed)
+        self.assertIsNone(new_sub.draft_comment)
+
+        # ensure the comment was still tied to the submission as expected
+        self.assertEqual(new_sub.get_comments().count(), 1)
+        comment = new_sub.get_comments()[0]
+        self.assertEqual(comment.text, '<p>test comment</p>')
+        short_sub.refresh_from_db()
+        long_sub.refresh_from_db()
+        self.assertEqual(short_sub.response_text, self.draft_response)
+        self.assertEqual(long_sub.response_text, self.draft_long_response)
+
+    def test_submit_file_question(self):
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student,
+                             draft_comment=draft_comment, is_completed=False, is_approved=False)
+        file_question = baker.make(Question, quest=new_quest, type="file_upload", ordinal=1,
+                                   instructions="Test instructions 2")
+        file_sub = baker.make(QuestionSubmission, question=file_question, comment=draft_comment)
+        post_data = {
+            'questionsubmission_set-TOTAL_FORMS': 1,
+            'questionsubmission_set-INITIAL_FORMS': 1,
+            'questionsubmission_set-MIN_FORMS': 0,
+            'questionsubmission_set-MAX_FORMS': 1000,
+            'questionsubmission_set-0-id': file_sub.id,
+            'questionsubmission_set-0-comment': draft_comment.id,
+            'questionsubmission_set-0-response_file': self.draft_file,
+        }
+        response = self.post_complete(submission=new_sub, **post_data)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.assertSuccessMessage(response)
+
+        new_sub.refresh_from_db()
+        self.assertTrue(new_sub.is_completed)
+        self.assertIsNone(new_sub.draft_comment)
+
+        # ensure the comment was still tied to the submission as expected
+        self.assertEqual(new_sub.get_comments().count(), 1)
+        comment = new_sub.get_comments()[0]
+        self.assertEqual(comment.text, '<p>test comment</p>')
+        file_sub.refresh_from_db()
+        self.assertEqual(file_sub.response_file.read().decode('utf-8'), 'file_content')
+
+    def test_students_must_complete_required_questions(self):
+        """When a teacher creates quest questions, they can mark them as required or not.
+        Students must complete required questions before they can complete the quest.
+        """
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        short_question1 = baker.make(Question, quest=new_quest, type="short_answer", ordinal=1,
+                                     instructions="Test instructions", required=True)
+        short_question2 = baker.make(Question, quest=new_quest, type="short_answer", ordinal=2,
+                                     instructions="Test instructions 2", required=False)
+        file_question = baker.make(Question, quest=new_quest, type="file_upload", ordinal=3,
+                                   instructions="Test instructions 2", required=True)
+        new_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student,
+                             is_completed=False, is_approved=False, draft_comment=new_comment)
+        short_question1_sub = baker.make(QuestionSubmission, question=short_question1, comment=new_comment)
+        short_question2_sub = baker.make(QuestionSubmission, question=short_question2, comment=new_comment)
+        file_question_sub = baker.make(QuestionSubmission, question=file_question, comment=new_comment)
+
+        empty_submission_data = {
+            'questionsubmission_set-TOTAL_FORMS': 3,
+            'questionsubmission_set-INITIAL_FORMS': 3,
+            'questionsubmission_set-MIN_NUM_FORMS': 0,
+            'questionsubmission_set-MAX_NUM_FORMS': 1000,
+            'questionsubmission_set-0-id': short_question1_sub.id,
+            'questionsubmission_set-0-comment': new_comment.id,
+            'questionsubmission_set-1-id': short_question2_sub.id,
+            'questionsubmission_set-1-comment': new_comment.id,
+            'questionsubmission_set-2-id': file_question_sub.id,
+            'questionsubmission_set-2-comment': new_comment.id,
+            'questionsubmission_set-2-response_file': '',
+        }
+        # submit without completing required questions
+        response = self.post_complete(submission=new_sub, **empty_submission_data)
+        # Should keep us on the submission page with error message
+        self.assertEqual(response.status_code, 200)
+        short_question1_sub.refresh_from_db()
+        short_question2_sub.refresh_from_db()
+        file_question_sub.refresh_from_db()
+        self.assertIsNone(short_question1_sub.response_text)
+        self.assertIsNone(short_question2_sub.response_text)
+        # the file is stored as a django FileField, so it's not None, but it's empty
+        # trying to read the file should raise an error
+        with self.assertRaises(ValueError):
+            file_question_sub.response_file.read()
+
+        # submit with required questions completed
+        response_data = empty_submission_data
+        response_data['questionsubmission_set-0-response_text'] = "test response"
+        response_data['questionsubmission_set-2-response_file'] = self.draft_file
+        response = self.post_complete(submission=new_sub, **response_data)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.assertSuccessMessage(response)
+
+        new_sub.refresh_from_db()
+        self.assertTrue(new_sub.is_completed)
+
+        short_question1_sub.refresh_from_db()
+        short_question2_sub.refresh_from_db()
+        file_question_sub.refresh_from_db()
+        self.assertEqual(short_question1_sub.response_text, "test response")
+        self.assertIsNone(short_question2_sub.response_text)
+        self.assertEqual(file_question_sub.response_file.read().decode('utf-8'), 'file_content')
+
+    def test_questions_allowed_file_type(self):
+        """Ensure the allowed_file_type field of the Question model is enforced.
+        Student's should only be allowed to submit files that match the allowed_file_type."""
+        new_quest = baker.make(Quest, name="TestSubmitQuest")
+        file_question = baker.make(Question, quest=new_quest, type="file_upload", ordinal=1,
+                                   instructions="Test instructions 2", required=True,
+                                   allowed_file_type='image')
+        new_comment = baker.make(Comment, text="I am a test draft comment")
+        new_sub = baker.make(QuestSubmission, quest=new_quest, user=self.test_student,
+                             is_completed=False, is_approved=False, draft_comment=new_comment)
+        file_question_sub = baker.make(QuestionSubmission, question=file_question, comment=new_comment)
+
+        video_submission_data = {
+            'questionsubmission_set-TOTAL_FORMS': 1,
+            'questionsubmission_set-INITIAL_FORMS': 1,
+            'questionsubmission_set-MIN_NUM_FORMS': 0,
+            'questionsubmission_set-MAX_NUM_FORMS': 1000,
+            'questionsubmission_set-0-id': file_question_sub.id,
+            'questionsubmission_set-0-comment': new_comment.id,
+            'questionsubmission_set-0-response_file': self.video_file,
+        }
+        # submit without completing required questions
+        response = self.post_complete(submission=new_sub, **video_submission_data)
+        # Should keep us on the submission page with error message
+        self.assertEqual(response.status_code, 200)
+        # file should not have been updated, since it can only accept an image
+        with self.assertRaises(ValueError):
+            file_question_sub.response_file.read()
+
+        image_submission_data = video_submission_data
+        image_submission_data['questionsubmission_set-0-response_file'] = self.image_file
+        response = self.post_complete(submission=new_sub, **image_submission_data)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.assertSuccessMessage(response)
+        file_question_sub.refresh_from_db()
+        self.assertEqual(file_question_sub.response_file.read().decode('utf-8'), 'image_content')
 
 
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
