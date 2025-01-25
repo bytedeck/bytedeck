@@ -6,7 +6,7 @@ from django import forms
 from django.core import signing
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.utils.encoding import smart_text
+from django.utils.encoding import smart_str
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
@@ -74,7 +74,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         assert response.status_code == 200
         data = json.loads(response.content.decode('utf-8'))
         assert data['results']
-        assert {'id': self._ct_pk(group), 'text': smart_text(group)} in data['results'][0]['children']
+        assert {'id': self._ct_pk(group), 'text': smart_str(group)} in data['results'][0]['children']
 
     def test_no_field_id(self):
         group = self.groups[0]
@@ -135,7 +135,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
 
         data = json.loads(response.content.decode('utf-8'))
         assert data['results']
-        assert {'id': self._ct_pk(group), 'text': smart_text(group.name.upper())} in data['results'][0]['children']
+        assert {'id': self._ct_pk(group), 'text': smart_str(group.name.upper())} in data['results'][0]['children']
 
     def test_url_check(self):
         from django_select2.cache import cache

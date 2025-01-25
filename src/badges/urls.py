@@ -1,8 +1,6 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from badges import views
-
-from django.conf.urls import url
 
 app_name = 'badges'
 
@@ -12,16 +10,16 @@ urlpatterns = [
     path('create/', views.badge_create, name='badge_create'),
     path('<int:badge_id>/', views.detail, name='badge_detail'),  # shows assertions of current students only
     path('<int:badge_id>/all/', views.detail_all, name='badge_detail_all'),  # show assertions of all students
-    url(r'^(?P<pk>[0-9]+)/edit/$', views.BadgeUpdate.as_view(), name='badge_update'),
-    url(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.BadgePrereqsUpdate.as_view(), name='badge_prereqs_update'),
-    url(r'^(?P<badge_id>[0-9]+)/copy/$', views.badge_copy, name='badge_copy'),
-    url(r'^(?P<pk>[0-9]+)/delete/$', views.BadgeDelete.as_view(), name='badge_delete'),
+    re_path(r'^(?P<pk>[0-9]+)/edit/$', views.BadgeUpdate.as_view(), name='badge_update'),
+    re_path(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.BadgePrereqsUpdate.as_view(), name='badge_prereqs_update'),
+    re_path(r'^(?P<badge_id>[0-9]+)/copy/$', views.badge_copy, name='badge_copy'),
+    re_path(r'^(?P<pk>[0-9]+)/delete/$', views.BadgeDelete.as_view(), name='badge_delete'),
 
     # Badge Assertions
-    url(r'^(?P<badge_id>[0-9]+)/grant/(?P<user_id>[0-9]+)/$', views.assertion_create, name='grant'),
-    url(r'^(?P<badge_id>[0-9]+)/grant/bulk/$', views.bulk_assertion_create, name='bulk_grant_badge'),
+    re_path(r'^(?P<badge_id>[0-9]+)/grant/(?P<user_id>[0-9]+)/$', views.assertion_create, name='grant'),
+    re_path(r'^(?P<badge_id>[0-9]+)/grant/bulk/$', views.bulk_assertion_create, name='bulk_grant_badge'),
     path('grant/bulk/', views.bulk_assertion_create, name='bulk_grant'),
-    url(r'^assertion/(?P<assertion_id>[0-9]+)/revoke/$', views.assertion_delete, name='revoke'),
+    re_path(r'^assertion/(?P<assertion_id>[0-9]+)/revoke/$', views.assertion_delete, name='revoke'),
 
 
     # Badge Types

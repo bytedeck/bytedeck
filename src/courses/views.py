@@ -408,7 +408,13 @@ class SemesterCreateUpdateFormsetMixin:
     # formsets
 
     def get_formset_queryset(self):
-        return self.get_object().excludeddate_set.all().order_by('date')
+        object_ = self.get_object()
+
+        # pk is None when creating a model without saving it
+        if object_.pk is None:
+            return self.model.objects.none()
+
+        return object_.excludeddate_set.all().order_by('date')
 
     def get_formset_kwargs(self):
         form_kwargs = super().get_form_kwargs()
@@ -555,6 +561,7 @@ def end_active_semester(request):
     return redirect('courses:semester_list')
 
 
+@xml_http_request_required
 @non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
@@ -563,7 +570,7 @@ def ajax_progress_chart(request, user_id=0):
     else:
         user = get_object_or_404(User, pk=user_id)
 
-    if request.is_ajax() and request.method == "POST":
+    if request.method == "POST":
         sem = SiteConfig.get().active_semester
 
         # generate a list of dates, from first date of semester to today
@@ -618,16 +625,10 @@ def ajax_progress_chart(request, user_id=0):
         raise Http404
 
 
-class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     _BINS = 10
     _BIN_WIDTH = 10
-
-    def dispatch(self, request, *args, **kwargs):
-        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
-        if not is_ajax or not request.user.is_authenticated:
-            raise Http404()
-
-        return super().dispatch(request, *args, **kwargs)
 
     def get(self, *args, **kwargs):
         self.user = self.get_user()
@@ -708,14 +709,8 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, View):
         })
 
 
-class Ajax_TagChart(NonPublicOnlyViewMixin, View):
-
-    def dispatch(self, request, *args, **kwargs):
-        is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
-        if not is_ajax or not request.user.is_authenticated:
-            raise Http404()
-
-        return super().dispatch(request, *args, **kwargs)
+@method_decorator(xml_http_request_required, name='dispatch')
+class Ajax_TagChart(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
 
     def get(self, *args, **kwargs):
         self.user = self.get_user()

@@ -7,7 +7,8 @@ def convert_issue_hashes_to_links(file_path):
     with open(file_path, encoding='utf-8') as file:
         content = file.read()
 
-    # Define the pattern for GitHub issue hashes and the pattern to ignore existing links
+    # Define the pattern for GitHub issue hashes and the pattern to ignore existing links:
+    # [#1234]
     issue_pattern = re.compile(r'(?<!\]\()(?<!\[)\#(\d+)')
 
     # Replace issue hashes with the appropriate link format

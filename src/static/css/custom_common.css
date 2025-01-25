@@ -593,11 +593,11 @@ form .panel-body {
 }
 
 /************ALERTS *************************/
-#main-container > .alert:first-of-type {
+#messages-container > .alert:first-of-type {
     margin-top: 10px;
 }
 
-#main-container > .alert {
+#messages-container > .alert {
     margin-bottom: 8px;
 }
 

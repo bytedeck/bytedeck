@@ -18,7 +18,8 @@ import environ
 env = environ.Env(
     # set casting, default value
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list)
+    ALLOWED_HOSTS=(list),
+    CSRF_TRUSTED_ORIGINS=(list)
 )
 
 
@@ -36,6 +37,8 @@ ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
+
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
@@ -455,6 +458,9 @@ STATICFILES_DIRS = env(
 )
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
+
+# https://django-crispy-forms.readthedocs.io/en/latest/crispy_tag_forms.html#make-crispy-forms-fail-loud
+CRISPY_FAIL_SILENTLY = not DEBUG  # logs crispy-forms failures as exceptions when True
 
 SITE_ID = 1
 

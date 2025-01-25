@@ -53,8 +53,11 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
 
         if SiteConfig.get().map_auto_update:
             maps = CytoScape.objects.get_related_maps(self.object)
-            if maps.count() != 0:
-                messages.success(self.request, f"maps {maps.get_maps_as_formatted_string()} will be updated")
+            if maps:
+                messages.success(
+                    self.request,
+                    f"These maps are being updated: {maps.get_maps_as_formatted_string()} "
+                )
 
         return HttpResponseRedirect(self.get_success_url())
 

@@ -181,7 +181,7 @@ class QuestTestModel(TenantTestCase):
             )
             self.assertFalse(q.active)
 
-        dt = timezone.get_current_timezone().localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+        dt = timezone.datetime(2023, 6, 13, 12, 0, 0).replace(tzinfo=timezone.get_current_timezone())
         with freeze_time(dt):
             # Quest that expires an hour ago
             dt_expired = timezone.localtime() - timezone.timedelta(hours=1)
@@ -216,7 +216,7 @@ class QuestTestModel(TenantTestCase):
         # Get the current local time zone
         local_tz = timezone.get_current_timezone()
         # Create a datetime object for noon on June 13th (arbitrary date)
-        dt = local_tz.localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+        dt = timezone.datetime(2023, 6, 13, 12, 0, 0).replace(tzinfo=local_tz)
 
         # Quest that expires at noon, date_expired=None by default
         quest = baker.make(Quest, time_expired=dt.time())
@@ -236,7 +236,7 @@ class QuestTestModel(TenantTestCase):
         # Get the current local time zone
         local_tz = timezone.get_current_timezone()
         # Create a datetime object for noon on June 13th (arbitrary date)
-        dt = local_tz.localize(timezone.datetime(2023, 6, 13, 12, 0, 0))
+        dt = timezone.datetime(2023, 6, 13, 12, 0, 0).replace(tzinfo=local_tz)
 
         # Quest that expires on June 13th, time_expired=None by default
         quest = baker.make(Quest, date_expired=dt.date())
