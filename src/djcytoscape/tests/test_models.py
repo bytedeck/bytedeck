@@ -366,12 +366,17 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         scape_ids = [s.id for s in scapes]
         scapes = CytoScape.objects.filter(id__in=scape_ids)
 
+        scape_0 = f'<a href="/maps/{scapes[0].id}/">0</a>'
+        scape_1 = f'<a href="/maps/{scapes[1].id}/">1</a>'
+        scape_2 = f'<a href="/maps/{scapes[2].id}/">2</a>'
+        scape_3 = f'<a href="/maps/{scapes[3].id}/">3</a>'
+
         expected_results = [
-            "",
-            "0",
-            "0 and 1",
-            "0, 1, and 2",
-            "0, 1, 2, and 3",
+            None,
+            f'{scape_0}',
+            f'{scape_0} and {scape_1}',
+            f'{scape_0}, {scape_1}, and {scape_2}',
+            f'{scape_0}, {scape_1}, {scape_2}, and {scape_3}',
         ]
         for index, expected in enumerate(expected_results):
             result = scapes[0:index].get_maps_as_formatted_string()

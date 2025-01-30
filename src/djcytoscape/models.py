@@ -373,7 +373,7 @@ class TempCampaign:
 class CytoScapeQueryset(models.QuerySet):
 
     def get_maps_as_formatted_string(self):
-        """ returns queryset of maps as grammatically correct string
+        """ returns queryset of maps as grammatically correct string with hyperlinks to map pages
         [map1]
         >>> map1
         [map1, map2]
@@ -382,10 +382,10 @@ class CytoScapeQueryset(models.QuerySet):
         >>> map1, map2, ..., and mapN
         """
         # .join functions do not convert to str
-        names = [str(scape) for scape in self]
+        names = [f'<a href="{scape.get_absolute_url()}">{str(scape)}</a>' for scape in self]
 
         if self.count() == 0:
-            return ""
+            return None
         elif self.count() == 1:
             return names[0]
         # oxford comma not applicable

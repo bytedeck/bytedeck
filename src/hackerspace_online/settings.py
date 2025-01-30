@@ -18,7 +18,8 @@ import environ
 env = environ.Env(
     # set casting, default value
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list)
+    ALLOWED_HOSTS=(list),
+    CSRF_TRUSTED_ORIGINS=(list)
 )
 
 
@@ -36,6 +37,8 @@ ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
+
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
 
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
