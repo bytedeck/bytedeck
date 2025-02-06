@@ -70,16 +70,18 @@ class Command(BaseCommand):
         for tenant in tenants:
             # loop through all models inside tenant
             with schema_context(tenant.schema_name):
-
+                print(f"* TENANT: {tenant}")
                 # loop through each model
                 for app_name in self.LOCAL_APPS:
+                    print(f"*** APP: {app_name}")
                     for model in apps.get_app_config(app_name).get_models():
-
+                        print(f"***** MODEL: {model}")
                         # full clean each object in model
                         for object_ in model.objects.all().iterator(chunk_size=100):
                             try:
                                 object_.full_clean()
-                                object_.save()
+                                # Since we don't actually fix errors here, there is no point in saving.
+                                # object_.save()
                             except ValidationError as e:
                                 exception_string = self.EXCEPTION_C + "Exception" + self.END_C
                                 tenant_string = self.TENANT_C + str(tenant.schema_name) + self.END_C
