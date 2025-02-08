@@ -17,7 +17,7 @@ django-select2>=8.2.1,<8.3
 django-storages[boto3]>=1.12,<2
 django-summernote>=0.8,<0.9
 django-taggit>=2.1,<5.0
-django-tenants>=3.5,<3.6  # latest version that supports python 3.8
+django-tenants>=3.5,<3.8  # latest version that supports python 3.8
 django-url-or-relative-url-field>=0.2.0,<0.3.0
 django-utils-six==2.0  # only 2.0 exists. Previous version was removed back in Django 3.0
 tenant-schemas-celery>=2.2,<3.1
