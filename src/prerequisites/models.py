@@ -96,6 +96,19 @@ class HasPrereqsMixin:
         content_type = ContentType.objects.get_for_model(self).name
         return f"({content_type}) {str(self)}"
 
+    @staticmethod
+    def content_type_is_registered(content_type):
+        """Check if model represented by this content_type implements HasPrereqsMixin"""
+        return HasPrereqsMixin.model_is_registered(content_type.model_class())
+
+    @staticmethod
+    def model_is_registered(model_class):
+        """Check if class implements HasPrereqsMixin"""
+        if model_class and issubclass(model_class, HasPrereqsMixin):
+            return True
+        else:
+            return False
+
 
 class IsAPrereqMixin:
     """

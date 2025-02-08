@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -241,6 +242,9 @@ class Notification(models.Model):
         # print("***** NOTIFICATION.get_url **********")
         try:
             target_url = self.target_object.get_absolute_url()
+
+            if 'commented on' in self.verb:
+                target_url += f'#comment-{self.action_object_id}'
         except:  # noqa
             # TODO make this except explicit, don't remember what it's doing
             target_url = reverse('notifications:list')
@@ -297,7 +301,7 @@ def new_notification(sender, **kwargs):
     :param sender: the object (any Model) initiating/causing the notification
     :param kwargs:
         target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
-        action (any Model): Not sure... not used I assume.
+        action (any Model): Used alongside "verb" to create syntax of notification ie. "<user> <verb> with <action>"
         recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
         affected_users (list of Users): everyone who should receive the notification
         verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
@@ -335,7 +339,7 @@ def new_notification(sender, **kwargs):
                 sender_object_id=sender.id,
                 font_icon=icon,
             )
-            # Set the target if provided.  Action not currently used...
+            # Set the target if provided.
             for option in ("target", "action"):
                 # obj = kwargs.pop(option, None) #don't want to remove option with pop
                 try:
@@ -360,3 +364,32 @@ def deleted_object_receiver(sender, **kwargs):
     object = kwargs["instance"]
     # print(object)
     Notification.objects.get_queryset().get_object_anywhere(object).delete()
+
+
+def notify_rank_up(notified_user, old_xp, new_xp):
+    """ notifies user if they've ranked up.
+    Mainly used alongside other notify.send
+    """
+    # cant import because of circular imports
+    SiteConfig = apps.get_model('siteconfig.SiteConfig')
+    Rank = apps.get_model('courses.Rank')
+
+    # get appropriate rank
+    old_rank = Rank.objects.get_rank(old_xp)
+    new_rank = Rank.objects.get_rank(new_xp)
+
+    if old_rank.xp == new_rank.xp:
+        return
+
+    fa_icon = new_rank.fa_icon or "fa-star"
+    icon = f"<i class='text-warning fa fa-lg fa-fw {fa_icon}'></i>"
+
+    #
+    notify.send(
+        SiteConfig.get().deck_ai,
+        target=new_rank,
+        recipient=notified_user,
+        affected_users=[notified_user, ],
+        icon=icon,
+        verb="promoted you to",
+    )

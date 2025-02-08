@@ -1,5 +1,6 @@
 import uuid
 import json
+import datetime
 
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
@@ -8,7 +9,7 @@ from django.db import models
 from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
-from django.utils import timezone, datetime_safe
+from django.utils import timezone
 
 from siteconfig.models import SiteConfig
 
@@ -135,7 +136,7 @@ class XPItem(models.Model):
     )
     hours_between_repeats = models.PositiveIntegerField(default=0)
     date_available = models.DateField(default=timezone.localdate)  # timezone aware!
-    time_available = models.TimeField(default=datetime_safe.time.min)  # midnight local time
+    time_available = models.TimeField(default=datetime.time.min)  # midnight local time
     date_expired = models.DateField(blank=True, null=True,
                                     help_text='If both Date and Time expired are blank, then the quest never expires')
     time_expired = models.TimeField(blank=True, null=True,  # local time
@@ -149,7 +150,7 @@ class XPItem(models.Model):
         # as such, the original value for sort_order (-sort_order,) orders quests upside-down
         # the sort_order value in this list should be reverted to -sort_order once manually sorting is not necessary
         # further information can be found here: https://github.com/bytedeck/bytedeck/pull/1179
-        ordering = ["sort_order", "-time_expired", "-date_expired", "name"]
+        ordering = ["sort_order", "date_expired", "time_expired", "name"]
 
     def __str__(self):
         return self.name
@@ -439,6 +440,18 @@ class QuestManager(models.Manager):
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
+    """
+    A model representing a Quest.
+
+    A Quest in this context is an assignment or task that the student must complete.
+    It contains several options for controlling how and when the quest is visible and completed.
+
+    IsAPrereqMixin: Requires that the condition_met_as_prerequisite method be implemented,
+                    allowing this to function as a prerequisite to other quests.
+    HasPrereqsMixin: provides functionalities related to having prerequisites.
+    TagsModelMixin: provides tagging functionalities.
+    XPItem: A quest grants XP to the user when completed. This mixin provides the XP related functionalities.
+    """
     verification_required = models.BooleanField(default=True,
                                                 help_text="Teacher must approve submissions of this quest.  If \
                                                 unchecked then submissions will automatically be approved and XP \
@@ -865,7 +878,10 @@ class QuestSubmission(models.Model):
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
                                    on_delete=models.SET_NULL)
-    draft_text = models.TextField(null=True, blank=True)
+    # while the user is working on their submission, this will store the comment that we will
+    # post when they submit. If this field currently stores a comment, we know that they are
+    # currently working on a submission.
+    draft_comment = models.ForeignKey(Comment, null=True, blank=True, on_delete=models.SET_NULL)
     xp_requested = models.PositiveIntegerField(
         default=0,
         help_text='The number of XP you are requesting for this submission.'
@@ -907,7 +923,7 @@ class QuestSubmission(models.Model):
         # when calculating repeatable quests
         if self.first_time_completed is None:
             self.first_time_completed = self.time_completed
-        self.draft_text = None  # clear draft stuff
+        self.draft_comment = None  # clear draft stuff
         self.xp_requested = xp_requested
         self.save()
 

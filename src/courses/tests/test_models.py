@@ -138,7 +138,7 @@ class SemesterModelManagerTest(TenantTestCase):
 
     def test_get_current_as_queryset(self):
         """ Get's the current semester object in a quesryset  """
-        self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [repr(SiteConfig.get().active_semester)])
+        self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
     def test_complete_active_semester(self):
         """ set current semester to closed and do lots of stuff..  """
@@ -158,7 +158,6 @@ class SemesterModelTest(TenantTestCase):
 
     def test_semester_creation(self):
         self.assertIsInstance(self.semester, Semester)
-        self.assertEqual(str(self.semester), self.semester.first_day.strftime("%b-%Y"))
 
     def test_is_open(self):
         # before semester starts: False

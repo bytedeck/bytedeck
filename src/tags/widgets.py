@@ -11,6 +11,19 @@ class TaggitSelect2Widget(ModelSelect2TagWidget):
     model = Tag
     search_fields = ["name__icontains"]
 
+    def __init__(self, *args, **kwargs):
+        """ Despite what Select2 and django-select2 docs tell you. You cant actually change the default setting in javascript.
+        For now modify the `attrs` variable to set default attributes.
+
+        cant set defaults in `def build_attrs` since it populates the attrs with the select2 defaults beforehand.
+        """
+        attrs = kwargs.get('attrs', {})
+        # As of `django-select2 7.1.2`, Select2 by default now has a minimum input length of 2.
+        attrs.setdefault('data-minimum-input-length', '1')
+        kwargs['attrs'] = attrs
+
+        super().__init__(*args, **kwargs)
+
     def get_url(self):
         return reverse('tags:auto-json')
 

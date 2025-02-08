@@ -44,14 +44,14 @@ RUN apt-get autoremove -y \
 ENV DEBIAN_FRONTEND=dialog
 
 # Set the default shell to bash rather than sh
-ENV SHELL /bin/bash
+ENV SHELL=/bin/bash
 
 # Set environment variables
 
 # Don't create .pyc files (why don't we want these?)
-ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONDONTWRITEBYTECODE=1
 # Prevent docker from buffering console output
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
 
 
 # Install python requirements

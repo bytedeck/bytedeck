@@ -10,6 +10,11 @@ from model_bakery import baker
 from badges.models import Badge, BadgeAssertion, BadgeType
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
+from djcytoscape.models import CytoScape
+from notifications.models import Notification
+
+import json
+
 
 User = get_user_model()
 
@@ -161,9 +166,14 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(new_badge.name, "badge copy test")
 
     def test_assertion_create_and_delete(self):
+        """ Ensure that the create and delete views properly add and remove the badges from the users profile
+        and adds/subtracts XP."""
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
+
+        # should be zero, but this avoids problems with any future changes to setUp etc.
+        xp_initial = self.test_student1.profile.xp_cached
 
         # test: assertion_create()
         form_data = {
@@ -180,6 +190,9 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.user, self.test_student1)
         self.assertEqual(new_assertion.badge, self.test_badge)
+        # make sure the student's xp cache was recalculated and includes the new badge xp amount
+        self.test_student1.profile.refresh_from_db()  # Ensure we get the most up-to-date value from the database
+        self.assertEqual(self.test_student1.profile.xp_cached, xp_initial + self.test_badge.xp)
 
         # test: assertion_delete()
         response = self.client.post(
@@ -190,6 +203,10 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # shouldn't exist anymore now that we deleted it!
         with self.assertRaises(BadgeAssertion.DoesNotExist):
             BadgeAssertion.objects.get(id=new_assertion.id)
+
+        # make sure the student's xp cache was recalculated and deleted badge xp removed
+        self.test_student1.profile.refresh_from_db()
+        self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
     def test_assertion_create_no_xp(self):
         """Don't grant XP for this badge assertion"""
@@ -236,6 +253,40 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
 
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a badge is related to map """
+        # setup
+        badge = baker.make(Badge)
+        scape = CytoScape.generate_map(badge, name='unique scape name')
+
+        form_data = {
+            'name': "badge copy test",
+            'xp': 0,
+            'content': "test content",
+            'badge_type': self.test_badge_type.id,
+            'author': self.test_teacher.id,
+            'import_id': uuid.uuid4()
+        }
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('badges:badge_update', args=[badge.id]), data=form_data)
+        self.assertEqual(response.status_code, 302)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # to clear any messages before next test
+        self.assert200('badges:badge_list')
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('badges:badge_delete', args=[badge.id]))
+        self.assertEqual(response.status_code, 302)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
     # Custom label tests
     def test_badge_views__header_custom_label_displayed(self):
         """
@@ -251,6 +302,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
@@ -285,6 +337,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert every instance of custom label is present
@@ -403,6 +456,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
@@ -414,3 +468,124 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Get Delete view and assert header is correct
         request = self.client.get(reverse('badges:badge_type_delete', args=[self.badge_type.id]))
         self.assertContains(request, 'Delete CustomBadge Type')
+
+
+class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
+    """ test case for
+    + ajax/on_show_badge_popup/
+    + ajax/on_close_badge_popup/
+    """
+
+    def create_assertion_notification(self, badge):
+        """ Creates a notification by triggering the post_save signal
+        for BadgeAssertion
+        """
+        prepped = baker.prepare(
+            BadgeAssertion,
+            badge=badge,
+            user=self.student,
+        )
+        prepped.full_clean()
+        prepped.save()
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.student = baker.make(User)
+
+        # create multiple assertions of the same badge
+        self.badge_type1 = baker.make(BadgeType)
+        self.badge_multiple = baker.make(Badge, badge_type=self.badge_type1)
+        self.create_assertion_notification(self.badge_multiple)
+        self.create_assertion_notification(self.badge_multiple)
+        self.create_assertion_notification(self.badge_multiple)
+
+        # create single assertion
+        self.badge_type2 = baker.make(BadgeType)
+        self.badge_single = baker.make(Badge, badge_type=self.badge_type2)
+        self.create_assertion_notification(self.badge_single)
+
+    def test_status_codes(self):
+        ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`
+        403 - because not ajax
+        302 - because of not logged in (LoginRequiredMixin)
+        200 - success
+        '''
+
+        # test anon
+        # ajax_on_show_badge_popup
+        self.assert403('badges:ajax_on_show_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # ajax_on_close_badge_popup
+        self.assert403('badges:ajax_on_close_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # test student
+        self.client.force_login(self.student)
+
+        # ajax_on_show_badge_popup
+        self.assert403('badges:ajax_on_show_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+        # ajax_on_close_badge_popup
+        self.assert403('badges:ajax_on_close_badge_popup')
+        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_on_show_badge_popup(self):
+        """ Checks if badge popup shows correct the correct context values and if
+        the badges in "new_badges" have the correct "duplicates" variable
+        """
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        context = response.context
+        new_badge_by_type = context['new_badges_by_type']
+        badges = new_badge_by_type[self.badge_type1] | new_badge_by_type[self.badge_type2]  # qs union
+
+        # 3 same badge assertion + 1 unique assertion
+        self.assertEqual(context['badge_total'], 4)
+
+        # only 2 distinct badge types
+        self.assertEqual(len(new_badge_by_type.keys()), 2)
+
+        # only 2 distinct badges (badge_single, badge_multiple)
+        self.assertEqual(badges.count(), 2)
+
+        # check if badge_single, badge_multiple exist in the context
+        # unable to test for .duplicates variable as they disappear when testing the full build
+        self.assertTrue(badges.filter(id=self.badge_single.id).count(), 1)
+        self.assertTrue(badges.filter(id=self.badge_multiple.id).count(), 1)
+
+    def test_on_show_badge_popup__no_notifications(self):
+        """ Check if when no notifications, badge popup has no html to show and show=False
+        """
+        # clear all notifications
+        Notification.objects.all().mark_all_read(self.student)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 0)
+
+        # login and get json response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        json_data = json.loads(response.content)
+
+        # check if "show=False" and if html is empty
+        self.assertFalse(json_data['show'])
+        self.assertFalse(json_data['html'])
+
+    def test_on_close_badge_popup(self):
+        """ Check if 'badges:ajax_on_close_badge_popup' closes all unread badge notifications
+        """
+        # check for initial notifications
+        # 3 same badge assertion + 1 unique assertion
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 4)
+
+        # trigger the ajax response
+        self.client.force_login(self.student)
+        self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # check if notifications are marked read
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 0)

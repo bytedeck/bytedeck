@@ -10,13 +10,14 @@ from django.urls import reverse
 from django.contrib.contenttypes.fields import GenericRelation
 
 from django.dispatch import receiver
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 
 from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
+from notifications.models import notify_rank_up
 
 
 # Create your models here.
@@ -324,6 +325,7 @@ class BadgeAssertionManager(models.Manager):
             do_not_grant_xp=transfer,
             semester_id=active_semester
         )
+        new_assertion.full_clean()
         new_assertion.save()
         user.profile.xp_invalidate_cache()  # recalculate user's XP
         return new_assertion
@@ -411,6 +413,15 @@ class BadgeAssertion(models.Model):
         return BadgeAssertion.objects.all_for_user_badge(self.user, self.badge, False)
 
 
+# Define the handler function that will be called when a BadgeAssertion is deleted
+@receiver(post_delete, sender=BadgeAssertion)
+def handle_badge_assertion_deleted(sender, instance, **kwargs):
+    """Run some code when a BadgeAssertion instance is deleted."""
+
+    # When an assertion is removed from a student, recalculate their xp:
+    instance.user.profile.xp_invalidate_cache()
+
+
 # only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
 def post_save_receiver(sender, **kwargs):
@@ -438,3 +449,13 @@ def post_save_receiver(sender, **kwargs):
             affected_users=[assertion.user, ],
             icon=icon,
             verb="granted you a")
+
+        # if user ranked up notify them
+        if not assertion.do_not_grant_xp:
+            notify_rank_up(
+                assertion.user,
+                assertion.user.profile.xp_cached,
+
+                # since post-save signal. this is before user.profile.xp_invalidate_cache()
+                assertion.user.profile.xp_cached + assertion.badge.xp,
+            )

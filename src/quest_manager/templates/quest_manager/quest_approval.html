@@ -11,7 +11,7 @@
 {% load static %}
 
 {% block heading_inner %}{{ heading }}
-    {% if submitted_tab_active %}
+    {% if view_type == VIEW_TYPES.SUBMITTED %}
       {% if show_all_blocks_button %}
         <div class="btn-group">
             <a href="{% url 'quests:submitted' %}"
@@ -72,6 +72,63 @@ $( document ).ready(function() {
 
     $('[data-toggle="tooltip"]').tooltip();
 });
+
+// all forms that has an id starting with "quick_reply"
+$("form[id^='quick_reply']").submit(function (event) {
+  /*
+  Overrides basic form function (refresh page and redirect to new url)
+  To send ajax request, remove submission container, and update messages dynamically
+
+  + if button pressed on quick reply form (quest submission) was 'approve_button' or 'return_button'
+  + sends ajax request to 'quests:ajax_approve'
+  + if successful removes submission container and updates messages
+  */
+
+  // get form data to send
+  var formData = new FormData(this);
+  // so approve view knows which button was pressed
+  var submit_name = event.originalEvent.submitter.name;
+  formData.append(submit_name, '');
+
+  // if not any of these buttons return.
+  // (comment_button, add_text_button)
+  if (!['approve_button', 'return_button'].includes(submit_name)) {
+    return;
+  }
+
+  // stops the form from refreshing page (but also sending data)
+  event.preventDefault();
+
+  // get url from id
+  var sid = $(this).attr('id').replace('quick_reply', '');
+  var url = "{% url 'quests:ajax_approve' 0 %}".replace('0', sid);
+
+  // send ajax request
+  // if successful remove submission container, and update messages dynamically
+  $.ajax({
+    url: url,
+    type: $(this).attr('method'),
+    data: formData,
+    processData: false,
+    contentType: false,
+    success: function(response) {
+
+      // remove row from bootstrap table
+      // without this the submission will show up again in the search bar
+      $('#accordion-available').bootstrapTable('remove', {
+        field: '_id',
+        values: ['heading-submission-' + sid]
+      });
+      $('#collapse-submission-' + sid).remove();
+
+      // if new messages, dynamically show them
+      if (response.messages_html) {
+        $('#messages-container').append(response.messages_html);
+      }
+    },
+  });
+});
+
 </script>
 
 {% include "quest_manager/ajax_content_loading.html" %}

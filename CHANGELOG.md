@@ -4,8 +4,66 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.25.0] 2024-09-04
+* New Features
+  - Maps auto-update when an item within the map is updated [#1660]
+  - Custom, otional field for student profiles. This can be set in Site Config;  Previously "Grad Year" field [#1273]
+  - When students earn badges and ranks, there is now a popup message congratulating/informing them [#551]
+  - Library feature can now import entire campaigns [#1667]
+  - Submission return and approval no longer reloads page [#1349]
+* Bugfixes:
+  - Typo in default Ranks
+  - Expired quests in the available quests tab now appear at the top of the list [#1430]
+  - Adding an Excluded Dates to a semester does not activate datepicker; [#1682]
+* Devops:
+  - Update Django to 4.2 LTS
+  - Enhance Campaign and Quest Library Management with new templates and routing
+  - Refactored approvals and quest_list to use enums for tabs [#1150]
+  - full_clean clearer error printout [#1669]
+  - add hash_to_link script to make Changelogs easier to write
+  - remove 'future' dependancy; update Dockerfile and docker-compose legacy code
+  - many dependancy updates
+  - Added CRISPY_FAIL_SILENTLY to settings.py; [#629]
+
+### [1.24.2] 2024-07-28 - Prep for big submission questions update
+* Tweaks:
+  - List related maps in Quest and Badge detail views [#273](https://github.com/bytedeck/bytedeck/issues/273)
+  - Add Library link to quest submenu on sidebar if Library turned on in Site Config [#1656](https://github.com/bytedeck/bytedeck/issues/1656)
+* Bugfixes:
+  - Notifications to comments don't jump to comment when clicked [#1541](https://github.com/bytedeck/bytedeck/issues/1541)
+  - Only allow Site Owner to toggle experimental Library option [#1651](https://github.com/bytedeck/bytedeck/issues/1651)
+* Devops:
+  - Replaced submission draft_text with draft_comment using comment model [#1627](https://github.com/bytedeck/bytedeck/issues/1627)
+  - Full clean all models management command [#1643](https://github.com/bytedeck/bytedeck/issues/1643)
+  - Update tons of dependancies
+
+
+### [1.24.1] 2024-07-15 - Loads of Tweaks Update
+* Tweaks:
+  - Adding a Rank as a prereq to an object automatically generates a map for that Rank on the Rank list page [#88](https://github.com/bytedeck/bytedeck/issues/88)
+  - New Site Config option added to only show tags that students have earned XP on (instead of all tags) [#1143](https://github.com/bytedeck/bytedeck/issues/1143)
+  - Add Mark Range values below the XP progress chart if using Mark Calculations option [#1508](https://github.com/bytedeck/bytedeck/issues/1508)
+  - Added name field to Semesters # 1565
+  - Added "Intro" tags to starter quests and badges for new decks [#1207](https://github.com/bytedeck/bytedeck/issues/1207)
+* Bugfixes:
+  - XP Progress Chart not showing XP earned over weekends and excluded days until next day of class [#1513](https://github.com/bytedeck/bytedeck/issues/1513)
+  - Fixed spacing in some comments [#1235](https://github.com/bytedeck/bytedeck/issues/1235)
+  - Delete Comment form's Cancel button did nothing [#1497](https://github.com/bytedeck/bytedeck/issues/1497)
+  - Tag detail view showed duplicate ordinals for repeatable quests [#1210](https://github.com/bytedeck/bytedeck/issues/1210)
+  - XP earned by tag on profiles showed unapproved quests [#1208](https://github.com/bytedeck/bytedeck/issues/1208)
+  - Clicking student list from portfolios pages gave an error [#1539](https://github.com/bytedeck/bytedeck/issues/1539)
+  - Importing a Badge with a new Badge Type no longer fails. [#794](https://github.com/bytedeck/bytedeck/issues/794)
+  - Fix error in certbot override command.
+* Devops:
+  - Fix failing tests due to extra Library tenant [#1590](https://github.com/bytedeck/bytedeck/issues/1590)
+  - Fix github actions crash/test fail at 11pm Pacific Time [#1327](https://github.com/bytedeck/bytedeck/issues/1327)
+  - Add configuration for @coderabbitai [#1626](https://github.com/bytedeck/bytedeck/issues/1626)
+  - `generate_content` refactored as management command and now creatses campaigns (Category objects) for quests [#1014](https://github.com/bytedeck/bytedeck/issues/1014)
+  - Flake8 local run, precommit hook, and github action all use same config file [#1623](https://github.com/bytedeck/bytedeck/issues/1623)
+
+
 ### [1.24.0] 2024-05-19 - Quest Library MVP
-* Feature:
+* Features:
   - Minimally viable Quest Library Feature!!  Turn on this feature in the Site Settings which will enable a new "Library" tab when viewing your quests. This allows you to import quests shared from the special Library deck.  Currently the feature is very limited.
 * Tweaks:
   - Verify existance of email domains to prevent some typos and fake user email addresses [#1562](https://github.com/bytedeck/bytedeck/issues/1562)
@@ -120,7 +178,7 @@ This file chronologically records all notable changes to this website, including
    - Tagg error duplicate key value violates unique constraint [#1351](https://github.com/bytedeck/bytedeck/issues/1351);
 
 
-### [1.21.2] 2023-07-03 - Summer speed up #1
+### [1.21.2] 2023-07-03 - Summer speed up 1
  * Feature: Campaign lists are now searchable and sortable (via bootstrap-tables)
  * Optimizations
    - Major refactor of Students lists to speed up page load times
@@ -196,8 +254,8 @@ This file chronologically records all notable changes to this website, including
 ### [1.19.3] 2023-01-02
 * Bugfixs:
   - Advanced prerequisite widget upgrade compelte (replaced DAL with select2)
-  - Ordering error issue #1266
-  - Do not return None when creating a new quest submission, issue #1225
+  - Ordering error issue [#1266](https://github.com/bytedeck/bytedeck/issues/1266)
+  - Do not return None when creating a new quest submission, issue [#1225](https://github.com/bytedeck/bytedeck/issues/1225)
 * Development:
   - Update precommit config
   - Update Contributing guidelines
@@ -652,7 +710,7 @@ This file chronologically records all notable changes to this website, including
 * [teachers] Custom favicon
 * [teachers] No longer receive notification for quest submissions of non-students (since these now show up in your approvals list anyway)
 * [bugfix] Upgrade to Summernote 8.11 fixes list numbering bug (for new lists, old lists will require redoing)
-* [bugfix] Sender link in messages fixed #237
+* [bugfix] Sender link in messages fixed [#237](https://github.com/bytedeck/bytedeck/issues/237)
 * [bugfix] Many other minor bug fixes
 * [dev] Upgrade to Django 2.2 LTS (good till April 2022)
 

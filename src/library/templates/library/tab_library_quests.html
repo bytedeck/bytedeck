@@ -22,7 +22,7 @@
     </thead>
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
       {% for q in library_quests %}
-        <tr class="accordian-trigger panel-title
+        <tr class="panel-title
           {% if request.user.is_staff %}
             {% if not q.visible_to_students %}danger
             {% elif q.is_expired %}warning

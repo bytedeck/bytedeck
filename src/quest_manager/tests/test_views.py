@@ -19,15 +19,21 @@ from django.http import JsonResponse
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from unittest.mock import patch
-from model_bakery import baker
+from model_bakery import baker, recipe
 
-from courses.models import Block
+from courses.models import Block, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from quest_manager.forms import QuestForm
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
+from comments.models import Comment
+from profile_manager.models import Profile
+from djcytoscape.models import CytoScape
+
+from datetime import datetime
+
 
 from hackerspace_online.tests.utils import model_to_form_data
 
@@ -143,7 +149,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
 
         self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 404)  # Ajax only
+        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
         response = self.client.get(
             reverse('quests:ajax_summary_histogram', args=[q_pk]),
             data={
@@ -428,6 +434,24 @@ class SubmissionViewTests(TenantTestCase):
         response = self.client.get(reverse('quests:drop', args=[s4_pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_drop_deletes_comment_and_submission(self):
+        """Ensure that the draft_comment (foreignkey to Comment object) is deleted
+        when a submission is dropped. Also ensure the QuestSubmission object is deleted."""
+        self.client.force_login(self.test_student1)
+
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        draft_comment_id = draft_comment.id
+        sub = baker.make(QuestSubmission, user=self.test_student1, draft_comment=draft_comment)
+        sub_id = sub.id
+
+        # drop the submission
+        response = self.client.post(reverse('quests:drop', args=[sub.id]))
+        self.assertEqual(response.status_code, 302)
+
+        # check that the draft_comment and submissions were deleted
+        self.assertFalse(Comment.objects.filter(id=draft_comment_id).exists())
+        self.assertFalse(QuestSubmission.objects.filter(id=sub_id).exists())
+
     def test_all_submission_page_status_codes_for_teachers(self):
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
@@ -508,13 +532,14 @@ class SubmissionViewTests(TenantTestCase):
         # loging required for this view
         self.client.force_login(self.test_student1)
         quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
                          quest=quest,
-                         draft_text="I am a test draft comment")
-        draft_comment = "Test draft comment"
+                         draft_comment=draft_comment)
+        draft_text = "Test draft comment"
         # Send some draft data via the ajax view, which should save it.
         ajax_data = {
-            'comment': draft_comment,
+            'comment': draft_text,
             'submission_id': sub.id,
         }
 
@@ -527,20 +552,40 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(response.json()['result'], "Draft saved")
 
         sub.refresh_from_db()
-        self.assertEqual(draft_comment, sub.draft_text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+        self.assertEqual(draft_text, sub.draft_comment.text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
+
+    def test_ajax_save_draft_no_submission_draft_comment(self):
+        """If a draft comment is not associated with the submission, then there is no submission in progress,
+        so return 404"""
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        # create a submission with no draft comment
+        sub = baker.make(QuestSubmission, draft_comment=None,
+                         quest=quest)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "I am a test",
+                'submission_id': sub.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_save_draft_no_changes(self):
         """Should not save if there are no changes in the draft text"""
         # loging required for this view
         self.client.force_login(self.test_student1)
         quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
                          quest=quest,
-                         draft_text="I am a test draft comment")
-        draft_comment = "I am a test draft comment"
+                         draft_comment=draft_comment)
+        draft_text = "I am a test draft comment"
         # Send the same draft data via the ajax view, which should not save it
         ajax_data = {
-            'comment': draft_comment,
+            'comment': draft_text,
             'submission_id': sub.id,
         }
 
@@ -553,7 +598,7 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(response.json()['result'], "No changes")
 
         sub.refresh_from_db()
-        self.assertEqual(draft_comment, sub.draft_text)
+        self.assertEqual(draft_text, sub.draft_comment.text)
 
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -575,8 +620,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
+        self.semester = SiteConfig.get().active_semester
         self.quest = baker.make(Quest, xp=5)
-        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest)
+        self.draft_comment = baker.make(Comment, text="test draft comment")
+        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
+                              draft_comment=self.draft_comment)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -609,6 +657,62 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
+
+    def test_complete__no_verification(self):
+        """ Checks if a student completing a submission that causes their XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        # digital novice is 60 xp
+        # create quest that can hit that rank with 2 submissions
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+        quest = baker.make(Quest, xp=40, max_repeats=-1, verification_required=False)
+        sub_recipe = recipe.Recipe(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+
+        # confirm theres no false positive with the notification
+        # as 40 xp (submission) < 60 xp (rank)
+        submission1 = sub_recipe.make()
+        response = self.client.post(reverse('quests:complete', args=[submission1.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 302)
+
+        # Should be no notifications since no approval and no rank up
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 0)
+
+        # another completed submission should rank self.test_student up
+        # as 80 xp (40 + 40 xp) > 60 xp (rank)
+        submission2 = sub_recipe.make()
+        response = self.client.post(reverse('quests:complete', args=[submission2.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_complete__no_verification_and_custom_xp(self):
+        """ Checks if a student completing a submission with custom xp that causes their XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+
+        # Ensure rank popup will only show if xp_requested is taken into account.
+        # if not it wont since standard xp is 40 (40 xp < 60 xp (rank))
+        # request xp is 80 (80 xp > 60 xp (rank))
+        quest = baker.make(Quest, xp=40, xp_can_be_entered_by_students=True, verification_required=False)
+        # complete view doesn't take in xp_request attribute, only as form data
+        submission_custom_xp = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+
+        #
+        response = self.client.post(reverse('quests:complete', args=[submission_custom_xp.id]), data={'complete': True, 'xp_requested': 80})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
 
     def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
@@ -863,6 +967,31 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         import os
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
+
+    def test_comment_multiple_comments_from_user(self):
+        """ Tests the functionality of comments made by user using standard and quick reply forms.
+        """
+        # complete quest as the only way user can comment is if they complete
+        self.post_complete(button='complete', submission_comment='submitted')
+
+        # comments using submission
+        self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission_comment='comment from submission #1')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #1').exists())
+
+        self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
+        self.post_complete(button='comment', submission_comment='comment from submission #2')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from submission #2').exists())
+
+        # comments using quick reply
+        self.post_complete(button='comment', submission_comment='comment from quick reply #1')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.draft_comment, None)
+        self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
 
     def test_unrecognized_submit_button(self):
         """ Unrecognized form submit button should 404.
@@ -1121,6 +1250,31 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIsNone(prereq_with_or.or_prereq_object)
         self.assertIsNone(another_prereq_with_or.or_prereq_object)
 
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a quest is related to map """
+        # setup
+        quest = baker.make(Quest)
+        scape = CytoScape.generate_map(quest, name='unique scape name')
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('quests:quest_update', args=[quest.id]), data=self.minimal_valid_form_data)
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # to clear any messages before next test
+        self.assert200('quests:')
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('quests:quest_delete', args=[quest.id]))
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+        
     # TODO
     # TAs should not be able to make a quest visible_to_students
     # When a quest is made visible_to_students by a teacher, the editor should be removed
@@ -1494,7 +1648,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('quests:quest_active', args=[self.quest1.id]))
 
         # should be on the available tab, since this quest is available (quest defaults make them available)
-        self.assertTrue(response.context['available_tab_active'])
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
         self.assertEqual(response.context['active_q_id'], self.quest1.id)
 
         # TODO: test the actual content properly with selenium?
@@ -1536,7 +1690,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         # {% if available_tab_active and remove_hidden and request.user.profile.hidden_quests and request.user.profile.has_current_course %}
 
         response = self.client.get(reverse('quests:available'))
-        self.assertEqual(response.context['available_tab_active'], True)
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
         self.assertEqual(response.context['remove_hidden'], True)
 
         # Still not there though, because student doesn't have an active course
@@ -1581,6 +1735,78 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
 
             # assert ordered view is unchanged from displayed view
             self.assertQuerysetEqual(displayed_order, intended_order)
+
+    def test_context_correct_tab_types(self):
+        """ Checks each possible tab for student and teacher individually if it can be activated
+        by accessing the tabs corresponding url
+        """
+        self.client.force_login(self.test_student)
+
+        # available (student)
+        response = self.client.get(reverse('quests:available'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
+        self.assertContains(response, 'class="active"')
+
+        # in progress
+        response = self.client.get(reverse('quests:inprogress'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].IN_PROGRESS)
+        self.assertContains(response, 'class="active"')
+
+        # completed
+        response = self.client.get(reverse('quests:completed'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].COMPLETED)
+        self.assertContains(response, 'class="active"')
+
+        # past
+        # have to patch 'Profile' or else it wont affect user.profile.has_past_courses
+        with patch.object(Profile, 'has_past_courses', new=True):
+            response = self.client.get(reverse('quests:past'))
+
+            self.assertTrue(response.context['request'].user.profile.has_past_courses)
+            self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].PAST)
+            self.assertContains(response, 'class="active"')
+
+        self.client.force_login(self.test_teacher)
+
+        # available (teacher)
+        response = self.client.get(reverse('quests:available'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
+        self.assertContains(response, 'class="active"')
+
+        # draft
+        response = self.client.get(reverse('quests:drafts'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].DRAFT)
+        self.assertContains(response, 'class="active"')
+
+    def test_available_quest_list_ordering__expired_quests(self):
+        """ Parses for queryset used as context for "Available Quests" list and asserts equal to intended order.
+        Which is expired quests first then non expired after.
+        expired quests should be sorted by date, then time.
+        """
+        # given hardcoded names to prevent baker randomly seeded names
+        # also since we sort by name we can ensure the order of the expired quests
+        expired_quest1 = baker.make(Quest, name="A", date_expired=datetime(2000, 1, 1).date)
+        expired_quest2 = baker.make(Quest, name="B", date_expired=datetime(2000, 1, 2).date,
+                                    time_expired=datetime(2000, 1, 1, 0).time())  # have to include y/m/d to get hour
+        expired_quest3 = baker.make(Quest, name="C", date_expired=datetime(2000, 1, 2).date,
+                                    time_expired=datetime(2000, 1, 1, 1).time())
+        expired_ids = [expired_quest1.id, expired_quest2.id, expired_quest3.id]
+
+        # only need to test for teacher since staff only has access to expired quests
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:available'))
+
+        # get the order displayed in 'quests:available'
+        displayed_order = response.context['available_quests']
+
+        # create the order we expect.
+        intended_order = list(displayed_order.order_by(*XPItem._meta.ordering).values_list('id', flat=True))
+        [intended_order.remove(id_) for id_ in expired_ids]  # remove the expired ids
+        intended_order = expired_ids + intended_order  # add them back in the order we expect
+
+        displayed_order = list(displayed_order.values_list('id', flat=True))
+
+        self.assertListEqual(intended_order, displayed_order)
 
 
 class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
@@ -1721,18 +1947,18 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
         baker.make('courses.CourseStudent', block=teacher_block,
                    user=self.test_student, semester=SiteConfig.get().active_semester)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
-        self.assert404('quests:ajax_submission_count')
+        self.assert403('quests:ajax_submission_count')
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
         response = self.client.post(
             reverse('quests:ajax_submission_count')
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
     def test_student_access_granted(self):
         """ The current behavior is that students can access the view.
@@ -1803,14 +2029,23 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_quest_info', args=[self.quest.id])
+        self.assert403('quests:ajax_quest_info', args=[self.quest.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ajax_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.get(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
 
@@ -1853,14 +2088,23 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.submission = baker.make(QuestSubmission)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_approval_info', args=[self.submission.id])
+        self.assert403('quests:ajax_approval_info', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ajax_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.get(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
 
@@ -1907,16 +2151,16 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.submission = baker.make(QuestSubmission, user=self.test_student)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_info_in_progress', args=[self.submission.id])
+        self.assert403('quests:ajax_info_in_progress', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_info_in_progress', args=[self.submission.id])
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
     def test_ajax_info_in_progress(self):
         response = self.client.post(
@@ -2369,6 +2613,44 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
+    def test_ajax_approve(self):
+        """ Checks functionality of approve using ajax for all valid button types using ajax
+        """
+        post_request = {
+            'path': reverse('quests:approve', args=[self.sub.pk]),
+            'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'
+        }
+
+        # 'approve_button' self.sub.is_approved is True
+        response = self.client.post(**post_request, data={'approve_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, True)
+
+        # 'return_button' self.sub.is_approved is False
+        response = self.client.post(**post_request, data={'return_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, False)
+
+        # 'skip_button' self.sub.is_approved is True
+        response = self.client.post(**post_request, data={'skip_button': ''})
+        self.assertEqual(response.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.is_approved, True)
+
+        # 'comment_button' new comment should exist
+        response = self.client.post(**post_request, data={
+            'comment_button': '',
+            'comment_text': 'COMMENT TEXT',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
+
+        # no button returns 404
+        response = self.client.post(**post_request)
+        self.assertEqual(response.status_code, 404)
+
 
 class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
@@ -2410,6 +2692,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         # other_teacher_block = baker.make('courses.Block', current_teacher=self.other_teacher)
         # baker.make('courses.CourseStudent', block=other_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
 
+        self.semester = SiteConfig.get().active_semester
         self.quest = baker.make(Quest, name="Test Quest")
         self.sub = baker.make(QuestSubmission, quest=self.quest)
 
@@ -2422,7 +2705,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:submitted'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        self.assertTrue(response.context['submitted_tab_active'])  # ? Is this used anymore?
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].SUBMITTED)
         # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][0]['active'])
         self.assertTrue(response.context['current_teacher_only'])
@@ -2466,6 +2749,62 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_approve__normal_quest(self):
+        """ Checks if approving a quest submission that causes a user's XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        # digital novice is 60 xp
+        # create quest that can hit that rank with 2 submissions
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+        quest = baker.make(Quest, xp=40, max_repeats=-1)
+
+        # confirm theres no false positive with the notification
+        # as 40 xp (submission) < 60 xp (rank)
+        submission1 = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+        response = self.client.post(reverse('quests:approve', args=[submission1.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: approved
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 1)
+
+        # another approved submission should rank self.test_student up
+        # as 80 xp (40 + 40 xp) > 60 xp (rank)
+        submission2 = baker.make(QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester)
+        response = self.client.post(reverse('quests:approve', args=[submission2.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 2 approved, 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 3)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_approve__custom_xp(self):
+        """ Checks if approving a quest submission with custom xp that causes user's XP to go over
+        the threshold for 'Digital Novice' rank (60 XP) generates a notification
+        """
+        self.assertTrue(Rank.objects.filter(name='Digital Novice').exists())
+
+        # Ensure rank popup will only show if xp_requested is taken into account.
+        # if not it wont since standard xp is 40 (40 xp < 60 xp (rank))
+        # request xp is 80 (80 xp > 60 xp (rank))
+        quest = baker.make(Quest, xp=40, xp_can_be_entered_by_students=True)
+        submission_custom_xp = baker.make(
+            QuestSubmission, quest=quest, user=self.test_student, is_completed=True, semester=self.semester, xp_requested=80
+        )
+
+        #
+        response = self.client.post(reverse('quests:approve', args=[submission_custom_xp.id]), data={'comment_text': "", 'approve_button': True})
+        self.assertEqual(response.status_code, 302)
+
+        # notifications: 1 approved, 1 promoted
+        self.assertEqual(Notification.objects.all_for_user(self.test_student).count(), 2)
+
+        # assert that xp matches rank
+        self.test_student.refresh_from_db()
+        self.assertEqual(self.test_student.profile.xp_cached, 80)
 
     def test_flagged(self):
         with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):
@@ -2531,6 +2870,30 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         # "current_teacher" is now the only user with assigned blocks
         response = self.client.get(reverse('quests:approvals'))
         self.assertNotContains(response, 'My groups')
+
+    def test_context_correct_tab_types(self):
+        """ Checks each possible tab if it can be activated by accessing the tabs corresponding url
+        """
+
+        # SUBMITTED
+        response = self.client.get(reverse('quests:approvals'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].SUBMITTED)
+        self.assertContains(response, 'class="active"')
+
+        # APPROVED
+        response = self.client.get(reverse('quests:approved'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].APPROVED)
+        self.assertContains(response, 'class="active"')
+
+        # RETURNED
+        response = self.client.get(reverse('quests:returned'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].RETURNED)
+        self.assertContains(response, 'class="active"')
+
+        # FLAGGED
+        response = self.client.get(reverse('quests:flagged'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].FLAGGED)
+        self.assertContains(response, 'class="active"')
 
 
 class Is_staff_or_TA_test(TenantTestCase):

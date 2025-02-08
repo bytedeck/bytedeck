@@ -2,15 +2,19 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
+from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from notifications.models import Notification, notify_rank_up
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
+from djcytoscape.models import CytoScape
 
 import random
 import datetime
@@ -116,6 +120,33 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('courses:ranks'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
+    def test_scape_update_message_on_update_delete(self):
+        """ Checks if delete and update function gives a success message when a rank is related to map """
+        # setup
+        rank = baker.make(Rank, name='rank')
+        scape = CytoScape.generate_map(rank, name='unique scape name')
+
+        self.client.force_login(self.test_teacher)
+
+        # test messages for quest_update
+        response = self.client.post(reverse('courses:rank_update', args=[rank.id]), data={
+            'name': 'rank', 'xp': 0, 'fa_icon': 'fa fa-circle-o'
+        })
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
+        # to clear any messages before next test
+        self.assert200('courses:ranks')
+
+        # test messages for quest_delete
+        response = self.client.post(reverse('courses:rank_delete', args=[rank.id]))
+        messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(scape.name in str(messages[0]))
+
 
 class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
 
@@ -149,7 +180,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
         self.assertRedirectsLogin('courses:end_active_semester')
-        self.assertRedirectsLogin('courses:ajax_progress_chart', args=[1])
 
         self.assertRedirectsLogin('courses:markranges')
         self.assertRedirectsLogin('courses:markrange_create')
@@ -171,7 +201,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('courses:course_update', args=[1])
         self.assertRedirectsLogin('courses:course_delete', args=[1])
         # View from external package.  Need to override view with LoginRequiredMixin if we want to bother
-        # self.assertRedirectsLogin('courses:mark_distribution_chart', args=[1])
 
         # Refer to rank specific tests for Rank CRUD views
 
@@ -184,9 +213,6 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         # 404 unless SiteConfig has marks turned on
         self.assert404('courses:my_marks')
         self.assert404('courses:marks', args=[self.test_student1.id])
-
-        # 404 unless ajax POST request
-        self.assert404('courses:ajax_progress_chart', args=[self.test_student1.id])
 
         # Staff access only
         self.assert403('courses:join', args=[self.test_student1.id])
@@ -666,6 +692,7 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['object_list'].count(), 1)
 
         for obj in response.context['object_list']:
+            self.assertContains(response, str(obj))
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
@@ -673,12 +700,13 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
 
         post_data = {
-            'first_day': '2020-10-15', 'last_day': '2020-12-15',
+            'name': 'semester', 'first_day': '2020-10-15', 'last_day': '2020-12-15',
             **generate_formset_data(ExcludedDateFormset, quantity=0)
         }
         response = self.client.post(reverse('courses:semester_create'), data=post_data)
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.count(), 2)
+        self.assertTrue(Semester.objects.filter(name='semester').exists())
 
     def test_SemesterCreate__with_ExcludedDates__view(self):
         """
@@ -978,11 +1006,12 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
 
     def test_non_ajax_status_code(self):
-        self.assert404('courses:mark_distribution_chart', args=[self.teacher.pk])
+        self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])
 
     def test_ajax_status_code_for_anonymous(self):
+        # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
 
     def test_ajax_status_code_for_students(self):
         user = baker.make(User)
@@ -1046,3 +1075,437 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         total_students = sum(json_response['data']['students'])
         self.assertNotEqual(total_students, len(test_account_students))
         self.assertEqual(total_students, len(active_sem_students))
+
+
+class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+        self.student = baker.make(User)
+        self.block = baker.make(Block)
+        self.course = baker.make(Course)
+
+        # freeze_time doesnt affect "SiteConfig.get().active_semester"
+        # we have to manually set the dates
+        self.semester = SiteConfig.get().active_semester
+        self.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
+        self.semester.last_day = self.semester.first_day + datetime.timedelta(days=135)
+        self.semester.save()
+
+        self.student_course = baker.make(
+            CourseStudent,
+            user=self.student,
+            semester=self.semester,
+            course=self.course,
+            block=self.block
+        )
+
+        # use this to make aware datetime objects
+        # (UTC-8) for datetime.date(2024, 1, 1)
+        self.tz = timezone.get_default_timezone()
+        self.base_xp = 1
+
+    def create_quest_and_submissions(self, xp, quest_submission_date, quest_submission_quantity=1):
+        """
+        Creates and returns quest with linked quest submission objects for self.user
+
+        Args:
+            xp (int): amount of xp quest object will have,
+            quest_submission_date: when the submission is approved
+            quest_submission_quantity (int, optional): how many submissions are created. Defaults to 1.
+
+        Returns:
+            tuple[Quest, list[QuestSubmission]]: tuple of Quest object + list of QuestSubmission objects
+        """
+
+        quest = baker.make('quest_manager.Quest', xp=xp)
+        quest_submissions = baker.make(
+            'quest_manager.QuestSubmission',
+            quest=quest,
+            user=self.student,
+            is_completed=True,
+            is_approved=True,
+            semester=self.semester,
+            time_approved=quest_submission_date,
+            _quantity=quest_submission_quantity,
+        )
+
+        return quest, quest_submissions
+
+    def test_non_ajax_status_code(self):
+        """ 403 unless verified ajax POST request """
+        self.assert403('courses:ajax_progress_chart', args=[self.student.pk])
+
+    def test_ajax_status_code_for_anonymous(self):
+        """ checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
+        redirects because of LoginRequiredMixin
+        """
+        # post
+        response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+        # get
+        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+    def test_ajax_status_code_for_student(self):
+        self.client.force_login(self.student)
+
+        # post
+        response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+        # get
+        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_xp_data__correct_xp_current_day(self):
+        """ tests if xp_data from ajax request holds the correct xp on different days of the week.
+        uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
+        """
+        self.client.force_login(self.student)
+
+        # create submissions from mon to fri
+        starting_date = datetime.datetime(2024, 1, 1, tzinfo=self.tz)
+        for i in range(5):
+            self.create_quest_and_submissions(
+                self.base_xp,
+                starting_date + datetime.timedelta(days=i),
+            )
+        initial_xp = self.base_xp * 5  # xp * (5 submissions)
+
+        # test for correct xp on week day
+        # 2024-1-12 (Friday)
+        with freeze_time(datetime.datetime(2024, 1, 5, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 4)  # 4 == Friday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            # total xp should equal 5
+            # (1 quest per day. 5th day)
+            total_xp = json.loads(response.content)['xp_data'][-1]['y']
+            self.assertEqual(total_xp, initial_xp)
+
+        # create a submission on saturday
+        saturday_xp = self.base_xp * 5
+        self.create_quest_and_submissions(
+            saturday_xp,
+            datetime.datetime(2024, 1, 6, tzinfo=self.tz)
+        )
+
+        # XP earned in SAT + SUN while being on a week end will add the xp to Friday
+        # test for correct xp on week end
+        # does not test for "if today.weekday() in [5, 6]:  # SAT or SUN"
+        # 2024-1-7 (Sunday)
+        with freeze_time(datetime.datetime(2024, 1, 7, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 6)  # 6 == Sunday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            total_xp = json.loads(response.content)['xp_data'][-1]['y']
+            self.assertEqual(total_xp, initial_xp + saturday_xp)
+
+        # create a submission on sunday
+        sunday_xp = saturday_xp
+        self.create_quest_and_submissions(
+            sunday_xp,
+            datetime.datetime(2024, 1, 7, tzinfo=self.tz)
+        )
+
+        # XP earned in SAT + SUN while being on a week end will add the xp to Friday
+        # test for correct xp on week end
+        # tests for "if today.weekday() in [5, 6]:  # SAT or SUN"
+        # 2024-1-14 (Sunday)
+        with freeze_time(datetime.datetime(2024, 1, 7, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 6)  # 6 == Sunday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            total_xp = json.loads(response.content)['xp_data'][-1]['y']
+            self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
+
+        # XP that was added on Friday should now be added to Monday
+        # 2024-1-15 (Monday)
+        with freeze_time(datetime.datetime(2024, 1, 8, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 0)  # 0 == Monday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            total_xp = json.loads(response.content)['xp_data'][-1]['y']
+            self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
+
+    def test_ajax_xp_data__equals_xp_cache_on_weekend(self):
+        """ test if the xp_data equals xp on weekend """
+        self.client.force_login(self.student)
+
+        # exclude monday to check if excluded date
+        baker.make(
+            'courses.ExcludedDate',
+            semester=self.semester,
+
+            # use datetime.date instead of datetime.datetime
+            # see the "Anything Else?" section "Bug 2"
+            # https://github.com/bytedeck/bytedeck/pull/1606
+            date=datetime.date(2024, 1, 15),
+        )
+
+        # submission on saturday
+        self.create_quest_and_submissions(
+            self.base_xp,
+            datetime.datetime(2024, 1, 13, tzinfo=self.tz)
+        )
+        # profile.xp_cached == 0 without doing this
+        self.student.profile.xp_invalidate_cache()
+
+        # test if the xp_data equals xp on weekend
+        with freeze_time(datetime.datetime(2024, 1, 13, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 5)  # 5 == Saturday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            total_xp = json.loads(response.content)['xp_data'][-1]['y']
+            self.assertEqual(total_xp, self.base_xp)  # 1 xp since only 1 submission
+            self.assertEqual(total_xp, self.student.profile.xp_cached)
+
+        # submission on monday
+        self.create_quest_and_submissions(
+            self.base_xp,
+            datetime.datetime(2024, 1, 14, tzinfo=self.tz)
+        )
+
+        # update the cache
+        self.student.profile.xp_invalidate_cache()
+
+        # test if the xp_data on monday is correct using xp_cached
+        with freeze_time(datetime.datetime(2024, 1, 15, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 0)  # 0 == Monday
+            response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+            json_data = json.loads(response.content)
+            total_xp = json_data['xp_data'][-1]['y']
+            valid_days = json_data['xp_data'][-1]['x']
+
+            # test xp
+            self.assertEqual(total_xp, self.base_xp * 2)  # 2x because 2 quest submissions with self.base_xp
+            self.assertEqual(total_xp, self.student.profile.xp_cached)
+
+            # test if monday was actually excluded from the json_data
+            # first_day (2024/1/1), today is (2024/1/15). Means, SUN/SAT + SUN/SAT/MONDAY was excluded
+            # giving 10 valid days
+            self.assertEqual(valid_days, 10)
+
+
+class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.student = baker.make(User)
+
+        self.block = baker.make(Block)
+        self.course = baker.make(Course, xp_for_100_percent=1000)
+
+        self.stu_course = baker.make(
+            CourseStudent,
+            user=self.student,
+            semester=SiteConfig.get().active_semester,
+            block=self.block,
+            course=self.course,
+        )
+
+        # to show mark calculation page without 404 you need to turn this on
+        siteconfig = SiteConfig.get()
+        siteconfig.display_marks_calculation = True
+        siteconfig.save()
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
+        """
+        tests the markranges displayed under "Current Mark Ranges by XP" are correct based on the percentage of the semester completed.
+        specifically tests when semester is 0%, 50%, 75%, 100%, and 125% done.
+        """
+        self.client.force_login(self.student)
+
+        # default markranges from initialization
+        # pass.minimum_mark = 0.495
+        # B.minimum_mark = 0.725
+        # A.minimum_mark = 0.855
+
+        # Check if markranges show 0% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertContains(response, '0')  # XP should be 0 for all ranges
+
+        # Check if markranges show as 50% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0.5
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertTrue(mock_sem_fraction_complete.called)
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 500)
+        self.assertContains(response, '247')  # 500 * 0.495 = 247.5
+        self.assertContains(response, '362')  # 500 * 0.725 = 362.5
+        self.assertContains(response, '427')  # 500 * 0.855 = 427.5
+
+        # Check if markranges show as 75% of 1000 xp
+        mock_sem_fraction_complete.return_value = 0.75
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 750)
+        self.assertContains(response, '371')  # 750 * 0.495 = 371.25
+        self.assertContains(response, '543')  # 750 * 0.725 = 543.75
+        self.assertContains(response, '641')  # 750 * 0.855 = 641.25
+
+        # Check if markranges show as 100% of 1000 xp
+        mock_sem_fraction_complete.return_value = 1
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 1000)
+        self.assertContains(response, '495')  # 1000 * 0.495 = 495
+        self.assertContains(response, '725')  # 1000 * 0.725 = 725
+        self.assertContains(response, '855')  # 1000 * 0.855 = 855
+
+        # Test for over 100% completion
+        mock_sem_fraction_complete.return_value = 1.25
+        response = self.client.get(reverse('courses:my_marks'))
+        self.assertContains(response, '618')  # 1250 * 0.495 = 618.75
+        self.assertContains(response, '906')  # 1250 * 0.725 = 906.25
+        self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
+
+
+class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
+    """ test case for
+    + ajax/on_show_ranked_popup/
+    + ajax/on_close_ranked_popup/
+    """
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.student = baker.make(User)
+
+    def test_status_codes(self):
+        ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`
+        403 - because not ajax
+        302 - because of not logged in (LoginRequiredMixin)
+        200 - success
+        '''
+
+        # test anon
+        # ajax_on_show_ranked_popup
+        self.assert403('courses:ajax_on_show_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # ajax_on_close_ranked_popup
+        self.assert403('courses:ajax_on_close_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 302)
+
+        # test student
+        self.client.force_login(self.student)
+
+        # ajax_on_show_ranked_popup
+        self.assert403('courses:ajax_on_show_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+        # ajax_on_close_ranked_popup
+        self.assert403('courses:ajax_on_close_ranked_popup')
+        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+
+    def test_on_show_ranked_popup(self):
+        """ Checks if earned_rank and next_rank are correct when requesting json from ranked popups
+        """
+        # make sure theres enough initial ranks for test
+        # first (0), second (20), third (60)
+        # cant get notification for first, so get second and third
+        self.assertTrue(Rank.objects.count() >= 3)
+        earned_rank = Rank.objects.get_next_rank(1)
+        next_rank = Rank.objects.get_next_rank(earned_rank.xp)
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_show_ranked_popup__no_notification(self):
+        """ Check if when no notifications, ranked popup has no html to show and show=False
+        """
+        # clear all notifications
+        Notification.objects.all().mark_all_read(self.student)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 0)
+
+        # login and get json response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        json_data = json.loads(response.content)
+
+        # check if "show=False" and if html is empty
+        self.assertFalse(json_data['show'])
+        self.assertFalse(json_data['html'])
+
+    def test_on_show_ranked_popup__on_last_rank(self):
+        """ Check if the next_rank is None when achieving the highest possible rank
+        """
+        self.assertTrue(Rank.objects.count() >= 2)
+        earned_rank = Rank.objects.all().last()
+        next_rank = None
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_show_ranked_popup__multiple_ranked_notifications(self):
+        """ Check if the popup only shows the latest notification (newest rank)
+        """
+        # make sure theres enough initial ranks for test
+        self.assertTrue(Rank.objects.count() >= 4)
+        previous_rank = Rank.objects.get_next_rank(1)
+        earned_rank = Rank.objects.get_next_rank(previous_rank.xp)
+        next_rank = Rank.objects.get_next_rank(earned_rank.xp)
+
+        # RankPopup needs the notification and correct xp_cached
+        notify_rank_up(self.student, 0, previous_rank.xp)
+        notify_rank_up(self.student, 0, earned_rank.xp)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 2)
+        self.student.profile.xp_cached = earned_rank.xp
+        self.student.profile.save()
+
+        # login and get context from response
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        context = response.context
+
+        # check if context has the correct ranks
+        self.assertEqual(context['earned_rank'], earned_rank)
+        self.assertNotEqual(context['earned_rank'], previous_rank)
+        self.assertEqual(context['next_rank'], next_rank)
+
+    def test_on_close_ranked_popup(self):
+        """ Check if 'courses:ajax_on_show_ranked_popup' closes only the latest ranked notification
+        """
+        # create 2 rank up notifications
+        # one should be older than the other
+        notify_rank_up(self.student, 0, 500)
+        notify_rank_up(self.student, 0, 1000)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 2)
+
+        # trigger the ajax response
+        self.client.force_login(self.student)
+        self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # check if it was marked as read
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)

@@ -1,5 +1,7 @@
 import json
+from itertools import cycle
 
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
@@ -9,9 +11,10 @@ from model_bakery import baker
 
 # from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoElement, CytoScape, TempCampaign, TempCampaignNode, clean_JSON
-from quest_manager.models import Quest
+from quest_manager.models import Quest, Category
 
 # from django_tenants.test.client import TenantClient
+from hackerspace_online.shell_utils import generate_quests
 
 
 User = get_user_model()
@@ -124,6 +127,44 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
             self.assertIn('data', json_dict)
             if element.is_node():  # Quests, Campaigns and Badges should have a class
                 self.assertIn('classes', json_dict)
+
+    def test_valid_urls(self):
+        """ tests if valid urls wont throw ValidationErrors """
+        element = baker.make(CytoElement)
+        valid_urls = [
+            '/',
+            '/quests/',
+            '/quests/1/2/',
+            'http://example.com',
+
+            # what we will typically encounter for CytoElement href
+            '/quests/1/',
+            '/badges/1/',
+            '/ranks/',
+            '/maps/2/1/1/',
+            '/maps/2/1/',
+            '/maps/2/',
+        ]
+        for url in valid_urls:
+            try:
+                element.href = url
+                element.full_clean()
+            except ValidationError:
+                self.fail(f"{url} is not a valid URL")
+
+    def test_invalid_urls(self):
+        """ tests if invalid urls throw ValidationErrors """
+        element = baker.make(CytoElement)
+        invalid_urls = [
+            ' ',  # space
+            '/ ',  # space
+            '/quests /',  # space
+            'quests-quests/',  # -
+        ]
+        for url in invalid_urls:
+            with self.assertRaises(ValidationError):
+                element.href = url
+                element.full_clean()
 
 
 class TempCampaignNodeTest(TenantTestCase):
@@ -271,3 +312,72 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
 
         # should have been deleted at this point
         self.assertFalse(CytoScape.objects.filter(name="bad map").exists())
+
+    def test_get_related_maps(self):
+        """ Check if CytoScape.objects.get_related_maps returns the correct maps per quest.
+        """
+
+        # create 3 categories
+        # exclude orientation as its linked with the main map
+        generate_quests(5, 3, quiet=True)
+        categories = Category.objects.exclude(title='Orientation').order_by('id')
+        self.assertEqual(categories.count(), 3)
+
+        # order category quest by id. Because when generating map:
+        # min(id) = source node
+        # max(id) = leaf node
+        c1, c2, c3 = list(categories)
+        c1_quests = c1.current_quests().order_by('id')
+        c2_quests = c2.current_quests().order_by('id')
+        c3_quests = c3.current_quests().order_by('id')
+
+        # no map as base case
+        self.no_maps = baker.make(Quest)
+
+        # quest exists only on one map
+        self.one_map = baker.make(Quest)
+        self.one_map.add_simple_prereqs([c1_quests.last()])
+
+        # quests exist on every map
+        self.all_maps = baker.make(Quest)
+        self.all_maps.add_simple_prereqs([
+            c1_quests.last(),
+            c2_quests.last(),
+            c3_quests.last(),
+        ])
+
+        # generate maps from categories
+        CytoScape.generate_map(c1_quests.first(), "Map 1")
+        CytoScape.generate_map(c2_quests.first(), "Map 2")
+        CytoScape.generate_map(c3_quests.first(), "Map 3")
+
+        # test if get_related_maps get correct
+        self.assertEqual(CytoScape.objects.get_related_maps(self.no_maps).count(), 0)
+        self.assertEqual(CytoScape.objects.get_related_maps(self.one_map).count(), 1)
+        self.assertEqual(CytoScape.objects.get_related_maps(self.all_maps).count(), 3)
+
+    def test_get_maps_as_formatted_string(self):
+        """ Checks if `get_maps_as_formatted_string` returns the appropriate formatting per length """
+        names = [str(x) for x in range(4)]
+        scapes = baker.make(CytoScape, name=cycle(names), _quantity=4)
+
+        # since baker returns a list with `_quantity` > 1
+        # we have to convert it to a queryset
+        scape_ids = [s.id for s in scapes]
+        scapes = CytoScape.objects.filter(id__in=scape_ids)
+
+        scape_0 = f'<a href="/maps/{scapes[0].id}/">0</a>'
+        scape_1 = f'<a href="/maps/{scapes[1].id}/">1</a>'
+        scape_2 = f'<a href="/maps/{scapes[2].id}/">2</a>'
+        scape_3 = f'<a href="/maps/{scapes[3].id}/">3</a>'
+
+        expected_results = [
+            None,
+            f'{scape_0}',
+            f'{scape_0} and {scape_1}',
+            f'{scape_0}, {scape_1}, and {scape_2}',
+            f'{scape_0}, {scape_1}, {scape_2}, and {scape_3}',
+        ]
+        for index, expected in enumerate(expected_results):
+            result = scapes[0:index].get_maps_as_formatted_string()
+            self.assertEqual(result, expected)

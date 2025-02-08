@@ -39,7 +39,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(wrong_content),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         self.assertFalse(form.is_valid())
         self.assertIn(
             "CSSStyleRule: No start { of style declaration found: 'Lorem ipsum dolor sit amet...' [1:30: ]",
@@ -57,7 +57,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(invalid_css),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         self.assertFalse(form.is_valid())
         self.assertIn("This stylesheet is not valid CSS.", form.errors["custom_stylesheet"])
 
@@ -71,7 +71,7 @@ class SiteConfigFormTest(TenantTestCase):
             size=len(valid_css),
             charset="utf-8",
         )
-        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config)
+        form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
         # print(form.errors)
         self.assertTrue(form.is_valid())
 
@@ -115,3 +115,23 @@ class SiteConfigFormTest(TenantTestCase):
         # assert there is no saved files, ie. "reading" non-existing file should raise an exception
         with self.assertRaises(ValueError):
             SiteConfig.get().custom_stylesheet.read()
+
+    def test_clean_clean_custom_profile_field_method(self):
+        """ Test if `clean_clean_custom_profile_field()` strips whitespace'd ends """
+        form_data = model_to_form_data(self.config, SiteConfigForm)
+
+        # check with whitespace only
+        form_data.update({
+            'custom_profile_field': '         ',
+        })
+        form = SiteConfigForm(form_data)
+        form.save()
+        self.assertEqual(form.instance.custom_profile_field, '')
+
+        # check with whitespace'd ends
+        form_data.update({
+            'custom_profile_field': '  Grad Year       ',
+        })
+        form = SiteConfigForm(form_data)
+        form.save()
+        self.assertEqual(form.instance.custom_profile_field, 'Grad Year')

@@ -246,6 +246,17 @@ class SiteConfig(models.Model):
             or \"Skill\" might be a more suitable name, depending on how you use the Tags feature."
     )
 
+    custom_profile_field = models.CharField(
+        default="", blank=True, max_length=20,
+        help_text="This field can be used to collect custom data such as a student's grad year or other \
+            important info you need from your users. If left blank this field will be ignored and will not appear on student profiles."
+    )
+
+    show_all_tags_on_profiles = models.BooleanField(
+        default=True,
+        help_text="Controls the visibility of tags on user profiles. If set to False, only tags where the student has earned XP are displayed."
+    )
+
     # Custom stylesheet and javascript
     #
     custom_stylesheet = RestrictedFileField(
@@ -263,6 +274,11 @@ class SiteConfig(models.Model):
     deck_owner = models.ForeignKey(
         User, on_delete=models.PROTECT, default=get_default_deck_owner, limit_choices_to={'is_staff': True}, related_name="deck_owner",
         help_text="Only the current deck owner can change this setting."
+    )
+
+    map_auto_update = models.BooleanField(
+        default=True,
+        help_text="Automatically regenerate maps when contents are changed."
     )
 
     def __str__(self):

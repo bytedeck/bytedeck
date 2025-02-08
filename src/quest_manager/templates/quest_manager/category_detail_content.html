@@ -1,50 +1,54 @@
-
 {% load static %}
-
 <div class="media">
   <div class="media-left">
-    <img class="media-object icon-lg img-rounded" src="{{ category.get_icon_url }}" alt="icon" />
+    <img class="media-object icon-lg img-rounded"
+         src="{% firstof category_icon_url category.get_icon_url %}"
+         alt="icon" />
   </div>
 </div>
-
-<div id="category-info-{{category.id}}" class="panel panel-primary panel-top">
+<div id="category-info-{% firstof category_id category.id %}"
+     class="panel panel-primary panel-top">
   <div class="panel-heading">
     <h3 class="panel-title">Campaign Info</h3>
   </div>
   <div class="panel-body">
-
     <div class="row">
       <div class="col-sm-6">
         <ul class="list-unstyled">
-          <li>Quests in this campaign: {{ category.quest_count }}</li>
-          <li>Total XP available: {{ category.xp_sum }}</li>
-          <li>Active: {{category.active }}</li>
+          <li>Quests in this campaign: {% firstof category_quest_count category.quest_count %}</li>
+          <li>Total XP available: {% firstof category_total_xp_available category.xp_sum %}</li>
+          <li>Active: {% firstof category_active category.active %}</li>
         </ul>
       </div>
     </div>
-
   </div>
 </div>
-
 {% if category_displayed_quests %}
   <div id="available">
     <table id="accordion-available"
-          class="accordian-table"
-          data-classes="table table-hover"
-          data-toggle="table"
-          data-detail-view="true"
-          data-search="true">
+           class="accordian-table"
+           data-classes="table table-hover"
+           data-toggle="table"
+           data-detail-view="true"
+           data-search="true">
       <thead>
         <tr class="panel-heading">
           <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
           <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
-          <th class="col-sm-1 col-xs-2 text-right" data-field="xp" data-sortable="true">XP</th>
-          <th class="col-sm-1 hidden-xs text-center" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
-          <th class="col-sm-2 hidden-xs" data-field="status_icons"><!-- status_icons --></th>
+          <th class="col-sm-1 col-xs-2 text-right"
+              data-field="xp"
+              data-sortable="true">XP</th>
+          <th class="col-sm-1 hidden-xs text-center"
+              data-field="tags"
+              data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+          <th class="col-sm-2 hidden-xs" data-field="status_icons">
+            <!-- status_icons -->
+          </th>
         </tr>
       </thead>
-      <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
-
+      <tbody class="panel-group panel-group-packed"
+             role="tablist"
+             aria-multiselectable="true">
         {% for q in category_displayed_quests %}
           <tr class="accordian-trigger panel-title
               {% if not q.visible_to_students %}danger
@@ -60,19 +64,22 @@
             <!-- COLUMNS -->
             <td class="col-sm-1 col-xs-2 col-icon">
               <img class="img-responsive panel-title-img img-rounded"
-                src="{{ q.get_icon_url }}" alt="icon"/>
+                   src="{{ q.get_icon_url }}"
+                   alt="icon" />
             </td>
-            <td class="col-sm-5 col-xs-8">{{q.name}}</td>
-            <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}</td>
-            <td class="col-sm-1 hidden-xs text-center"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
-            <td id="status-icon-{{q.id}}" class="col-xs-2 hidden-xs text-muted"></td>
-          </tr> <!-- accordian -->
-
-        {% endfor %} <!-- for each quest -->
+            <td class="col-sm-5 col-xs-8">{{ q.name }}</td>
+            <td class="col-sm-1 col-xs-2 text-center">{{ q.xp }}</td>
+            <td class="col-sm-1 hidden-xs text-center">
+              <small>{{ q.tags.all|join:", "|default:"-" }}</small>
+            </td>
+            <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted"></td>
+          </tr>
+          <!-- accordian -->
+        {% endfor %}
+        <!-- for each quest -->
       </tbody>
     </table>
-  </div> <!-- #available -->
-
+  </div><!-- #available -->
   {% for q in category_displayed_quests %}
     {% comment %}
       ### COLLAPSING CONTENT ###
@@ -80,23 +87,23 @@
       ajax_content_loading.html inserts quest content here.
       If the content hasn't been retrieved yet from the server, a loading icon is displayed.
     {% endcomment %}
-    <div style="display: none" id="collapse-quest-{{q.id}}"
-      class="{% if not q.visible_to_students %}danger
-              {% elif q.expired %}warning
-              {% else %}default{% endif %}"
-      role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
+    <div style="display: none"
+         id="collapse-quest-{{ q.id }}"
+         class="{% if not q.visible_to_students %}danger {% elif q.expired %}warning {% else %}default{% endif %}"
+         role="tabpanel"
+         aria-labelledby="heading-quest-{{ q.id }}">
       <ul class="list-group">
-        <li id="preview-quest-{{q.id}}" class="list-group-item list-group-item-buttons">
-            <p>
-              <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
-              &nbsp;Loading content...
-              <!-- preview_content_quests_avail.html via AJAX -->
-            </p>
+        <li id="preview-quest-{{ q.id }}"
+            class="list-group-item list-group-item-buttons">
+          <p>
+            <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+            &nbsp;Loading content...
+            <!-- preview_content_quests_avail.html via AJAX -->
+          </p>
         </li>
       </ul>
-    </div> <!-- accordian panel-collapse -->
+    </div><!-- accordian panel-collapse -->
   {% endfor %} <!-- for each quest -->
-
 {% else %}
   <p>There are no quests in this campaign.</p>
 {% endif %}

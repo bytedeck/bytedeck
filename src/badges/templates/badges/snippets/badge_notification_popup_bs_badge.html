@@ -1,0 +1,7 @@
+                  <!-- Modification of profile_manager/snippets/profile_badge.html -->
+                  <div class="icon-badge-container">
+                    <img class="icon-xl img-rounded" src="{{badge.get_icon_url}}">
+                    {% if badge.duplicates > 1 %}
+                      <span class="badge badge-icon-lg progress-bar-info">{{badge.duplicates}}</span>
+                    {% endif %}
+                  </div>

@@ -70,8 +70,84 @@
               $("#announcements-badge").html(announcements_count);
             }
           }
+
+          // if webpage is already loaded and ajaxNotificationsBadge() again with 0 notifications
+          // does not clear .notification-badge
+          if (document.readyState == "complete" && count == 0) {
+            $(".notification-badge").html('');
+          }
+
         }
       });
+    }
+
+    // For badge popup
+    function ajaxOnShowBadgePopup() {
+      $.ajax({
+        type: "GET",
+        url: "{% url 'badges:ajax_on_show_badge_popup' %}",
+
+        success: function(data) {
+          if (data.show) {
+            // insert and show modal popup
+            document.body.insertAdjacentHTML('beforeend', data.html);
+            $('#newBadgeModal').modal('show');
+
+            // active popover else hover popup wont activate
+            $('#newBadgeModal [data-toggle="popover"]').popover();
+
+            // link close button to ajaxOnCloseNewBadgePopup
+            $('#newBadgeDissmissButton').click(function () {
+              OnCloseBadgePopup();
+            });
+          }
+        }
+      })
+    }
+    // since djangos are stored server side we have to use ajax
+    // instead of modifying cookies here (only cookie available would be session id)
+    function OnCloseBadgePopup() {
+      $.ajax({
+        type: "GET",
+        url: "{% url 'badges:ajax_on_close_badge_popup' %}",
+        success: function(data) {
+          // update notification number as this request marks some read
+          ajaxNotificationsBadge();
+        }
+      })
+    }
+
+    // For rank popup
+    function ajaxOnShowRankPopup() {
+      $.ajax({
+        type: "GET",
+        url: "{% url 'courses:ajax_on_show_ranked_popup' %}",
+
+        success: function(data) {
+          if (data.show) {
+            // insert and show modal popup
+            document.body.insertAdjacentHTML('beforeend', data.html);
+            $('#newRankModal').modal('show');
+
+            // link close button to ajaxOnCloseNewBadgePopup
+            $('#newRankDismissButton').click(function () {
+              ajaxOnCloseRankPopup();
+            });
+          }
+        }
+      })
+    }
+
+    //
+    function ajaxOnCloseRankPopup() {
+      $.ajax({
+        type: "GET",
+        url: "{% url 'courses:ajax_on_close_ranked_popup' %}",
+        success: function(data) {
+          // update notification number as this request marks some read
+          ajaxNotificationsBadge();
+        }
+      })
     }
 
     function ajaxMarkNotificationRead(notification_id, $item) {
@@ -123,7 +199,14 @@
       {% if request.user.is_authenticated %}
         ajaxNotificationsBadge()
         setInterval(ajaxNotificationsBadge, timeout);
+
+        {% if not request.user.is_staff %}
+        ajaxOnShowBadgePopup();
+        ajaxOnShowRankPopup();
+        {% endif %}
+
       {% endif %}
+
 
       {% if request.user.is_staff %}
         ajaxApprovalsBadge()

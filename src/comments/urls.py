@@ -1,14 +1,11 @@
 from comments import views
 
-from django.conf.urls import url
+from django.urls import re_path
 
 app_name = 'comments'
 
 urlpatterns = [
-    # url(r'^(?P<id>\d+)/thread/$', views.comment_thread, name='threads'),
-    url(r'^(?P<id>\d+)/flag/$', views.flag, name='flag'),
-    url(r'^(?P<id>\d+)/unflag/$', views.unflag, name='unflag'),
-    url(r'^(?P<id>\d+)/delete/$', views.delete, name='delete'),
-    # url(r'^create/$', views.comment_create, name='create'),
-
+    re_path(r'^(?P<id>\d+)/flag/$', views.flag, name='flag'),
+    re_path(r'^(?P<id>\d+)/unflag/$', views.unflag, name='unflag'),
+    re_path(r'^(?P<id>\d+)/delete/$', views.delete, name='delete'),
 ]
