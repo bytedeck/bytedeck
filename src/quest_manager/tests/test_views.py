@@ -25,6 +25,8 @@ from courses.models import Block, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from quest_manager.forms import QuestForm
+from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
@@ -32,6 +34,8 @@ from djcytoscape.models import CytoScape
 
 from datetime import datetime
 
+
+from hackerspace_online.tests.utils import model_to_form_data
 
 User = get_user_model()
 
@@ -1167,6 +1171,85 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
+    def test_archive_quest__removes_quest_from_prereqs(self):
+        """
+        Test where archiving a quest removes itself from being a prerequisite of other objects.
+        """
+
+        quest_as_prereq = baker.make(Quest, name="Requirement for other quest")
+
+        self.client.force_login(self.test_teacher)
+        self.minimal_valid_form_data['new_quest_prerequisite'] = quest_as_prereq.id
+        self.minimal_valid_form_data['new_badge_prerequisite'] = baker.make('badges.Badge').id
+        response = self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        parent_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, parent_quest.get_absolute_url())
+        self.assertEqual(parent_quest.prereqs().count(), 2)
+
+        form_data = model_to_form_data(quest_as_prereq, QuestForm)
+        form_data['archived'] = True
+
+        # Archive the quest_as_prereq
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_as_prereq.pk}),
+            data=form_data
+        )
+
+        quest_as_prereq.refresh_from_db()
+        self.assertTrue(quest_as_prereq.archived)
+
+        # Because the quest was archived, there should be 1 less prereq
+        self.assertEqual(parent_quest.prereqs().count(), 1)
+
+    def test_archive_quest__removes_quest_from_or_prereq(self):
+        """
+        Test where archiving a quest removes itself from being an alternate prerequisite
+        """
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('quests:quest_create'), data=self.minimal_valid_form_data)
+        parent_quest = Quest.objects.latest('datetime_created')
+
+        quest_as_prereq = baker.make(Quest, name="Requirement for other quest")
+        quest_or_prereq = baker.make(Quest, name="or_prereq")
+        prereq_with_or = Prereq.objects.create(
+            parent_object=parent_quest,
+            prereq_object=quest_as_prereq,
+            or_prereq_object=quest_or_prereq,
+        )
+
+        # Let's create another quest that has the same or_prereq
+        # and make sure that the or_prereq_object is also unset when archiving
+        # the quest_or_prereq Quest
+        another_parent_quest = baker.make(Quest, name="another_parent_quest")
+        another_prereq_with_or = Prereq.objects.create(
+            parent_object=another_parent_quest,
+            prereq_object=quest_as_prereq,
+            or_prereq_object=quest_or_prereq,
+        )
+
+        # Archive the or_prereq
+        form_data = model_to_form_data(quest_or_prereq, QuestForm)
+        form_data['archived'] = True
+
+        self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_or_prereq.pk}),
+            data=form_data
+        )
+
+        # Sanity check for the created Prereq objects
+        self.assertEqual(prereq_with_or.or_prereq_object, quest_or_prereq)
+        self.assertEqual(another_prereq_with_or.or_prereq_object, quest_or_prereq)
+
+        quest_or_prereq.refresh_from_db()
+        self.assertTrue(quest_or_prereq.archived)
+
+        # Because the quest was archived, the or_prereq object should now be empty
+        prereq_with_or.refresh_from_db()
+        another_prereq_with_or.refresh_from_db()
+        self.assertIsNone(prereq_with_or.or_prereq_object)
+        self.assertIsNone(another_prereq_with_or.or_prereq_object)
+
     def test_scape_update_message_on_update_delete(self):
         """ Checks if delete and update function gives a success message when a quest is related to map """
         # setup
@@ -1191,7 +1274,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
         self.assertTrue(scape.name in str(messages[0]))
-
+        
     # TODO
     # TAs should not be able to make a quest visible_to_students
     # When a quest is made visible_to_students by a teacher, the editor should be removed
