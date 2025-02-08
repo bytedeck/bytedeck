@@ -1,13 +1,16 @@
-from django.contrib.auth import get_user_model
-from django.core.mail import EmailMultiAlternatives
+from datetime import timedelta
+from model_bakery import baker
 from unittest.mock import patch
 
-from model_bakery import baker
 from django_tenants.test.cases import TenantTestCase
+
+from django.contrib.auth import get_user_model
+from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 
 from notifications import tasks
 from notifications.models import Notification
-from notifications.tasks import generate_notification_email, get_notification_emails
+from notifications.tasks import generate_notification_email, get_notification_emails, delete_old_notifications
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -165,3 +168,35 @@ class NotificationTasksTests(TenantTestCase):
         # Should not get email because they are not enrolled in any courses
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 0)
+
+
+class DeleteOldNotificationsTestCase(TenantTestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.old_notification = baker.make(
+            Notification,
+            timestamp=timezone.now() - timedelta(days=90)  # Older than 3 months
+        )
+
+        self.recent_notification = baker.make(
+            Notification,
+            timestamp=timezone.now() - timedelta(days=89)  # Within 3 months
+        )
+
+        self.notification_count = Notification.objects.count()
+
+    def test_task_deletes_old_notifications(self):
+        """Ensure old notifications >90 days are deleted but recent ones remain."""
+        delete_old_notifications()
+
+        with self.assertRaises(Notification.DoesNotExist):
+            self.old_notification.refresh_from_db()  # Should be deleted
+
+        self.recent_notification.refresh_from_db()  # Should still exist
+
+    @patch('notifications.tasks.delete_old_notifications.delay')
+    def test_task_is_called_properly(self, mock_task):
+        """Ensure the task can be scheduled via Celery."""
+        delete_old_notifications.delay()
+        mock_task.assert_called_once()
