@@ -2,6 +2,7 @@ import json
 import uuid
 
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -1153,6 +1154,8 @@ def complete(request, submission_id):
                 draft_comment.text = f"<p>{comment_text}</p>"
                 draft_comment.target_object_id = submission.id
                 draft_comment.target_object = submission
+                # reset timestamp needed otherwise it will use the draft comment's timestamp from when the submission was started
+                draft_comment.timestamp = timezone.now()
                 draft_comment.save()
 
             # this if for quick_reply comments
