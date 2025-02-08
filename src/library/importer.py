@@ -1,17 +1,20 @@
 from django_tenants.utils import schema_context
+from library.utils import get_library_schema_name
 from quest_manager.admin import QuestResource
 from quest_manager.models import Quest
 
-from .utils import library_schema_context
 
-
-def import_quests_to(*, destination_schema, quest_import_ids):
+def import_quests_to(*, destination_schema, quest_import_ids, source_schema=None):
     """
     :param destination_schema: schema to import the quest to
     :param quest_import_ids: list of quest import ids
+    :param source_schema: Optional. The source where to import the quest import ids
     """
 
-    with library_schema_context():
+    if source_schema is None:
+        source_schema = get_library_schema_name()
+
+    with schema_context(source_schema):
         quests = Quest.objects.select_related('campaign').filter(visible_to_students=True, import_id__in=quest_import_ids)
         export_data = QuestResource().export(quests)
 
