@@ -145,7 +145,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
 
         self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 404)  # Ajax only
+        self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
         response = self.client.get(
             reverse('quests:ajax_summary_histogram', args=[q_pk]),
             data={
@@ -595,26 +595,6 @@ class SubmissionViewTests(TenantTestCase):
 
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
-
-    def test_backwards_compatibility_draft_text_changed_to_draft_comment(self):
-        """BACKWARDS COMPATIBILITY: The old draft_text field was kept around to make it easier to
-        migrate existing data to the new draft_comment field.  This test makes sure that when
-        the submission view is visited, the old draft_text is copied to the new draft_comment field."""
-        # loging required for this view
-        self.client.force_login(self.test_student1)
-        quest = baker.make(Quest, name="TestSaveDrafts")
-        draft_text = "I am a test draft comment"
-        sub = baker.make(QuestSubmission,
-                         quest=quest,
-                         draft_text=draft_text,
-                         user=self.test_student1,
-                         semester=SiteConfig.get().active_semester)
-
-        response = self.client.get(reverse('quests:submission', args=[sub.id]))
-        self.assertEqual(response.status_code, 200)
-
-        sub.refresh_from_db()
-        self.assertEqual(sub.draft_comment.text, draft_text)
 
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -1201,6 +1181,9 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
         self.assertTrue(scape.name in str(messages[0]))
+
+        # to clear any messages before next test
+        self.assert200('quests:')
 
         # test messages for quest_delete
         response = self.client.post(reverse('quests:quest_delete', args=[quest.id]))
@@ -1881,18 +1864,18 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
         baker.make('courses.CourseStudent', block=teacher_block,
                    user=self.test_student, semester=SiteConfig.get().active_semester)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
-        self.assert404('quests:ajax_submission_count')
+        self.assert403('quests:ajax_submission_count')
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
         response = self.client.post(
             reverse('quests:ajax_submission_count')
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
     def test_student_access_granted(self):
         """ The current behavior is that students can access the view.
@@ -1963,14 +1946,23 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_quest_info', args=[self.quest.id])
+        self.assert403('quests:ajax_quest_info', args=[self.quest.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ajax_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.get(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
 
@@ -2013,14 +2005,23 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.submission = baker.make(QuestSubmission)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_approval_info', args=[self.submission.id])
+        self.assert403('quests:ajax_approval_info', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ajax_get_returns_404(self):
+        """ This view is only accessible by an ajax POST request """
+        response = self.client.get(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
 
@@ -2067,16 +2068,16 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.submission = baker.make(QuestSubmission, user=self.test_student)
         # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-    def test_get_returns_404(self):
+    def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
-        self.assert404('quests:ajax_info_in_progress', args=[self.submission.id])
+        self.assert403('quests:ajax_info_in_progress', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_404(self):
+    def test_non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_info_in_progress', args=[self.submission.id])
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
     def test_ajax_info_in_progress(self):
         response = self.client.post(

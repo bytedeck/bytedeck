@@ -43,6 +43,13 @@ app.conf.beat_schedule = {
             "queue": "default",
         }
     },
+    "Delete Notifications older than 90 days for all schemas daily task": {
+        "task": "notifications.tasks.delete_old_notifications_for_all_tenants",
+        "schedule": crontab(minute=0, hour=1),
+        "options": {
+            "queue": "default",
+        }
+    },
 }
 
 
