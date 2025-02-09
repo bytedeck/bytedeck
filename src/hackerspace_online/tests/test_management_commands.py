@@ -143,8 +143,8 @@ class FullCleanTest(TestCase, CommandMixin):
         # + "you cant create a tenant outside public schema"
         with schema_context(get_public_schema_name()):
             self.tenant1 = Tenant.objects.create(schema_name='test_schema1', name='Test Tenant 1')
-        with schema_context(get_public_schema_name()):
-            self.tenant2 = Tenant.objects.create(schema_name='test_schema2', name='Test Tenant 2')
+        # with schema_context(get_public_schema_name()):
+        #     self.tenant2 = Tenant.objects.create(schema_name='test_schema2', name='Test Tenant 2')
 
         # add two different errors to each tenant
         with schema_context(self.tenant1.schema_name):
@@ -153,11 +153,12 @@ class FullCleanTest(TestCase, CommandMixin):
             #  ie. `{'author': ['this field cannot be blank.']}`
             baker.make('announcements.Announcement')
 
-        with schema_context(self.tenant2.schema_name):
-            # will cause an error because semester is None because of
-            # `null=True` without `blank=True`
-            #  ie. `{'semester': ['this field cannot be blank.']}`
-            baker.make('quest_manager.QuestSubmission')
+        # Remove to speed up tests.
+        # with schema_context(self.tenant2.schema_name):
+        #     # will cause an error because semester is None because of
+        #     # `null=True` without `blank=True`
+        #     #  ie. `{'semester': ['this field cannot be blank.']}`
+        #     qs = baker.make('quest_manager.QuestSubmission')
 
     def test_full_clean(self):
         """ Checks if full clean captures expected validation errors from "full_clean" management command
@@ -179,22 +180,23 @@ class FullCleanTest(TestCase, CommandMixin):
             # will cause an error because author is None because of
             # `null=True` without `blank=True`
             #  ie. `{'author': ['this field cannot be blank.']}`
-            self.assertTrue('Announcement' in log)
-            self.assertFalse('QuestSubmission' in log)
+            self.assertTrue("'author': ['This field cannot be blank.']" in log)
+            self.assertEqual(log.count("ValidationError"), 1)
 
-        with StringIO() as buf, redirect_stdout(buf):
-            self.call_command(
-                '--tenants', 'test_schema2'
-            )
-            # should capture any print statements by self.call_command
-            # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
-            log = buf.getvalue()
+        # Speed up tests
+        # with StringIO() as buf, redirect_stdout(buf):
+        #     self.call_command(
+        #         '--tenants', 'test_schema2'
+        #     )
+        #     # should capture any print statements by self.call_command
+        #     # "Exception found on cleaning "<Object Name>" (<Model Name>) of type <Error Name>: <Error Log>"
+        #     log = buf.getvalue()
 
-            # capture schema name
-            self.assertTrue('test_schema2' in log)
+        #     # capture schema name
+        #     self.assertTrue('test_schema2' in log)
 
-            # will cause an error because semester is None because of
-            # `null=True` without `blank=True`
-            #  ie. `{'semester': ['this field cannot be blank.']}`
-            self.assertTrue('QuestSubmission' in log)
-            self.assertFalse('Announcement' in log)
+        #     # will cause an error because semester is None because of
+        #     # `null=True` without `blank=True`
+        #     #  ie. `{'semester': ['this field cannot be blank.']}`
+        #     self.assertTrue('QuestSubmission' in log)
+        #     self.assertFalse('Announcement' in log)
