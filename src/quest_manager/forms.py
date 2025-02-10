@@ -1,5 +1,3 @@
-from datetime import date
-
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -114,8 +112,6 @@ class QuestForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
 
         self.fields['common_data'].label = 'Common Quest Info'
         self.fields['common_data'].queryset = CommonData.objects.filter(active=True)

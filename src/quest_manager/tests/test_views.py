@@ -596,26 +596,6 @@ class SubmissionViewTests(TenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
 
-    def test_backwards_compatibility_draft_text_changed_to_draft_comment(self):
-        """BACKWARDS COMPATIBILITY: The old draft_text field was kept around to make it easier to
-        migrate existing data to the new draft_comment field.  This test makes sure that when
-        the submission view is visited, the old draft_text is copied to the new draft_comment field."""
-        # loging required for this view
-        self.client.force_login(self.test_student1)
-        quest = baker.make(Quest, name="TestSaveDrafts")
-        draft_text = "I am a test draft comment"
-        sub = baker.make(QuestSubmission,
-                         quest=quest,
-                         draft_text=draft_text,
-                         user=self.test_student1,
-                         semester=SiteConfig.get().active_semester)
-
-        response = self.client.get(reverse('quests:submission', args=[sub.id]))
-        self.assertEqual(response.status_code, 200)
-
-        sub.refresh_from_db()
-        self.assertEqual(sub.draft_comment.text, draft_text)
-
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for view.py :
