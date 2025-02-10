@@ -87,6 +87,7 @@ class BadgeTestModel(TenantTestCase):
 
         # give it an icon
         self.badge.icon = "test_icon.png"
+        self.badge.full_clean()
         self.badge.save()
         self.assertEqual(self.badge.get_icon_url(), self.badge.icon.url)
 

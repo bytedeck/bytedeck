@@ -1,7 +1,7 @@
 LMS originating from Timberline Secondary School's Digital Hackerspace
 
-[![Build and Tests Status](https://github.com/bytedeck/bytedeck/workflows/Build%20and%20Tests/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
-[![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/workflows/Flake8/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
+[![Build and Tests Status](https://github.com/bytedeck/bytedeck/actions/workflows/build_and_test.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
+[![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/actions/workflows/lint.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
 [![codecov](https://codecov.io/gh/bytedeck/bytedeck/branch/develop/graph/badge.svg)](https://codecov.io/gh/bytedeck/bytedeck)
 
 # Hackerspace development environment installation
