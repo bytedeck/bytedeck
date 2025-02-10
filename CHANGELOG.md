@@ -13,11 +13,11 @@ This file chronologically records all notable changes to this website, including
   - Fix broken "Available Date" field's default value when creating a new quest [#1741]
   - Fix alert message margins [#1720]
   - Fix timestamps on submission comments [#1716]
+  - Fix broken form field when trying to grant badges in bulk [#1574] and [#1472]
 * Devops:
   - Remove save() from full_clean management command and run on all decks, fix all warnings
   - fix broken workflow badges in README, e.g. [![Build and Tests Status](https://github.com/bytedeck/bytedeck/actions/workflows/build_and_test.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
   - remove old draft_text field (was replaced by a draft Comment object)
-
 
 
 ### [1.25.0] 2024-09-04
