@@ -207,11 +207,4 @@
 
     {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
 
-    {% if request.user.is_staff %}
-    <script>
-        // styling for badge awarding widget
-        $.fn.select2.defaults.set( "theme", "bootstrap" );
-    </script>
-    {% endif %}
-
 {% endblock %}
