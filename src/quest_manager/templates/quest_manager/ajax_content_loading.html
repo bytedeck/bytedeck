@@ -1,140 +1,53 @@
 <script>
 
     $(document).ready(function () {
-
-        {% if quests_available_page and request.user.is_staff %}
-            // teacher on main quest page need to load all at once since individual ajax calls for each quest will
-            // overwhelm or error out or something bad (i.e. doesn't work most of time)
-            $.ajax({
-                  type: "POST",
-                  url: "{% url 'quests:ajax_quest_all' %}",
-                  data: {
-                      csrfmiddlewaretoken: "{{ csrf_token }}"
-                  },
-                  success: function (data) {
-                      var jsonData = JSON.parse(data);
-
-                      //$(preview_content_selector).html(data.quest_info_html);
-                      $(".accordian-trigger").each(function (index) {
-
-                          // get the quest/submission id from the id of the accordian panel
-                          var html_id = $(this).attr('id');
-                          // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
-                          // quest/sub id is number at end of html_id
-                          // html_id will be in format "heading-quest-42", so need to get the 42, which is the quest.id
-                          var id = parseInt(html_id.match(/\d+$/)[0], 10);
-
-                          var preview_content_selector = `#preview-quest-${id}, #preview-submission-${id}`;
-
-                          $(preview_content_selector).html(jsonData[id]);
-                      });
-
-                  },
-                  error: function (xhr, errmsg, err) {
-                      if (xhr.status == 500) {
-                          console.log(xhr.responseText)
-                      }
-                  }
-              });
-
-        {% else %} // student or approval pages
-
-        var is_inprogress = false;
-        var is_completed = false;
-        var is_past = false;
-        var is_approval = false;
-        var is_available_quest = false; // default
-        var tab_id = "#available";
-
-        // if this is the available tab, then it will list quests, not submissions
-        // if submissions, need to determine which tab
-        // or could be approvals...
-        if (window.location.href.indexOf("/inprogress/") > -1) {
-            is_inprogress = true;
-            tab_id = "#inprogress";
-        }
-        else if (window.location.href.indexOf("/completed/") > -1) {
-            is_completed = true;
-            tab_id = "#completed";
-        }
-        else if (window.location.href.indexOf("/past/") > -1) {
-            is_past = true;
-            tab_id = "#past_submissions";
-        }
-        else if (window.location.href.indexOf("/approvals/") > -1) {
-            is_approval = true;
-            tab_id = "#tab-submitted";
-            if (window.location.href.indexOf("/submitted/") > -1) {
-                tab_id = "#tab-submitted";
-            }
-            else if (window.location.href.indexOf("/returned/") > -1) {
-                tab_id = "#tab-returned";
-            }
-            else if (window.location.href.indexOf("/approved/") > -1) {
-                tab_id = "#tab-approved";
-            }
-            else if (window.location.href.indexOf("/flagged/") > -1) {
-                tab_id = "#tab-flagged";
-            }
-        }
-        else {
-            is_available_quest = true;
-            tab_id = "#available";
-        }
-
-        // cycle through each quest/submission and add content to accordian panel
-        $(`${tab_id} .accordian-trigger`).each(function (index) {
-
-            // get the quest/submission id from the id of the accordian panel
-            var html_id = $(this).attr('id')
+        $(".accordian-trigger").on("click", function () {
+            // get the questor submission id from the id of the accordian panel
+            var html_id = $(this).attr('id');
             // http://stackoverflow.com/questions/6340180/regex-to-get-the-number-from-the-end-of-a-string
             // quest/sub id is number at end of html_id
             // html_id will be in format "heading-quest-42", so need to get the 42, which is the quest.id
             var id = parseInt(html_id.match(/\d+$/)[0], 10);
+            var $contentContainer = $(`#preview-quest-${id}, #preview-submission-${id}`);
 
-            // get ajax url based on tab
-            if (is_inprogress) {
-                var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/";
-            }
-            else if (is_completed) {
-                var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/completed/";
-            }
-            else if (is_past) {
-                var ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/past/";
-            }
-            else if (is_approval) {
-                var ajax_url = "{% url 'quests:ajax_approval_root' %}" + id + "/";
-            }
-            else {
-                var ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/";
+            // If content is already loaded, do nothing
+            if ($contentContainer.hasClass("ajax-content-loaded")) return;
+
+            // Determine which tab we're in and set the correct AJAX URL
+            // if this is the available or drafts tab, then it will list quests, not submissions
+            // if submissions, need to determine which type (buttons are different depending on submission status)
+            // or could be the approvals tab
+            var ajax_url;
+            var currentURL = window.location.href;
+
+            if (currentURL.includes("/inprogress/")) {
+                ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/";
+            } else if (currentURL.includes("/completed/")) {
+                ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/completed/";
+            } else if (currentURL.includes("/past/")) {
+                ajax_url = "{% url 'quests:ajax_submission_root' %}" + id + "/past/";
+            } else if (currentURL.includes("/approvals/")) {
+                ajax_url = "{% url 'quests:ajax_approval_root' %}" + id + "/";
+            } else {
+                ajax_url = "{% url 'quests:ajax_quest_root' %}" + id + "/"; // Default: available quests or drafts
             }
 
-            var preview_content_selector = `#preview-quest-${id}, #preview-submission-${id}`;
-            var hidden_selector = "#status-icon-" + id;
-
+            // Fetch content
             $.ajax({
                 type: "POST",
                 url: ajax_url,
-                data: {
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                    use_schema: "{{ use_schema }}"
-                },
+                data: { csrfmiddlewaretoken: "{{ csrf_token }}" },
                 success: function (data) {
-                    //console.log(data)
-                    $(preview_content_selector).html(data.quest_info_html);
-
+                    // Replace loading spinner
+                    $contentContainer.html(data.quest_info_html).addClass("ajax-content-loaded");
                     $('div.pack').pack()
                 },
-                error: function (xhr, errmsg, err) {
-                    if (xhr.status == 500) {
-                        console.log(xhr.responseText)
-                    }
+                error: function (xhr) {
+                    $contentContainer.html("<p>Error loading content. Please try again.</p>");
+                    console.error(xhr.responseText);
                 }
             });
-
         });
-
-        {% endif %}
 
     });
 

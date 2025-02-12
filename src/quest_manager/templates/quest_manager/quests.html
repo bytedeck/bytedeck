@@ -151,8 +151,5 @@ back to its original look.
   {% comment %} Include from quest_manager/base.html {% endcomment %}
   {{ block.super }}
 
-  {% with quests_available_page=True %}
-    {% include "quest_manager/ajax_content_loading.html" %}
-  {% endwith %}
-
+  {% include "quest_manager/ajax_content_loading.html" %}
 {% endblock %}
