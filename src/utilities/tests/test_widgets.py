@@ -121,7 +121,7 @@ class TestGFKSelect2Widget(TenantTestCase):
             widget.get_search_fields(Group)
 
         widget.search_fields = {'auth': {'group': ['name__icontains']}}
-        assert isinstance(widget.get_search_fields(Group), collections.Iterable)
+        assert isinstance(widget.get_search_fields(Group), collections.abc.Iterable)
         assert all(isinstance(x, text_type) for x in widget.get_search_fields(Group))
 
     def test_filter_queryset(self):
