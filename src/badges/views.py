@@ -299,6 +299,7 @@ def assertion_delete(request, assertion_id):
                          ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
                           ))
         assertion.delete()
+        user.profile.xp_invalidate_cache()
         return redirect('profiles:profile_detail', pk=user.profile.id)
 
     template_name = 'badges/assertion_confirm_delete.html'

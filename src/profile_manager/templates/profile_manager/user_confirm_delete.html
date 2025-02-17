@@ -1,0 +1,21 @@
+{% extends "profile_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Delete User: {{object}} {% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this user account?</p>
+  <p class="text-danger text-bold"><strong>WARNING:</strong> This will permanently delete everything the user has
+    done on this website. This action is irreversable.</p>
+  <div class="well">
+    <p>Username: {{object.user.username}}</p>
+    <p>First Name: {{object.user.first_name}}</p>
+    <p>Last Name: {{object.user.last_name}}</p>
+    <p>Joined: {{ object.datetime_created|timesince }} ago ({{object.datetime_created}})</p>
+    <p>Quests Completed: {{approved_submission_count}}</p>
+  </div>
+  <a href="{% url 'profiles:profile_detail'  profile.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input type="submit" value="Delete" class="btn btn-danger" />
+</form>
+{% endblock %}
