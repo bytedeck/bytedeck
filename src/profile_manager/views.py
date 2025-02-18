@@ -7,10 +7,10 @@ from django.db.models import Prefetch
 from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
-from django.views.generic.edit import UpdateView, FormView
+from django.views.generic.edit import UpdateView, FormView, DeleteView
 
 from hackerspace_online.decorators import staff_member_required
 from siteconfig.models import SiteConfig
@@ -224,6 +224,39 @@ class ProfileOwnerOrIsStaffMixin:
         if profile_user == self.request.user or self.request.user.is_staff:
             return super().dispatch(*args, **kwargs)
         raise Http404("Sorry, this profile isn't yours!")
+
+
+class ProfileDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
+    """ This view deletes the entire User object, not just the Profile! """
+    model = Profile  # Ensure you're using the custom User model
+    template_name = "profile_manager/user_confirm_delete.html"  # Adjust the template path as needed
+    success_url = reverse_lazy("profiles:profile_list")  # Redirect after deletion
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.get_object()
+        approved_submission_qs = QuestSubmission.objects.all_approved(user=profile.user, quest=None, up_to_date=None, active_semester_only=False)
+        print(approved_submission_qs)
+        context["approved_submission_count"] = approved_submission_qs.count()
+        return context
+
+    def delete(self, request, *args, **kwargs):
+        profile = self.get_object()
+        user = profile.user
+        user.delete()  # Delete the User (cascades to Profile)
+        # Profile will already be deleted due to `on_delete=models.CASCADE`, so no need to call super
+        # return super().delete(request, *args, **kwargs)
+
+        # Add success message
+        messages.success(
+            self.request,
+            f"The user <b>{user.get_full_name()}</b> and all of their submissions and courses have been successfully deleted."
+        )
+
+        return redirect(self.success_url)
 
 
 class ProfileUpdate(NonPublicOnlyViewMixin, ProfileOwnerOrIsStaffMixin, UpdateView):

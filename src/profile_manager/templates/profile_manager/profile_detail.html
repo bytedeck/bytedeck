@@ -12,6 +12,10 @@
         <a class="btn btn-warning" title="Change User's Password"
           href="{% url 'profiles:change_password' object.user.pk %}"
           role="button"><i class="fa fa-key"></i></a>
+
+        <a class="btn btn-danger" title="Delete this User"
+          href="{% url 'profiles:profile_delete' object.id %}"
+          role="button"><i class="fa fa-trash-o"></i></a>
       {% else %}
         <a class="btn btn-warning" title="Change Password"
         href="{% url 'account_change_password' %}"

@@ -66,8 +66,6 @@
     {% comment %}
       ### COLLAPSING CONTENT ###
       This is the content that is hidden until the row is clicked.
-      ajax_content_loading.html inserts quest content here.
-      If the content hasn't been retrieved yet from the server, a loading icon is displayed.
     {% endcomment %}
     <div style="display: none" id="collapse-quest-{{q.id}}"
       class="{% if request.user.is_staff %}
@@ -79,6 +77,8 @@
             {% endif %}"
       role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
       <ul class="list-group">
+        <!-- ajax_content_loading.html inserts quest content here.
+        If the content hasn't been retrieved yet from the server, a loading icon is displayed. -->
         <li id="preview-quest-{{q.id}}" class="list-group-item list-group-item-buttons">
             <p>
               <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
