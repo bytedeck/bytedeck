@@ -30,10 +30,10 @@ As a sanity check, make sure docker compose works too:
 If you can't run docker without sudo, you can try adding yourself to the docker group (is this still needed? I don't think so)
 `sudo usermod -aG docker $USER`
 
-#### Make sure you have Python3.8
+#### Make sure you have Python3.10
 
 Using a different version of Python will probably give you errors when installing the dependencies due to slight changes between versions:
-`sudo apt install python3.8`
+`sudo apt install python3.10`
 
 ### Getting the Code
 
