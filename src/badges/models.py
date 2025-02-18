@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from django.dispatch import receiver
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save
 
 from siteconfig.models import SiteConfig
 from notifications.signals import notify
@@ -398,15 +398,6 @@ class BadgeAssertion(models.Model):
     def get_duplicate_assertions(self):
         """A qs of all assertions of this badge for this user"""
         return BadgeAssertion.objects.all_for_user_badge(self.user, self.badge, False)
-
-
-# Define the handler function that will be called when a BadgeAssertion is deleted
-@receiver(post_delete, sender=BadgeAssertion)
-def handle_badge_assertion_deleted(sender, instance, **kwargs):
-    """Run some code when a BadgeAssertion instance is deleted."""
-
-    # When an assertion is removed from a student, recalculate their xp:
-    instance.user.profile.xp_invalidate_cache()
 
 
 # only receive signals from BadgeAssertion model

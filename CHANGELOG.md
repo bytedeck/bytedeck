@@ -4,6 +4,17 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.25.2] 2025-02-017
+* New Features:
+  - Add ability to fully delete users from their profile [#1751]
+* Refactor/Optimizations:
+  - Quest and Submission list accordion contents now load when clicked, vastly improving loading speeds of large quest and submission lists [#1474]
+* Bugfixes:
+  - Fix broken widget styling on all forms [#1750]
+* Devops:
+  - Update to Python 3.10
+
+
 ### [1.25.1] 2025-02-09
 * Tweaks:
   - Improve map update messages [#1721]

@@ -6,8 +6,13 @@ from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
-from courses.models import Semester
+from badges.models import BadgeAssertion
+from comments.models import Comment
+from courses.models import CourseStudent, Semester
+from notifications.models import Notification
+from portfolios.models import Portfolio
 from profile_manager.models import Profile, smart_list
+from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -228,3 +233,41 @@ class SmartListTests(SimpleTestCase):
 
     def test_smart_list_int(self):
         self.assertEqual(smart_list(1), [1])
+
+
+class UserDeletionTest(TenantTestCase):
+
+    def setUp(self):
+        # Create a student user to be deleted
+        self.student = baker.make(User)
+
+        # Create related objects for student user
+        self.badge_assertion = baker.make('BadgeAssertion', user=self.student)
+        self.comment = baker.make('Comment', user=self.student)
+        self.course_student = baker.make('CourseStudent', user=self.student)
+        self.notification = baker.make('Notification', recipient=self.student)
+        self.portfolio = baker.make('Portfolio', user=self.student)
+        self.quest_submission = baker.make('QuestSubmission', user=self.student)
+
+    def test_delete_student_and_cascade(self):
+        # Ensure that the related objects exist before deletion
+        self.assertTrue(self.badge_assertion.pk)
+        self.assertTrue(self.comment.pk)
+        self.assertTrue(self.course_student.pk)
+        self.assertTrue(self.notification.pk)
+        self.assertTrue(self.portfolio.pk)
+        self.assertTrue(self.quest_submission.pk)
+
+        # Perform direct user deletion for the student
+        self.student.delete()
+
+        # Check the user is deleted
+        self.assertFalse(User.objects.filter(id=self.student.id).exists())
+
+        # Check that the related objects are also deleted (cascade)
+        self.assertRaises(BadgeAssertion.DoesNotExist, self.badge_assertion.refresh_from_db)
+        self.assertRaises(Comment.DoesNotExist, self.comment.refresh_from_db)
+        self.assertRaises(CourseStudent.DoesNotExist, self.course_student.refresh_from_db)
+        self.assertRaises(Notification.DoesNotExist, self.notification.refresh_from_db)
+        self.assertRaises(Portfolio.DoesNotExist, self.portfolio.refresh_from_db)
+        self.assertRaises(QuestSubmission.DoesNotExist, self.quest_submission.refresh_from_db)
