@@ -10,12 +10,10 @@ Each tab has an HTML table loaded into it, and each row in the table is a quest.
 It is important to note that each row in the “Available” tab represents a Quest object,
 while each row in the “In Progress”/”Completed” tabs are QuestSubmission objects.
 
-After the page loads, AJAX is used to insert all of the preview content into the quests.
-Several AJAX endpoints can be used depending on the tab. This is handled in
-`ajax_content_loading.html`. A whole bunch of conditions are used to ensure content
-is only loaded into the currently active tab.
+A lot happens in bootstrap-table-accordion.js:
 
-This content is inserted into a hidden DOM location, and whenever a quest is clicked,
+After the page loads, whenever a quest or submission is clicked,
+AJAX is used to insert all of the preview content into a hidden DOM location, then
 the preview content is inserted underneath the quest row. And when the preview content
 is collapsed, the content is sent back to the hidden location, and the quest row goes
 back to its original look.
@@ -148,8 +146,6 @@ back to its original look.
 {% endblock %}
 
 {% block js %}
-  {% comment %} Include from quest_manager/base.html {% endcomment %}
+  {% comment %} Include js block from quest_manager/base.html {% endcomment %}
   {{ block.super }}
-
-  {% include "quest_manager/ajax_content_loading.html" %}
 {% endblock %}

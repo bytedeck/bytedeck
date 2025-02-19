@@ -39,7 +39,7 @@
           role="tab"
           aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
           aria-controls="collapse-quest-{{q.id}}"
-          {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
+          {% comment %} ID allows bootstrap-table-accordion.js populate detailed content {% endcomment %}
           id="heading-quest-{{q.id}}"
         >
           <td class="col-sm-1 col-xs-2 col-icon">
@@ -77,7 +77,7 @@
             {% endif %}"
       role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
       <ul class="list-group">
-        <!-- ajax_content_loading.html inserts quest content here.
+        <!-- bootstrap-table-accordion.js inserts quest content here.
         If the content hasn't been retrieved yet from the server, a loading icon is displayed. -->
         <li id="preview-quest-{{q.id}}" class="list-group-item list-group-item-buttons">
             <p>
