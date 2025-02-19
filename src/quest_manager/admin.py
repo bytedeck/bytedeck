@@ -68,6 +68,7 @@ class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin
     list_display = ('id', 'user', 'quest', 'is_completed', 'is_approved', 'semester')
     list_filter = ['is_completed', 'is_approved', 'semester']
     search_fields = ['user__username']
+    autocomplete_fields = ("draft_comment",)
 
     # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
     def get_queryset(self, request):
