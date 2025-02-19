@@ -5,6 +5,7 @@
 {% block head_css %}{% endblock %}
 {% block head %}
     <link type="text/css" rel="stylesheet" href="{% static 'quest_manager/css/bootstrap-table-accordion.css' %}?v=1.1" />
+
 {% endblock %}
 
 {% block content_first %}{% endblock %}
@@ -12,10 +13,18 @@
 
 {% block content %}{% endblock %}
 {% block js %}
-    {% comment %} ### Import Bootstrap Table JS ### {% endcomment %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.18.3/bootstrap-table.min.js"
             integrity="sha384-H2wFlf4pp5vxYPba0+XWp9zlTzEKO5Syk7ZZlbgOgZqj5GWvazhyWvq9zHs0INqj"
             crossorigin="anonymous"></script>
 
-    <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}?v=1.1"></script>
+    {% comment %}CSRF token needed in bootstrap-table-accordion.js to load AJAX data {% endcomment %}
+    <script>
+      window.contextData = {
+        csrfToken: "{{ csrf_token }}",
+        ajax_submission_root: "{% url 'quests:ajax_submission_root' %}",
+        ajax_approval_root: "{% url 'quests:ajax_approval_root' %}",
+        ajax_quest_root: "{% url 'quests:ajax_quest_root' %}"
+      };
+    </script>
+    <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}?v=1.2"></script>
 {% endblock %}
