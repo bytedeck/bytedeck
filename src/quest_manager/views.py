@@ -160,15 +160,32 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
+    """View for sharing a category (campaign) to the library.
 
+    This view allows the deck owner to share a category and its associated quests to the library.
+    It checks if the category already exists in the library and prevents duplicates.
+    """
+    
     model = Category
     success_url = reverse_lazy("quests:categories")
     template_name = 'quest_manager/category_confirm_share.html'
 
     def test_func(self):
+        """Check if the current user is the deck owner.
+
+        Returns:
+            bool: True if the current user is the deck owner, False otherwise.
+        """
         return self.request.user == SiteConfig.get().deck_owner
 
     def get_context_data(self, *args, **kwargs):
+        """Get context data for the template.
+
+        Adds library category and its URL to the context if it exists in the library.
+
+        Returns:
+            dict: Context data including library category, URL and active quests.
+        """
         context = super().get_context_data(*args, **kwargs)
 
         from library.utils import library_schema_context
@@ -192,7 +209,6 @@ class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-
         category = self.object
 
         from library.utils import library_schema_context, get_library_schema_name
@@ -225,7 +241,6 @@ class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
             )
 
         return redirect(self.success_url)
-
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
