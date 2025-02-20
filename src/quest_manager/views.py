@@ -264,6 +264,7 @@ class QuestShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
                 messages.error(request, f'Quest with import_id {quest.import_id} already exists in the library.')
                 return redirect('quests:quests')
 
+        quest.full_clean()
         import_quests_to(destination_schema=dest_schema, quest_import_ids=[quest.import_id], source_schema=tenant.schema_name)
 
         with schema_context(dest_schema):
