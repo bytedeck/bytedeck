@@ -208,6 +208,8 @@ class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
 
         # Import all quests from this campaign
         quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+        for quest in category.quest_set.all():
+            quest.full_clean()
         import_quests_to(destination_schema=get_library_schema_name(), quest_import_ids=quest_ids, source_schema=connection.schema_name)
         messages.success(request, f"Successfully shared '{category.name}' to the library.")
 
