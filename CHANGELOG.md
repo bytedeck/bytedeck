@@ -4,6 +4,33 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.25.2] 2025-02-017
+* New Features:
+  - Add ability to fully delete users from their profile [#1751]
+* Refactor/Optimizations:
+  - Quest and Submission list accordion contents now load when clicked, vastly improving loading speeds of large quest and submission lists [#1474]
+* Bugfixes:
+  - Fix broken widget styling on all forms [#1750]
+* Devops:
+  - Update to Python 3.10
+
+
+### [1.25.1] 2025-02-09
+* Tweaks:
+  - Improve map update messages [#1721]
+  - Auto-delete notifications older than 90 days [#757]
+* Bugfixes:
+  - Recalc student's XP when a badge is revoked from a student [#1743]
+  - Fix broken "Available Date" field's default value when creating a new quest [#1741]
+  - Fix alert message margins [#1720]
+  - Fix timestamps on submission comments [#1716]
+  - Fix broken form field when trying to grant badges in bulk [#1574] and [#1472]
+* Devops:
+  - Remove save() from full_clean management command and run on all decks, fix all warnings
+  - fix broken workflow badges in README, e.g. [![Build and Tests Status](https://github.com/bytedeck/bytedeck/actions/workflows/build_and_test.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
+  - remove old draft_text field (was replaced by a draft Comment object)
+
+
 ### [1.25.0] 2024-09-04
 * New Features
   - Maps auto-update when an item within the map is updated [#1660]

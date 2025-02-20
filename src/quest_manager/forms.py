@@ -1,5 +1,3 @@
-from datetime import date
-
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -45,7 +43,7 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Quest,
             search_fields=['name__icontains'],
-            attrs={'data-minimum-input-length': 0},
+            attrs={'data-minimum-input-length': 0, 'data-theme': 'bootstrap'},
         ),
     )
 
@@ -56,7 +54,7 @@ class QuestForm(forms.ModelForm):
         widget=ModelSelect2Widget(
             model=Badge,
             search_fields=['name__icontains'],
-            attrs={'data-minimum-input-length': 0},
+            attrs={'data-minimum-input-length': 0, 'data-theme': 'bootstrap'},
         ),
     )
 
@@ -109,13 +107,11 @@ class QuestForm(forms.ModelForm):
             # 'specific_teacher_to_notify': Select2Widget(),
 
             # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
-            'tags': BootstrapTaggitSelect2Widget()
+            'tags': BootstrapTaggitSelect2Widget(attrs={'data-theme': 'bootstrap'})
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.fields['date_available'].initial = date.today().strftime('%Y-%m-%d'),
 
         self.fields['common_data'].label = 'Common Quest Info'
         self.fields['common_data'].queryset = CommonData.objects.filter(active=True)
@@ -259,7 +255,8 @@ class SubmissionFormStaff(SubmissionForm):
             queryset=Badge.objects.all_manually_granted(),
             search_fields=[
                 'name__icontains',
-            ]
+            ],
+            attrs={'data-theme': 'bootstrap'}
         )
 
 
