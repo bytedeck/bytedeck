@@ -242,7 +242,9 @@ class CategoryShare(NonPublicOnlyViewMixin, UserPassesTestMixin, DetailView):
 
         return redirect(self.success_url)
 
+
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
+    ...
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
