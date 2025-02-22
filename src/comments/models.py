@@ -38,7 +38,7 @@ class CommentManager(models.Manager):
     # def all(self):
     #     return self.get_queryset.get_active().get_no_parents()
 
-    def create_comment(self, user=None, text=None, path=None, target=None, parent=None, convert_newlines=True):
+    def create_comment(self, user=None, text=None, path=None, target=None, parent=None, convert_newlines=True, paste_detected=False):
         if not path:
             raise ValueError("Must include a path when adding a comment")
         if not user:
@@ -50,6 +50,7 @@ class CommentManager(models.Manager):
             user=user,
             path=path,
             text=text,
+            paste_detected=paste_detected,
         )
         if target is not None:
             comment.target_content_type = ContentType.objects.get_for_model(target)
@@ -135,6 +136,7 @@ class Comment(models.Model):
     updated = models.DateTimeField(auto_now=True)
     active = models.BooleanField(default=True)
     flagged = models.BooleanField(default=False)
+    paste_detected = models.BooleanField(default=False)
 
     target_content_type = models.ForeignKey(ContentType, related_name='comment_target',
                                             null=True, blank=True, on_delete=models.SET_NULL)

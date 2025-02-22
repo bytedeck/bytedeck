@@ -67,7 +67,7 @@ class BulkBadgeAssertionForm(forms.Form):
     students = forms.ModelMultipleChoiceField(
         # TODO just use the user objects here instead of profile
         # Goign back to the user just to sort by profile string is...a hack.  How to do that properly?!
-        queryset=Profile.objects.all().order_by('user__first_name', 'user__last_name'),
+        queryset=Profile.objects.select_related('user').order_by('user__first_name', 'user__last_name'),
         required=True,
         widget=ProfileMultiSelectWidget(),
     )

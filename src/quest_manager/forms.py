@@ -224,12 +224,17 @@ class TAQuestForm(QuestForm):
 
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
-
     attachments = RestrictedMultiFileFormField(
         required=False,
         max_upload_size=16777216,
         label="Attach files",
         help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
+    )
+    #Creates a hidden paste detected field in the submission form
+    paste_detected = forms.BooleanField(
+        required=False,  # Not required, as no user input here
+        widget=forms.HiddenInput(),  # Make it invisible to the user
+        initial=False  # Default value
     )
 
 
@@ -283,6 +288,11 @@ class SubmissionQuickReplyForm(forms.Form):
 
 class SubmissionQuickReplyFormStudent(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    paste_detected = forms.BooleanField(
+        required=False,  # Not required, as no user input here
+        widget=forms.HiddenInput(),  # Make it invisible to the user
+        initial=False  # Default value
+    )
 
 
 class CommonDataForm(forms.ModelForm):

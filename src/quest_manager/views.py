@@ -1105,6 +1105,7 @@ def complete(request, submission_id):
 
     # http://stackoverflow.com/questions/22470637/django-show-validationerror-in-template
     if request.method == "POST":
+        print(request.POST)  # Debugging: Print the POST data
         # for some reason Summernote is submitting the form in the background when an image is added or
         # dropped into the widget We need to ignore that submission
         # https://github.com/summernote/django-summernote/issues/362
@@ -1127,6 +1128,7 @@ def complete(request, submission_id):
 
         if form.is_valid():
             comment_text = form.cleaned_data.get("comment_text")
+            paste_detected = form.cleaned_data.get("paste_detected")
             if not comment_text or comment_text == "<p><br></p>":
                 if submission.quest.verification_required and not request.FILES:
                     messages.error(
@@ -1155,6 +1157,8 @@ def complete(request, submission_id):
                 draft_comment.text = f"<p>{comment_text}</p>"
                 draft_comment.target_object_id = submission.id
                 draft_comment.target_object = submission
+                if paste_detected == True:
+                    draft_comment.paste_detected = paste_detected
                 draft_comment.save()
 
             # this if for quick_reply comments
@@ -1165,8 +1169,9 @@ def complete(request, submission_id):
                     path=submission.get_absolute_url(),
                     text=f"<p>{comment_text}</p>",
                     target=submission,
+                    #paste_detected=paste_detected,
                 )
-
+        
             if request.FILES:
                 for afile in request.FILES.getlist("attachments"):
                     newdoc = Document(docfile=afile, comment=draft_comment)
@@ -1269,6 +1274,7 @@ def complete(request, submission_id):
                 verb=note_verb,
                 icon=icon,
             )
+
             messages.success(request, msg_text)
             return redirect("quests:quests")
         else:  # form is not valid
@@ -1407,6 +1413,7 @@ def ajax_save_draft(request):
 
         submission_comment = request.POST.get("comment")
         submission_id = request.POST.get("submission_id")
+        paste_detected = request.POST.get("paste_detected")
         # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id)
@@ -1418,6 +1425,9 @@ def ajax_save_draft(request):
 
         if draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
+            # checks to see if the paste_detected field is True. Will update value to true if it is (does not overwrite True with False) 
+            if paste_detected == "true":
+                draft_comment.paste_detected = True
             # sub.xp_requested = xp_requested
             response_data["result"] = "Draft saved"
             draft_comment.save()
