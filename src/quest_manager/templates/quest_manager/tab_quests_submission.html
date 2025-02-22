@@ -37,7 +37,7 @@
         role="tab"
         aria-expanded="{% if s.id == active_id %}true{% else %}false{% endif %}"
         aria-controls="collapse-submission-{{s.id}}"
-        {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
+        {% comment %} ID allows bootstrap-table-accordion.js populate detailed content {% endcomment %}
         id="heading-submission-{{s.id}}"
       >
         <td class="col-sm-1 col-xs-2 col-icon">
@@ -73,7 +73,7 @@
       {% comment %}
         ### COLLAPSING CONTENT ###
         This is the content that is hidden until the row is clicked.
-        ajax_content_loading.html inserts quest content here.
+        bootstrap-table-accordion.js inserts quest/submission content here.
         If the content hasn't been retrieved yet from the server, a loading icon is displayed.
       {% endcomment %}
       <div style="display: none" id="collapse-submission-{{s.id}}"

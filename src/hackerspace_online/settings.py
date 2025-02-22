@@ -326,6 +326,7 @@ CACHES = {
 }
 
 SELECT2_CACHE_BACKEND = 'select2'
+SELECT2_THEME = 'bootstrap'  # This doesn't actually work, why?
 
 
 # I18N AND L10N ####################################################################

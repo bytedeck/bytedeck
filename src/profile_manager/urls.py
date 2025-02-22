@@ -22,6 +22,7 @@ urlpatterns = [
     re_path(r'^(?P<profile_id>[0-9]+)/comment_ban_toggle/$', views.comment_ban_toggle, name='comment_ban_toggle'),
     re_path(r'^(?P<profile_id>[0-9]+)/comment_ban/$', views.comment_ban, name='comment_ban'),
     re_path(r'^(?P<pk>[0-9]+)/edit/$', views.ProfileUpdate.as_view(), name='profile_update'),
+    re_path(r'^(?P<pk>[0-9]+)/delete/$', views.ProfileDelete.as_view(), name='profile_delete'),
     re_path(r'^edit/own/$', views.ProfileUpdateOwn.as_view(), name='profile_edit_own'),
     path('chart/<pk>/', views.TagChart.as_view(), name='tag_chart'),
 
