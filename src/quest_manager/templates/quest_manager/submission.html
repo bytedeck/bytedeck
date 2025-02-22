@@ -209,13 +209,6 @@
     
     {% include 'quest_manager/snippets/flag_submissions_scripts.html' %}
     
-    {% if request.user.is_staff %}
-    <script>
-        // styling for badge awarding widget
-        $.fn.select2.defaults.set( "theme", "bootstrap" );
-    </script>
-    {% endif %}
-
     {% if not request.user.is_staff %}
     <script defer>
       /*Detects when a user pastes into any textarea with class 'note-editable' and sets the pastedetected field

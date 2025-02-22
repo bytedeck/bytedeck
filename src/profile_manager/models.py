@@ -3,9 +3,11 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
 from django.db import transaction
+from django.db.transaction import TransactionManagementError
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.templatetags.static import static
@@ -452,8 +454,12 @@ def create_profile(sender, **kwargs):
 def post_delete_user(sender, instance, *args, **kwargs):
     """If a profile is deleted, then that to cascade and delete profile as well.
     """
-    if instance.user:  # just in case user is not specified or was already deleted
-        instance.user.delete()
+    try:
+        if instance.user:
+            instance.user.delete()
+    except (TransactionManagementError, ObjectDoesNotExist):
+        # Handle the case where the user is already deleted or in the middle of being deleted
+        pass
 
 
 @receiver(email_confirmed, sender=EmailConfirmationHMAC)

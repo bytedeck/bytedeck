@@ -312,6 +312,7 @@ class BadgeAssertionManager(models.Manager):
             do_not_grant_xp=transfer,
             semester_id=active_semester
         )
+        new_assertion.full_clean()
         new_assertion.save()
         user.profile.xp_invalidate_cache()  # recalculate user's XP
         return new_assertion

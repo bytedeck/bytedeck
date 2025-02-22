@@ -58,7 +58,7 @@ class GenerateQuestMapForm(FutureModelForm):
             'parent_scape',
         ]
 
-    name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial quest's name will be used")
+    name = forms.CharField(max_length=50, required=False, help_text="If not provided, the initial object's name will be used")
 
     initial_content_object = CytoscapeGFKChoiceField(label='Initial Object')
 

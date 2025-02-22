@@ -12,6 +12,74 @@
 
 */
 
+
+/**
+ * ### function loadQuestOrSubmissionContent(id) ###
+ * Loads quest or submission content via AJAX and updates the corresponding accordion content container.
+ *
+ * This function dynamically determines the appropriate AJAX URL based on the current page URL,
+ * fetches the corresponding content, and inserts it into the appropriate (accordion) container. It prevents
+ * redundant requests by checking if the content has already been loaded.
+ *
+ * Prerequisites:
+ * - `window.contextData` must be defined in the global scope with the following properties:
+ *   - `csrfToken`: The CSRF token for secure AJAX requests.
+ *   - `ajax_submission_root`: The base URL for fetching submission-related content.
+ *   - `ajax_approval_root`: The base URL for fetching approval-related content.
+ *   - `ajax_quest_root`: The base URL for fetching quest-related content.
+ *
+ * @param {number} id - The unique identifier for the quest or submission.
+ *
+ * Behavior:
+ * - Determines the appropriate AJAX URL based on the current page context:
+ *   - `/inprogress/` → Fetches an in-progress submission.
+ *   - `/completed/` → Fetches a completed submission.
+ *   - `/past/` → Fetches a past submission.
+ *   - `/approvals/` → Fetches an approval-related submission.
+ *   - Otherwise → Fetches quest-related content (available or drafts).
+ * - Prevents duplicate AJAX requests by checking if the content has already been loaded.
+ * - Updates the corresponding content container (`#preview-quest-{id}` or `#preview-submission-{id}`).
+ * - Calls `$('div.pack').pack()` after successful content loading (in case a packing layout needs updating).
+ * - Handles errors gracefully by displaying a user-friendly message and logging details to the console.
+ */
+function loadQuestOrSubmissionContent(id) {
+  var $contentContainer = $(`#preview-quest-${id}, #preview-submission-${id}`);
+
+  // If content is already loaded, do nothing
+  if ($contentContainer.hasClass("ajax-content-loaded")) return;
+
+  // Determine the correct AJAX URL based on the current page
+  var currentURL = window.location.href;
+  var ajax_url;
+
+  if (currentURL.includes("/inprogress/")) {
+      ajax_url = `${window.contextData.ajax_submission_root}${id}/`;
+  } else if (currentURL.includes("/completed/")) {
+      ajax_url = `${window.contextData.ajax_submission_root}${id}/completed/`;
+  } else if (currentURL.includes("/past/")) {
+      ajax_url = `${window.contextData.ajax_submission_root}${id}/past/`;
+  } else if (currentURL.includes("/approvals/")) {
+      ajax_url = `${window.contextData.ajax_approval_root}${id}/`;
+  } else {
+      ajax_url = `${window.contextData.ajax_quest_root}${id}/`; // Default for available quests or drafts
+  }
+
+  // Fetch content via AJAX
+  $.ajax({
+      type: "POST",
+      url: ajax_url,
+      data: { csrfmiddlewaretoken: window.contextData.csrfToken },
+      success: function (data) {
+          $contentContainer.html(data.quest_info_html).addClass("ajax-content-loaded");
+          $('div.pack').pack();
+      },
+      error: function (xhr) {
+          $contentContainer.html("<p>Error loading content. Please try again.</p>");
+          console.error(xhr.responseText);
+      }
+  });
+}
+
 /**
      * Collapses the provided row, animates the collapse, moves the content back to its original location,
      * and updates the Bootstrap table to reflect the row's collapsed state.
@@ -55,6 +123,10 @@ $(document).ready(function () {
       // Get the row's html id, then extract the last digit (quest or submission id) from it
       const row_html_id = row._id;
       const object_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
+
+      // Load the accordion container content via AJAX
+      loadQuestOrSubmissionContent(object_id)
+
       let $hiddenDIV;
       // find elements matching "collapse-quest-<id>" or "collapse-submission-<id>"
       if (row_html_id.includes("quest")) {

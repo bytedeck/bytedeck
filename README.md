@@ -1,7 +1,7 @@
 LMS originating from Timberline Secondary School's Digital Hackerspace
 
-[![Build and Tests Status](https://github.com/bytedeck/bytedeck/workflows/Build%20and%20Tests/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
-[![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/workflows/Flake8/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
+[![Build and Tests Status](https://github.com/bytedeck/bytedeck/actions/workflows/build_and_test.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
+[![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/actions/workflows/lint.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
 [![codecov](https://codecov.io/gh/bytedeck/bytedeck/branch/develop/graph/badge.svg)](https://codecov.io/gh/bytedeck/bytedeck)
 
 # Hackerspace development environment installation
@@ -30,10 +30,10 @@ As a sanity check, make sure docker compose works too:
 If you can't run docker without sudo, you can try adding yourself to the docker group (is this still needed? I don't think so)
 `sudo usermod -aG docker $USER`
 
-#### Make sure you have Python3.8
+#### Make sure you have Python3.10
 
 Using a different version of Python will probably give you errors when installing the dependencies due to slight changes between versions:
-`sudo apt install python3.8`
+`sudo apt install python3.10`
 
 ### Getting the Code
 

@@ -2,6 +2,7 @@ import json
 import uuid
 
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -782,9 +783,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """ gets the kwargs for notifications. every key should be empty unless
         there is something we want to put before hand.
         similar to get_context_data """
-        kwargs = {el: None for el in [
-            "action", "target", "recipient", "affected_users", "verb", "icon"
-        ]}
+        kwargs = dict.fromkeys(["action", "target", "recipient", "affected_users", "verb", "icon"], None)
 
         # add default values here
         kwargs["target"] = self.submission
@@ -1157,6 +1156,8 @@ def complete(request, submission_id):
                 draft_comment.text = f"<p>{comment_text}</p>"
                 draft_comment.target_object_id = submission.id
                 draft_comment.target_object = submission
+                # reset timestamp needed otherwise it will use the draft comment's timestamp from when the submission was started
+                draft_comment.timestamp = timezone.now()
                 if paste_detected == True:
                     draft_comment.paste_detected = paste_detected
                 draft_comment.save()
@@ -1260,7 +1261,6 @@ def complete(request, submission_id):
                     # if commenting after approval we have to remove draft_comment
                     # else drafts get "stuck" to same comment
                     submission.draft_comment = None
-                    submission.draft_text = None
                     submission.save()
             else:
                 raise Http404("unrecognized submit button")
@@ -1485,13 +1485,9 @@ def submission(request, submission_id=None, quest_id=None):
 
     else:
         draft_comment = sub.draft_comment
-        # if there is no draft comment, create one, and also create a set of QuestionSubmissions
+        # if there is no draft comment, create one.
         if not draft_comment:
-            # BACKWARDS COMPATIBILITY: if there is no draft comment, but there is a comment, then this is an old submission
-            # that was created before the draft comment feature was added.  So, we'll create a draft comment from the comment
             text = ""
-            if sub.draft_text:
-                text = sub.draft_text
             draft_comment = Comment.objects.create_comment(
                 user=request.user,
                 path=sub.get_absolute_url(),
@@ -1509,10 +1505,6 @@ def submission(request, submission_id=None, quest_id=None):
                                                        minimum_xp=sub.quest.xp)
         else:
             main_comment_form = SubmissionForm(initial=initial)
-
-    # main_comment_form = CommentForm(request.POST or None, wysiwyg=True, label="")
-    # reply_comment_form = CommentForm(request.POST or None, label="")
-    # comments = Comment.objects.all_with_target_object(sub)
 
     context = {
         "heading": sub.quest_name(),
