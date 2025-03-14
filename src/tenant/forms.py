@@ -1,3 +1,5 @@
+from captcha.fields import ReCaptchaField
+from captcha.widgets import ReCaptchaV2Invisible
 from django import forms
 from django.contrib.auth import get_user_model
 from django.forms import ModelForm
@@ -55,3 +57,35 @@ class TenantForm(TenantBaseForm):
 
     class Meta(TenantBaseForm.Meta):
         fields = TenantBaseForm.Meta.fields + ["first_name", "last_name", "email"]
+
+
+class ProspectForm(forms.Form):
+    deck_name = forms.CharField(
+        max_length=50,
+        label='Deck Name',
+        help_text='The name of your deck (DECKNAME.bytedeck.com)',
+    )
+    first_name = forms.CharField(
+        max_length=30,
+        label='First name',
+        help_text='Please enter your first name',  # noqa
+    )
+    last_name = forms.CharField(max_length=30, label='Last name', help_text='Please enter your last name')
+    email = forms.EmailField(required=True, help_text='')
+    captcha = ReCaptchaField(label='', widget=ReCaptchaV2Invisible)
+
+    def clean_deck_name(self):
+        deck_name = self.cleaned_data['deck_name']
+
+        if Tenant.objects.filter(name=deck_name).exists():
+            raise forms.ValidationError('This deck name already exists')
+
+        return deck_name
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+
+        if Tenant.objects.filter(owner_email_cached=email).exists():
+            raise forms.ValidationError('This e-mail is already in use.')
+
+        return email

@@ -1,3 +1,5 @@
+from django.http.response import HttpResponseBadRequest, HttpResponseRedirectBase
+import stripe
 import functools
 
 from django.core.mail import EmailMultiAlternatives
@@ -8,6 +10,7 @@ from django.db import connection
 from django.dispatch import receiver
 from django.http import Http404, HttpResponseRedirect
 from django.utils.decorators import method_decorator
+from django.views.generic import FormView
 from django.views.generic.edit import CreateView
 from django.urls import reverse_lazy
 
@@ -21,7 +24,7 @@ from allauth.account.models import EmailConfirmationHMAC
 from siteconfig.models import SiteConfig
 from utilities.html import textify
 
-from .forms import TenantForm
+from .forms import TenantForm, ProspectForm
 from .models import Tenant
 
 
@@ -57,6 +60,14 @@ class NonPublicOnlyViewMixin:
     @method_decorator(non_public_only_view)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
+
+
+class HttpResponseSeeOther(HttpResponseRedirectBase):
+    """
+    Stripe uses code 303 when redirecting so we need to create our own since
+    Django does not provide this by default
+    """
+    status_code = 303
 
 
 def generate_default_owner_password(user, tenant):
@@ -176,3 +187,49 @@ def email_confirmed_handler(email_address, **kwargs):
     )
     email.attach_alternative(msg, "text/html")
     email.send()
+
+
+class ProspectTryNowView(PublicOnlyViewMixin, FormView):
+    form_class = ProspectForm
+    template_name = 'tenant/prospect_form.html'
+
+    def form_valid(self, form):
+        data = form.cleaned_data
+        data.pop('captcha', None)
+
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                customer_email=data['email'],
+                line_items=[
+                    {
+                        'price': 'price_1R2RatQZ7VVtlqWZEO2qUKgQ',  # TODO: Do we hard code this or put in an env or db model?
+                        'quantity': 1,
+                    }
+                ],
+                mode='subscription',
+                metadata={
+                    'deck_name': data['deck_name'],
+                    'email': data['email'],
+                    'first_name': data['first_name'],
+                    'last_name': data['last_name'],
+                },
+                subscription_data={
+                    'trial_period_days': 60,
+                    'trial_settings': {
+                        'end_behavior': {
+                            'missing_payment_method': 'cancel',
+                        }
+                    },
+                    'metadata': {
+                        'deck_name': data['deck_name'],
+                        'email': data['email'],
+                        'first_name': data['first_name'],
+                        'last_name': data['last_name'],
+                    },
+                },
+                success_url=self.request.build_absolute_uri('/pages/thank-you/'),
+                cancel_url=self.request.build_absolute_uri('/pages/subscribe/'),
+            )
+            return HttpResponseSeeOther(checkout_session.url)
+        except Exception:
+            raise HttpResponseBadRequest()

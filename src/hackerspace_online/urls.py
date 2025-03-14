@@ -24,7 +24,7 @@ from decorator_include import decorator_include
 from badges.views import AchievementRedirectView
 from hackerspace_online import views
 from siteconfig.models import SiteConfig
-from tenant.views import non_public_only_view
+from tenant.views import non_public_only_view, ProspectTryNowView
 
 admin.site.site_header = lambda: SiteConfig.get().site_name
 admin.site.site_title = lambda: SiteConfig.get().site_name_short
@@ -39,6 +39,7 @@ urlpatterns = [
 urlpatterns += [
     re_path(r'^$', views.home, name='home'),
     re_path(r'^a/simple/life/is/its/own/reward/', views.simple, name='simple'),
+    re_path(r'^try-now/', ProspectTryNowView.as_view(), name='prospect_try_now'),
     # quest_manager
     re_path(r'^library/', include('library.urls', namespace='library')),
     re_path(r'^quests/', include('quest_manager.urls', namespace='quests')),

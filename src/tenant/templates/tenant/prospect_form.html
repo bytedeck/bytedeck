@@ -1,0 +1,26 @@
+{% extends 'public/base.html' %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load account socialaccount %}
+
+{% block content %}
+
+<div class="BG-BD-White" id="top">
+  <div class="row justify-content-center">
+    <div class="col-md-11 col-lg-10 col-xl-8 BD-content1">
+      <h1>Try ByteDeck!</h1>
+      <form class="signup" id="signup_form" method="post" action="{% url 'prospect_try_now' %}">
+        {% csrf_token %}
+        {{ form|crispy}}
+        {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+        {% endif %}
+        <button class="btn btn-primary" type="submit">{% trans "Try Now" %} &raquo;</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
