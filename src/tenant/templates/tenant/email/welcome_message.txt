@@ -1,6 +1,6 @@
 Hello {{user.get_full_name}},
 
-Thank you for confirming your email address.  Use these credentails to log in to your new deck at {{tenant.get_root_url}}
+Thank you for confirming your email address.  Use these credentials to log in to your new deck at {{tenant.get_root_url}}
 
 username: {{user.username}}
 password: {{password}}
