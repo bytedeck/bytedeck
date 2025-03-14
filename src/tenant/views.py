@@ -231,5 +231,5 @@ class ProspectTryNowView(PublicOnlyViewMixin, FormView):
                 cancel_url=self.request.build_absolute_uri('/pages/subscribe/'),
             )
             return HttpResponseSeeOther(checkout_session.url)
-        except Exception:
-            raise HttpResponseBadRequest()
+        except Exception as exc:
+            return HttpResponseBadRequest(exc)

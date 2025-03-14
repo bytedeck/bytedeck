@@ -33,7 +33,8 @@ app_name = 'hackerspace_online'
 
 urlpatterns = [
     re_path(r'^grappelli/', include('grappelli.urls')),
-    re_path(r'^admin/', admin.site.urls)
+    re_path(r'^admin/', admin.site.urls),
+    re_path(r'^stripe-webhook/', views.stripe_webhook, name='stripe_webhook'),
 ]
 
 urlpatterns += [
