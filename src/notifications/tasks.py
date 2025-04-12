@@ -1,4 +1,6 @@
+from datetime import timedelta
 from django.urls import reverse
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.mail import EmailMultiAlternatives
@@ -7,14 +9,30 @@ from django_tenants.utils import get_tenant_model, tenant_context
 
 from hackerspace_online.celery import app
 from quest_manager.models import QuestSubmission
+from notifications.models import Notification
 
 from profile_manager.models import Profile
 
 from siteconfig.models import SiteConfig
 
-from .models import Notification
-
 User = get_user_model()
+
+
+@app.task(name='notifications.tasks.delete_old_notifications_for_all_tenants')
+def delete_old_notifications_for_all_tenants():
+    """Delete notifications older than three months for all tenants (schemas)."""
+    for tenant in get_tenant_model().objects.exclude(schema_name='public'):
+        with tenant_context(tenant):
+            delete_old_notifications.apply_async(queue='default')
+
+    return "Scheduled notifications.tasks.delete_old_notifications for all schemas/tenants"
+
+
+@app.task(name='notifications.tasks.delete_old_notifications')
+def delete_old_notifications():
+    three_months_ago = timezone.now() - timedelta(days=90)
+    deleted_count, _ = Notification.objects.filter(timestamp__lt=three_months_ago).delete()
+    return f"Deleted {deleted_count} notifications."
 
 
 @app.task(name='notifications.tasks.email_notification_to_users_on_all_schemas')

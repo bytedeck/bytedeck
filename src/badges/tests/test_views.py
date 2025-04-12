@@ -166,9 +166,14 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(new_badge.name, "badge copy test")
 
     def test_assertion_create_and_delete(self):
+        """ Ensure that the create and delete views properly add and remove the badges from the users profile
+        and adds/subtracts XP."""
         # log in a teacher
         success = self.client.login(username=self.test_teacher.username, password=self.test_password)
         self.assertTrue(success)
+
+        # should be zero, but this avoids problems with any future changes to setUp etc.
+        xp_initial = self.test_student1.profile.xp_cached
 
         # test: assertion_create()
         form_data = {
@@ -185,6 +190,9 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.user, self.test_student1)
         self.assertEqual(new_assertion.badge, self.test_badge)
+        # make sure the student's xp cache was recalculated and includes the new badge xp amount
+        self.test_student1.profile.refresh_from_db()  # Ensure we get the most up-to-date value from the database
+        self.assertEqual(self.test_student1.profile.xp_cached, xp_initial + self.test_badge.xp)
 
         # test: assertion_delete()
         response = self.client.post(
@@ -195,6 +203,10 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # shouldn't exist anymore now that we deleted it!
         with self.assertRaises(BadgeAssertion.DoesNotExist):
             BadgeAssertion.objects.get(id=new_assertion.id)
+
+        # make sure the student's xp cache was recalculated and deleted badge xp removed
+        self.test_student1.profile.refresh_from_db()
+        self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
     def test_assertion_create_no_xp(self):
         """Don't grant XP for this badge assertion"""
@@ -290,6 +302,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
@@ -324,6 +337,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert every instance of custom label is present
@@ -442,6 +456,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
         config.custom_name_for_badge = "CustomBadge"
+        config.full_clean()
         config.save()
 
         # Get Create view and assert header is correct
