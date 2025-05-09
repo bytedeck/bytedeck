@@ -596,6 +596,30 @@ class SubmissionViewTests(TenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
 
+    def test_ajax_save_draft_blank_comment(self):
+        """Should not cause an error if the comment is blank"""
+        # loging required for this view
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        sub = baker.make(QuestSubmission,
+                         quest=quest,
+                         draft_comment=draft_comment,
+                         )
+
+        ajax_data = {
+            # 'comment': draft_text, #  intentionally blank to ensure it does not error
+            'submission_id': sub.id,
+        }
+
+        # THere was a bug where the comment was not passed then and it would throw an IntegrityError
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data=ajax_data,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for view.py :
