@@ -559,7 +559,7 @@ ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | �
 # The URL to redirect to after a successful e-mail confirmation, in case no user is logged in.
 ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=None)
 # The URL to redirect to after a successful e-mail confirmation, in case of an authenticated user. Set to None to use settings.LOGIN_REDIRECT_URL.
-# ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS #(=3)
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 90
 # Determines the expiration date of email confirmation mails (# of days).
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
