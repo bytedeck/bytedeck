@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from utilities.html import textify
+from utilities.html import textify, urlize
 
 
 class TestUtilsText(SimpleTestCase):
@@ -23,3 +23,57 @@ class TestUtilsText(SimpleTestCase):
         html = """<p>Hello, <a href='https://www.google.com/earth/'>world</a>!</p>"""
         output = textify(html)
         self.assertEqual(output, """Hello, [world](https://www.google.com/earth/)!\n\n""")
+
+
+class UrlizeTests(SimpleTestCase):
+    def test_basic(self):
+        """
+        Test that a simple URL is correctly converted into an anchor tag
+        with rel="nofollow" attribute and the URL text is preserved.
+        """
+        text = "Visit www.example.com"
+        result = urlize(text)
+        self.assertIn('<a href="http://www.example.com"', result)
+        self.assertIn('rel="nofollow"', result)
+        self.assertIn('www.example.com', result)
+
+    def test_empty(self):
+        """
+        Test that empty string or None input returns an empty string without error.
+        """
+        self.assertEqual(urlize(""), "")
+        self.assertEqual(urlize(None), "")
+
+    def test_trim_url_limit(self):
+        """
+        Test that URLs longer than trim_url_limit are trimmed in the displayed
+        text but keep the full URL in the href attribute.
+        Also ensures rel="nofollow" is added.
+        """
+        url = "http://example.com/this/is/a/very/long/url/that/needs/trimming"
+        trimmed_length = 30
+        result = urlize(url, trim_url_limit=trimmed_length)
+        self.assertIn('rel="nofollow"', result)
+        self.assertTrue(result.startswith('<a href="http://example.com/this/is/a/very/long/url/that/needs/trimming"'))
+        self.assertIn("http://example.com/this/is/a/very/lo...", result)
+
+    def test_multiple_urls(self):
+        """
+        Test that multiple URLs in the input text are all converted into anchor tags,
+        each with rel="nofollow".
+        """
+        text = "Links: http://foo.com and https://bar.com/page"
+        result = urlize(text)
+        self.assertIn('href="http://foo.com"', result)
+        self.assertIn('href="https://bar.com/page"', result)
+        self.assertEqual(result.count('<a '), 2)
+
+    def test_no_trim(self):
+        """
+        Test that URLs shorter than trim_url_limit are not trimmed
+        and the display text matches the full URL.
+        """
+        url = "http://short.url"
+        result = urlize(url, trim_url_limit=100)
+        self.assertIn("http://short.url", result)
+        self.assertNotIn("...", result)
