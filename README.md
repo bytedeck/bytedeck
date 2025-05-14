@@ -110,6 +110,40 @@ If everything has worked so far, you should now be able to create your own byted
 4. Now you should be in your own bytedeck site!
 5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
 
+#### Alternatively
+If the above doesn't work for you there are other ways to create a new tenant.
+
+0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker compose up web` (and ignore the link it tells you to access the page)
+1. Go to create a new deck at http://localhost:8000/decks/new/.
+2. Fill out all the empty boxes with your info and hit the 'create' button at the bottom.
+3. You should now be at the login, you can log in using log in using
+   - username: admin
+   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in the .env file)
+4. Now you should be in your own bytedeck site!
+5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
+
+Finally if the other two methods didn't work for you please document the errors you recieved along the way, but don't worry there is another method.
+
+0. This method does not require the server to be running, although you will need to make sure it's running to view your website at the end.
+1. Run this command in your terminal to create a tenant using django-tenants:
+   - Using venv: `python src/manage.py create_tenant`
+   - Using docker: `docker compose run web bash -c "python src/manage.py create_tenant"`
+2. Your terminal should prompt you for `schema name:` here is where you put your tenants name for example: `hackerspace`
+   - It will then prompt you for `name:`, this field is required, it can be anything.
+3. It should then prompt you for `desc:` this field is not required, so you could put anything or leave it blank.
+   - The same goes for `owner full name:`, and `owner email:`
+4. When you get to `max active users (leave blank to use '5'):` leave it blank.
+   - Do the same for `max quests` and `trial end date`
+5. After `trial end date` leave blank, unless you want to enable google signon then enter True for `google signon enabled:`
+6. Your terminal will start setting up the tenant, and you should get to `domain:` enter the same thing you entered for `schema name:` and add `.localhost`, for example `domain: hackerspace.localhost`
+7. In `is primary (leave blank to use 'True'):` leave blank.
+8. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker compose up web` (and ignore the link it tells you to access the page)
+9. Go to http://yourschemaname.localhost:8000/ and login using:
+   - Username: admin
+   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in the .env file)
+10. Now you should be in your own bytedeck site!
+11. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
+
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
 
