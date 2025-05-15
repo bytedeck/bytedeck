@@ -3,6 +3,7 @@ HTML utilities suitable for global use, matching `django.utils.html` naming conv
 """
 # html2text is a python script that converts a page of HTML into clean, easy-to-read plain ASCII text
 import html2text
+import bleach
 
 
 def textify(html):
@@ -50,3 +51,5 @@ def urlize(text, trim_url_limit=None):
             clean_attrs[(None, '_text')] = display_text
 
         return clean_attrs
+
+    return bleach.linkify(text, callbacks=[nofollow])
