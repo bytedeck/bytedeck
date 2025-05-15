@@ -1,5 +1,5 @@
 from django.test import SimpleTestCase
-
+from html.parser import HTMLParser
 from utilities.html import textify, urlize
 
 
@@ -23,6 +23,15 @@ class TestUtilsText(SimpleTestCase):
         html = """<p>Hello, <a href='https://www.google.com/earth/'>world</a>!</p>"""
         output = textify(html)
         self.assertEqual(output, """Hello, [world](https://www.google.com/earth/)!\n\n""")
+
+
+class LinkTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.link_texts = []
+
+    def handle_data(self, data):
+        self.link_texts.append(data)
 
 
 class UrlizeTests(SimpleTestCase):
@@ -53,11 +62,17 @@ class UrlizeTests(SimpleTestCase):
         url = "http://example.com/this/is/a/very/long/url/that/needs/trimming"
         trimmed_length = 30
         result = urlize(url, trim_url_limit=trimmed_length)
+
+        # Parse visible text
+        parser = LinkTextExtractor()
+        parser.feed(result)
+        visible_text = ''.join(parser.link_texts)
+
         expected_display = url[:trimmed_length].rstrip() + "..."
 
         self.assertIn('rel="nofollow"', result)
         self.assertTrue(result.startswith(f'<a href="{url}"'))
-        self.assertIn(expected_display, result)
+        self.assertIn(expected_display, visible_text)
 
     def test_multiple_urls(self):
         """
