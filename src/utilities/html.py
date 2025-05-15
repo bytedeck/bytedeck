@@ -16,19 +16,23 @@ def textify(html):
     return h.handle(html)
 
 
-def urlize(text, trim_url_limit=None):
+def urlize(text):
     """
-    Convert URLs in the given text into clickable, sanitized anchor tags.
-    Optionally trims the displayed URL text and adds rel="nofollow".
+    Converts plain text URLs into links using bleach.
+    Safely adds rel="nofollow" without changing link text.
     """
     if not text:
         return ""
 
-    def add_nofollow(attrs, new):
-        # Just ensure rel="nofollow" is set
-        if attrs is None:
-            return None
-        attrs["rel"] = "nofollow"
-        return attrs
+    def nofollow(attrs, new):
+        # Ensure attrs is a dictionary with only string keys/values
+        if not isinstance(attrs, dict):
+            return attrs
+        clean_attrs = {}
+        for k, v in attrs.items():
+            if isinstance(k, str) and isinstance(v, str):
+                clean_attrs[k] = v
+        clean_attrs["rel"] = "nofollow"
+        return clean_attrs
 
-    return bleach.linkify(text, callbacks=[add_nofollow])
+    return bleach.linkify(text, callbacks=[nofollow])
