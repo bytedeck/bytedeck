@@ -33,7 +33,7 @@ def urlize(text, trim_url_limit=None):
              rel="nofollow".
     """
 
-    def shorten_url(attrs, new=False):
+    def shorten_url(attrs):
         """
         Modify the link attributes to optionally trim the displayed URL text.
 
@@ -50,7 +50,7 @@ def urlize(text, trim_url_limit=None):
             attrs["_text"] = display
         return attrs
 
-    def linkify_callback(attrs, new=False):
+    def linkify_callback(attrs):
         """
         Callback function used by bleach.linkify to customize link attributes.
 
@@ -63,7 +63,7 @@ def urlize(text, trim_url_limit=None):
         Returns:
             dict: Modified link attributes.
         """
-        attrs = shorten_url(attrs, new)
+        attrs = shorten_url(attrs)
         attrs.setdefault("rel", "nofollow")
         return attrs
 
