@@ -18,31 +18,15 @@ def textify(html):
 
 def urlize(text, trim_url_limit=None):
     """
-    Convert URLs in the given text into clickable HTML links, using bleach.linkify
-    for safe HTML escaping and sanitization.
-
-    Args:
-        text (str): The input text containing URLs to convert.
-        trim_url_limit (int, optional): Maximum length of the displayed URL text.
-            If the URL is longer, it will be truncated with '...'.
-            The href attribute will always contain the full URL.
-            Defaults to None (no trimming).
-
-    Returns:
-        str: The text with URLs replaced by safe HTML anchor tags including
-             rel="nofollow".
+    Convert URLs in the given text into clickable, sanitized anchor tags.
+    Optionally trims the displayed URL text and adds rel="nofollow".
     """
+    if not text:
+        return ""
 
-    def shorten_url(attrs):
+    def shorten_url(attrs, new):
         """
-        Modify the link attributes to optionally trim the displayed URL text.
-
-        Args:
-            attrs (dict): Dictionary of link attributes (e.g., 'href', 'title').
-            new (bool): Whether this is a newly created link (unused).
-
-        Returns:
-            dict: Modified attributes with possibly trimmed '_text' for display.
+        Optionally shorten the visible text of a link if it's longer than trim_url_limit.
         """
         href = attrs.get("href", "")
         if trim_url_limit and len(href) > trim_url_limit:
@@ -50,24 +34,14 @@ def urlize(text, trim_url_limit=None):
             attrs["_text"] = display
         return attrs
 
-    def linkify_callback(attrs):
+    def linkify_callback(attrs, new):
         """
-        Callback function used by bleach.linkify to customize link attributes.
-
-        Adds rel="nofollow" and trims displayed URL text if requested.
-
-        Args:
-            attrs (dict): Link attributes.
-            new (bool): Whether this is a new link (unused).
-
-        Returns:
-            dict: Modified link attributes.
+        Callback for bleach.linkify to modify link attributes:
+        - Shorten display text
+        - Add rel="nofollow"
         """
-        attrs = shorten_url(attrs)
+        attrs = shorten_url(attrs, new)
         attrs.setdefault("rel", "nofollow")
         return attrs
-
-    if not text:
-        return ""
 
     return bleach.linkify(text, callbacks=[linkify_callback])
