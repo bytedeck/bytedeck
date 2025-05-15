@@ -24,13 +24,11 @@ def urlize(text, trim_url_limit=None):
     if not text:
         return ""
 
-    def linkify_callback(attrs, new):
-        """
-        Callback for bleach.linkify to modify link attributes:
-        - Shorten display text
-        - Add rel="nofollow"
-        """
-        attrs.setdefault("rel", "nofollow")
+    def add_nofollow(attrs, new):
+        # Just ensure rel="nofollow" is set
+        if attrs is None:
+            return None
+        attrs["rel"] = "nofollow"
         return attrs
 
-    return bleach.linkify(text, callbacks=[linkify_callback])
+    return bleach.linkify(text, callbacks=[add_nofollow])
