@@ -25,14 +25,18 @@ def urlize(text):
         return ""
 
     def nofollow(attrs, new):
-        # Ensure attrs is a dictionary with only string keys/values
+        print("🔍 CALLBACK CALLED WITH attrs =", attrs)
         if not isinstance(attrs, dict):
-            return attrs
+            print("❌ attrs is not a dict!")
+            return None
+
         clean_attrs = {}
         for k, v in attrs.items():
+            print("   ➤ Key:", k, "Type:", type(k), "| Value:", v, "Type:", type(v))
             if isinstance(k, str) and isinstance(v, str):
                 clean_attrs[k] = v
         clean_attrs["rel"] = "nofollow"
+        print("✅ Returning clean_attrs:", clean_attrs)
         return clean_attrs
 
     return bleach.linkify(text, callbacks=[nofollow])
