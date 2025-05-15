@@ -18,25 +18,22 @@ def textify(html):
 
 def urlize(text):
     """
-    Converts plain text URLs into links using bleach.
-    Safely adds rel="nofollow" without changing link text.
+    Converts plain text URLs into HTML anchor tags using bleach.linkify.
+    Adds rel="nofollow" to anchor tags while handling both namespaced and
+    non-namespaced attribute keys.
     """
     if not text:
         return ""
 
     def nofollow(attrs, new):
-        print("🔍 CALLBACK CALLED WITH attrs =", attrs)
-        if not isinstance(attrs, dict):
-            print("❌ attrs is not a dict!")
-            return None
-
+        # Preserve all existing attributes, including namespaced keys like (None, 'href')
         clean_attrs = {}
         for k, v in attrs.items():
-            print("   ➤ Key:", k, "Type:", type(k), "| Value:", v, "Type:", type(v))
-            if isinstance(k, str) and isinstance(v, str):
+            if isinstance(v, str):
                 clean_attrs[k] = v
+
+        # Add rel="nofollow" (only on standard string keys, not namespaced)
         clean_attrs["rel"] = "nofollow"
-        print("✅ Returning clean_attrs:", clean_attrs)
         return clean_attrs
 
     return bleach.linkify(text, callbacks=[nofollow])
