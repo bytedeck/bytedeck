@@ -24,23 +24,15 @@ def urlize(text, trim_url_limit=None):
     if not text:
         return ""
 
-    def shorten_url(attrs, new):
-        """
-        Optionally shorten the visible text of a link if it's longer than trim_url_limit.
-        """
-        href = attrs.get("href", "")
-        if trim_url_limit and len(href) > trim_url_limit:
-            display = href[:trim_url_limit].rstrip() + "..."
-            attrs["_text"] = display
-        return attrs
-
     def linkify_callback(attrs, new):
         """
         Callback for bleach.linkify to modify link attributes:
         - Shorten display text
         - Add rel="nofollow"
         """
-        attrs = shorten_url(attrs, new)
+        href = attrs.get("href", "")
+        if trim_url_limit and len(href) > trim_url_limit:
+            attrs["_text"] = href[:trim_url_limit].rstrip() + "..."
         attrs.setdefault("rel", "nofollow")
         return attrs
 
