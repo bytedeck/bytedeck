@@ -30,9 +30,6 @@ def urlize(text, trim_url_limit=None):
         - Shorten display text
         - Add rel="nofollow"
         """
-        href = attrs.get("href", "")
-        if trim_url_limit and len(href) > trim_url_limit:
-            attrs["_text"] = href[:trim_url_limit].rstrip() + "..."
         attrs.setdefault("rel", "nofollow")
         return attrs
 
