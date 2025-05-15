@@ -53,9 +53,11 @@ class UrlizeTests(SimpleTestCase):
         url = "http://example.com/this/is/a/very/long/url/that/needs/trimming"
         trimmed_length = 30
         result = urlize(url, trim_url_limit=trimmed_length)
+        expected_display = url[:trimmed_length].rstrip() + "..."
+
         self.assertIn('rel="nofollow"', result)
-        self.assertTrue(result.startswith('<a href="http://example.com/this/is/a/very/long/url/that/needs/trimming"'))
-        self.assertIn("http://example.com/this/is/a/very/lo...", result)
+        self.assertTrue(result.startswith(f'<a href="{url}"'))
+        self.assertIn(expected_display, result)
 
     def test_multiple_urls(self):
         """
@@ -67,6 +69,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="http://foo.com"', result)
         self.assertIn('href="https://bar.com/page"', result)
         self.assertEqual(result.count('<a '), 2)
+        self.assertEqual(result.count('rel="nofollow"'), 2)
 
     def test_no_trim(self):
         """
@@ -75,5 +78,5 @@ class UrlizeTests(SimpleTestCase):
         """
         url = "http://short.url"
         result = urlize(url, trim_url_limit=100)
-        self.assertIn("http://short.url", result)
+        self.assertIn(url, result)
         self.assertNotIn("...", result)
