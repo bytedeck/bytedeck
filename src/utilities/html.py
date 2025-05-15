@@ -26,13 +26,19 @@ def urlize(text):
         return ""
 
     def nofollow(attrs, new):
-        # Preserve all existing attributes, including namespaced keys like (None, 'href')
+        # Create a new dictionary only with valid attribute keys
         clean_attrs = {}
         for k, v in attrs.items():
-            if isinstance(v, str):
+            # Skip keys like '_text' or any keys that are not tuples or strings representing valid HTML attribute names
+            if k == '_text':
+                continue
+
+            # Bleach expects attribute keys as tuples (namespace, name)
+            # but sometimes strings too, so keep both
+            if (isinstance(k, tuple) or isinstance(k, str)) and isinstance(v, str):
                 clean_attrs[k] = v
 
-        # Add rel="nofollow" (only on standard string keys, not namespaced)
+        # Add rel="nofollow" to string key 'rel' (typical usage)
         clean_attrs["rel"] = "nofollow"
         return clean_attrs
 
