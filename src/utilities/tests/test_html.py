@@ -33,6 +33,9 @@ class LinkTextExtractor(HTMLParser):
     def handle_data(self, data):
         self.link_texts.append(data)
 
+    def get_text(self):
+        return "".join(self.link_texts)
+
 
 class UrlizeTests(SimpleTestCase):
     def test_basic(self):
@@ -63,16 +66,16 @@ class UrlizeTests(SimpleTestCase):
         trimmed_length = 30
         result = urlize(url, trim_url_limit=trimmed_length)
 
+        expected_display = url[:trimmed_length].rstrip() + "..."
+
         # Parse visible text
         parser = LinkTextExtractor()
         parser.feed(result)
-        visible_text = ''.join(parser.link_texts)
-
-        expected_display = url[:trimmed_length].rstrip() + "..."
+        visible_text = parser.get_text()
 
         self.assertIn('rel="nofollow"', result)
         self.assertTrue(result.startswith(f'<a href="{url}"'))
-        self.assertIn(expected_display, visible_text)
+        self.assertEqual(visible_text, expected_display)
 
     def test_multiple_urls(self):
         """
