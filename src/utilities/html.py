@@ -17,35 +17,28 @@ def textify(html):
 
 
 def urlize(text, trim_url_limit=None):
-    """
-    Converts plain text URLs into HTML anchor tags using bleach.linkify.
-    Adds rel="nofollow" attribute to anchor tags while correctly handling
-    attribute keys as tuples to avoid serializer errors.
-    """
     if not text:
         return ""
 
-    def nofollow_factory(trim_limit):
-        def nofollow(attrs, new):
-            clean_attrs = {}
+    def nofollow(attrs, new):
+        print(f"nofollow called with attrs={attrs}, new={new}, trim_url_limit={trim_url_limit}")
+        clean_attrs = {}
+        for k, v in attrs.items():
+            if k == '_text':
+                continue
+            if isinstance(k, tuple) and len(k) == 2:
+                clean_attrs[k] = v
+            elif isinstance(k, str):
+                clean_attrs[(None, k)] = v
+        clean_attrs[(None, "rel")] = "nofollow"
+        display_text = attrs.get('_text', '')
 
-            for k, v in attrs.items():
-                if k == '_text':
-                    continue
-                if isinstance(k, tuple) and len(k) == 2:
-                    clean_attrs[k] = v
-                elif isinstance(k, str):
-                    clean_attrs[(None, k)] = v
+        if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
+            trimmed_text = display_text[:trim_url_limit].rstrip() + "..."
+            print("Returning:", clean_attrs, trimmed_text)
+            return clean_attrs, trimmed_text
+        else:
+            print("Returning:", clean_attrs, display_text)
+            return clean_attrs, display_text
 
-            clean_attrs[(None, "rel")] = "nofollow"
-
-            display_text = attrs.get('_text', '')
-
-            if trim_limit is not None and isinstance(display_text, str) and len(display_text) > trim_limit:
-                trimmed_text = display_text[:trim_limit].rstrip() + "..."
-                return clean_attrs, trimmed_text
-            else:
-                return clean_attrs, display_text
-        return nofollow
-
-    return bleach.linkify(text, callbacks=[nofollow_factory(trim_url_limit)])
+    return bleach.linkify(text, callbacks=[nofollow])
