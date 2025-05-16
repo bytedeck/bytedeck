@@ -26,23 +26,23 @@ def urlize(text, trim_url_limit=None):
         return ""
 
     def nofollow(attrs, new):
-        print(f"attrs type: {type(attrs)}, attrs: {attrs}")
+        # Convert attrs keys to strings, ignoring '_text'
         clean_attrs = {}
 
         for k, v in attrs.items():
             if k == '_text':
                 continue
+            # Just use string keys — if k is tuple, use the second element as key
             if isinstance(k, tuple) and len(k) == 2:
-                clean_attrs[k] = v
+                clean_attrs[k[1]] = v
             elif isinstance(k, str):
-                clean_attrs[(None, k)] = v
+                clean_attrs[k] = v
 
         # Add rel="nofollow"
-        clean_attrs[(None, "rel")] = "nofollow"
+        clean_attrs["rel"] = "nofollow"
 
-        # Trim the visible text by returning a tuple (attrs, new_text)
+        # Trim visible text if needed
         display_text = attrs.get('_text', '')
-
         if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
             trimmed_text = display_text[:trim_url_limit].rstrip() + "..."
             return clean_attrs, trimmed_text
