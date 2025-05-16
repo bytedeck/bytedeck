@@ -29,7 +29,7 @@ def urlize(text, trim_url_limit=None):
 
     # Avoid double-linkification if already linked
     if re.search(r'<a\s+[^>]*href=', text, re.IGNORECASE):
-        return text
+        return text  # Already contains an anchor tag
 
     def add_nofollow_and_trim(attrs, new):
         # Get the display text for the link
@@ -43,11 +43,12 @@ def urlize(text, trim_url_limit=None):
 
         clean_attrs[(None, "rel")] = "nofollow"
 
-        # Trim the text if a limit is set and exceeded
+        # If trimming is needed, return (attrs, trimmed_text)
         if trim_url_limit and isinstance(display_text, str) and len(display_text) > trim_url_limit:
-            display_text = display_text[:trim_url_limit].rstrip() + "..."
+            trimmed = display_text[:trim_url_limit].rstrip() + "..."
+            return clean_attrs, trimmed
 
-        # ✅ Always return both attributes and text
-        return clean_attrs, display_text
+        # Otherwise just return the attributes dict (NOT a tuple)
+        return clean_attrs
 
     return bleach.linkify(text, callbacks=[add_nofollow_and_trim])
