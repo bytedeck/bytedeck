@@ -129,7 +129,7 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(text)
         self.assertNotIn("href=", result)  # Should not linkify
 
-    def test_display_text_preserved():
+    def test_display_text_preserved(self):
         url = "http://test.com"
         result = urlize(url)
         assert result == '<a href="http://test.com" rel="nofollow">http://test.com</a>'
