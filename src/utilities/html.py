@@ -20,39 +20,37 @@ def textify(html):
 def urlize(text, trim_url_limit=None):
     """
     Converts plain text URLs into HTML anchor tags using bleach.linkify.
-    Adds rel="nofollow" attribute to anchor tags while correctly handling
-    attribute keys and avoiding serializer errors.
+    Adds rel="nofollow" to all links and optionally trims displayed text.
+    Existing <a href="..."> HTML is left untouched.
     """
     if not text:
         return ""
 
+    # Skip transformation if HTML anchor tags already exist
     if re.search(r'<a\s+[^>]*href=', text, re.IGNORECASE):
-        return text  # Optional: skip if already HTML
+        return text
 
-    def nofollow(attrs, new):
-        clean_attrs = {}
-
-        # Extract display text
+    def add_nofollow_and_trim(attrs, new):
+        # Extract display text if present
         display_text = attrs.get('_text', '')
+        cleaned_attrs = {}
 
-        for k, v in attrs.items():
-            if k == '_text':
+        # Normalize attribute keys to (namespace, name) tuples
+        for key, value in attrs.items():
+            if key == '_text':
                 continue
-            # Keep tuple keys as is, otherwise convert string keys to tuple keys
-            if isinstance(k, tuple) and len(k) == 2:
-                clean_attrs[k] = v
-            elif isinstance(k, str):
-                clean_attrs[(None, k)] = v
+            if isinstance(key, tuple):
+                cleaned_attrs[key] = value
+            else:  # key is a plain string
+                cleaned_attrs[(None, key)] = value
 
-        # Add rel="nofollow" using tuple key
-        clean_attrs[(None, "rel")] = "nofollow"
-        display_text = attrs.get('_text', '')
+        # Always add rel="nofollow"
+        cleaned_attrs[(None, "rel")] = "nofollow"
 
-        # If trimming is needed, update the '_text' key in attrs directly
-        if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
-            trimmed_text = display_text[:trim_url_limit].rstrip() + "..."
-            clean_attrs["_text"] = trimmed_text
+        # Optionally trim the display text
+        if trim_url_limit and isinstance(display_text, str) and len(display_text) > trim_url_limit:
+            cleaned_attrs["_text"] = display_text[:trim_url_limit].rstrip() + "..."
 
-        return clean_attrs  # always return dict, not tuple!
+        return cleaned_attrs  # Must be a dict only
 
-    return bleach.linkify(text, callbacks=[nofollow])
+    return bleach.linkify(text, callbacks=[add_nofollow_and_trim])
