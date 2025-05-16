@@ -39,17 +39,13 @@ def urlize(text, trim_url_limit=None):
         # Add rel="nofollow"
         clean_attrs[(None, "rel")] = "nofollow"
 
-        # Apply trimming to the displayed text (not href)
+        # Trim the visible text by returning a tuple (attrs, new_text)
         display_text = attrs.get('_text', '')
-        if trim_url_limit is not None and isinstance(display_text, str):
-            if len(display_text) > trim_url_limit:
-                trimmed = display_text[:trim_url_limit].rstrip() + "..."
-                clean_attrs[(None, '_text')] = trimmed
-            else:
-                clean_attrs[(None, '_text')] = display_text
-        else:
-            clean_attrs[(None, '_text')] = display_text
 
-        return clean_attrs
+        if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
+            trimmed_text = display_text[:trim_url_limit].rstrip() + "..."
+            return clean_attrs, trimmed_text
+        else:
+            return clean_attrs, display_text
 
     return bleach.linkify(text, callbacks=[nofollow])
