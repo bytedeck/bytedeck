@@ -98,3 +98,33 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(url, trim_url_limit=100)
         self.assertIn(url, result)
         self.assertNotIn("...", result)
+
+    def test_url_positions(self):
+        self.assertIn('<a href="http://start.com"', urlize("http://start.com is at the start"))
+        self.assertIn('<a href="http://middle.com"', urlize("Text before http://middle.com text after"))
+        self.assertIn('<a href="http://end.com"', urlize("Ends with http://end.com"))
+
+    def test_https_link(self):
+        result = urlize("Check https://secure.com")
+        self.assertIn('href="https://secure.com"', result)
+        self.assertIn('rel="nofollow"', result)
+
+    def test_non_url_text(self):
+        text = "This is just a sentence. Not a link!"
+        result = urlize(text)
+        self.assertEqual(result, text)
+
+    def test_trailing_punctuation(self):
+        result = urlize("Visit http://example.com.")
+        self.assertIn('href="http://example.com"', result)
+        self.assertTrue(result.endswith("</a>."))
+
+    def test_already_linked_html(self):
+        html = '<a href="http://example.com">example</a>'
+        result = urlize(html)
+        self.assertEqual(result, html)
+
+    def test_no_javascript_links(self):
+        text = "Click javascript:alert('xss')"
+        result = urlize(text)
+        self.assertNotIn("href=", result)  # Should not linkify
