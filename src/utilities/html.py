@@ -37,7 +37,7 @@ def urlize(text, trim_url_limit=None):
                 clean_attrs[(None, k)] = v
 
         # Add rel="nofollow"
-        clean_attrs[(None, "rel")] = "nofollow"
+        clean_attrs["rel"] = "nofollow"
 
         # Trim the visible text by returning a tuple (attrs, new_text)
         display_text = attrs.get('_text', '')
