@@ -48,6 +48,9 @@ def urlize(text, trim_url_limit=None):
             trimmed = display_text[:trim_url_limit].rstrip() + "..."
             return clean_attrs, trimmed
 
+        # Always include '_text' key to show link text
+        clean_attrs["_text"] = display_text
+
         # Otherwise just return the attributes dict (NOT a tuple)
         return clean_attrs
 
