@@ -1,6 +1,7 @@
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
 from utilities.html import textify, urlize
+from comments.models import clean_html
 
 
 class TestUtilsText(SimpleTestCase):
@@ -133,3 +134,50 @@ class UrlizeTests(SimpleTestCase):
         url = "http://test.com"
         result = urlize(url)
         assert result == '<a href="http://test.com" rel="nofollow">http://test.com</a>'
+
+    def test_clean_html_url_integration(self):
+        """
+        Ensure that clean_html applies urlize logic to plain text URLs.
+        """
+        text = "Go to www.example.com"
+        result = clean_html(text)
+        self.assertIn('<a href="http://www.example.com"', result)
+        self.assertIn('target="_blank"', result)
+        self.assertIn('rel="nofollow"', result)
+
+    def test_clean_html_trims_long_urls(self):
+        """
+        Test that clean_html trims long URLs in display text.
+        """
+        url = "http://example.com/this/is/a/very/long/path/that/needs/to/be/trimmed"
+        result = clean_html(url)
+        self.assertIn("...", result)
+        self.assertIn('href="http://example.com/this/is/a/very/long/path/that/needs/to/be/trimmed"', result)
+
+    def test_clean_html_ignores_existing_links(self):
+        """
+        Test that clean_html doesn't re-process existing anchor tags.
+        """
+        html = '<a href="http://example.com">Click</a>'
+        result = clean_html(html)
+        self.assertEqual(result.count('<a '), 1)
+        self.assertIn('href="http://example.com"', result)
+        self.assertIn('target="_blank"', result)  # Ensure it still enforces target
+
+    def test_clean_html_multiple_urls(self):
+        """
+        Ensure that multiple unformatted URLs are handled correctly.
+        """
+        html = "http://foo.com and www.bar.com"
+        result = clean_html(html)
+        self.assertIn('href="http://foo.com"', result)
+        self.assertIn('href="http://www.bar.com"', result)
+        self.assertEqual(result.count("<a "), 2)
+
+    def test_clean_html_does_not_link_javascript(self):
+        """
+        Ensure javascript: links are not linkified.
+        """
+        text = "Check javascript:alert('XSS')"
+        result = clean_html(text)
+        self.assertNotIn('<a ', result)
