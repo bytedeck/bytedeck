@@ -32,25 +32,22 @@ def urlize(text, trim_url_limit=None):
         return text
 
     def add_nofollow_and_trim(attrs, new):
-        # Extract visible link text
+        # Get the display text for the link
         display_text = attrs.get('_text', '')
 
-        # Normalize attribute keys
-        cleaned_attrs = {
-            (None, key) if not isinstance(key, tuple) else key: val
-            for key, val in attrs.items()
-            if key != '_text'
+        # Normalize all keys to (namespace, key) tuples
+        clean_attrs = {
+            (None, k) if isinstance(k, str) else k: v
+            for k, v in attrs.items() if k != '_text'
         }
 
-        # Add rel="nofollow"
-        cleaned_attrs[(None, 'rel')] = 'nofollow'
+        clean_attrs[(None, "rel")] = "nofollow"
 
-        # Return (attrs, trimmed_text) if we want to override display text
+        # Trim the text if a limit is set and exceeded
         if trim_url_limit and isinstance(display_text, str) and len(display_text) > trim_url_limit:
-            trimmed = display_text[:trim_url_limit].rstrip() + "..."
-            return cleaned_attrs, trimmed
+            display_text = display_text[:trim_url_limit].rstrip() + "..."
 
-        # Otherwise return just the attrs dict — Bleach uses original _text
-        return cleaned_attrs
+        # ✅ Always return both attributes and text
+        return clean_attrs, display_text
 
     return bleach.linkify(text, callbacks=[add_nofollow_and_trim])
