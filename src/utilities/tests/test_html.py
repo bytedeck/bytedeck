@@ -128,3 +128,8 @@ class UrlizeTests(SimpleTestCase):
         text = "Click javascript:alert('xss')"
         result = urlize(text)
         self.assertNotIn("href=", result)  # Should not linkify
+
+    def test_display_text_preserved():
+        url = "http://test.com"
+        result = urlize(url)
+        assert result == '<a href="http://test.com" rel="nofollow">http://test.com</a>'
