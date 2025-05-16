@@ -27,31 +27,29 @@ def urlize(text, trim_url_limit=None):
     if not text:
         return ""
 
-    # Avoid double-linkification if already linked
+    # Skip if already HTML links
     if re.search(r'<a\s+[^>]*href=', text, re.IGNORECASE):
         return text  # Already contains an anchor tag
 
     def add_nofollow_and_trim(attrs, new):
-        # Get the display text for the link
-        display_text = attrs.get('_text', '')
-
-        # Normalize all keys to (namespace, key) tuples
+        # Create clean dict with namespace-correct keys
         clean_attrs = {
             (None, k) if isinstance(k, str) else k: v
             for k, v in attrs.items() if k != '_text'
         }
 
+        # Add rel="nofollow"
         clean_attrs[(None, "rel")] = "nofollow"
 
-        # If trimming is needed, return (attrs, trimmed_text)
-        if trim_url_limit and isinstance(display_text, str) and len(display_text) > trim_url_limit:
-            trimmed = display_text[:trim_url_limit].rstrip() + "..."
-            return clean_attrs, trimmed
+        # Always preserve the display text
+        display_text = attrs.get("_text", "")
 
-        # Always include '_text' key to show link text
+        if trim_url_limit and isinstance(display_text, str) and len(display_text) > trim_url_limit:
+            display_text = display_text[:trim_url_limit].rstrip() + "..."
+
+        # Critical: Add display text back to dict
         clean_attrs["_text"] = display_text
 
-        # Otherwise just return the attributes dict (NOT a tuple)
         return clean_attrs
 
     return bleach.linkify(text, callbacks=[add_nofollow_and_trim])
