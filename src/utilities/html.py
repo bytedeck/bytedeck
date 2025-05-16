@@ -4,6 +4,7 @@ HTML utilities suitable for global use, matching `django.utils.html` naming conv
 # html2text is a python script that converts a page of HTML into clean, easy-to-read plain ASCII text
 import html2text
 import bleach
+import re
 
 
 def textify(html):
@@ -25,6 +26,9 @@ def urlize(text, trim_url_limit=None):
     if not text:
         return ""
 
+    if re.search(r'<a\s+[^>]*href=', text, re.IGNORECASE):
+        return text  # Optional: skip if already HTML
+
     def nofollow(attrs, new):
         clean_attrs = {}
 
@@ -42,6 +46,7 @@ def urlize(text, trim_url_limit=None):
 
         # Add rel="nofollow" using tuple key
         clean_attrs[(None, "rel")] = "nofollow"
+        display_text = attrs.get('_text', '')
 
         # If trimming is needed, update the '_text' key in attrs directly
         if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
