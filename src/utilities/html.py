@@ -25,28 +25,27 @@ def urlize(text, trim_url_limit=None):
     if not text:
         return ""
 
-    def nofollow(attrs, new):
-        clean_attrs = {}
+    def nofollow_factory(trim_limit):
+        def nofollow(attrs, new):
+            clean_attrs = {}
 
-        for k, v in attrs.items():
-            if k == '_text':
-                continue
-            # Keep tuple keys as is, otherwise convert string keys to tuple keys
-            if isinstance(k, tuple) and len(k) == 2:
-                clean_attrs[k] = v
-            elif isinstance(k, str):
-                clean_attrs[(None, k)] = v
+            for k, v in attrs.items():
+                if k == '_text':
+                    continue
+                if isinstance(k, tuple) and len(k) == 2:
+                    clean_attrs[k] = v
+                elif isinstance(k, str):
+                    clean_attrs[(None, k)] = v
 
-        # Add rel="nofollow" using tuple key
-        clean_attrs[(None, "rel")] = "nofollow"
+            clean_attrs[(None, "rel")] = "nofollow"
 
-        # Get the visible text to potentially trim
-        display_text = attrs.get('_text', '')
+            display_text = attrs.get('_text', '')
 
-        if trim_url_limit is not None and isinstance(display_text, str) and len(display_text) > trim_url_limit:
-            trimmed_text = display_text[:trim_url_limit].rstrip() + "..."
-            return clean_attrs, trimmed_text
-        else:
-            return clean_attrs, display_text
+            if trim_limit is not None and isinstance(display_text, str) and len(display_text) > trim_limit:
+                trimmed_text = display_text[:trim_limit].rstrip() + "..."
+                return clean_attrs, trimmed_text
+            else:
+                return clean_attrs, display_text
+        return nofollow
 
-    return bleach.linkify(text, callbacks=[nofollow])
+    return bleach.linkify(text, callbacks=[nofollow_factory(trim_url_limit)])
