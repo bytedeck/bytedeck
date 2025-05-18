@@ -1416,7 +1416,7 @@ def ajax_save_draft(request):
 
         draft_comment = sub.draft_comment
 
-        if draft_comment.text != submission_comment:
+        if submission_comment is not None and draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
             # sub.xp_requested = xp_requested
             response_data["result"] = "Draft saved"

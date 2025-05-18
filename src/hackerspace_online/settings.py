@@ -487,6 +487,8 @@ TENANT_DEFAULT_OWNER_USERNAME = env('TENANT_DEFAULT_OWNER_USERNAME')
 TENANT_DEFAULT_OWNER_PASSWORD = env('TENANT_DEFAULT_OWNER_PASSWORD')
 TENANT_DEFAULT_OWNER_EMAIL = env('TENANT_DEFAULT_OWNER_EMAIL', default='')
 
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
+
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
 SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
@@ -557,7 +559,7 @@ ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | �
 # The URL to redirect to after a successful e-mail confirmation, in case no user is logged in.
 ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = LOGIN_REDIRECT_URL  # (=None)
 # The URL to redirect to after a successful e-mail confirmation, in case of an authenticated user. Set to None to use settings.LOGIN_REDIRECT_URL.
-# ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS #(=3)
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 90
 # Determines the expiration date of email confirmation mails (# of days).
 # ACCOUNT_EMAIL_REQUIRED = True #(=False)
 # The user is required to hand over an e-mail address when signing up.
