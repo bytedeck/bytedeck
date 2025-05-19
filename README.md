@@ -107,16 +107,45 @@ This will create your docker containers and initialize the database by running m
 `docker compose logs -f`
 
 ### Creating a Tenant
-If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
 
-0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker compose up web` (and ignore the link it tells you to access the page)
-1. Go to create a new deck at http://localhost:8000/decks/new/.
-2. Fill out all the empty boxes with your info and hit the 'create' button at the bottom.
-3. You should now be at the login, you can log in using log in using
-   * username: admin
-   * password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in the .env file)
-4. Now you should be in your own bytedeck site!
-5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
+If everything has worked so far, you should now be able to create your own Bytedeck website (aka a new "deck") as a new tenant:
+
+0. If the server isn't already running, start it with:
+   - `python src/manage.py runserver`
+     **or**
+   - `docker compose up web`
+     *(Ignore the link it outputs; it won’t take you to the right place.)*
+
+1. Go to [http://localhost:8000/decks/new/](http://localhost:8000/decks/new/) to create a new deck.
+   > **Note:** You may be prompted to log in to the Django admin interface before accessing the page.
+   >
+   > Use the following credentials:
+   > - **Username**: `admin`
+   > - **Password**: `password`
+   >   *(Defined in `TENANT_DEFAULT_SUPERUSER_PASSWORD` in your `.env` file)*
+
+2. Fill in all required fields and click the **Create** button at the bottom.
+
+3. You’ll now be at the login page. To log in as the default admin:
+   - **Username**: `admin`
+   - **Password**: `password`
+     *(Defined in `TENANT_DEFAULT_SUPERUSER_PASSWORD` in your `.env` file)*
+
+4. To log in as the **owner of the deck**:
+   1. Go to the `_sent_mail` directory.
+   2. Open the most recent file—it contains a confirmation link.
+   3. Click the link and press the **Confirm** button; you'll be taken to the login page.
+   4. Return to the `_sent_mail` directory.
+   5. Open the latest file—this will contain the owner’s login credentials.
+   6. On the login page, log in using:
+      - **Username**: as shown in the email (e.g. `firstname.lastname`)
+      - **Password**: as shown in the email
+
+5. You should now be inside your own Bytedeck site!
+
+6. To stop the project:
+   - Press `Ctrl + C` in the terminal windows
+   - Wait for all containers to shut down completely
 
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:
