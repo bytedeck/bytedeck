@@ -74,6 +74,7 @@ This will create your docker containers and initialize the database by running m
    1. Create a python virtual environment (we'll put ours in a venv directory):
    `python -m venv venv --prompt bytedeck`
    1. Enter the virtual environment:
+
       **Linux / macOS**
       `source venv/bin/activate`
 
