@@ -2,7 +2,6 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, HttpResponseRedirect, redirect, render
@@ -97,15 +96,10 @@ def ajax(request):
         notifications = notifications[:limit]
         notes = []
         for note in notifications:
-            removable = note.target_content_type != ContentType.objects.get(
-                app_label="announcements",
-                model='announcement'
-            )
             notes.append(
                 {
                     'link': str(note.get_link()),
                     'id': str(note.id),
-                    'removable': removable,
                 }
             )
 
