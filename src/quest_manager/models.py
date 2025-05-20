@@ -871,6 +871,8 @@ class QuestSubmission(models.Model):
     is_approved = models.BooleanField(default=False)
     time_approved = models.DateTimeField(null=True, blank=True)
     time_returned = models.DateTimeField(null=True, blank=True)
+    time_started = models.DateTimeField(null=True, blank=True)
+    time_started = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
@@ -915,6 +917,11 @@ class QuestSubmission(models.Model):
     def get_absolute_url(self):
         return reverse('quests:submission', kwargs={'submission_id': self.id})
 
+    def mark_started(self):
+        if not self.time_started:
+            self.time_started = timezone.now()
+            self.save()
+
     def mark_completed(self, xp_requested=0):
         self.is_completed = True
         self.time_completed = timezone.now()
@@ -951,6 +958,13 @@ class QuestSubmission(models.Model):
 
     def is_returned(self):
         return self.time_completed is not None and not self.is_completed
+
+    def is_in_progress(self):
+        """
+        Returns True if the submission has been started but not yet completed.
+        Used to identify quests that a student is currently working on.
+        """
+        return self.time_started is not None and not self.is_completed
 
     def get_comments(self):
         return Comment.objects.all_with_target_object(self)

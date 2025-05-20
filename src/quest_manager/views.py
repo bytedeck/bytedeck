@@ -954,6 +954,7 @@ class ApprovalsViewTabTypes:
     APPROVED = 1
     RETURNED = 2
     FLAGGED = 3
+    PENDING = 4
 
 
 @non_public_only_view
@@ -995,6 +996,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         current_teacher_only = True
 
     submitted_submissions = []
+    pending_submissions = []
     approved_submissions = []
     returned_submissions = []
     flagged_submissions = []
@@ -1018,6 +1020,13 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
         flagged_submissions = paginate(flagged_submissions, page)
+    elif "/in_progress/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.PENDING
+        pending_submissions = QuestSubmission.objects.all_not_completed()
+        returned_submissions = QuestSubmission.objects.all_returned()
+        # Removes the returned submissions from being displayed with the in progress submissions
+        pending_submissions = list(set(pending_submissions) - set(returned_submissions))
+        pending_submissions = paginate(pending_submissions, page)
     else:  # default is /submitted/ (awaiting approval)
         view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
@@ -1030,6 +1039,13 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         submitted_submissions = paginate(submitted_submissions, page)
 
     tab_list = [
+        {
+            "name": "In Progress",
+            "submissions": pending_submissions,
+            "active": view_type == ApprovalsViewTabTypes.PENDING,
+            "time_heading": "Started",
+            "url": reverse("quests:in_progress")
+        },
         {
             "name": "Submitted",
             "submissions": submitted_submissions,
@@ -1500,6 +1516,10 @@ def submission(request, submission_id=None, quest_id=None):
 
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
+
+    # Track when the student first opens the submission page (starts working on the quest)
+    # This will allow for a time-stamp on in progress quests
+    sub.mark_started()
 
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
