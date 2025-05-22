@@ -644,7 +644,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest, xp=5)
         self.draft_comment = baker.make(Comment, text="test draft comment")
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
-                              draft_comment=self.draft_comment)
+                              draft_comment=self.draft_comment, semester=self.semester)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -733,6 +733,40 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # assert that xp matches rank
         self.test_student.refresh_from_db()
         self.assertEqual(self.test_student.profile.xp_cached, 80)
+
+    def test_complete__xp_requested_when_is_approved(self):
+        """ Checks that xp_requested can't be changed after a qubmission is approved
+        and also checks the bugfix for https://github.com/bytedeck/bytedeck/issues/1561
+        """
+        quest = baker.make(Quest, xp_can_be_entered_by_students=True)
+        submission = baker.make(
+            QuestSubmission,
+            quest=quest,
+            user=self.test_student,
+            is_completed=True,
+            is_approved=True,  # this means shouldn't be able to change xp_requested anymore
+            xp_requested=10,  # for later comparison to make sure it isn't changed
+        )
+
+        self.client.force_login(self.test_student)
+        url = reverse("quests:complete", args=[submission.pk])
+
+        response = self.client.post(
+            url,
+            data={
+                "xp_requested": 50,  # should be trigger error
+                "comment": "1",
+                "comment_text": "just a comment",
+            }
+        )
+
+        self.assertContains(
+            response,
+            "already been approved",
+            status_code=403,
+        )
+        submission.refresh_from_db()
+        self.assertEqual(submission.xp_requested, 10)  # Ensure XP wasn't updated
 
     def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
