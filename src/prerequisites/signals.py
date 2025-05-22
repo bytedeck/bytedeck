@@ -83,7 +83,7 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
     """
-    if instance.parent_content_type.model == 'quest':
+    if isinstance(instance.parent_object, Quest):
         # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
         # Cover this instance in a post_delete signal receiver for Quest objects.
         if instance.parent_object:
