@@ -7,7 +7,7 @@ jQuery.fn.preventDoubleSubmission = function () {
 
         if ($form.data('submitted') === true) {
             // Previously submitted - don't submit again
-            alert('I\'m working on it! Extra clicks not required. Thanks!');
+            alert("This form has already been submitted, please be patient while your request is being processed. You can also refresh the page if you want to try to resubmit the form.");
             e.preventDefault();
         } else {
             // Mark it so that the next submit can be ignored
