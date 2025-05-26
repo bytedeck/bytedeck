@@ -126,7 +126,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "icon", "active")
+    fields = ("title", "short_description", "icon", "active")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -139,7 +139,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "icon", "active")
+    fields = ("title", "short_description", "icon", "active")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
