@@ -12,8 +12,18 @@
                 title = "Edit this campaign" >
             <i class="fa fa-edit"></i>
             </a>
-            <a class="btn btn-danger" href="{% url 'quests:category_delete' object.id %}" role="button"
-                title = "Delete this campaign" >
+
+            <a class="btn btn-danger"
+                {% if object.quest_count != 0 %}
+                    disabled
+                    tabindex="-1"
+                    aria-disabled="true"
+                    title="Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first"
+                {% else %}
+                    href="{% url 'quests:category_delete' object.id %}" title="Delete this campaign"
+                    title="Delete this campaign"
+                {% endif %}
+                role="button">
             <i class="fa fa-trash-o"></i>
             </a>
         </div>
