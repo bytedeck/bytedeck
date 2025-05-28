@@ -85,6 +85,7 @@ class QuestResource(resources.ModelResource):
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
+    campaign_short_description = Field()
 
     class Meta:
         model = Quest
@@ -92,6 +93,20 @@ class QuestResource(resources.ModelResource):
         exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
 
     def dehydrate_prereq_import_ids(self, quest):
+        """
+        Returns a string of prerequisite import IDs for the given quest.
+
+        This method is used during data export to include a list of prerequisite
+        quest or badge import IDs (UUIDs), separated by '&', in the exported dataset.
+        Only simple prerequisites (no OR logic) are included. If there are no prerequisites,
+        returns an empty string.
+
+        Args:
+            quest (Quest): The quest instance being exported.
+
+        Returns:
+            str: A string of prerequisite import IDs separated by '&', or an empty string.
+        """
         # save basic single/simple prerequisites, if there are any (no OR).
         # save as an & seperated list of import_ids (UUIDs)
         prereq_import_ids = ''
@@ -101,15 +116,53 @@ class QuestResource(resources.ModelResource):
         return prereq_import_ids
 
     def dehydrate_campaign_title(self, quest):
+        """
+        Returns the title of the campaign associated with the given quest.
+
+        This method is used during data export to include the campaign's title
+        in the exported dataset. If the quest does not have an associated campaign,
+        returns None.
+
+        Args:
+            quest (Quest): The quest instance being exported.
+
+        Returns:
+            str or None: The title of the campaign, or None if not available.
+        """
         if quest.campaign:
             return quest.campaign.title
         return None
 
     def dehydrate_campaign_icon(self, quest):
+        """
+        Returns the icon of the campaign associated with the given quest.
+
+        This method is used during data export to include the campaign's icon
+        in the exported dataset. If the quest does not have an associated campaign,
+        returns None.
+
+        Args:
+            quest (Quest): The quest instance being exported.
+
+        Returns:
+            str or None: The icon of the campaign, or None if not available.
+        """
         if quest.campaign:
             return quest.campaign.icon
         else:
             return None
+
+    def dehydrate_campaign_short_description(self, quest):
+        """
+        Returns the short description of the campaign associated with the given quest.
+
+        This method is used during data export to include the campaign's short description
+        in the exported dataset. If the quest does not have an associated campaign,
+        returns None.
+        """
+        if quest.campaign:
+            return quest.campaign.short_description
+        return None
 
     def generate_simple_prereqs(self, parent_object, data_dict):
         # check that the prereq quest exists as an import-linked quest via import_id
@@ -143,12 +196,16 @@ class QuestResource(resources.ModelResource):
     def generate_campaign(self, quest, data_dict):
         campaign_title = data_dict['campaign_title']
         campaign_icon = data_dict['campaign_icon']
+        campaign_short_description = data_dict['campaign_short_description']
 
         # Might not have a campaign.
         if campaign_title:
             campaign, created = Category.objects.get_or_create(
                 title=campaign_title,
-                defaults={'icon': campaign_icon},
+                defaults={
+                    'icon': campaign_icon,
+                    'short_description': campaign_short_description
+                },
             )
 
             quest.campaign = campaign
