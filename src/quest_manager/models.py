@@ -24,6 +24,7 @@ class Category(IsAPrereqMixin, models.Model):
     """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
+    short_description = models.CharField(max_length=500, blank=True, null=True)
     active = models.BooleanField(
         default=True,
         help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
