@@ -64,6 +64,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
+        self.client.force_login(self.test_teacher)
 
     def test_library_tenant_exists(self):
         self.assertIsNotNone(self.library_tenant)
@@ -89,6 +91,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
     def test_import_non_existing_quest_to_current_deck(self):
         url = reverse('library:import_quest', args=[str(uuid.uuid4())])
 
+        # Already logged in as staff in setUp
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
@@ -161,6 +164,51 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         response = self.assert200('library:quest_list')
         self.assertContains(response, '</i>&nbsp; Quest Library</a>')
 
+    def test_quest_list_view_requires_auth_and_staff(self):
+        """
+        Test that the quest list view requires authentication and staff permissions.
+        """
+        url = reverse('library:quest_list')
+
+        # Unauthenticated user should be redirected to login
+        self.client.logout()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response.url)
+
+        # Authenticated non-staff user should be forbidden (403)
+        self.client.force_login(self.test_student)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+        # Authenticated staff user should succeed
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_import_quest_requires_auth_and_staff(self):
+        """
+        Test that the import quest view requires authentication and staff permissions.
+        """
+        import_url = reverse('library:import_quest', args=[str(uuid.uuid4())])
+
+        # Unauthenticated user
+        self.client.logout()
+        response = self.client.get(import_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response.url)
+
+        # Authenticated non-staff user
+        self.client.force_login(self.test_student)
+        response = self.client.get(import_url)
+        self.assertEqual(response.status_code, 403)
+
+        # Authenticated staff user
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(import_url)
+        # 404 is expected since the quest doesn't exist
+        self.assertEqual(response.status_code, 404)
+
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def setUp(self):
@@ -171,13 +219,13 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
+        self.client.force_login(self.test_teacher)
 
     def test_import_campaign_already_exists(self):
         current_category = Category.objects.first()
-
         import_url = reverse('library:import_category', args=(current_category.name,))
         response = self.client.get(import_url)
-
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
     def test_import_campaign_success(self):
@@ -189,13 +237,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             self.assertEqual(library_campaign.quest_set.count(), 3)
 
         import_url = reverse('library:import_category', args=(library_campaign.name,))
-
         response = self.client.post(import_url)
         self.assertEqual(response.url, reverse('quests:categories_inactive'))
         self.assertEqual(Category.objects.count(), 2)
-
         imported_library_campaign = Category.objects.filter(title=library_campaign.name).first()
-
         self.assertIsNotNone(imported_library_campaign)
         self.assertFalse(imported_library_campaign.active)
 
@@ -204,3 +249,28 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_import_campaign_requires_auth_and_staff(self):
+        """
+        Test that the import campaign view requires authentication and staff permissions.
+        """
+        # Make sure there is at least one category to import
+        category = baker.make(Category)
+        import_url = reverse('library:import_category', args=(category.name,))
+
+        # Unauthenticated user
+        self.client.logout()
+        response = self.client.get(import_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response.url)
+
+        # Authenticated non-staff user
+        self.client.force_login(self.test_student)
+        response = self.client.get(import_url)
+        self.assertEqual(response.status_code, 403)
+
+        # Authenticated staff user
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(import_url)
+        # Should succeed (200 or 404 depending on setup)
+        self.assertIn(response.status_code, [200, 404])

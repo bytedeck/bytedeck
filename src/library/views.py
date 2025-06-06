@@ -1,5 +1,7 @@
 from django.contrib import messages
 from django.db import connection
+from django.contrib.auth.decorators import login_required
+from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
@@ -11,7 +13,13 @@ from .importer import import_quests_to
 from .utils import get_library_schema_name, library_schema_context
 
 
+@login_required
+@staff_member_required
 def quests_library_list(request):
+    """
+    List all quests in the library
+    """
+
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
@@ -26,7 +34,13 @@ def quests_library_list(request):
     return render(request, 'library/library_quests.html', context)
 
 
+@login_required
+@staff_member_required
 def campaigns_library_list(request):
+    """
+    List all campaigns (categories) in the library
+    """
+
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
@@ -40,6 +54,8 @@ def campaigns_library_list(request):
     return render(request, 'library/library_categories.html', context)
 
 
+@login_required
+@staff_member_required
 def import_quest_to_current_deck(request, quest_import_id):
     """
     Import a single quest to the current deck
@@ -76,9 +92,11 @@ def import_quest_to_current_deck(request, quest_import_id):
     return redirect('quests:drafts')
 
 
+@login_required
+@staff_member_required
 def import_campaign(request, campaign_name):
     """
-    Import a single quest to the current deck
+    Import all quests from a campaign (category)
     """
 
     if request.method == 'GET':
