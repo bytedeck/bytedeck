@@ -17,7 +17,13 @@ from .utils import get_library_schema_name, library_schema_context
 @staff_member_required
 def quests_library_list(request):
     """
-    List all quests in the library
+    Display a list of all active quests available in the shared library
+
+    Args:
+        request: HttpRequest object containing request data
+
+    Returns:
+        HttpResponse: Rendered template with library quests context
     """
 
     with library_schema_context():
@@ -38,7 +44,13 @@ def quests_library_list(request):
 @staff_member_required
 def campaigns_library_list(request):
     """
-    List all campaigns (categories) in the library
+    Display a list of all active campaigns (categories) available in the shared library.
+
+    Args:
+        request: HttpRequest object containing request data
+
+    Returns:
+        HttpResponse: Rendered template with library categories context
     """
 
     with library_schema_context():
@@ -58,7 +70,15 @@ def campaigns_library_list(request):
 @staff_member_required
 def import_quest_to_current_deck(request, quest_import_id):
     """
-    Import a single quest to the current deck
+    Import a quest from the library to the current deck.
+
+    Args:
+        request: HttpRequest object containing request data
+        quest_import_id: String ID of the quest to import
+
+    Returns:
+        HttpResponse: GET requests return rendered confirmation template
+        HttpResponseRedirect: POST requests redirect to drafts view
     """
 
     if request.method == 'GET':
@@ -96,7 +116,15 @@ def import_quest_to_current_deck(request, quest_import_id):
 @staff_member_required
 def import_campaign(request, campaign_name):
     """
-    Import all quests from a campaign (category)
+    Import all quests from a specified campaign (category) to the current deck.
+
+    Args:
+        request: HttpRequest object containing request data
+        campaign_name: String name of the campaign to import
+
+    Returns:
+        HttpResponse: GET requests return rendered confirmation template
+        HttpResponseRedirect: POST requests redirect to inactive categories view
     """
 
     if request.method == 'GET':
