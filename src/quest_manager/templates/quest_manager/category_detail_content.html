@@ -5,6 +5,9 @@
          src="{% firstof category_icon_url category.get_icon_url %}"
          alt="icon" />
   </div>
+  <div class="media-body">
+    <p>{{ category.short_description|default:"<i>[No description provided]</i>" }}</p>
+  </div>
 </div>
 <div id="category-info-{% firstof category_id category.id %}"
      class="panel panel-primary panel-top">
