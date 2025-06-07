@@ -62,6 +62,10 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
 
         self.test_password = 'password'
 
+        with library_schema_context():
+            # Create a quest in the library tenant
+            self.library_quest = baker.make(Quest)
+
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
@@ -78,12 +82,10 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         Tests that the library pages redirect anonymous users to the login page.
         This is important to ensure that only authenticated users can access the library.
         """
-        with library_schema_context():
-            library_quest = baker.make(Quest)
 
         # Should redirect to login for anonymous users
         self.assertRedirectsLogin('library:quest_list')
-        self.assertRedirectsLogin('library:import_quest', args=[library_quest.import_id])
+        self.assertRedirectsLogin('library:import_quest', args=[self.library_quest.import_id])
 
     def test_all_library_quest_page_status_codes_for_students(self):
         """
@@ -91,13 +93,9 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         """
         self.client.force_login(self.test_student)
 
-        # Create a quest in the library tenant
-        with library_schema_context():
-            library_quest = baker.make(Quest)
-
         # Students should not have access to the library pages
         self.assert403('library:quest_list')
-        self.assert403('library:import_quest', args=[library_quest.import_id])
+        self.assert403('library:import_quest', args=[self.library_quest.import_id])
 
     def test_all_library_quest_page_status_codes_for_staff(self):
         """
@@ -105,15 +103,11 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         """
         self.client.force_login(self.test_teacher)
 
-        # Create a quest in the library tenant
-        with library_schema_context():
-            library_quest = baker.make(Quest)
-
         # Staff should have access to the library pages
         self.assert200('library:quest_list')
-        self.assert200('library:import_quest', args=[library_quest.import_id])
+        self.assert200('library:import_quest', args=[self.library_quest.import_id])
 
-    def test_quest_list_view(self):
+    def test_quests_library_list__showing_only_library_quests(self):
         """
         Add test that checks if the library quest list view works and does not list the quests from other tenants
         """
@@ -130,58 +124,62 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(len(response.context['library_quests']), non_library_quest_count)
 
-    def test_import_non_existing_quest_to_current_deck(self):
+    def test_import_quest_to_current_deck(self):
         """
-        Add test that checks if the import quest to current deck view works
-        when the quest does not exist in the library schema.
+        Add tests that check if the import quest to current deck view works.
+        2 tests where the quest doesn't import and 1 test of a quest succeeding to import
         """
         self.client.force_login(self.test_teacher)
-        # Create a non-existing quest import_id
+
+        # Fail non existing quest
+        # This quest fails to import because the import_id doesn't point to a quest
+
+        # Create the url leading to a non-existent quest
         url = reverse('library:import_quest', args=[str(uuid.uuid4())])
         self.assert404URL(url)
 
-    def test_import_quest_already_exists_locally(self):
-        """Currently we don't support overwriting existing quests (based on import_id),
-        so make sure the import feature rejects already existing import_ids
-        TODO: When we add an overwrite feature, this quest will need to be modified to test that feature"""
+        # Fail existing quest
+        # This quest fails to import becuase there is already a quest with the same
+        # import_id already on the current deck
+        # TODO: When we add an overwrite feature, this quest will need to be modified to test that feature
 
-        self.client.force_login(self.test_teacher)
-        # Create quest in the test tenant
+        # Create a quest in the local test schema
         quest = baker.make(Quest)
 
-        # Create a quest in the libray schema with same import_id:
+        # create a quest in the library schema with same import_id
         with library_schema_context():
             library_quest = baker.make(Quest, import_id=quest.import_id)
 
-        # Check that the quest exitsts and sends a 200 when trying to import it
-        # It sends a 200 because there is a confirmation page that stops the import
-        self.assert200('library:import_quest', args=[library_quest.import_id])
+        url = reverse('library:import_quest', args=[library_quest.import_id])
 
-    def test_import_library_to_current_deck(self):
-        """
-        Add test that checks if the import quest to current deck view works
-        """
-        self.client.force_login(self.test_teacher)
-        # Create a quest in the library tenant
+        # Check that it sends you to the confrimation page with
+        self.assertContains(
+            self.client.get(url),
+            'Your deck already contains a quest with a matching Import ID'
+        )
+
+        # Success
+        # This quest imports correctly
+
+        # Create a quest in the library schema
         with library_schema_context():
             library_quest = baker.make(Quest)
 
-        # Sanity check that the library quest does not exist in the non-library tenant
+        # Sanity check that the library quest does not exist in the local test schema
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(import_id=library_quest.import_id)
 
         url = reverse('library:import_quest', args=[library_quest.import_id])
 
         # Test the confirmation page
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(self.client.get(url), 'Are you sure you want to import this quest into your deck')
 
-        # Make a request to import the quest
+        # Make the request to import the quest
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('quests:drafts'))
 
-        # Check that the quest now exists in the non-library tenant
+        # Check that the quest now exists in the local test schema
         quest_qs = Quest.objects.filter(import_id=library_quest.import_id)
         self.assertTrue(quest_qs.exists())
 
@@ -215,6 +213,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
 
         self.test_password = 'password'
 
+        with library_schema_context():
+            # Create a category in the library tenant
+            self.library_category = baker.make(Category)
+
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
@@ -224,13 +226,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         Tests that the library pages redirect anonymous users to the login page.
         This is important to ensure that only authenticated users can access the library.
         """
-        with library_schema_context():
-            library_category = baker.make(Category)
-
         # Category list view
         self.assertRedirectsLogin('library:category_list')
         # Import campaign view
-        self.assertRedirectsLogin('library:import_category', args=[library_category.name])
+        self.assertRedirectsLogin('library:import_category', args=[self.library_category.name])
 
     def test_all_library_category_page_status_codes_for_students(self):
         """
@@ -238,12 +237,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         """
         self.client.force_login(self.test_student)
 
-        with library_schema_context():
-            library_category = baker.make(Category)
-
         # Students should not have access to the library pages
         self.assert403('library:category_list')
-        self.assert403('library:import_category', args=[library_category.name])
+        self.assert403('library:import_category', args=[self.library_category.name])
 
     def test_all_library_category_page_status_codes_for_staff(self):
         """
@@ -251,12 +247,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         """
         self.client.force_login(self.test_teacher)
 
-        with library_schema_context():
-            library_category = baker.make(Category)
-
         # Staff should have access to the library pages
         self.assert200('library:category_list')
-        self.assert200('library:import_category', args=[library_category.name])
+        self.assert200('library:import_category', args=[self.library_category.name])
 
     def test_import_campaign_already_exists(self):
         self.client.force_login(self.test_teacher)
