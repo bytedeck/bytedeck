@@ -49,6 +49,26 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('<a href="http://www.example.com"', result)
         self.assertIn('www.example.com', result)
 
+        text = "1.www.example.com"
+        result = urlize(text)
+        self.assertIn('<a href="http://www.example.com"', result)
+        self.assertTrue(result.startswith('1.<a href="http://www.example.com"'))
+
+        text = "a.www.example.com"
+        result = urlize(text)
+        self.assertIn('<a href="http://www.example.com"', result)
+        self.assertTrue(result.startswith('a.<a href="http://www.example.com"'))
+
+        text = "1.http://example.com"
+        result = urlize(text)
+        self.assertIn('<a href="http://example.com"', result)
+        self.assertTrue(result.startswith('1.<a href="http://example.com"'))
+
+        text = "a.http://example.com"
+        result = urlize(text)
+        self.assertIn('<a href="http://example.com"', result)
+        self.assertTrue(result.startswith('a.<a href="http://example.com"'))
+
     def test_empty(self):
         """
         Test that empty string or None input returns an empty string without error.
