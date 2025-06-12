@@ -17,7 +17,7 @@ class BadgeForm(forms.ModelForm):
         )
 
         widgets = {
-            'tags': BootstrapTaggitSelect2Widget()
+            'tags': BootstrapTaggitSelect2Widget(attrs={'data-theme': 'bootstrap'})
         }
 
 
@@ -27,8 +27,8 @@ class BadgeAssertionForm(forms.ModelForm):
         # fields = '__all__'
         exclude = ['ordinal', 'issued_by', 'semester']
         widgets = {
-            'user': Select2Widget(),
-            'badge': Select2Widget(),
+            'user': Select2Widget(attrs={'data-theme': 'bootstrap'}),
+            'badge': Select2Widget(attrs={'data-theme': 'bootstrap'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -44,8 +44,8 @@ class BadgeAssertionForm(forms.ModelForm):
 class ProfileMultiSelectWidget(ModelSelect2MultipleWidget):
     model = Profile
     search_fields = [
-        'first_name__istartswith',
-        'last_name__istartswith',
+        'user__first_name__istartswith',
+        'user__last_name__istartswith',
         'preferred_name__istartswith',
         'user__username__istartswith',
     ]
@@ -62,12 +62,13 @@ class BulkBadgeAssertionForm(forms.Form):
         widget=ModelSelect2Widget(
             model=Badge,
             search_fields=['name__icontains'],
+            attrs={'data-theme': 'bootstrap'}
         )
     )
     students = forms.ModelMultipleChoiceField(
         # TODO just use the user objects here instead of profile
         # Goign back to the user just to sort by profile string is...a hack.  How to do that properly?!
-        queryset=Profile.objects.all().order_by('user__profile'),
+        queryset=Profile.objects.all().order_by('user__first_name', 'user__last_name'),
         required=True,
-        widget=ProfileMultiSelectWidget(),
+        widget=ProfileMultiSelectWidget(attrs={'data-theme': 'bootstrap'}),
     )

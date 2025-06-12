@@ -5,6 +5,9 @@
          src="{% firstof category_icon_url category.get_icon_url %}"
          alt="icon" />
   </div>
+  <div class="media-body">
+    <p>{{ category.short_description|default:"<i>[No description provided]</i>" }}</p>
+  </div>
 </div>
 <div id="category-info-{% firstof category_id category.id %}"
      class="panel panel-primary panel-top">
@@ -15,8 +18,8 @@
     <div class="row">
       <div class="col-sm-6">
         <ul class="list-unstyled">
-          <li>Quests in this campaign: {% firstof category_quest_count category.quest_count %}</li>
-          <li>Total XP available: {% firstof category_total_xp_available category.xp_sum %}</li>
+          <li>Published quests in this campaign: {% firstof category_quest_count category.quest_count "0" %}</li>
+          <li>Total XP available: {% firstof category_total_xp_available category.xp_sum "0" %}</li>
           <li>Active: {% firstof category_active category.active %}</li>
         </ul>
       </div>
@@ -58,7 +61,7 @@
               role="tab"
               aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
               aria-controls="collapse-quest-{{q.id}}"
-              {% comment %} ID makes the ajax_content_loading.html file populate detailed content {% endcomment %}
+              {% comment %} ID allows bootstrap-table-accordion.js populate detailed content {% endcomment %}
               id="heading-quest-{{q.id}}"
           >
             <!-- COLUMNS -->
@@ -84,7 +87,7 @@
     {% comment %}
       ### COLLAPSING CONTENT ###
       This is the content that is hidden until the row is clicked.
-      ajax_content_loading.html inserts quest content here.
+      bootstrap-table-accordion.js inserts quest content here.
       If the content hasn't been retrieved yet from the server, a loading icon is displayed.
     {% endcomment %}
     <div style="display: none"

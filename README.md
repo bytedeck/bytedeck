@@ -30,10 +30,10 @@ As a sanity check, make sure docker compose works too:
 If you can't run docker without sudo, you can try adding yourself to the docker group (is this still needed? I don't think so)
 `sudo usermod -aG docker $USER`
 
-#### Make sure you have Python3.8
+#### Make sure you have Python3.10
 
 Using a different version of Python will probably give you errors when installing the dependencies due to slight changes between versions:
-`sudo apt install python3.8`
+`sudo apt install python3.10`
 
 ### Getting the Code
 
@@ -74,7 +74,16 @@ This will create your docker containers and initialize the database by running m
    1. Create a python virtual environment (we'll put ours in a venv directory):
    `python -m venv venv --prompt bytedeck`
    1. Enter the virtual environment:
-   `source venv/bin/activate`
+
+      **Linux / macOS**
+      `source venv/bin/activate`
+
+      **Windows (bash)**
+      `source venv/Scripts/activate`
+
+      **Windows**
+      `venv/Scripts/activate`
+
    1. Install wheel to prevent errors (why isn't this included in the new venv module?)
    `python -m pip install wheel`
    1. Install our requirements:
@@ -99,16 +108,45 @@ This will create your docker containers and initialize the database by running m
 `docker compose logs -f`
 
 ### Creating a Tenant
-If everything has worked so far, you should now be able to create your own bytedeck website (aka a new 'deck') as a new tenant:
 
-0. If the server isn't already running, run it with: `python src/manage.py runserver` or `docker compose up web` (and ignore the link it tells you to access the page)
-1. Go to django admin at http://localhost:8000/admin/ (this is known as the Public tenant, it's where we can control all the other sites or tenants)
-2. In the Tenants app near the bottom, create a new tenant by giving it a name, for example: `hackerspace`
-3. This will create a new site at http://hackerspace.localhost:8000 go there and log in
-   - user: admin
-   - password: password (this is defined in TENANT_DEFAULT_SUPERUSER_PASSWORD in the .env file)
-4. Now you should be in your own bytedeck site!
-5. If you would like to stop the project, use `Ctrl + C` in the command lines, then wait for each of the containers to stop.
+If everything has worked so far, you should now be able to create your own Bytedeck website (aka a new "deck") as a new tenant:
+
+0. If the server isn't already running, start it with:
+   - `python src/manage.py runserver`
+     **or**
+   - `docker compose up web`
+     *(Ignore the link it outputs; it won’t take you to the right place.)*
+
+1. Go to [http://localhost:8000/decks/new/](http://localhost:8000/decks/new/) to create a new deck.
+   > **Note:** You may be prompted to log in to the Django admin interface before accessing the page.
+   >
+   > Use the following credentials:
+   > - **Username**: `admin`
+   > - **Password**: `password`
+   >   *(Defined in `TENANT_DEFAULT_SUPERUSER_PASSWORD` in your `.env` file)*
+
+2. Fill in all required fields and click the **Create** button at the bottom.
+
+3. You’ll now be at the login page. To log in as the default admin:
+   - **Username**: `admin`
+   - **Password**: `password`
+     *(Defined in `TENANT_DEFAULT_SUPERUSER_PASSWORD` in your `.env` file)*
+
+4. To log in as the **owner of the deck**:
+   1. Go to the `_sent_mail` directory.
+   2. Open the most recent file—it contains a confirmation link.
+   3. Click the link and press the **Confirm** button; you'll be taken to the login page.
+   4. Return to the `_sent_mail` directory.
+   5. Open the latest file—this will contain the owner’s login credentials.
+   6. On the login page, log in using:
+      - **Username**: as shown in the email (e.g. `firstname.lastname`)
+      - **Password**: as shown in the email
+
+5. You should now be inside your own Bytedeck site!
+
+6. To stop the project:
+   - Press `Ctrl + C` in the terminal windows
+   - Wait for all containers to shut down completely
 
 ### Installing more Sample Data
 New tenants will come with some basic initial data already installed, but if you want masses of data to simulate a more realistic site in production:

@@ -52,6 +52,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
+        self.assertRedirectsLogin('profiles:profile_delete', args=[1])
 
     def test_all_profile_page_status_codes_for_students(self):
 
@@ -73,6 +74,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('profiles:profile_list_inactive')
         self.assert403('profiles:profile_list_staff')
         self.assert403('profiles:profile_list_block', args='1')
+        self.assert403('profiles:profile_delete', args=[s_pk])
 
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
@@ -102,6 +104,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert404("profiles:profile_list_block", kwargs={"pk": "999"})
         self.assert200('profiles:profile_list_inactive')
         self.assert200('profiles:tag_chart', args=[s_pk])
+        self.assert200('profiles:profile_delete', args=[s_pk])
         self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
@@ -673,3 +676,57 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         request = self.client.get(reverse('profiles:profile_update', args=[self.test_student1.profile.pk]))
         self.assertContains(request, "to other customstudents:")
         self.assertContains(request, "Your marks will be visible to other customstudents through the customstudent list.")
+
+
+class ProfileDeleteTests(TenantTestCase):
+
+    def setUp(self):
+        """
+        Create test data using model_bakery.
+        Since Profile is auto-created via a post_save signal, we only create Users.
+        """
+        self.User = get_user_model()
+        self.client = TenantClient(self.tenant)
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
+        self.student = self.User.objects.create_user('test_student')
+
+        # URL for deleting the student's profile
+        self.delete_url = reverse("profiles:profile_delete", kwargs={"pk": self.student.profile.pk})
+
+    def test_teacher_can_delete_profile(self):
+        """Ensure that teacher (staff) users can delete a profile and its associated user."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(self.delete_url, follow=True)  # POST to delete
+
+        # Check that the user and profile were deleted
+        self.assertFalse(self.User.objects.filter(pk=self.student.pk).exists())
+        self.assertFalse(Profile.objects.filter(pk=self.student.profile.pk).exists())
+
+        # Ensure redirect to success_url after deletion
+        self.assertRedirects(response, reverse("profiles:profile_list"))
+
+    def test_student_cannot_delete_profile(self):
+        """Ensure that student (non-staff) users cannot delete profiles."""
+        # student2 = baker.make(self.User)
+        self.client.force_login(self.student)  # Log in as student (non-staff user)
+
+        response = self.client.post(self.delete_url)
+
+        # Student and profile should still exist
+        self.assertTrue(self.User.objects.filter(pk=self.student.pk).exists())
+        self.assertTrue(Profile.objects.filter(pk=self.student.profile.pk).exists())
+
+        # Ensure access is denied (403 Forbidden)
+        self.assertEqual(response.status_code, 403)
+
+    def test_deleting_non_existent_profile_returns_404(self):
+        """Ensure that trying to delete a non-existent profile results in a 404 error."""
+        self.client.force_login(self.teacher)
+
+        non_existent_url = reverse("profiles:profile_delete", kwargs={"pk": 99999})
+        response = self.client.post(non_existent_url)
+
+        self.assertEqual(response.status_code, 404)
