@@ -55,7 +55,7 @@ class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, TenantTestCase):
         cls.library_domain.save()
 
 
-class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
+class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
@@ -206,7 +206,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
         self.assertContains(response, '</i>&nbsp; Quest Library</a>')
 
 
-class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
+class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
@@ -253,8 +253,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin, ViewTestUtilsMixin):
 
     def test_import_campaign_already_exists(self):
         self.client.force_login(self.test_teacher)
-        current_category = Category.objects.first()
-        import_url = reverse('library:import_category', args=(current_category.name,))
+        with library_schema_context():
+            library_campaign = baker.make(Category)
+        local_campaign = baker.make(Category, title=library_campaign.name)
+        import_url = reverse('library:import_category', args=(local_campaign.name,))
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
