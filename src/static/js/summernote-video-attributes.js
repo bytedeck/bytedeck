@@ -124,7 +124,7 @@
             '<label for="note-video-attributes-end" class="control-label col-xs-3">'+ lang.videoAttributes.end + '</label>' +
             '<div class="input-group col-xs-9">' +
               '<input type="number" min="0" max="999" id="note-video-attributes-end-hrs" class="note-video-attributes-end-hrs form-control" style="width:15%" placeholder="hrs">' +
-              '<input type="number" min="0" max="999" id="note-video-attributes-end-min" class="note-video-attributes-end-min form-control" style="width:15%" placeholder="min">' +
+              '<input type="number" min="0" max="59" id="note-video-attributes-end-min" class="note-video-attributes-end-min form-control" style="width:15%" placeholder="min">' +
               '<input type="number" min="0" max="59" id="note-video-attributes-end-sec" class="note-video-attributes-end-sec form-control" style="width:15%" placeholder="sec">' +
             '</div>' +
           '</div>' +
