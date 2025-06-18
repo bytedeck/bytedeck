@@ -83,7 +83,8 @@
           '<div class="form-group">'+
             '<label for="note-video-attributes-href" class="control-label col-xs-3">'+lang.videoAttributes.href+'</label>'+
             '<div class="input-group col-xs-9">'+
-              '<input type="text" id="note-video-attributes-href" class="note-video-attributes-href form-control" required>'+
+              '<input type="text" id="note-video-attributes-href" name="note-video-attributes-href" class="note-video-attributes-href form-control">'+
+              '<div class="invalid-feedback" style="display:none;color:#a94442;">Please enter a video URL.</div>'+
             '</div>'+
           '</div>'+
           '<div class="form-group">'+
@@ -116,7 +117,7 @@
             '<div class="input-group col-xs-9">' +
               '<input type="number" min="0" max="999" id="note-video-attributes-start-hrs" class="note-video-attributes-start-hrs form-control" style="width:15%" placeholder="hrs">' +
               '<input type="number" min="0" max="59" id="note-video-attributes-start-min" class="note-video-attributes-start-min form-control" style="width:15%" placeholder="min">' +
-              '<input type="number" min="0" max="59" id="note-video-attributes-start-sec" class="note-video-attributes-start-sec form-control" style="width:15%" placeholder="sec">' +            
+              '<input type="number" min="0" max="59" id="note-video-attributes-start-sec" class="note-video-attributes-start-sec form-control" style="width:15%" placeholder="sec">' +
             '</div>' +
           '</div>' +
           '<div class="form-group row">' +
@@ -179,7 +180,7 @@
           });
         });
       };
-     
+
       //Function that takes the start and end time inputs and validates that the start time is less than the end time
       //If the start time is greater than the end time, the OK button is disabled and a tooltip is shown
       this.validateInput = function() {
@@ -190,7 +191,8 @@
             $videoEndHrs = self.$dialog.find('.note-video-attributes-end-hrs'),
             $videoEndMin = self.$dialog.find('.note-video-attributes-end-min'),
             $videoEndSec = self.$dialog.find('.note-video-attributes-end-sec'),
-            $okBtn = self.$dialog.find('.note-video-attributes-btn');
+            $okBtn = self.$dialog.find('.note-video-attributes-btn'),
+            $invalidFeedback = self.$dialog.find('.invalid-feedback');
 
         var startHrs = parseInt($videoStartHrs.val()) || 0;
         var startMin = parseInt($videoStartMin.val()) || 0;
@@ -205,7 +207,7 @@
         }
 
         startSeconds = (startHrs * 3600) + (startMin * 60) + startSec;
-        
+
         var endHrs = parseInt($videoEndHrs.val()) || 0;
         var endMin = parseInt($videoEndMin.val()) || 0;
         var endSec = parseInt($videoEndSec.val()) || 0;
@@ -218,15 +220,24 @@
           $videoEndSec.val(0);
         }
         endSeconds = (endHrs * 3600) + (endMin * 60) + endSec;
-        if (!self.$dialog.find('input')[0].checkValidity()) {
+
+        var url = $videoHref.val().trim();
+
+        if (!url) {
           $okBtn.prop('disabled', true);
           $okBtn.attr('title', 'URL is required');
+          $videoHref.addClass('is-invalid');
+          $invalidFeedback.show();
         } else if (endSeconds > 0 && startSeconds >= endSeconds) {
           $okBtn.prop('disabled', true);
           $okBtn.attr('title', 'Start time must be less than end time');
+          $videoHref.removeClass('is-invalid');
+          $invalidFeedback.hide();
         } else {
           $okBtn.prop('disabled', false);
           $okBtn.attr('title', '');
+          $videoHref.removeClass('is-invalid');
+          $invalidFeedback.hide();
         }
       };
       this.destroy=function(){
@@ -239,10 +250,10 @@
         });
       };
       this.bindLabels=function(){
-      	self.$dialog.find('.form-control:first').focus().select();
-      	self.$dialog.find('label').on('click',function(){
-      		$(this).parent().find('.form-control:first').focus();
-      	});
+          self.$dialog.find('.form-control:first').focus().select();
+          self.$dialog.find('label').on('click',function(){
+              $(this).parent().find('.form-control:first').focus();
+          });
       };
       this.show=function(){
         var $vid=$($editable.data('target'));
@@ -370,6 +381,13 @@
             context.triggerEvent('dialog.shown');
             $editBtn.click(function(e){
               e.preventDefault();
+              var url = $videoHref.val().trim();
+              if (!url) {
+                $videoHref.addClass('is-invalid');
+                self.$dialog.find('.invalid-feedback').show();
+                $videoHref.focus();
+                return false;
+              }
               deferred.resolve({
                 vidDom:vidInfo.vidDom,
                 href:$videoHref.val(),
