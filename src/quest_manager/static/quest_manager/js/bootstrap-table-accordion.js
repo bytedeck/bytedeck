@@ -131,11 +131,11 @@ $(document).ready(function () {
       return data.filter(row => {
         // Customize this to search across desired fields
         const searchableText = [
-          row.name,
-          row.campaign,
-          row.tags,
-          row.xp,
-          row.status_icons,
+          row.name || "",
+          row.campaign || "",
+          row.tags || "",
+          row.xp || "",
+          row.status_icons || "",
         ].join(" ").toLowerCase();
 
         return terms.every(term => searchableText.includes(term));
@@ -184,6 +184,7 @@ $(document).ready(function () {
       // If the clicked row is already expanded, collapse it
       if ($tr.next().is('tr.detail-view')) {
         collapseRow($tr, $table);
+      // If the clicked row is collapsed, expand it
       } else {
         // Collapse all other expanded rows
         $table.find('tr.active').each(function () {
