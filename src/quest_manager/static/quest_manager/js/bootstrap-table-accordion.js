@@ -108,6 +108,32 @@ function collapseRow($expandedRow, $table) {
   });
 }
 
+/**
+ * ### function multiKeywordSearch(data, text) ###
+ * Custom search handler for Bootstrap Table that supports multiple keywords (in any order).
+ *
+ * @param {Array} data - Array of row data objects.
+ * @param {string} text - The current search query string.
+ *
+ * @returns {Array} - Filtered row data objects that match all search terms.
+ */
+function multiKeywordSearch(data, text) {
+  const terms = (text || "").toLowerCase().split(/\s+/).filter(Boolean);
+
+  return data.filter(row => {
+    // Customize this to search across desired fields
+    const searchableText = [
+      row.name || "",
+      row.campaign || "",
+      row.tags || "",
+      row.xp || "",
+      row.status_icons || "",
+    ].join(" ").toLowerCase();
+
+    return terms.every(term => searchableText.includes(term));
+  });
+}
+
 $(document).ready(function () {
   // class selector to target all tables with the class '.accordian-table'
   const $tables = $('.accordian-table');
@@ -115,41 +141,6 @@ $(document).ready(function () {
   // For each table, initialize the Bootstrap Table and add event listeners for expanding/collapsing rows
   $tables.each(function() {
     const $table = $(this);
-
-    /**
-     * ### function multiKeywordSearch(data, text) ###
-     * Custom search handler for Bootstrap Table that supports multiple keywords (in any order).
-     *
-     * @param {Array} data - Array of row data objects.
-     * @param {string} text - The current search query string.
-     *
-     * @returns {Array} - Filtered row data objects that match all search terms.
-     */
-    function multiKeywordSearch(data, text) {
-      const terms = (text || "").toLowerCase().split(/\s+/).filter(Boolean);
-
-      return data.filter(row => {
-        // Customize this to search across desired fields
-        const searchableText = [
-          row.name || "",
-          row.campaign || "",
-          row.tags || "",
-          row.xp || "",
-          row.status_icons || "",
-        ].join(" ").toLowerCase();
-
-        return terms.every(term => searchableText.includes(term));
-      });
-    }
-
-    // Destroy and re-initialize the table with custom search
-    // Otherwise customSearch is not implemented
-    $table.bootstrapTable('destroy');
-    $table.bootstrapTable({
-      search: true,
-      trimOnSearch: false,
-      customSearch: multiKeywordSearch
-    });
 
     $table.on('expand-row.bs.table', function (e, index, row, $detail) {
       // Get the row's html id, then extract the last digit (quest or submission id) from it
