@@ -116,8 +116,40 @@ $(document).ready(function () {
   $tables.each(function() {
     const $table = $(this);
 
-    // Initialize the Bootstrap Table
-    $table.bootstrapTable();
+    /**
+     * ### function multiKeywordSearch(data, text) ###
+     * Custom search handler for Bootstrap Table that supports multiple keywords (in any order).
+     *
+     * @param {Array} data - Array of row data objects.
+     * @param {string} text - The current search query string.
+     *
+     * @returns {Array} - Filtered row data objects that match all search terms.
+     */
+    function multiKeywordSearch(data, text) {
+      const terms = (text || "").toLowerCase().split(/\s+/).filter(Boolean);
+
+      return data.filter(row => {
+        // Customize this to search across desired fields
+        const searchableText = [
+          row.name,
+          row.campaign,
+          row.tags,
+          row.xp,
+          row.status_icons,
+        ].join(" ").toLowerCase();
+
+        return terms.every(term => searchableText.includes(term));
+      });
+    }
+
+    // Destroy and re-initialize the table with custom search
+    // Otherwise customSearch is not implemented
+    $table.bootstrapTable('destroy');
+    $table.bootstrapTable({
+      search: true,
+      trimOnSearch: false,
+      customSearch: multiKeywordSearch
+    });
 
     $table.on('expand-row.bs.table', function (e, index, row, $detail) {
       // Get the row's html id, then extract the last digit (quest or submission id) from it
@@ -125,7 +157,7 @@ $(document).ready(function () {
       const object_id = parseInt(row_html_id.match(/\d+$/)[0], 10);
 
       // Load the accordion container content via AJAX
-      loadQuestOrSubmissionContent(object_id)
+      loadQuestOrSubmissionContent(object_id);
 
       let $hiddenDIV;
       // find elements matching "collapse-quest-<id>" or "collapse-submission-<id>"
@@ -138,13 +170,12 @@ $(document).ready(function () {
       // Save the original parent of the hidden div for later use
       $hiddenDIV.data('originalParent', $hiddenDIV.parent());
 
-      // The primary change is here: instead of copying the content, we're moving it
+      // Move the hidden div into the detail area
       $hiddenDIV.appendTo($detail);
 
       // Add all classes from the hidden div to the detail element
       $detail.addClass($hiddenDIV.attr('class'));
 
-      // Start animation for expanding
       // .hide() sets display to none, and slideDown() does animation before setting display to block
       $hiddenDIV.hide().slideDown();
     });
@@ -153,7 +184,6 @@ $(document).ready(function () {
       // If the clicked row is already expanded, collapse it
       if ($tr.next().is('tr.detail-view')) {
         collapseRow($tr, $table);
-      // If the clicked row is collapsed, expand it
       } else {
         // Collapse all other expanded rows
         $table.find('tr.active').each(function () {
