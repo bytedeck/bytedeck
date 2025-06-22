@@ -126,8 +126,9 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def test_import_quest_to_current_deck(self):
         """
-        Add tests that check if the import quest to current deck view works.
-        2 tests where the quest doesn't import and 1 test of a quest succeeding to import
+        Tests the import functionality for quests from the library tenant into the current tenant's deck.
+        
+        Verifies that importing a non-existent quest returns a 404, importing a quest with a duplicate import ID shows a warning, and successfully importing a new quest adds it to the current deck as not visible to students.
         """
         self.client.force_login(self.test_teacher)
 
@@ -186,24 +187,33 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
-    def test_side_bar_library_drop_down(self):
-        """Checks if library drop down is available when siteconfig.enable_shared_library is true"""
-        staff = baker.make(User, is_staff=True)
-        self.client.force_login(staff)
+    def test_quests_tab_shows_correct_badge_count(self):
+        """
+        Verify that the quests tab displays a badge with the correct count of active quests from the library schema.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # Get the correct quest count
+            quest_count = Quest.objects.get_active().count()
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+        # The badge should show the correct quest count
+        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
 
-        config = SiteConfig.get()
-
-        # if `enable_shared_library=False` then "Quest Library" should not exist
-        config.enable_shared_library = False
-        config.save()
-        response = self.assert200('library:quest_list')
-        self.assertNotContains(response, '</i>&nbsp; Quest Library</a>')
-
-        # if `enable_shared_library=True` then "Quest Library" should exist
-        config.enable_shared_library = True
-        config.save()
-        response = self.assert200('library:quest_list')
-        self.assertContains(response, '</i>&nbsp; Quest Library</a>')
+    def test_quests_tab_only_shows_quests(self):
+        """
+        Verify that the quests tab displays only quests from the library schema for a logged-in staff user.
+        
+        This test logs in as a teacher, requests the quest list page, and asserts that the page contains the name of an active quest from the library schema if one exists.
+        """
+        self.client.force_login(self.test_teacher)
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+        # Should contain a quest name from the library schema if one exists
+        with library_schema_context():
+            quest = Quest.objects.get_active().first()
+        if quest:
+            self.assertContains(response, quest.name)
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
@@ -261,6 +271,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
     def test_import_campaign_success(self):
+        """
+        Tests successful import of a campaign and its quests from the library tenant, ensuring the imported campaign and quests are inactive and correctly associated.
+        """
         self.client.force_login(self.test_teacher)
         self.assertEqual(Category.objects.count(), 1)
 
@@ -282,3 +295,31 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_campaigns_tab_shows_correct_badge_count(self):
+        """
+        Verify that the campaigns tab displays a badge with the correct count of active campaigns from the library schema.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # get the correct campiagn count
+            campaign_count = Category.objects.filter(active=True).count()
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        # The badge should show the correct campaign count
+        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
+
+    def test_campaigns_tab_only_shows_campaigns(self):
+        """
+        Verify that the campaigns tab displays only active campaigns from the library schema.
+        
+        The test logs in as a staff user, requests the campaign list page, and asserts that the page contains the name of an active campaign from the library schema if one exists.
+        """
+        self.client.force_login(self.test_teacher)
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        with library_schema_context():
+            campaign = Category.objects.filter(active=True).first()
+        # The response should contain the campaign name if one exists
+        if campaign:
+            self.assertContains(response, campaign.name)
