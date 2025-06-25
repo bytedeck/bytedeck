@@ -189,7 +189,11 @@ class IsAPrereqMixinTest(TenantTestCase):
         for ct in IsAPrereqMixin.all_registered_content_types():
             # If the method is not implemented, then NotImplementedError is thrown
             instance = baker.make(ct.model_class())
-            instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
+            try:
+                instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
+            except NotImplementedError:
+                print(f"FAIL: {ct.model_class().__module__}.{ct.model_class().__name__}")
+                raise
 
     def test_gfk_search_fields__is_implemented(self):
         """ All models implementing this Mixin, also implement this method if the default doesn't suffice """
