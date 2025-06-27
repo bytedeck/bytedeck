@@ -845,9 +845,9 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 0)
 
     def test_specific_teacher_to_notify_own_teacher(self):
-        """ If a quest has a specific teacher linked to it, they should be notified of completions if
-        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
-        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        If a quest has a specific teacher set to notify and that teacher is also the student's current teacher,
+        then no notification should be sent, because the submission will already appear in their "Approvals" tab.
         """
         self.sub.quest.specific_teacher_to_notify = self.test_teacher
         self.sub.quest.save()
@@ -858,9 +858,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 0)
 
     def test_specific_teacher_to_notify_other_teacher(self):
-        """ If a quest has a specific teacher linked to it, they should be notified of completions if
-        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
-        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        If a quest has a specific teacher set to notify who is not the student's current teacher,
+        the submission should appear in that teacher's "Approvals" tab, and no notification should be sent
+        since it's already visible there.
+        Likewise no notification should be sent to the student's current teacher.
         """
         special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
         self.sub.quest.specific_teacher_to_notify = special_teacher
@@ -868,8 +870,12 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.post_complete(teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
 
+        # asserts that the quest is in the specific_teacher_to_notify "Approvals" tab
+        self.assertIn(self.sub, QuestSubmission.objects.all_awaiting_approval(teacher=special_teacher))
+
+        # Shouldn't notify the specific other teacher since it should show up in their "Approvals" tab
         notifications = Notification.objects.all_for_user_target(special_teacher, self.sub)
-        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(notifications.count(), 0)
 
         # and still no notification needed for actual teacher of student:
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)

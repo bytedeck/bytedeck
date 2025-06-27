@@ -1239,15 +1239,6 @@ def complete(request, submission_id):
 
         icon = "<i class='fa fa-shield fa-lg'></i>"
 
-        # Notify teacher if they are specific to quest but are not the student's current teacher
-        # current teacher doesn't need the notification because they'll see it in their approvals tabs already
-        if (
-            submission.quest.specific_teacher_to_notify
-            and submission.quest.specific_teacher_to_notify
-            not in request.user.profile.current_teachers()
-        ):
-            affected_users.append(submission.quest.specific_teacher_to_notify)
-
         # Send notification to current teachers when a comment is left on an auto-approved quest
         # since these quests don't appear in the approvals tab, teacher would never know about the comment.
         if (
