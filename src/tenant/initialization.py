@@ -28,6 +28,7 @@ User = get_user_model()
 # tag for all initial quests (welcome + orientation campaign)
 # including bytedeck proficiency badge
 intro_tag = "intro"
+owner_tag = "owner"
 
 
 def load_initial_tenant_data():
@@ -413,6 +414,20 @@ def create_orientation_campaign():
         available_outside_course=1,
         hideable=False,
     )
+    owner_new_maps = Quest.objects.create(
+        name="Owner: New Maps",
+        xp=0,
+        short_description="This quest is a tutorial for new owners to get familiar with how Quest Maps work. Feel free to delete this once your down, as this quest is still visible to students.",  # noqa
+        instructions="<p> Welcome to your new deck! This tutorial quest is designed to help you understand how to create a link between a quest and a map. By following these instructions, you\'ll learn how to create a new map with this quest as its starting point, or how to link it to an existing map through <b>prerequisites</b>. </p> <p> <b>How to make a map link to this quest.</b> </p> <p> There are two ways to make this quest show up in a map. Either create a new map, using this quest as its <i style=\"font-weight: bold;\">initial object</i>, or use a <i style=\"font-weight: bold;\">prerequisite</i>&nbsp;to link this quest with another quest from an existing map. </p> <p> <b>map link by creating a new map</b> </p> <ol> <li> Go to Maps tab </li> <li> Click on List all maps, next to the Print, and Fullscreen buttons </li> <li> Click on Create </li> <li> Set this quest as the Initial Object </li> </ol> <p> <b>map link by prerequisite</b> </p> <ol> <li> Under Quest Info click on Edit, next to the Prerequisites </li> <li> Under Required Element select a quest that exists in a map </li> <li> Click Save </li> <li> Go to Maps tab, then List all maps </li> <li> Click on the map that was linked to the Required Element </li> <li> Click on the green button that says Recalculate this Map </li> </ol> <p><b> How this quest links to the map</b></p><ol><li>Its campaign is set to <b>Orientation</b></li><li>Has <b>Welcome to Bytedeck</b> as a prerequisite</li><li><b>Badge: ByteDeck Proficiency</b> has this quest as a prerequisite</li></ol>",  # noqa
+        submission_details="",
+        instructor_notes="",
+        import_id="d8b8e00b-5788-4cde-ae4b-75fdfea096ec",
+        campaign=orientation_campaign,
+        hideable=False,
+    )
+
+    # tag for all tutorial quests for new owners
+    owner_new_maps.tags.add(owner_tag)
 
     # intro tag for all orientation campaign
     contract_quest.tags.add(intro_tag)
@@ -430,11 +445,12 @@ def create_orientation_campaign():
     Prereq.add_simple_prereq(screenshots_quest, welcome_quest)
     Prereq.add_simple_prereq(contract_quest, welcome_quest)
     Prereq.add_simple_prereq(cc_quest, welcome_quest)
+    Prereq.add_simple_prereq(owner_new_maps, welcome_quest)
 
     # add the orientation campaign's quests as a prereq to the ByteDeck Proficiency badge
     proficiency_badge = Badge.objects.get(name='ByteDeck Proficiency')
 
-    proficiency_badge.add_simple_prereqs([avatar_quest, screenshots_quest, cc_quest, contract_quest])
+    proficiency_badge.add_simple_prereqs([avatar_quest, screenshots_quest, cc_quest, contract_quest, owner_new_maps])
 
     # Message quest prereq is proficiency badge
     Prereq.add_simple_prereq(message_quest, proficiency_badge)
