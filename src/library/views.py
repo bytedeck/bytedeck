@@ -168,7 +168,7 @@ def import_campaign(request, campaign_import_id):
 
         local_category = local_category_qs.first()
         if local_category:
-            raise PermissionDenied(f'Campaign with name {category_name} already exists in the current deck.')
+            raise PermissionDenied(f'Campaign with name {campaign_import_id} already exists in the current deck.')
 
         with library_schema_context():
             category = get_object_or_404(Category, import_id=campaign_import_id)

@@ -245,7 +245,7 @@ class QuestResource(resources.ModelResource):
                 - 'campaign_import_id': The import ID of the campaign (UUID).
 
         Side Effects:
-            - The quest's `campaign` field is updated updated and saved.
+            - The quest's `campaign` field is updated and saved.
             - A new Category Object may be created if no existing match is found.
         """
         campaign_title = data_dict.get('campaign_title')
