@@ -33,7 +33,8 @@ class Category(IsAPrereqMixin, models.Model):
     import_id = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
-        help_text="Used to link this object across schemas. Don't edit manually unless necessary."
+        help_text="This value links your campaign to the corresponding campaign within the Library."
+        " Only change this value if you want to disconnect your campaign from the Library."
     )
 
     class Meta:
