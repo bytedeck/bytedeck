@@ -4,6 +4,13 @@ from django.db import migrations, models
 import uuid
 
 
+def backfill_category_import_ids(apps, schema_editor):
+    Category = apps.get_model('quest_manager', 'Category')
+    for category in Category.objects.filter(import_id__isnull=True):
+        category.import_id = uuid.uuid4()
+        category.save(update_fields=["import_id"])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -14,6 +21,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='category',
             name='import_id',
-            field=models.UUIDField(blank=True, default=uuid.uuid4, help_text="Used to link this object across schemas. Don't edit manually unless necessary.", null=True, unique=True),
+            field=models.UUIDField(
+                blank=True,
+                default=uuid.uuid4,
+                help_text="Used to link this object across schemas. Don't edit manually unless necessary.",
+                unique=True,
+            ),
         ),
+        migrations.RunPython(backfill_category_import_ids, reverse_code=migrations.RunPython.noop),
     ]

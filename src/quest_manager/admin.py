@@ -268,15 +268,18 @@ class QuestResource(resources.ModelResource):
 
         if not campaign:
             # Create a new campaign if it doesn't exist
-            campaign = Category.objects.create(
+            campaign = Category(
                 title=campaign_title,
                 icon=campaign_icon,
                 short_description=campaign_short_description,
                 import_id=UUID(campaign_import_id) if campaign_import_id else None
             )
+            campaign.full_clean()
+            campaign.save()
 
         # Assign the campaign to the quest
         quest.campaign = campaign
+        quest.full_clean()
         quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
