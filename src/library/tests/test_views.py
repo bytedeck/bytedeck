@@ -233,7 +233,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # Category list view
         self.assertRedirectsLogin('library:category_list')
         # Import campaign view
-        self.assertRedirectsLogin('library:import_category', args=[self.library_category.name])
+        self.assertRedirectsLogin('library:import_category', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_students(self):
         """
@@ -243,7 +243,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Students should not have access to the library pages
         self.assert403('library:category_list')
-        self.assert403('library:import_category', args=[self.library_category.name])
+        self.assert403('library:import_category', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_staff(self):
         """
@@ -253,16 +253,16 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Staff should have access to the library pages
         self.assert200('library:category_list')
-        self.assert200('library:import_category', args=[self.library_category.name])
+        self.assert200('library:import_category', args=[self.library_category.import_id])
 
     def test_import_campaign_already_exists(self):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Create a category in the library tenant
-            library_category = baker.make(Category, name='Existing Campaign')
-        
+            library_category = baker.make(Category, title='Existing Campaign')
+
         # Create a category in the current tenant with the same import_id
-        current_category = baker.make(Category, import_id=library_category.import_id, name=library_category.name)
+        current_category = baker.make(Category, import_id=library_category.import_id, title=library_category.name)
 
         import_url = reverse('library:import_category', args=[library_category.import_id])
 
