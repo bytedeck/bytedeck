@@ -255,11 +255,13 @@ class QuestResource(resources.ModelResource):
 
         campaign = None
 
-        # Try to find import_id
+        # Try to find import_id on the local deck
         if campaign_import_id:
             try:
+                # Try to parse import_id as UUID.
+                # Catch ValueError to handle malformed UUIDs, which might come from manual edits by superusers.
                 campaign = Category.objects.get(import_id=UUID(campaign_import_id))
-            except (Category.DoesNotExist, ValueError):
+            except (Category.DoesNotExist):
                 pass
 
         # Fallback to title
@@ -289,7 +291,7 @@ class QuestResource(resources.ModelResource):
                 parent_quest = Quest.objects.get(import_id=import_id)
 
                 self.generate_simple_prereqs(parent_quest, data_dict)
-                if (data_dict.get('campaign_title') or data_dict.get('campaign_import_id')):
+                if data_dict.get('campaign_title') or data_dict.get('campaign_import_id'):
                     # Only generate campaign if title or import_id is provided
                     # This prevents unnecessary campaign creation for quests without campaigns
                     self.generate_campaign(parent_quest, data_dict)

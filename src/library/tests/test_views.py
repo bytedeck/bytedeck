@@ -170,6 +170,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
                 campaign=campaign,
             )
 
+        # sanity check that the library quest does not exist in the local test schema
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(import_id=library_quest.import_id)
 
@@ -262,11 +263,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             library_category = baker.make(Category, title='Existing Campaign')
 
         # Create a category in the current tenant with the same import_id
-        current_category = baker.make(Category, import_id=library_category.import_id, title=library_category.name)
+        baker.make(Category, import_id=library_category.import_id, title=library_category.name)
 
         import_url = reverse('library:import_category', args=[library_category.import_id])
 
-        import_url = reverse('library:import_category', args=(current_category.import_id,))
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 

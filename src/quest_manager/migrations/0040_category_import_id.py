@@ -23,9 +23,8 @@ class Migration(migrations.Migration):
             name='import_id',
             field=models.UUIDField(
                 blank=True,
-                default=uuid.uuid4,
+                null=True,
                 help_text="Used to link this object across schemas. Don't edit manually unless necessary.",
-                unique=True,
             ),
         ),
         migrations.RunPython(backfill_category_import_ids, reverse_code=migrations.RunPython.noop),

@@ -29,7 +29,7 @@ def quests_library_list(request):
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
-        library_quests = Quest.objects.select_related('campaign').filter(visible_to_students=True).order_by('name')
+        library_quests = list(Quest.objects.get_active())
         library_quests = list(library_quests)
 
         context = {

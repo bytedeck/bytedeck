@@ -32,7 +32,6 @@ class Category(IsAPrereqMixin, models.Model):
 
     import_id = models.UUIDField(
         default=uuid.uuid4,
-        blank=True,
         unique=True,
         help_text="Used to link this object across schemas. Don't edit manually unless necessary."
     )
