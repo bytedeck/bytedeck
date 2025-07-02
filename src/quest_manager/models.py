@@ -30,6 +30,14 @@ class Category(IsAPrereqMixin, models.Model):
         help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
     )
 
+    import_id = models.UUIDField(
+        default=uuid.uuid4,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Used to link this object across schemas. Don't edit manually unless necessary."
+    )
+
     class Meta:
         verbose_name = "campaign"
         ordering = ["title"]

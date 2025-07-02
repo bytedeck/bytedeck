@@ -52,7 +52,7 @@
                 <i class="fa fa-trash-o"></i>
               </a>
           {% else %}
-            <a href="{% url 'library:import_category' object.title %}"
+            <a href="{% url 'library:import_category' object.import_id %}"
                class="btn btn-sm btn-default"
                title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab."><i class="fa fa-download"></i></a>
           {% endif %}
