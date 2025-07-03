@@ -30,6 +30,7 @@ def quests_library_list(request):
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
         library_quests = list(Quest.objects.get_active())
+        library_quests = list(library_quests)
 
         context = {
             'heading': 'Quests',
@@ -114,13 +115,13 @@ def import_quest_to_current_deck(request, quest_import_id):
 
 @login_required
 @staff_member_required
-def import_campaign(request, campaign_name):
+def import_campaign(request, campaign_import_id):
     """
     Import all quests from a specified campaign (category) to the current deck.
 
     Args:
         request: HttpRequest object containing request data
-        campaign_name: String name of the campaign to import
+        campaign_import_id: import ID (UUID) of the campaign to import
 
     Returns:
         HttpResponse: GET requests return rendered confirmation template
@@ -129,24 +130,25 @@ def import_campaign(request, campaign_name):
 
     if request.method == 'GET':
         # Check if the quest already exists in the deck
-        local_category = Category.objects.filter(title=campaign_name).first()
+        local_category = Category.objects.filter(import_id=campaign_import_id).first()
 
         # Fetch and load the items, and include them in the context so we get the correct
         # value from the database while we are still within the lbrary schema context.
         with library_schema_context():
-            category = get_object_or_404(Category, title=campaign_name)
+            category = get_object_or_404(Category, import_id=campaign_import_id)
             category_icon_url = category.get_icon_url()
             category_id = category.pk
             category_quest_count = category.quest_count()
             category_total_xp_available = category.xp_sum()
             category_active = category.active
             category_displayed_quests = list(category.quest_set.all())
+            category_name = category.name
 
         context = {
             'local_category': local_category,
             'category': category,
             'category_id': category_id,
-            'category_campaign_name': campaign_name,
+            'category_campaign_name': category_name,
             'category_icon_url': category_icon_url,
             'category_quest_count': category_quest_count,
             'category_total_xp_available': category_total_xp_available,
@@ -162,14 +164,14 @@ def import_campaign(request, campaign_name):
         # If the quest already exists in the destination schema, throw 404.
         # Shouldn't get here because the "Import" button is disabled
 
-        local_category_qs = Category.objects.filter(title=campaign_name)
+        local_category_qs = Category.objects.filter(import_id=campaign_import_id)
 
         local_category = local_category_qs.first()
         if local_category:
-            raise PermissionDenied(f'Campaign with name {campaign_name} already exists in the current deck.')
+            raise PermissionDenied(f'Campaign with name {campaign_import_id} already exists in the current deck.')
 
         with library_schema_context():
-            category = get_object_or_404(Category, title=campaign_name)
+            category = get_object_or_404(Category, import_id=campaign_import_id)
 
             # Import all quests
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))

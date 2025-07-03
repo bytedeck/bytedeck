@@ -44,7 +44,7 @@
             {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
           </td>
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
-          <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{q.campaign}}{% endif %}</small></td>
+          <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{ q.campaign }}{% endif %}</small></td>
           <td class="col-sm-2 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
           <td id="status-icon-{{q.id}}" class="col-sm-1 text-muted">
             <a href="{% url 'library:import_quest' q.import_id %}" class="btn btn-sm btn-default"

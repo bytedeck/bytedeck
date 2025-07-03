@@ -82,10 +82,27 @@ class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin
 
 
 class QuestResource(resources.ModelResource):
+    """
+    A resource class for importing and exporting Quests using django-import-export.
+
+    This class enables Quests to be serialized and deserialized across schemas,
+    such as importing from the library into tenant schemas. It supports linking
+    related data like campaigns (Categories) using a UUID-based `import_id`.
+
+    generate_campaign_from_import_data: Automatically finds or creates a Campaign
+    for the imported Quest based on import_id or title, ensuring proper cross-schema linking.
+
+    Intended for use in multi-tenant environments where Quests need to be
+    shared, cloned, or updated from a central library source.
+
+    Related behavior like prerequisites and tags are handled by associated mixins
+    on the Quest model, not directly by this class.
+    """
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
     campaign_short_description = Field()
+    campaign_import_id = Field()
 
     class Meta:
         model = Quest
@@ -164,6 +181,24 @@ class QuestResource(resources.ModelResource):
             return quest.campaign.short_description
         return None
 
+    def dehydrate_campaign_import_id(self, quest):
+        """
+        Returns the import ID of the campaign associated with the given quest.
+
+        This method is used during data export to include the campaign's import ID
+        in the exported dataset. If the quest does not have an associated campaign,
+        returns None.
+
+        Args:
+            quest (Quest): The quest instance being exported.
+
+        Returns:
+            UUID or None: The import ID of the campaign, or None if not available.
+        """
+        if quest.campaign and quest.campaign.import_id:
+            return str(quest.campaign.import_id)
+        return None
+
     def generate_simple_prereqs(self, parent_object, data_dict):
         # check that the prereq quest exists as an import-linked quest via import_id
 
@@ -194,22 +229,60 @@ class QuestResource(resources.ModelResource):
                     Prereq.add_simple_prereq(parent_object, prereq_object)
 
     def generate_campaign(self, quest, data_dict):
-        campaign_title = data_dict['campaign_title']
-        campaign_icon = data_dict['campaign_icon']
-        campaign_short_description = data_dict['campaign_short_description']
+        """
+        Assigns or creates a campaign (Category) for the given quest based on the provided data dictionary.
 
-        # Might not have a campaign.
-        if campaign_title:
-            campaign, created = Category.objects.get_or_create(
+        Priority is given to matching an existing campaign via its import_id. If no match is found,
+        the method attempts to find a campaign by its title. If neither exists, a new campaign is created
+        using the provided title, icon, short description, and import_id.
+
+        Args:
+            quest (Quest): The quest instance to which the campaign will be assigned.
+            data_dict (dict): A dictionary containing campaign data, including:
+                - 'campaign_title': The title of the campaign.
+                - 'campaign_icon': The icon of the campaign.
+                - 'campaign_short_description': A short description of the campaign.
+                - 'campaign_import_id': The import ID of the campaign (UUID).
+
+        Side Effects:
+            - The quest's `campaign` field is updated and saved.
+            - A new Category Object may be created if no existing match is found.
+        """
+        campaign_title = data_dict.get('campaign_title')
+        campaign_icon = data_dict.get('campaign_icon')
+        campaign_short_description = data_dict.get('campaign_short_description')
+        campaign_import_id = data_dict.get('campaign_import_id')
+
+        campaign = None
+
+        # Try to find import_id on the local deck
+        if campaign_import_id:
+            try:
+                # Try to parse import_id as UUID.
+                # Catch ValueError to handle malformed UUIDs, which might come from manual edits by superusers.
+                campaign = Category.objects.get(import_id=UUID(campaign_import_id))
+            except (Category.DoesNotExist):
+                pass
+
+        # Fallback to title
+        if not campaign and campaign_title:
+            campaign = Category.objects.filter(title=campaign_title).first()
+
+        if not campaign:
+            # Create a new campaign if it doesn't exist
+            campaign = Category(
                 title=campaign_title,
-                defaults={
-                    'icon': campaign_icon,
-                    'short_description': campaign_short_description
-                },
+                icon=campaign_icon,
+                short_description=campaign_short_description,
+                import_id=UUID(campaign_import_id) if campaign_import_id else None
             )
+            campaign.full_clean()
+            campaign.save()
 
-            quest.campaign = campaign
-            quest.save()
+        # Assign the campaign to the quest
+        quest.campaign = campaign
+        quest.full_clean()
+        quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         if not dry_run:
@@ -218,8 +291,10 @@ class QuestResource(resources.ModelResource):
                 parent_quest = Quest.objects.get(import_id=import_id)
 
                 self.generate_simple_prereqs(parent_quest, data_dict)
-
-                self.generate_campaign(parent_quest, data_dict)
+                if data_dict.get('campaign_title') or data_dict.get('campaign_import_id'):
+                    # Only generate campaign if title or import_id is provided
+                    # This prevents unnecessary campaign creation for quests without campaigns
+                    self.generate_campaign(parent_quest, data_dict)
 
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin

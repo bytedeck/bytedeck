@@ -163,9 +163,14 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         # Create a quest in the library schema
         with library_schema_context():
-            library_quest = baker.make(Quest)
+            campaign = baker.make(Category, import_id=uuid.uuid4())
+            library_quest = baker.make(
+                Quest,
+                visible_to_students=True,
+                campaign=campaign,
+            )
 
-        # Sanity check that the library quest does not exist in the local test schema
+        # sanity check that the library quest does not exist in the local test schema
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(import_id=library_quest.import_id)
 
@@ -229,7 +234,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # Category list view
         self.assertRedirectsLogin('library:category_list')
         # Import campaign view
-        self.assertRedirectsLogin('library:import_category', args=[self.library_category.name])
+        self.assertRedirectsLogin('library:import_category', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_students(self):
         """
@@ -239,7 +244,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Students should not have access to the library pages
         self.assert403('library:category_list')
-        self.assert403('library:import_category', args=[self.library_category.name])
+        self.assert403('library:import_category', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_staff(self):
         """
@@ -249,14 +254,19 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Staff should have access to the library pages
         self.assert200('library:category_list')
-        self.assert200('library:import_category', args=[self.library_category.name])
+        self.assert200('library:import_category', args=[self.library_category.import_id])
 
     def test_import_campaign_already_exists(self):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
-            library_campaign = baker.make(Category)
-        local_campaign = baker.make(Category, title=library_campaign.name)
-        import_url = reverse('library:import_category', args=(local_campaign.name,))
+            # Create a category in the library tenant
+            library_category = baker.make(Category, title='Existing Campaign')
+
+        # Create a category in the current tenant with the same import_id
+        baker.make(Category, import_id=library_category.import_id, title=library_category.name)
+
+        import_url = reverse('library:import_category', args=[library_category.import_id])
+
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
@@ -269,7 +279,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             baker.make(Quest, campaign=library_campaign, _quantity=3)
             self.assertEqual(library_campaign.quest_set.count(), 3)
 
-        import_url = reverse('library:import_category', args=(library_campaign.name,))
+        import_url = reverse('library:import_category', args=[library_campaign.import_id])
+
         response = self.client.post(import_url)
         self.assertEqual(response.url, reverse('quests:categories_inactive'))
         self.assertEqual(Category.objects.count(), 2)
