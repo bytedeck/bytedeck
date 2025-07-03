@@ -342,7 +342,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', visible_to_students=False, archived=False)
 
         # Go to the import confirmation page for the campaign
-        response = self.client.get(reverse('library:import_category', args=[campaign.title]))
+        response = self.client.get(reverse('library:import_category', args=[campaign.import_id]))
 
         # Should include only the visible, non-archived quest
         content = response.content.decode()
