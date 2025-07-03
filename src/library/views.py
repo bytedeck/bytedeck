@@ -3,9 +3,10 @@ from django.db import connection
 from django.contrib.auth.decorators import login_required
 from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import get_object_or_404
-from django.shortcuts import redirect
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from quest_manager.models import Quest
 from quest_manager.models import Category
 
@@ -30,15 +31,75 @@ def quests_library_list(request):
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
         library_quests = list(Quest.objects.get_active())
-        library_quests = list(library_quests)
+        num_library = len(library_quests)
 
         context = {
             'heading': 'Quests',
             'library_quests': library_quests,
+            'num_library': num_library,
             'library_tab_active': True,
         }
 
     return render(request, 'library/library_quests.html', context)
+
+
+@login_required
+def ajax_quest_library_list(request):
+    """
+    Return all active quest data for Bootstrap Table via AJAX.
+    """
+    with library_schema_context():
+        # Base queryset: active quests only
+        qs = (
+            Quest.objects.get_active()
+            .select_related('campaign')
+            .prefetch_related('tags')
+        )
+
+        total = qs.count()
+
+        rows = []
+        for quest in qs:
+            repeat_icon = (
+                '<i title="Repeat: this quest is repeatable" class="icon-spacing fa fa-fw fa-undo"></i>'
+                if quest.max_repeats != 0 else
+                '<i class="icon-spacing fa fa-fw"></i>'
+            )
+            blocking_icon = (
+                '<i title="Blocking: all other quests are unavailable until you complete this one." '
+                'class="icon-spacing fa fa-fw fa-exclamation-triangle"></i>'
+                if getattr(quest, "blocking", False) else
+                '<i class="icon-spacing fa fa-fw"></i>'
+            )
+            rows.append({
+                'id': quest.id,
+                '_id': f'heading-quest-{quest.id}',
+                'icon': f"<img src='{quest.get_icon_url()}' class='img-responsive panel-title-img img-rounded' alt='icon'>",
+                'name': quest.name,
+                'xp': quest.xp,
+                'campaign': quest.campaign.name if quest.campaign else '',
+                'tags': ", ".join(tag.name for tag in quest.tags.all()) or '-',
+                'status_icons': repeat_icon + blocking_icon,
+            })
+
+    return JsonResponse({
+        'total': total,
+        'rows': rows,
+    })
+
+
+@require_POST
+@login_required
+def ajax_quest_info(request, id):
+    """
+    AJAX POST returning detailed HTML of a quest by id,
+    always checking library schema.
+    """
+    with library_schema_context():
+        quest = get_object_or_404(Quest, pk=id)
+        template = 'library/preview_content_lib.html'
+        html = render_to_string(template, {'quest': quest}, request)
+        return JsonResponse({'quest_info_html': html})
 
 
 @login_required

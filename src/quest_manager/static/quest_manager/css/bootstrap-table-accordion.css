@@ -150,3 +150,27 @@ tr.detail-view > td > div > ul > .list-group-item:last-child,
 tr.detail-view > td > div > .list-group-item:last-child  {
   border-bottom-color: var(--accordian-table-border-color);
 }
+
+/* Library-specific: Flex layout for quest header */
+.quest-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* Button container for preview/detail views */
+.library-preview-btns {
+  margin-left: 1em;
+  margin-bottom: 1em;
+}
+
+@media (max-width: 767px) {
+  .quest-header {
+    flex-direction: column;
+  }
+  .library-preview-btns {
+    margin: 1em 0 0 0;
+    text-align: right;
+  }
+}

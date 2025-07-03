@@ -79,6 +79,7 @@ back to its original look.
         <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
           <a href="{% url 'library:quest_list' %}">
             Library
+            <span class="badge">{{ num_library | default:"" }}</span>
           </a>
         </li>
       {% endif %}

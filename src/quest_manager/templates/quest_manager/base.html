@@ -23,7 +23,8 @@
         csrfToken: "{{ csrf_token }}",
         ajax_submission_root: "{% url 'quests:ajax_submission_root' %}",
         ajax_approval_root: "{% url 'quests:ajax_approval_root' %}",
-        ajax_quest_root: "{% url 'quests:ajax_quest_root' %}"
+        ajax_quest_root: "{% url 'quests:ajax_quest_root' %}",
+        ajax_library_root:"{% url 'library:ajax_library_root' %}"
       };
     </script>
     <script src="{% static 'quest_manager/js/bootstrap-table-accordion.js' %}?v=1.2"></script>

@@ -60,6 +60,8 @@ function loadQuestOrSubmissionContent(id) {
       ajax_url = `${window.contextData.ajax_submission_root}${id}/past/`;
   } else if (currentURL.includes("/approvals/")) {
       ajax_url = `${window.contextData.ajax_approval_root}${id}/`;
+  } else if (currentURL.includes("/library/")) {
+      ajax_url = `${window.contextData.ajax_library_root}${id}/`;
   } else {
       ajax_url = `${window.contextData.ajax_quest_root}${id}/`; // Default for available quests or drafts
   }

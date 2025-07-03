@@ -1,12 +1,13 @@
 {% if library_quests %}
-<p>
-  <span class="text-danger">EXPERIMENTAL!</span>
-  The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
-  Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
-</p>
+  <p>
+    <span class="text-danger">EXPERIMENTAL!</span>
+    The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
+    Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
+  </p>
   <table id="accordion-available"
          class="accordian-table"
          data-classes="table table-hover table-responsive"
+         data-url="{% url 'library:ajax_quest_library_list' %}"
          data-toggle="table"
          data-detail-view="true"
          data-search="true"
@@ -19,12 +20,12 @@
         <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
         <th class="col-sm-2 text-right hidden-xs" data-field="campaign" data-sortable="true">Campaign</th>
         <th class="col-sm-1 text-center hidden-xs" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
-        <th class="col-sm-2" data-field="status_icons">Actions</th>
+        <th class="col-sm-2 hidden-xs" data-field="status_icons"></th>
       </tr>
     </thead>
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
       {% for q in library_quests %}
-        <tr class="panel-title
+        <tr class="accordian-trigger panel-title
           {% if request.user.is_staff %}
             {% if not q.visible_to_students %}danger
             {% elif q.is_expired %}warning
@@ -36,6 +37,7 @@
           role="tab"
           aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
           aria-controls="collapse-quest-{{q.id}}"
+          id="heading-quest-{{q.id}}"
         >
           <td class="col-sm-1 col-xs-2 col-icon">
             <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
@@ -46,14 +48,33 @@
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
           <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{ q.campaign }}{% endif %}</small></td>
           <td class="col-sm-2 text-center hidden-xs"><small>{{ q.tags.all|join:", "|default:"-" }}</small></td>
-          <td id="status-icon-{{q.id}}" class="col-sm-1 text-muted">
-            <a href="{% url 'library:import_quest' q.import_id %}" class="btn btn-sm btn-default"
-            title="Import this Quest into your Deck.  The quest will appear in your Drafts tab."><i class="fa fa-download"></i></a>
-          </td>
+          <td id="status-icon-{{q.id}}" class="col-sm-1 hidden-xs text-muted"></td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <!-- Collapsible detail views injected by JS on row expand -->
+  {% for q in library_quests %}
+    <div style="display: none" id="collapse-quest-{{q.id}}"
+      class="{% if request.user.is_staff %}
+              {% if not q.visible_to_students %}danger
+              {% elif q.is_expired %}warning
+              {% else %}default{% endif %}
+            {% else %}
+              default
+            {% endif %}"
+      role="tabpanel" aria-labelledby="heading-quest-{{q.id}}">
+      <ul class="list-group">
+        <li id="preview-quest-{{q.id}}" class="list-group-item list-group-item-buttons">
+          <p>
+            <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
+            &nbsp;Loading content...
+          </p>
+        </li>
+      </ul>
+    </div>
+  {% endfor %}
 {% else %}
   <p>Quest library is empty at the moment.</p>
 {% endif %}

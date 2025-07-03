@@ -1,0 +1,54 @@
+<li class="list-group-item">
+  <div class="row visible-xs-block">
+    <div class="col-xs-6">
+      <p>Campaign: {{ quest.campaign|default:"-" }}</p>
+    </div>
+    <div class="col-xs-6">
+      <p>{{ config.custom_name_for_tag }}s: <small>{{ quest.tags.all|join:", "|default:"-" }}</small></p>
+    </div>
+  </div>
+  <hr class="visible-xs-block">
+
+  <div id="preview-btns-{{ quest.id }}" class="pull-right" style="margin-bottom: 1em;">
+    <a href="{% url 'library:import_quest' quest.import_id %}"
+       class="btn btn-primary"
+       title="Import this Quest into your Deck. The Quest will appear in your Drafts tab.">
+      <i class="fa fa-download"></i> Import Quest
+    </a>
+  </div>
+
+  <p>{{ quest.short_description|default:"No description." }}</p>
+
+  {% if request.user.is_staff or request.user == quest.editor %}
+    <hr />
+    <div class="row">
+      <div class="col-xs-6">
+        <ul class="list-unstyled">
+          <li>Available Date: {{ quest.date_available }}</li>
+          <li>Available Time: {{ quest.time_available }}</li>
+          <li>Visible to Students: {{ quest.visible_to_students|yesno }}</li>
+          <li>Requires Approval: {{ quest.verification_required|yesno }}</li>
+        </ul>
+      </div>
+      <div class="col-xs-6">
+        <ul class="list-unstyled">
+          <li>Available without course: {{ quest.available_outside_course|yesno }}</li>
+          <li>Repeatable:
+            {% if quest.max_repeats == 0 %}no
+            {% else %}
+              {% if quest.max_repeats == -1 %}Unlimited
+              {% else %}{{ quest.max_repeats }} time{{ quest.max_repeats|pluralize }} max
+              {% endif %}
+              {% if quest.hours_between_repeats > 0 %}
+                - every {{ quest.hours_between_repeats }} hrs
+              {% endif %}
+            {% endif %}
+          </li>
+          <li>Prerequisites:
+            {% with quest as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
+          </li>
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+</li>
