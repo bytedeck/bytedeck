@@ -21,7 +21,7 @@ class LibraryQuestListView(TemplateView):
     View for displaying a list of active quests from the shared library.
 
     Only quests that are both visible to students and unarchived will be displayed.
-    Access is restricted to looged-in staff users.
+    Access is restricted to logged-in staff users.
     """
     template_name = 'library/library_quests.html'
 
@@ -105,7 +105,7 @@ class ImportQuestView(View):
             HttpResponse: Rendered template with the quest details from the library and
                           any matching local quest if one exists.
         """
-        # Check for local eistence to warn the user before importing
+        # Check for local existence to warn the user before importing
         local_quest = Quest.objects.filter(import_id=quest_import_id).first()
 
         # Fetch the quest from the shared library
@@ -127,10 +127,10 @@ class ImportQuestView(View):
             quest_import_id (UUID): The import ID of the quest to import.
 
         Returns:
-            HttpResponseRedirect: Redirrects to the draft quest list upon success.
+            HttpResponseRedirect: Redirects to the draft quest list upon success.
 
         Raises:
-            PermissionDenied: if the quest already exists locally.
+            PermissionDenied: If the quest already exists locally.
         """
         # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
@@ -157,7 +157,7 @@ class ImportCampaignView(View):
 
     Handles both GET and POST requests:
     - GET: Displays a confirmation page with detailed campaign and quest info.
-    - POST: Imports all quests in the campiagn into the current schema.
+    - POST: Imports all quests in the campaign into the current schema.
 
     Access is restricted to authenticated staff users.
     """
@@ -168,7 +168,7 @@ class ImportCampaignView(View):
         Display a confirmation page for importing a campaign from the shared library.
 
         Args:
-            request (HttpRequest): the current HTTP request.
+            request (HttpRequest): The current HTTP request.
             campaign_import_id (UUID): The import ID of the campaign to import.
 
         Returns:
@@ -212,7 +212,7 @@ class ImportCampaignView(View):
             campaign_import_id (UUID): The import ID of the campaign to import.
 
         Returns:
-            HttpResponseRedirect: Redirects to the inactive campiangs page after import.
+            HttpResponseRedirect: Redirects to the inactive campaigns page after import.
 
         Raises:
             PermissionDenied: if a campaign with the same import ID already exists locally.
