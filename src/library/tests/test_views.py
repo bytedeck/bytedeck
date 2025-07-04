@@ -191,6 +191,12 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
+        # Check that the campaign is imported
+        imported_campaign = Category.objects.filter(import_id=campaign.import_id).first()
+        self.assertIsNotNone(imported_campaign)
+        # Check that the campaign is deactivated
+        self.assertFalse(imported_campaign.active)
+
     def test_side_bar_library_drop_down(self):
         """Checks if library drop down is available when siteconfig.enable_shared_library is true"""
         staff = baker.make(User, is_staff=True)
