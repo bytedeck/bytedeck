@@ -178,4 +178,5 @@ def import_campaign(request, campaign_import_id):
             import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
             messages.success(request, f"Successfully imported '{category.name}' to your deck.")
 
+    # The campaign will be deactivated by import_quests_to()
     return redirect('quest_manager:categories_inactive')
