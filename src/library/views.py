@@ -30,7 +30,7 @@ def quests_library_list(request):
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
-        library_quests = list(Quest.objects.get_active())
+        library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
         num_library = len(library_quests)
 
         context = {
@@ -41,51 +41,6 @@ def quests_library_list(request):
         }
 
     return render(request, 'library/library_quests.html', context)
-
-
-@login_required
-def ajax_quest_library_list(request):
-    """
-    Return all active quest data for Bootstrap Table via AJAX.
-    """
-    with library_schema_context():
-        # Base queryset: active quests only
-        qs = (
-            Quest.objects.get_active()
-            .select_related('campaign')
-            .prefetch_related('tags')
-        )
-
-        total = qs.count()
-
-        rows = []
-        for quest in qs:
-            repeat_icon = (
-                '<i title="Repeat: this quest is repeatable" class="icon-spacing fa fa-fw fa-undo"></i>'
-                if quest.max_repeats != 0 else
-                '<i class="icon-spacing fa fa-fw"></i>'
-            )
-            blocking_icon = (
-                '<i title="Blocking: all other quests are unavailable until you complete this one." '
-                'class="icon-spacing fa fa-fw fa-exclamation-triangle"></i>'
-                if getattr(quest, "blocking", False) else
-                '<i class="icon-spacing fa fa-fw"></i>'
-            )
-            rows.append({
-                'id': quest.id,
-                '_id': f'heading-quest-{quest.id}',
-                'icon': f"<img src='{quest.get_icon_url()}' class='img-responsive panel-title-img img-rounded' alt='icon'>",
-                'name': quest.name,
-                'xp': quest.xp,
-                'campaign': quest.campaign.name if quest.campaign else '',
-                'tags': ", ".join(tag.name for tag in quest.tags.all()) or '-',
-                'status_icons': repeat_icon + blocking_icon,
-            })
-
-    return JsonResponse({
-        'total': total,
-        'rows': rows,
-    })
 
 
 @require_POST

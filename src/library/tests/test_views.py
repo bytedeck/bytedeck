@@ -210,40 +210,6 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         response = self.assert200('library:quest_list')
         self.assertContains(response, '</i>&nbsp; Quest Library</a>')
 
-    def test_ajax_quest_library_list(self):
-        """
-        Ensure staff users can access the AJAX quest library list endpoint and receive
-        a valid JSON response with all required fields for the Bootstrap Table.
-
-        This test verifies:
-        - The endpoint is accessible to staff (HTTP 200)
-        - The response contains 'total' and 'rows' keys
-        - Each row contains the expected fields: 'icon', 'name', and 'status_icons'
-        """
-        # Log in as a staff user
-        self.client.force_login(self.test_teacher)
-
-        # Get the AJAX quest library list endpoint
-        url = reverse('library:ajax_quest_library_list')
-        response = self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-
-        # The response should be successful
-        self.assertEqual(response.status_code, 200)
-
-        # Parse the JSON response
-        data = response.json()
-
-        # The response should include 'total' and 'rows'
-        self.assertIn('total', data)
-        self.assertIn('rows', data)
-
-        # If there are any rows, check that required fields are present in the first row
-        if data['rows']:
-            row = data['rows'][0]
-            self.assertIn('icon', row)
-            self.assertIn('name', row)
-            self.assertIn('status_icons', row)
-
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def setUp(self):

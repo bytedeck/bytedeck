@@ -5,7 +5,6 @@ app_name = 'library'
 
 urlpatterns = [
     # AJAX endpoints
-    path('quests/ajax_list/', views.ajax_quest_library_list, name='ajax_quest_library_list'),
     path('quests/ajax_quest_info/<int:id>/', views.ajax_quest_info, name='ajax_library_info'),
     path('quests/ajax_quest_info/', views.ajax_quest_info, name='ajax_library_root'),
 
