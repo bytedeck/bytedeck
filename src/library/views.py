@@ -52,8 +52,8 @@ def ajax_quest_info(request, id):
     """
     with library_schema_context():
         quest = get_object_or_404(Quest, pk=id)
-        template = 'library/preview_content_lib.html'
-        html = render_to_string(template, {'quest': quest}, request)
+        template = 'quest_manager/preview_content_quests_avail.html'
+        html = render_to_string(template, {'q': quest}, request)
         return JsonResponse({'quest_info_html': html})
 
 

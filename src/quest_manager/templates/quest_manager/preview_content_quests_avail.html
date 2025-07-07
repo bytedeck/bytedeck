@@ -8,7 +8,11 @@
 
 </div>
 <hr class ="visible-xs-block" >
-{% include "quest_manager/buttons.html" %}
+{% if '/library/' in request.path %}
+  {% include "library/library_bttns.html" %}
+{% else %}
+  {% include "quest_manager/buttons.html" %}
+{% endif %}
   <p>{{q.short_description|safe}}</p>
 {% if request.user.is_staff or request.user == q.editor %}
 
