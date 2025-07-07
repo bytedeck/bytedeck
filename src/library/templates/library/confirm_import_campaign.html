@@ -32,6 +32,14 @@
                class="btn btn-success"
                {% if local_category %}disabled{% endif %} />
       </form>
+
+      <div class="well panel-top">
+        <p>Are you sure you want to import this campaign into your deck? This action involves:</p>
+        <ul>
+          <li>Importing all quests associated with the campaign</li>
+          <li>If any of the quests from the campaign already exist on your Deck, they'll be added into the campaign</li>
+        </ul>
+      </div>
       {% include "quest_manager/category_detail_content.html" %}
     {% endwith %}
   {% else %}

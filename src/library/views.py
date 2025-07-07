@@ -9,7 +9,7 @@ from django.shortcuts import render
 from quest_manager.models import Quest
 from quest_manager.models import Category
 
-from .importer import import_quests_to
+from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context
 
 
@@ -30,7 +30,6 @@ def quests_library_list(request):
         # Get the active quests and force the query to run while still in the library schema
         # by calling list() on the queryset
         library_quests = list(Quest.objects.get_active())
-        library_quests = list(library_quests)
 
         context = {
             'heading': 'Quests',
@@ -106,8 +105,7 @@ def import_quest_to_current_deck(request, quest_import_id):
 
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
-            quest_ids = [quest.import_id]
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
+            import_quest_to(destination_schema=dest_schema, quest_import_id=quest_import_id)
             messages.success(request, f"Successfully imported '{quest.name}' to your deck.")
 
     return redirect('quests:drafts')
@@ -175,8 +173,8 @@ def import_campaign(request, campaign_import_id):
 
             # Import all quests
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
+            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=campaign_import_id)
             messages.success(request, f"Successfully imported '{category.name}' to your deck.")
 
-    # The campaign will be deactivated by import_quests_to()
+    # The campaign will be deactivated by import_campaign_to()
     return redirect('quest_manager:categories_inactive')
