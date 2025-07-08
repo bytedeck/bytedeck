@@ -537,11 +537,12 @@ def ajax_quest_info(request, quest_id=None):
         template = 'quest_manager/preview_content_quests_avail.html'
 
         with from_library_schema_first(request):
+            is_library_view = (request.POST.get('use_schema') == 'library')
             if quest_id:
                 quest = get_object_or_404(Quest, pk=quest_id)
 
                 template = 'quest_manager/preview_content_quests_avail.html'
-                quest_info_html = render_to_string(template, {'q': quest}, request=request)
+                quest_info_html = render_to_string(template, {'q': quest, 'is_library_view': is_library_view}, request=request)
 
                 data = {'quest_info_html': quest_info_html}
 
@@ -552,7 +553,7 @@ def ajax_quest_info(request, quest_id=None):
                 all_quest_info_html = {}
 
                 for q in quests:
-                    all_quest_info_html[q.id] = render_to_string(template, {'q': q}, request=request)
+                    all_quest_info_html[q.id] = render_to_string(template, {'q': q, 'is_library_view': is_library_view}, request=request)
 
                 data = json.dumps(all_quest_info_html)
                 return JsonResponse(data, safe=False)

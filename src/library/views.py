@@ -4,9 +4,6 @@ from django.contrib.auth.decorators import login_required
 from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
-from django.template.loader import render_to_string
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
 from quest_manager.models import Quest
 from quest_manager.models import Category
 
@@ -29,7 +26,7 @@ def quests_library_list(request):
 
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
-        # by calling list() on the queryset
+        # by calling len() on the queryset
         library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
         num_library = len(library_quests)
 
@@ -41,20 +38,6 @@ def quests_library_list(request):
         }
 
     return render(request, 'library/library_quests.html', context)
-
-
-@require_POST
-@login_required
-def ajax_quest_info(request, id):
-    """
-    AJAX POST returning detailed HTML of a quest by id,
-    always checking library schema.
-    """
-    with library_schema_context():
-        quest = get_object_or_404(Quest, pk=id)
-        template = 'quest_manager/preview_content_quests_avail.html'
-        html = render_to_string(template, {'q': quest}, request)
-        return JsonResponse({'quest_info_html': html})
 
 
 @login_required

@@ -1,9 +1,0 @@
-{% if request.user.is_staff %}
-  <div id="preview-btns-{{ q.id }}" class="pull-right" style="margin-bottom: 1em;">
-    <a href="{% url 'library:import_quest' q.import_id %}"
-       class="btn btn-primary"
-       title="Import this Quest into your Deck. The Quest will appear in your Drafts tab.">
-      <i class="fa fa-download"></i> Import Quest
-    </a>
-  </div>
-{% endif %}

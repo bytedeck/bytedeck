@@ -4,10 +4,6 @@ from library import views
 app_name = 'library'
 
 urlpatterns = [
-    # AJAX endpoints
-    path('quests/ajax_quest_info/<int:id>/', views.ajax_quest_info, name='ajax_library_info'),
-    path('quests/ajax_quest_info/', views.ajax_quest_info, name='ajax_library_root'),
-
     # Library pages
     path('quests/', views.quests_library_list, name='quest_list'),
     path('campaigns/', views.campaigns_library_list, name='category_list'),
