@@ -259,7 +259,6 @@ class QuestResource(resources.ModelResource):
         if campaign_import_id:
             try:
                 # Try to parse import_id as UUID.
-                # Catch ValueError to handle malformed UUIDs, which might come from manual edits by superusers.
                 campaign = Category.objects.get(import_id=UUID(campaign_import_id))
             except (Category.DoesNotExist):
                 pass
@@ -281,19 +280,24 @@ class QuestResource(resources.ModelResource):
 
         # Assign the campaign to the quest
         quest.campaign = campaign
+        # Make sure any quests that already exist don't get published
+        quest.visible_to_students = False
         quest.full_clean()
         quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         if not dry_run:
+            # Include the option to not import the campaign set the default to False
+            import_campaign = kwargs.get('import_campaign', False)
             for data_dict in dataset.dict:
                 import_id = data_dict['import_id']
                 parent_quest = Quest.objects.get(import_id=import_id)
 
                 self.generate_simple_prereqs(parent_quest, data_dict)
-                if data_dict.get('campaign_title') or data_dict.get('campaign_import_id'):
-                    # Only generate campaign if title or import_id is provided
-                    # This prevents unnecessary campaign creation for quests without campaigns
+                if import_campaign and (data_dict.get('campaign_title') or data_dict.get('campaign_import_id')):
+                    # Only generate a campaign if importing campaigns is enabled
+                    # and either a campaign title or import ID is present.
+                    # This avoids creating unnecessary campaigns when importing standalone quests.
                     self.generate_campaign(parent_quest, data_dict)
 
 
