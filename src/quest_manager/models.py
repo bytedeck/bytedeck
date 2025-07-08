@@ -20,25 +20,21 @@ from tags.models import TagsModelMixin
 
 
 class CategoryManager(models.Manager):
-    """
-    Custom manager for Category model that provides
-    queryset methods for active campaigns with available quests.
-    """
 
     def all_active_with_importable_quests(self):
         """
         Returns a queryset of active campaigns (categories) that have
-        at least one quest visible to students and not archived.
+        at least one quest visible_to_students (published) and not archived.
 
         This helps efficiently filter campaigns relevant for display
         or import in the library context.
         """
 
         # Start with all categories filtered to only those marked active
-        qs = self.get_queryset()
+        qs = self.get_queryset().filter(active=True)
 
         # Annotate each category with a count of related quests that:
-        # - are visible to students (not drafts)
+        # - are visible_to_students (published)
         # - are not archived (still active)
         qs = qs.annotate(
             current_quest_count=Count(
@@ -59,7 +55,6 @@ class Category(IsAPrereqMixin, models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
-    objects = CategoryManager()
     active = models.BooleanField(
         default=True,
         help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
@@ -71,6 +66,8 @@ class Category(IsAPrereqMixin, models.Model):
         help_text="This value links your campaign to the corresponding campaign within the Library."
         " Only change this value if you want to disconnect your campaign from the Library."
     )
+
+    objects = CategoryManager()
 
     class Meta:
         verbose_name = "campaign"

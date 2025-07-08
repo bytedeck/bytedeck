@@ -297,7 +297,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
         Campaigns are only included in the library list if they have at least one
-        visible and unarchived quest.
+        visible_to_students (published) and unarchived quest.
         """
         self.client.force_login(self.test_teacher)
 
@@ -325,26 +325,47 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertNotContains(response, excluded_archived.title)
         self.assertNotContains(response, excluded_invisible.title)
 
-    def test_import_campaign_view__shows_only_current_quests(self):
+    def test_campaigns_library_list_excludes_inactive_campaigns(self):
         """
-        Only current quests (visible and not archived) should be shown when confirming a campaign import.
+        Inactive campaigns should not appear in the library category list,
+        even if they contain visible_to_students (published) and unarchived quests.
         """
         self.client.force_login(self.test_teacher)
 
         with library_schema_context():
-            # Create a campaign with a mix of visible, archived, and invisible quests
+            # Should be shown: active campaign with a visible/unarchived quest
+            active_campaign = baker.make(Category, title='Active Campaign', active=True)
+            baker.make(Quest, campaign=active_campaign, visible_to_students=True, archived=False)
+
+            # Should be hidden: inactive campaign even though quest is valid
+            inactive_campaign = baker.make(Category, title='Inactive Campaign', active=False)
+            baker.make(Quest, campaign=inactive_campaign, visible_to_students=True, archived=False)
+
+        response = self.client.get(reverse('library:category_list'))
+
+        self.assertContains(response, active_campaign.title)
+        self.assertNotContains(response, inactive_campaign.title)
+
+    def test_import_campaign_view__shows_only_current_quests(self):
+        """
+        Only current quests (visible_to_students (published) and not archived) should be shown when confirming a campaign import.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            # Create a campaign with a mix of visible (published), archived, and invisible quests
             campaign = baker.make(Category, title='Visible Campaign')
             # Create a quest that should be displayed
             visible_quest = baker.make(Quest, campaign=campaign, name='Visible', visible_to_students=True, archived=False)
             # Create a quest that should not be displayed (archived)
             archived_quest = baker.make(Quest, campaign=campaign, name='Archived', visible_to_students=True, archived=True)
-            # Create a quest that should not be displayed (invisible/draft)
+            # Create a quest that should not be displayed (unpublished/draft)
             invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', visible_to_students=False, archived=False)
 
         # Go to the import confirmation page for the campaign
         response = self.client.get(reverse('library:import_category', args=[campaign.import_id]))
 
-        # Should include only the visible, non-archived quest
+        # Should include only the visible (published), non-archived quest
         content = response.content.decode()
         assert visible_quest.name in content
         assert archived_quest.name not in content
