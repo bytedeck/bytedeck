@@ -3,9 +3,7 @@ from django.db import connection
 from django.contrib.auth.decorators import login_required
 from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import get_object_or_404
-from django.shortcuts import redirect
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 from quest_manager.models import Quest
 from quest_manager.models import Category
 
@@ -28,13 +26,14 @@ def quests_library_list(request):
 
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
-        # by calling list() on the queryset
-        library_quests = list(Quest.objects.get_active())
-        library_quests = list(library_quests)
+        # by calling len() on the queryset
+        library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
+        num_library = len(library_quests)
 
         context = {
             'heading': 'Quests',
             'library_quests': library_quests,
+            'num_library': num_library,
             'library_tab_active': True,
         }
 
