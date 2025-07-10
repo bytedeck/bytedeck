@@ -5,6 +5,9 @@
          src="{% firstof category_icon_url category.get_icon_url %}"
          alt="icon" />
   </div>
+  <div class="media-body">
+    <p>{{ category.short_description|default:"<i>[No description provided]</i>" }}</p>
+  </div>
 </div>
 <div id="category-info-{% firstof category_id category.id %}"
      class="panel panel-primary panel-top">
@@ -15,8 +18,8 @@
     <div class="row">
       <div class="col-sm-6">
         <ul class="list-unstyled">
-          <li>Quests in this campaign: {% firstof category_quest_count category.quest_count %}</li>
-          <li>Total XP available: {% firstof category_total_xp_available category.xp_sum %}</li>
+          <li>Published quests in this campaign: {% firstof category_quest_count category.quest_count "0" %}</li>
+          <li>Total XP available: {% firstof category_total_xp_available category.xp_sum "0" %}</li>
           <li>Active: {% firstof category_active category.active %}</li>
         </ul>
       </div>
@@ -30,7 +33,9 @@
            data-classes="table table-hover"
            data-toggle="table"
            data-detail-view="true"
-           data-search="true">
+           data-search="true"
+           data-trim-on-search="false"
+           data-custom-search="multiKeywordSearch">
       <thead>
         <tr class="panel-heading">
           <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>

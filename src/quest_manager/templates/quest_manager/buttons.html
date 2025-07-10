@@ -2,33 +2,49 @@
 
 <div id='preview-btns-{{ q.id }}' class="pull-right">
     {% if not no_details %} <!-- no_details if you are already viewing the details =) -->
-      <a title="View Details: preview the content of this quest without starting it"
-         class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">
+      {% if is_library_view %}
+        {% comment %} TODO: add a detail view for library quests {% endcomment %}
+        {% comment %} <a title="View Details: preview the content of this quest without importing it"
+          class="btn btn-info" href="#" role="button">
           <i class="fa fa-fw fa-info-circle"></i><span class="visible-lg-inline-block icon-text">View Details</span>
-      </a>
+        </a> {% endcomment %}
+      {% else %}
+        <a title="View Details: preview the content of this quest without starting it"
+          class="btn btn-info" href="{% url 'quests:quest_detail' q.id %}" role="button">
+            <i class="fa fa-fw fa-info-circle"></i><span class="visible-lg-inline-block icon-text">View Details</span>
+        </a>
+      {% endif %}
     {% endif %}
 
     {% if  request.user.is_staff or request.user == q.editor %}
-        <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
-          title = "Edit the quest" >
-          <i class="fa fa-edit"></i>
-        </a>
-        <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button"
-          title = "Create a copy of this quest" >
-          <i class="fa fa-copy"></i>
-        </a>
-        <a class="btn btn-default" href="{% url 'quests:approved_for_quest' q.id %}" role="button"
-          title = "View past submissions of this quest" >
-          <i class="fa fa-folder-open-o"></i>
-        </a>
-        <a class="btn btn-default" href="{% url 'quests:summary' q.id %}" role="button"
-          title="View summary data for this quest" >
-          <i class="fa fa-fw fa-bar-chart"></i>
-        </a>
-        <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
-          title = "Delete this quest" >
-          <i class="fa fa-trash-o"></i>
-        </a>
+        {% if is_library_view %}
+          <a href="{% url 'library:import_quest' q.import_id %}"
+              class="btn btn-primary"
+              title="Import this Quest into your Deck. The Quest will appear in your Drafts tab.">
+            <i class="fa fa-download"></i><span class="visible-lg-inline-block icon-text">Import Quest</span>
+          </a>
+        {% else %}
+          <a class="btn btn-warning" href="{% url 'quests:quest_update' q.id %}" role="button"
+            title = "Edit the quest" >
+            <i class="fa fa-edit"></i>
+          </a>
+          <a class="btn btn-primary" href="{% url 'quests:quest_copy' q.id %}" role="button"
+            title = "Create a copy of this quest" >
+            <i class="fa fa-copy"></i>
+          </a>
+          <a class="btn btn-default" href="{% url 'quests:approved_for_quest' q.id %}" role="button"
+            title = "View past submissions of this quest" >
+            <i class="fa fa-folder-open-o"></i>
+          </a>
+          <a class="btn btn-default" href="{% url 'quests:summary' q.id %}" role="button"
+            title="View summary data for this quest" >
+            <i class="fa fa-fw fa-bar-chart"></i>
+          </a>
+          <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
+            title = "Delete this quest" >
+            <i class="fa fa-trash-o"></i>
+          </a>
+          {% endif %}
 
     {% else %}
 

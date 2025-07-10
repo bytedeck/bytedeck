@@ -16,6 +16,9 @@
       <p>
         Existing Campaign: <a href="{{ local_category.get_absolute_url }}">{{ local_category.name }}</a>
       </p>
+      <p>
+        Import ID: {{ local_category.import_id }}
+      </p>
     </div>
   {% elif object.active or request.user.is_staff %}
     {% with object as category %}
