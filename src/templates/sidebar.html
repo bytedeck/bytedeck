@@ -15,7 +15,7 @@
   </h3>
 
 
-  {#    Group Menus #}
+  {# Group Menus #}
   {% if request.user.is_staff %}
     <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-staff">
       <a class="list-group-item {% if '/approvals/' in request.path_info %}active{% endif %}"
@@ -27,15 +27,17 @@
       </a>
     </div>
 
-    <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-staff">
-      <a class="list-group-item {% if '/library/' in request.path_info %}active{% endif %}"
-         href="{% url 'library:quest_list' %}">
-        <i class="fa fa-book fa-fw"></i>&nbsp;
-        <span class="visible-sm-inline visible-xs-inline visible-md-inline">Library</span>
-        <span class="hidden-sm hidden-xs hidden-md">Library</span>
-        <span id="approvals_badge" class="badge alert-danger list-group-item-badge "></span>
-      </a>
-    </div>
+    {% if config.enable_shared_library %}
+      <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-staff">
+        <a class="list-group-item {% if '/library/' in request.path_info %}active{% endif %}"
+          href="{% url 'library:quest_list' %}">
+          <i class="fa fa-book fa-fw"></i>&nbsp;
+          <span class="visible-sm-inline visible-xs-inline visible-md-inline">Library</span>
+          <span class="hidden-sm hidden-xs hidden-md">Library</span>
+          <span id="approvals_badge" class="badge alert-danger list-group-item-badge "></span>
+        </a>
+      </div>
+    {% endif %}
   {% endif %}
 
   <div class="nav list-group hidden-xs sidebar-menu" id="lg-menu-main">
