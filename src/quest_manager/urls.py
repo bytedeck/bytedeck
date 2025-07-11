@@ -46,6 +46,7 @@ urlpatterns = [
     re_path(r'^completed/$', views.quest_list, name='completed'),
     re_path(r'^past/$', views.quest_list, name='past'),
     re_path(r'^drafts/$', views.quest_list, name='drafts'),
+    re_path(r'^archived/$', views.quest_list, name='archived'),
 
     # Approvals
     re_path(r'^approvals/$', views.approvals, name='approvals'),
