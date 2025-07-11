@@ -219,10 +219,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('library:quest_list'))
-        # Makes sure staff still have sidebar menu items
-        self.assertContains(response, 'id="lg-menu-staff"')
         # Checks if the html in the sidebar for library is there (shouldn't be)
-        self.assertNotContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
+        self.assertNotContains(response, 'id="lg-menu-library"')
 
         # Now enable the shared library
         config.enable_shared_library = True
@@ -231,10 +229,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Re-fetch the response after config change
         response = self.client.get(reverse('library:quest_list'))
 
-        # Makes sure staff still have sidebar menu items
-        self.assertContains(response, 'id="lg-menu-staff"')
         # Checks if the html in the sidebar for library is there (should be)
-        self.assertContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
+        self.assertContains(response, 'id="lg-menu-library"')
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):

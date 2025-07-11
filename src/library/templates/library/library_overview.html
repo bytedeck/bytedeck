@@ -6,14 +6,14 @@
 {% block content %}
   <!-- Bootstrap Nav Tabs -->
   <ul class="nav nav-tabs nav-justified" role="tablist">
-    <li class="nav-item{% if tab == 'quests' %} active{% endif %}">
-      <a class="nav-link" href="{% url 'library:quest_list' %}">
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'quests' %} active{% endif %}" href="{% url 'library:quest_list' %}">
         Quests
         <span class="badge">{{ num_quests|default:"" }}</span>
       </a>
     </li>
-    <li class="nav-item{% if tab == 'campaigns' %} active{% endif %}">
-      <a class="nav-link" href="{% url 'library:category_list' %}">
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'campaigns' %} active{% endif %}" href="{% url 'library:category_list' %}">
         Campaigns
         <span class="badge">{{ num_campaigns|default:"" }}</span>
       </a>
