@@ -490,7 +490,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions_count = completed_submissions.count()
     past_submissions_count = past_submissions.count()
     drafts_count = draft_quests.count()
-    archived_count = len(archived_quests)
+    archived_count = archived_quests.count()
     available_quests_count = (
         len(available_quests)
         if type(available_quests) is list
@@ -562,7 +562,7 @@ def ajax_quest_info(request, quest_id=None):
                 return JsonResponse(data)
 
             else:  # all quests, used for staff only.
-                quests = Quest.objects.get_queryset()
+                quests = Quest.objects.all()
                 all_quest_info_html = {}
 
                 for q in quests:
@@ -1118,14 +1118,7 @@ def unarchive(request, quest_id):
     quest = Quest.objects.all_including_archived().get(id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
-    url = quest.get_absolute_url()
-    link = f'<a href="{url}">{quest.name}</a>'
-    # Check if quest is actually archived
-    # Too many submissions can cause this to happen
-    if not quest.archived:
-        messages.info(request, f"Quest '{link}' is already unarchived and should be in the Drafts tab.")
-        # Since the quests should be unarchived to the Drafts tab redirect them there
-        return redirect("quests:drafts")
+    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
     quest.visible_to_students = False
