@@ -30,14 +30,13 @@ def quests_library_list(request):
         library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
         num_library = len(library_quests)
 
-        context = {
-            'heading': 'Quests',
-            'library_quests': library_quests,
-            'num_library': num_library,
-            'library_tab_active': True,
-        }
-
-    return render(request, 'library/library_quests.html', context)
+    context = {
+        'heading': 'Library',
+        'tab': 'quests',
+        'library_quests': library_quests,
+        'num_quests': num_library,
+    }
+    return render(request, 'library/library_overview.html', context)
 
 
 @login_required
@@ -58,12 +57,14 @@ def campaigns_library_list(request):
         # by calling list() on the queryset
         library_categories = list(Category.objects.filter(active=True))
 
-        context = {
-            'object_list': library_categories,
-            'library_tab_active': True,
-        }
-
-    return render(request, 'library/library_categories.html', context)
+    num_campaigns = len(library_categories)
+    context = {
+        'heading': 'Library',
+        'tab': 'campaigns',
+        'library_categories': library_categories,
+        'num_campaigns': num_campaigns,
+    }
+    return render(request, 'library/library_overview.html', context)
 
 
 @login_required

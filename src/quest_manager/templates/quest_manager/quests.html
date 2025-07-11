@@ -74,16 +74,6 @@ back to its original look.
       </li>
     {% endif %}
 
-    {% if config.enable_shared_library %}
-      {% if request.user.profile.is_TA or request.user.is_staff %}
-        <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
-          <a href="{% url 'library:quest_list' %}">
-            Library
-            <span class="badge">{{ num_library | default:"" }}</span>
-          </a>
-        </li>
-      {% endif %}
-    {% endif %}
   </ul>
   <!-- Tab panes -->
   <div class="tab-content">
@@ -132,15 +122,6 @@ back to its original look.
         {% include 'quest_manager/tab_quests_available.html' %}
       {% endwith %}
       </div>
-    {% endif %}
-
-    {% if config.enable_shared_library %}
-      {% if request.user.profile.is_TA or request.user.is_staff %}
-        <div role="tabpanel"
-          class="tab-pane fade {% if library_tab_active %}in active{% endif %}" id="library">
-          {% include 'library/tab_library_quests.html' %}
-        </div>
-      {% endif %}
     {% endif %}
 
   </div>
