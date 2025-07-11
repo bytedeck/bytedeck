@@ -471,7 +471,7 @@ class SubmissionTestModel(TenantTestCase):
 
     def test_submission_mark_completed(self):
         user = baker.make(User)
-        sub = baker.make(QuestSubmission, user=user)
+        sub = baker.make(QuestSubmission, user=user, semester=self.semester)
         draft_comment = Comment.objects.create_comment(
             user=self.student,
             text="draft comment",
@@ -484,7 +484,9 @@ class SubmissionTestModel(TenantTestCase):
         self.assertFalse(sub.is_completed)
         self.assertEqual(sub.draft_comment, draft_comment)
         self.assertIsNone(user.profile.time_of_last_submission)
+        self.assertTrue(sub.is_in_progress())
         sub.mark_completed()
+        self.assertFalse(sub.is_in_progress())
         self.assertEqual(user.profile.time_of_last_submission, sub.time_completed)
         self.assertTrue(sub.is_completed)
         self.assertIsNotNone(sub.first_time_completed)

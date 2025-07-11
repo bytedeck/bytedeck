@@ -39,7 +39,7 @@
   </div>
   {{s.quest.submission_details|safe}}
 </li>
-{% if s.is_returned or completed %}
+{% if s.is_in_progress or s.is_returned or completed %}
   <li class="list-group-item list-group-item-info">Submission Comments</li>
   {% with s.get_comments as target_comments %}
     {% include "comments/comments.html" %}
@@ -47,7 +47,7 @@
   <li class="list-group-item list-group-item-info">
     Quick Reply Form
     <small>(To provide a fully formatted comment, include images, or attach files, click the
-      {% if s.is_returned %}
+      {% if s.all_not_completed %}
         Continue
       {% else %}
         View Details

@@ -18,5 +18,6 @@
       {% endif %}
     </small>
   {% else %}
-    In progress
+    In progress<br>
+    <small>{{ s.time_started|timesince }}</small>
   {% endif %}
