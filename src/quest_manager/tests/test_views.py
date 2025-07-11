@@ -596,6 +596,30 @@ class SubmissionViewTests(TenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
 
+    def test_ajax_save_draft_blank_comment(self):
+        """Should not cause an error if the comment is blank"""
+        # loging required for this view
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text="I am a test draft comment")
+        sub = baker.make(QuestSubmission,
+                         quest=quest,
+                         draft_comment=draft_comment,
+                         )
+
+        ajax_data = {
+            # 'comment': draft_text, #  intentionally blank to ensure it does not error
+            'submission_id': sub.id,
+        }
+
+        # THere was a bug where the comment was not passed then and it would throw an IntegrityError
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data=ajax_data,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+
 
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for view.py :
@@ -620,7 +644,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.quest = baker.make(Quest, xp=5)
         self.draft_comment = baker.make(Comment, text="test draft comment")
         self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
-                              draft_comment=self.draft_comment)
+                              draft_comment=self.draft_comment, semester=self.semester)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -710,6 +734,40 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.test_student.refresh_from_db()
         self.assertEqual(self.test_student.profile.xp_cached, 80)
 
+    def test_complete__xp_requested_when_is_approved(self):
+        """ Checks that xp_requested can't be changed after a qubmission is approved
+        and also checks the bugfix for https://github.com/bytedeck/bytedeck/issues/1561
+        """
+        quest = baker.make(Quest, xp_can_be_entered_by_students=True)
+        submission = baker.make(
+            QuestSubmission,
+            quest=quest,
+            user=self.test_student,
+            is_completed=True,
+            is_approved=True,  # this means shouldn't be able to change xp_requested anymore
+            xp_requested=10,  # for later comparison to make sure it isn't changed
+        )
+
+        self.client.force_login(self.test_student)
+        url = reverse("quests:complete", args=[submission.pk])
+
+        response = self.client.post(
+            url,
+            data={
+                "xp_requested": 50,  # should be trigger error
+                "comment": "1",
+                "comment_text": "just a comment",
+            }
+        )
+
+        self.assertContains(
+            response,
+            "already been approved",
+            status_code=403,
+        )
+        submission.refresh_from_db()
+        self.assertEqual(submission.xp_requested, 10)  # Ensure XP wasn't updated
+
     def test_no_comment_verification_not_required_quick_reply_form(self):
         """ When a quest is automatically approved, it does not require a comment
         """
@@ -787,9 +845,9 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 0)
 
     def test_specific_teacher_to_notify_own_teacher(self):
-        """ If a quest has a specific teacher linked to it, they should be notified of completions if
-        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
-        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        If a quest has a specific teacher set to notify and that teacher is also the student's current teacher,
+        then no notification should be sent, because the submission will already appear in their "Approvals" tab.
         """
         self.sub.quest.specific_teacher_to_notify = self.test_teacher
         self.sub.quest.save()
@@ -800,9 +858,11 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(notifications.count(), 0)
 
     def test_specific_teacher_to_notify_other_teacher(self):
-        """ If a quest has a specific teacher linked to it, they should be notified of completions if
-        the student is not in one of that teacher's courses (if they are in the teacher's course, then the submission will
-        appear in their "Approvals" tab anyway and notification is redundant)
+        """
+        If a quest has a specific teacher set to notify who is not the student's current teacher,
+        the submission should appear in that teacher's "Approvals" tab, and no notification should be sent
+        since it's already visible there.
+        Likewise no notification should be sent to the student's current teacher.
         """
         special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
         self.sub.quest.specific_teacher_to_notify = special_teacher
@@ -810,8 +870,12 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.post_complete(teachers_list=[self.test_teacher])  # test_teacher is default but be explicit
 
+        # asserts that the quest is in the specific_teacher_to_notify "Approvals" tab
+        self.assertIn(self.sub, QuestSubmission.objects.all_awaiting_approval(teacher=special_teacher))
+
+        # Shouldn't notify the specific other teacher since it should show up in their "Approvals" tab
         notifications = Notification.objects.all_for_user_target(special_teacher, self.sub)
-        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(notifications.count(), 0)
 
         # and still no notification needed for actual teacher of student:
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)

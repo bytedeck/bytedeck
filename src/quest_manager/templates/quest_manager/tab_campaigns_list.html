@@ -10,7 +10,6 @@
       <th>Icon</th>
       <th data-sortable='true' data-field='count'># of Quests</th>
       <th data-sortable='true' data-field='xp'>XP Available</th>
-      <th data-sortable='true' data-field='active'>Active</th>
       <th>Action</th>
     </tr>
   </thead>
@@ -24,7 +23,6 @@
         </td>
         <td>{{ object.quest_count }}</td>
         <td>{{ object.xp_sum }}</td>
-        <td>{{ object.active }}</td>
         <td>
           {% if not library_tab_active %}
             <a class="btn btn-info"
@@ -39,16 +37,28 @@
                title="Edit this campaign">
               <i class="fa fa-edit"></i>
             </a>
-            <a class="btn btn-danger"
-               href="{% url 'quests:category_delete' object.id %}"
-               role="button"
-               title="Delete this campaign">
-              <i class="fa fa-trash-o"></i>
-            </a>
+
+              <a class="btn btn-danger"
+                {% if object.quest_count != 0 %}
+                  disabled
+                  title="Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first"
+                  tabindex="-1"
+                  aria-disabled="true"
+                {% else %}
+                  href="{% url 'quests:category_delete' object.id %}"
+                  title="Delete this campaign"
+                {% endif %}
+                role="button">
+                <i class="fa fa-trash-o"></i>
+              </a>
           {% else %}
-            <a href="{% url 'library:import_category' object.title %}"
-               class="btn btn-sm btn-default"
-               title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab."><i class="fa fa-download"></i></a>
+            {% if object.import_id %}
+               <a href="{% url 'library:import_category' object.import_id %}"
+                  class="btn btn-sm btn-default"
+                  title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab.">
+                 <i class="fa fa-download"></i>
+               </a>
+            {% endif %}
           {% endif %}
         </td>
       </tr>

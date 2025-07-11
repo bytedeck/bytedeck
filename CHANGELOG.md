@@ -4,27 +4,57 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.25.2] 2025-02-017
+### [1.26.0] 2025-07-10 Marcus I
 * New Features:
-  - Add ability to fully delete users from their profile [#1751]
+ - New Campaign 'Description' field [#1772](https://github.com/bytedeck/bytedeck/issues/1772)
+ - Add optional start and end times to youtube video insert widget [#1556](https://github.com/bytedeck/bytedeck/issues/1556)
+ - Preview quests on the Library tab [#1757](https://github.com/bytedeck/bytedeck/issues/1757)
+* Tweaks:
+ - Redirect to bytedeck.com when deck name isn't found (or typo) [#1583](https://github.com/bytedeck/bytedeck/issues/1583)
+ - Extend email confirmation link to 90 days [#1767](https://github.com/bytedeck/bytedeck/issues/1767)
+ - Remove 'active' column from campaign list (redundant since only active campaigns will appear in this tab) [#1749](https://github.com/bytedeck/bytedeck/issues/1749)
+ - Announcement notifications can now be removed from the New Notifications menu [#1233](https://github.com/bytedeck/bytedeck/issues/1233)
+ - Improve the "form already submitted" alert message [#1778](https://github.com/bytedeck/bytedeck/issues/1778)
+ - Prevent deletion of Campaign if it has quests in it [#1773](https://github.com/bytedeck/bytedeck/issues/1773)
+ - Quest (and other) search fields now search on all words seperately [#1791](https://github.com/bytedeck/bytedeck/issues/1791)
+ - Avatar styling on profile page [#822](https://github.com/bytedeck/bytedeck/issues/822)
 * Refactor/Optimizations:
-  - Quest and Submission list accordion contents now load when clicked, vastly improving loading speeds of large quest and submission lists [#1474]
 * Bugfixes:
-  - Fix broken widget styling on all forms [#1750]
+ - Add rate limit 429 error page [#1776](https://github.com/bytedeck/bytedeck/issues/1776)
+ - Handle empty 'XP Requested' field [#1561](https://github.com/bytedeck/bytedeck/issues/1561)
+ - Add blank values for Quests in Campaign and Total XP available on Campaign detail view [#1748](https://github.com/bytedeck/bytedeck/issues/1748)
+ - Fix user access to the Library tab.  Only authenticated staff can access [#1789](https://github.com/bytedeck/bytedeck/issues/1789)
+ - Fix automated link creation of urls in comments [#930](https://github.com/bytedeck/bytedeck/issues/930)
+ - Remove uneccessary notification for a submission on a quest when the teacher is set to be notified already [#699](https://github.com/bytedeck/bytedeck/issues/699)
+ - Fix various campaign import issues [#1764](https://github.com/bytedeck/bytedeck/issues/1764)
+* Devops:
+ - Upgrade database to Postgres 16
+ - Update automated testing to use Ubuntu 22.04
+ - Update CodeQL Analysis to V2 [#1784](https://github.com/bytedeck/bytedeck/issues/1784)
+
+
+### [1.25.2] 2025-02-19
+* New Features:
+  - Add ability to fully delete users from their profile [#1751](https://github.com/bytedeck/bytedeck/issues/1751)
+* Refactor/Optimizations:
+  - Quest and Submission list accordion contents now load when clicked, vastly improving loading speeds of large quest and submission lists [#1474](https://github.com/bytedeck/bytedeck/issues/1474)
+* Bugfixes:
+  - Fix broken widget styling on all forms [#1750](https://github.com/bytedeck/bytedeck/issues/1750)
+  - Fix broken QuestSubmission and Comment edit views in Django Admin
 * Devops:
   - Update to Python 3.10
 
 
 ### [1.25.1] 2025-02-09
 * Tweaks:
-  - Improve map update messages [#1721]
-  - Auto-delete notifications older than 90 days [#757]
+  - Improve map update messages [#1721](https://github.com/bytedeck/bytedeck/issues/1721)
+  - Auto-delete notifications older than 90 days [#757](https://github.com/bytedeck/bytedeck/issues/757)
 * Bugfixes:
-  - Recalc student's XP when a badge is revoked from a student [#1743]
-  - Fix broken "Available Date" field's default value when creating a new quest [#1741]
-  - Fix alert message margins [#1720]
-  - Fix timestamps on submission comments [#1716]
-  - Fix broken form field when trying to grant badges in bulk [#1574] and [#1472]
+  - Recalc student's XP when a badge is revoked from a student [#1743](https://github.com/bytedeck/bytedeck/issues/1743)
+  - Fix broken "Available Date" field's default value when creating a new quest [#1741](https://github.com/bytedeck/bytedeck/issues/1741)
+  - Fix alert message margins [#1720](https://github.com/bytedeck/bytedeck/issues/1720)
+  - Fix timestamps on submission comments [#1716](https://github.com/bytedeck/bytedeck/issues/1716)
+  - Fix broken form field when trying to grant badges in bulk [#1574](https://github.com/bytedeck/bytedeck/issues/1574) and [#1472](https://github.com/bytedeck/bytedeck/issues/1472)
 * Devops:
   - Remove save() from full_clean management command and run on all decks, fix all warnings
   - fix broken workflow badges in README, e.g. [![Build and Tests Status](https://github.com/bytedeck/bytedeck/actions/workflows/build_and_test.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3A%22Build+and+Tests%22+branch%3Adevelop)
@@ -33,24 +63,24 @@ This file chronologically records all notable changes to this website, including
 
 ### [1.25.0] 2024-09-04
 * New Features
-  - Maps auto-update when an item within the map is updated [#1660]
-  - Custom, otional field for student profiles. This can be set in Site Config;  Previously "Grad Year" field [#1273]
-  - When students earn badges and ranks, there is now a popup message congratulating/informing them [#551]
-  - Library feature can now import entire campaigns [#1667]
-  - Submission return and approval no longer reloads page [#1349]
+  - Maps auto-update when an item within the map is updated [#1660](https://github.com/bytedeck/bytedeck/issues/1660)
+  - Custom, otional field for student profiles. This can be set in Site Config;  Previously "Grad Year" field [#1273](https://github.com/bytedeck/bytedeck/issues/1273)
+  - When students earn badges and ranks, there is now a popup message congratulating/informing them [#551](https://github.com/bytedeck/bytedeck/issues/551)
+  - Library feature can now import entire campaigns [#1667](https://github.com/bytedeck/bytedeck/issues/1667)
+  - Submission return and approval no longer reloads page [#1349](https://github.com/bytedeck/bytedeck/issues/1349)
 * Bugfixes:
   - Typo in default Ranks
-  - Expired quests in the available quests tab now appear at the top of the list [#1430]
-  - Adding an Excluded Dates to a semester does not activate datepicker; [#1682]
+  - Expired quests in the available quests tab now appear at the top of the list [#1430](https://github.com/bytedeck/bytedeck/issues/1430)
+  - Adding an Excluded Dates to a semester does not activate datepicker; [#1682](https://github.com/bytedeck/bytedeck/issues/1682)
 * Devops:
   - Update Django to 4.2 LTS
   - Enhance Campaign and Quest Library Management with new templates and routing
-  - Refactored approvals and quest_list to use enums for tabs [#1150]
-  - full_clean clearer error printout [#1669]
+  - Refactored approvals and quest_list to use enums for tabs [#1150](https://github.com/bytedeck/bytedeck/issues/1150)
+  - full_clean clearer error printout [#1669](https://github.com/bytedeck/bytedeck/issues/1669)
   - add hash_to_link script to make Changelogs easier to write
   - remove 'future' dependancy; update Dockerfile and docker-compose legacy code
   - many dependancy updates
-  - Added CRISPY_FAIL_SILENTLY to settings.py; [#629]
+  - Added CRISPY_FAIL_SILENTLY to settings.py; [#629](https://github.com/bytedeck/bytedeck/issues/629)
 
 ### [1.24.2] 2024-07-28 - Prep for big submission questions update
 * Tweaks:
