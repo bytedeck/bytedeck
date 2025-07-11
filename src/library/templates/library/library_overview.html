@@ -1,0 +1,21 @@
+{% extends "quest_manager/base.html" %}
+{% block content %}
+  <h2>{{ heading }}</h2>
+  <!-- Bootstrap Nav Tabs -->
+  <ul class="nav nav-tabs nav-justified" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'quests' %} active{% endif %}" href="{% url 'library:quest_list' %}">Quests</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link{% if tab == 'campaigns' %} active{% endif %}" href="{% url 'library:category_list' %}">Campaigns</a>
+    </li>
+  </ul>
+  <!-- Tab Content -->
+  <div class="tab-content" style="margin-top: 2em;">
+    {% if tab == "quests" %}
+      {% include "library/tab_library_quests.html" with library_quests=library_quests %}
+    {% elif tab == "campaigns" %}
+      {% include "library/library_categories.html" with object_list=library_categories %}
+    {% endif %}
+  </div>
+{% endblock %}
