@@ -288,6 +288,27 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "You have no new quests available")
         self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
 
+    def test_teacher_can_unarchive_quest(self):
+        """Staff can unarchive an archived quest via the unarchive view."""
+        # Login a Teacher from setUp
+        self.client.force_login(self.test_teacher)
+        # Create an archived quest
+        archived_quest = baker.make(Quest, archived=True)
+        # Make sure it's archived
+        self.assertTrue(archived_quest.archived)
+
+        # Create the url leading to the unarchive view, same as button
+        url = reverse('quests:unarchive', args=[archived_quest.id])
+        # Simulate clicking the button
+        response = self.client.get(url)
+        # Make sure the teacher gets redirected
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        # Refresh the quest
+        archived_quest.refresh_from_db()
+        # Make sure the quest is no longer archived
+        self.assertFalse(archived_quest.archived)
+
 
 class SubmissionViewTests(TenantTestCase):
 
