@@ -248,17 +248,15 @@ class QuestCopy(QuestCreate):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
 
-        # Use a queryset that includes archived quests for staff
-        qs = Quest.objects.all()
-
-        # Fetch the quest to copy, including archived if staff
-        copied_quest = get_object_or_404(qs, pk=self.kwargs["quest_id"])
+        # by default, set the quest this was copied from as the new_quest_prerequisite
+        # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
+        copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
         # Set initial tags and prerequisite for the form
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
 
         # Create a new Quest instance based on the copied quest
-        new_quest = get_object_or_404(qs, pk=self.kwargs["quest_id"])
+        new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
         new_quest.pk = None  # autogen a new primary key (quest_id by default)
         new_quest.import_id = uuid.uuid4()  # assign a new import ID
         new_quest.name = new_quest.name + " - COPY"  # indicate this is a copy
@@ -636,7 +634,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest.objects.get_queryset(), pk=quest_id)
+    q = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
@@ -1108,6 +1106,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting its archived status to False.
+    Send the quest to the Drafts tab by making sure visible_to_students=False.
     Only staff members can unarchive quests.
 
     Args:
@@ -1117,17 +1116,24 @@ def unarchive(request, quest_id):
     Returns:
         Redirect to quests list with success message
     """
-    quest = get_object_or_404(Quest, pk=quest_id)
+    quest = Quest.objects.get_queryset(include_archived=True).get(id=quest_id)
 
+    # Make the link that leads to the quests detail page to include in the message
+    url = reverse('quests:quest_detail', args=[quest.pk])
+    link = f'<a href="{url}">{quest.name}</a>'
     # Check if quest is actually archived
     if not quest.archived:
-        messages.info(request, f"Quest '{quest.name}' is already unarchived.")
-        return redirect("quests:quests")
+        messages.info(request, f"Quest '{link}' is already unarchived and should be in the Drafts tab.")
+        # Since the quests should be unarchived to the Drafts tab redirect them there
+        return redirect("quests:drafts")
     quest.archived = False
+    # Make sure the quest goes to the Drafts tab
+    quest.visible_to_students = False
     quest.full_clean()
     quest.save()
-    messages.success(request, f"Quest '{quest.name}' has been unarchived.")
-    return redirect("quests:quests")
+    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    # Since the quest is sent to the Drafts tab redirect them there
+    return redirect("quests:drafts")
 
 
 #########################################

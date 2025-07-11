@@ -318,8 +318,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Simulate clicking the button
         response = self.client.post(url, follow=True)
         # Make sure the teacher gets redirected with the message
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.assertContains(response, f"Quest '{archived_quest.name}' has been unarchived.")
+        self.assertRedirects(response, reverse('quests:drafts'))
+        self.assertContains(response, "has been unarchived and moved to the Drafts tab.")
 
         # Refresh the quest
         archived_quest.refresh_from_db()
@@ -329,8 +329,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Simulate clicking the button again
         response = self.client.post(url, follow=True)
         # Make sure the teacher gets redirected with the message
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.assertContains(response, f"Quest '{archived_quest.name}' is already unarchived.")
+        self.assertRedirects(response, reverse('quests:drafts'))
+        self.assertContains(response, "is already unarchived and should be in the Drafts tab.")
 
 
 class SubmissionViewTests(TenantTestCase):
