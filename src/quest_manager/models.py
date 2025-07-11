@@ -127,7 +127,7 @@ class XPItem(models.Model):
     )
     archived = models.BooleanField(
         default=False,
-        help_text="Move this quest into the archived tab."
+        help_text="Move this quest into the Archived tab."
     )
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
@@ -483,12 +483,10 @@ class QuestManager(models.Manager):
         Returns:
             QuerySet of archived quests if user is staff, empty list otherwise
         """
-        # If the default of include_archived=False make sure this includes archived
-        qs = self.get_queryset().filter(archived=True)
         if user.is_staff:
+            qs = self.get_queryset().filter(archived=True)
             return qs
-        else:
-            return qs.none()
+        return self.get_queryset().none()
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
