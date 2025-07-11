@@ -459,7 +459,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if request.user.is_staff:
         available_quests = (
             Quest.objects.all()
-            .not_archived()
             .visible()
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
@@ -551,7 +550,7 @@ def ajax_quest_info(request, quest_id=None):
             is_library_view = (request.POST.get('use_schema') == 'library')
             if quest_id:
                 if request.user.is_staff:
-                    quest = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
+                    quest = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
                 else:
                     quest = get_object_or_404(Quest, pk=quest_id)
 
@@ -563,7 +562,7 @@ def ajax_quest_info(request, quest_id=None):
                 return JsonResponse(data)
 
             else:  # all quests, used for staff only.
-                quests = Quest.objects.get_queryset(include_archived=True)
+                quests = Quest.objects.get_queryset()
                 all_quest_info_html = {}
 
                 for q in quests:
@@ -634,7 +633,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
+    q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
@@ -1116,12 +1115,13 @@ def unarchive(request, quest_id):
     Returns:
         Redirect to quests list with success message
     """
-    quest = Quest.objects.get_queryset(include_archived=True).get(id=quest_id)
+    quest = Quest.objects.all_including_archived().get(id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
-    url = reverse('quests:quest_detail', args=[quest.pk])
+    url = quest.get_absolute_url()
     link = f'<a href="{url}">{quest.name}</a>'
     # Check if quest is actually archived
+    # Too many submissions can cause this to happen
     if not quest.archived:
         messages.info(request, f"Quest '{link}' is already unarchived and should be in the Drafts tab.")
         # Since the quests should be unarchived to the Drafts tab redirect them there
