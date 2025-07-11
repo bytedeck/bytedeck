@@ -30,12 +30,11 @@ def quests_library_list(request):
         library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
         num_library = len(library_quests)
 
-    num_quests = len(library_quests)
     context = {
         'heading': 'Library',
         'tab': 'quests',
         'library_quests': library_quests,
-        'num_quests': num_quests,
+        'num_quests': num_library,
     }
     return render(request, 'library/library_overview.html', context)
 
