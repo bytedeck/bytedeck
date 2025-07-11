@@ -1108,9 +1108,23 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting its archived status to False.
+    Only staff members can unarchive quests.
+
+    Args:
+        request: HTTP request object
+        quest_id: ID of the quest to unarchive
+
+    Returns:
+        Redirect to quests list with success message
     """
     quest = get_object_or_404(Quest, pk=quest_id)
+
+    # Check if quest is actually archived
+    if not quest.archived:
+        messages.info(request, f"Quest '{quest.name}' is already unarchived.")
+        return redirect("quests:quests")
     quest.archived = False
+    quest.full_clean()
     quest.save()
     messages.success(request, f"Quest '{quest.name}' has been unarchived.")
     return redirect("quests:quests")
