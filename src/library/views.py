@@ -13,39 +13,6 @@ from .utils import get_library_schema_name, library_schema_context
 
 @login_required
 @staff_member_required
-def library_overview(request):
-    """
-    Staff-only Library overview page with Quests and Campaigns tabs.
-    """
-    tab = request.GET.get("tab", "quests")
-    with library_schema_context():
-        quests = list(Quest.objects.get_active())
-        campaigns = list(Category.objects.filter(active=True))
-
-    tab_list = [
-        {
-            "name": "Quests",
-            "objects": quests,
-            "active": tab == "quests",
-        },
-        {
-            "name": "Campaigns",
-            "objects": campaigns,
-            "active": tab == "campaigns",
-        },
-    ]
-
-    context = {
-        "heading": "Library",
-        "tab_list": tab_list,
-        "library_quests": quests,
-        "library_categories": campaigns,
-    }
-    return render(request, "library/library_overview.html", context)
-
-
-@login_required
-@staff_member_required
 def quests_library_list(request):
     """
     Display a list of all active quests available in the shared library
