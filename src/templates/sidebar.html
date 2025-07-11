@@ -33,7 +33,7 @@
             {% if config.enable_shared_library %}
             <li><a href="{% url 'library:quest_list' %}"><i class="fa fa-book fa-fw"></i>&nbsp; Quest Library</a></li>
             {% endif %}
-            <li><a href="{% url 'quests:archived' %}"><i class="fa fa-folder fa-fw"></i>&nbsp; Archived Quests</a></li>
+            <li><a href="{% url 'quests:archived' %}"><i class="fa fa-archive fa-fw"></i>&nbsp; Archived Quests</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Quest Setup</li>
             <li><a href="{% url 'tags:list' %}"><i class="fa fa-fw fa-tags"></i>&nbsp;{{ config.custom_name_for_tag }}s</a></li>
