@@ -35,7 +35,6 @@ class CategoryManager(models.Manager):
 
         # Annotate each category with a count of related quests that:
         # - are visible_to_students (published)
-        # - are not archived (still active)
         qs = qs.annotate(
             current_quest_count=Count(
                 'quest',

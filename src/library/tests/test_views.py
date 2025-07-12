@@ -325,7 +325,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertNotContains(response, excluded_archived.title)
         self.assertNotContains(response, excluded_invisible.title)
 
-    def test_campaigns_library_list_excludes_inactive_campaigns(self):
+    def test_campaigns_library_list__excludes_inactive_campaigns(self):
         """
         Inactive campaigns should not appear in the library category list,
         even if they contain visible_to_students (published) and unarchived quests.
