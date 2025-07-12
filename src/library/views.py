@@ -54,7 +54,7 @@ def campaigns_library_list(request):
     """
 
     with library_schema_context():
-        library_categories = list(Category.objects.all_active_with_available_quests())
+        library_categories = list(Category.objects.all_active_with_importable_quests())
 
         context = {
             'object_list': library_categories,
