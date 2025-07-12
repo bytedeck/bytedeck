@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
+from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum, OuterRef, Exists
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
@@ -19,12 +19,52 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 from tags.models import TagsModelMixin
 
 
+class CategoryQuerySet(models.QuerySet):
+    """
+    Custom queryset for Category model (campaigns).
+    """
+    def with_available_quests(self):
+        """
+        Annotates and filters categories that are active and have at least one
+        quest that is visible to students and not archived.
+        Uses a correlated subquery with EXISTS for performance.
+        """
+        filtered_quests = Quest.objects.filter(
+            campaign=OuterRef('pk'),
+            visible_to_students=True,
+            archived=False
+        )
+
+        return self.filter(active=True).annotate(
+            has_available_quests=Exists(filtered_quests)
+        ).filter(has_available_quests=True)
+
+
+class CategoryManager(models.Manager):
+    """
+    Custom model manager for Category (campaign) objects.
+    """
+    def get_queryset(self):
+        """
+        Returns the base QuerySet for Category objects,
+        using the custom CategoryQuerySet with additional filtering utilities.
+        """
+        return CategoryQuerySet(self.model, using=self._db)
+
+    def all_active_with_available_quests(self):
+        """
+        Returns all active categories with at least one visible and unarchived quest
+        """
+        return self.get_queryset().with_available_quests()
+
+
 class Category(IsAPrereqMixin, models.Model):
     """ Used to group quests into 'Campaigns'
     """
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
+    objects = CategoryManager()
     active = models.BooleanField(
         default=True,
         help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."

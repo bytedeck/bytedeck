@@ -6,7 +6,6 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from quest_manager.models import Quest
 from quest_manager.models import Category
-from django.db.models import OuterRef, Exists
 
 from .importer import import_quests_to
 from .utils import get_library_schema_name, library_schema_context
@@ -55,22 +54,7 @@ def campaigns_library_list(request):
     """
 
     with library_schema_context():
-        # Filter quests that are visible to students and not archived,
-        # linked to the campaign (category) via OuterRef for subquery use.
-        filtered_quests = Quest.objects.filter(
-            campaign=OuterRef('pk'),
-            visible_to_students=True
-        ).exclude(archived=True)
-
-        # Fetch active campaigns that have at least one current quest,
-        # using Exists with the filtered_quests subquery to filter in SQL.
-        # Convert queryset to list while still in the library schema context.
-        library_categories = list(
-            Category.objects
-            .filter(active=True)
-            .annotate(has_current_quests=Exists(filtered_quests))
-            .filter(has_current_quests=True)
-        )
+        library_categories = list(Category.objects.all_active_with_available_quests())
 
         context = {
             'object_list': library_categories,
