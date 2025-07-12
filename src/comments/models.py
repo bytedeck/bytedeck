@@ -5,8 +5,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.utils.html import escape
-from utilities.html import urlize
+from django.utils.html import urlize, escape
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
