@@ -54,9 +54,7 @@ def campaigns_library_list(request):
     """
 
     with library_schema_context():
-        # Get the active quests and force the query to run while still in the library schema
-        # by calling list() on the queryset
-        library_categories = list(Category.objects.filter(active=True))
+        library_categories = list(Category.objects.all_active_with_importable_quests())
 
         context = {
             'object_list': library_categories,
@@ -140,7 +138,7 @@ def import_campaign(request, campaign_import_id):
             category_quest_count = category.quest_count()
             category_total_xp_available = category.xp_sum()
             category_active = category.active
-            category_displayed_quests = list(category.quest_set.all())
+            category_displayed_quests = list(category.current_quests())
             category_name = category.name
 
         context = {

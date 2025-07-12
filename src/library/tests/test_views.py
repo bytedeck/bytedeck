@@ -293,3 +293,80 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_campaigns_library_list__filters_by_current_quests(self):
+        """
+        Campaigns are only included in the library list if they have at least one
+        visible_to_students (published) and unarchived quest.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            # Make a library campaign that should be visible
+            included = baker.make(Category, title='Included Campaign')
+            # Make a library campaign that should be excluded because the quest is archived
+            excluded_archived = baker.make(Category, title='Archived Only')
+            # Make a library campaign that should be excluded because the quest isn't active (draft)
+            excluded_invisible = baker.make(Category, title='Invisible Only')
+
+            # Make a current quest on the library and put it in a campaign — should be included
+            baker.make(Quest, campaign=included, visible_to_students=True, archived=False)
+
+            # Make an archived quest on the library and put it in a campaign — should not count
+            baker.make(Quest, campaign=excluded_archived, visible_to_students=True, archived=True)
+
+            # Make and invisible quest (draft) on the library and put it in a campaign — should not count
+            baker.make(Quest, campaign=excluded_invisible, visible_to_students=False, archived=False)
+
+        # Go to the list on the local deck
+        response = self.client.get(reverse('library:category_list'))
+
+        self.assertContains(response, included.title)
+        self.assertNotContains(response, excluded_archived.title)
+        self.assertNotContains(response, excluded_invisible.title)
+
+    def test_campaigns_library_list__excludes_inactive_campaigns(self):
+        """
+        Inactive campaigns should not appear in the library category list,
+        even if they contain visible_to_students (published) and unarchived quests.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            # Should be shown: active campaign with a visible/unarchived quest
+            active_campaign = baker.make(Category, title='Active Campaign', active=True)
+            baker.make(Quest, campaign=active_campaign, visible_to_students=True, archived=False)
+
+            # Should be hidden: inactive campaign even though quest is valid
+            inactive_campaign = baker.make(Category, title='Inactive Campaign', active=False)
+            baker.make(Quest, campaign=inactive_campaign, visible_to_students=True, archived=False)
+
+        response = self.client.get(reverse('library:category_list'))
+
+        self.assertContains(response, active_campaign.title)
+        self.assertNotContains(response, inactive_campaign.title)
+
+    def test_import_campaign_view__shows_only_current_quests(self):
+        """
+        Only current quests (visible_to_students (published) and not archived) should be shown when confirming a campaign import.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            # Create a campaign with a mix of visible (published), archived, and invisible quests
+            campaign = baker.make(Category, title='Visible Campaign')
+            # Create a quest that should be displayed
+            visible_quest = baker.make(Quest, campaign=campaign, name='Visible', visible_to_students=True, archived=False)
+            # Create a quest that should not be displayed (archived)
+            archived_quest = baker.make(Quest, campaign=campaign, name='Archived', visible_to_students=True, archived=True)
+            # Create a quest that should not be displayed (unpublished/draft)
+            invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', visible_to_students=False, archived=False)
+
+        # Go to the import confirmation page for the campaign
+        response = self.client.get(reverse('library:import_category', args=[campaign.import_id]))
+
+        # Should include only the visible (published), non-archived quest
+        content = response.content.decode()
+        assert visible_quest.name in content
+        assert archived_quest.name not in content
+        assert invisible_quest.name not in content

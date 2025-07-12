@@ -19,6 +19,35 @@ from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, Prereq
 from tags.models import TagsModelMixin
 
 
+class CategoryManager(models.Manager):
+
+    def all_active_with_importable_quests(self):
+        """
+        Returns a queryset of active campaigns (categories) that have
+        at least one quest visible_to_students (published) and not archived.
+
+        This helps efficiently filter campaigns relevant for display
+        or import in the library context.
+        """
+
+        # Start with all categories filtered to only those marked active
+        qs = self.get_queryset().filter(active=True)
+
+        # Annotate each category with a count of related quests that:
+        # - are visible_to_students (published)
+        qs = qs.annotate(
+            current_quest_count=Count(
+                'quest',
+                filter=Q(quest__visible_to_students=True, quest__archived=False)
+            )
+        )
+
+        # Filter out categories that do not have any qualifying quests
+        qs = qs.filter(current_quest_count__gt=0)
+
+        return qs
+
+
 class Category(IsAPrereqMixin, models.Model):
     """ Used to group quests into 'Campaigns'
     """
@@ -36,6 +65,8 @@ class Category(IsAPrereqMixin, models.Model):
         help_text="This value links your campaign to the corresponding campaign within the Library."
         " Only change this value if you want to disconnect your campaign from the Library."
     )
+
+    objects = CategoryManager()
 
     class Meta:
         verbose_name = "campaign"
