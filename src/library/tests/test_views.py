@@ -408,7 +408,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             # Create a quest that should be displayed
             visible_quest = baker.make(Quest, campaign=campaign, name='Visible', visible_to_students=True, archived=False)
             # Create a quest that should not be displayed (archived)
-            archived_quest = baker.make(Quest, campaign=campaign, name='Archived', visible_to_students=True, archived=True)
+            archived_quest = baker.make(Quest, campaign=campaign, name='ArchivedQuest', visible_to_students=True, archived=True)
             # Create a quest that should not be displayed (unpublished/draft)
             invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', visible_to_students=False, archived=False)
 

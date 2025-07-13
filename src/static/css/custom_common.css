@@ -890,7 +890,8 @@ div.btn-group.action-btn-group {
     width: 100px;
 }
 
-.action-form {
+/* Allows form-based buttons (e.g. Unarchive) to appear inline with preview action buttons */
+.preview-action-form {
     display: inline-block;
 }
 

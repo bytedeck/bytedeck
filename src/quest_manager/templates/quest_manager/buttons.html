@@ -17,7 +17,7 @@
     {% endif %}
 
     {% if q.archived and request.user.is_staff %}
-      <form action="{% url 'quests:unarchive' q.id %}" method="post" class="action-form">
+      <form action="{% url 'quests:unarchive' q.id %}" method="post" class="preview-action-form">
         {% csrf_token %}
         <button type="submit" class="btn btn-default" title="Unarchive this quest: move it into your drafts tab so you can edit it">
           <i class="fa fa-archive"></i>
