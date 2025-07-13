@@ -158,8 +158,7 @@ class XPItem(models.Model):
     )
     archived = models.BooleanField(
         default=False,
-        help_text='Setting this will prevent it from appearing in admin quest lists.  '
-        'To un-archive a quest, you will need to access it through Site Administration.'
+        help_text="Move this quest into the archived tab."
     )
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
