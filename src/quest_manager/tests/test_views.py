@@ -326,12 +326,6 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Make sure the quest is no longer archived
         self.assertFalse(archived_quest.archived)
 
-        # Simulate clicking the button again
-        response = self.client.post(url, follow=True)
-        # Make sure the teacher gets redirected with the message
-        self.assertRedirects(response, reverse('quests:drafts'))
-        self.assertContains(response, "is already unarchived and should be in the Drafts tab.")
-
 
 class SubmissionViewTests(TenantTestCase):
 

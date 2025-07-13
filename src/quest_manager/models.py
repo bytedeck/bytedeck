@@ -158,6 +158,7 @@ class XPItem(models.Model):
     )
     archived = models.BooleanField(
         default=False,
+        # TODO: Update help_text once archiving also affects prerequisites, submissions, or other quest behavior.
         help_text="Move this quest into the Archived tab."
     )
     sort_order = models.IntegerField(default=0)
