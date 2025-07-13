@@ -479,13 +479,19 @@ class QuestManager(models.Manager):
 
     def all_archived(self, user):
         """
-        Make and return the qs to staff users only.
+        Return a queryset of archived quests for staff users only.
+
+        Args:
+            user: The user requesting archived quests
+
+        Returns:
+            QuerySet of archived quests if user is staff, empty list otherwise
         """
         qs = self.get_queryset(include_archived=True).filter(archived=True)
         if user.is_staff:
             return qs
         else:
-            return []
+            return qs.none()
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
