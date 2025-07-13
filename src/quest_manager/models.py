@@ -477,6 +477,16 @@ class QuestManager(models.Manager):
         else:  # TA
             return qs.editable(user)
 
+    def all_archived(self, user):
+        """
+        Make and return the qs to staff users only.
+        """
+        qs = self.get_queryset(include_archived=True).filter(archived=True)
+        if user.is_staff:
+            return qs
+        else:
+            return None
+
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     """

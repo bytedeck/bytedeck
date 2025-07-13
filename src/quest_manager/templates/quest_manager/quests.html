@@ -74,6 +74,15 @@ back to its original look.
       </li>
     {% endif %}
 
+
+    {% if request.user.is_staff %}
+      <li role="presentation" {% if view_type == VIEW_TYPES.ARCHIVED %}class="active"{% endif %}>
+        <a href="{% url 'quests:archived' %}">
+          Archived
+          <span class="badge">{{ num_archived | default:"" }}</span>
+        </a>
+      </li>
+    {% endif %}
   </ul>
   <!-- Tab panes -->
   <div class="tab-content">
@@ -122,6 +131,15 @@ back to its original look.
         {% include 'quest_manager/tab_quests_available.html' %}
       {% endwith %}
       </div>
+    {% endif %}
+
+    {% if request.user.is_staff %}
+    <div role="tabpanel"
+        class="tab-pane fade {% if view_type == VIEW_TYPES.ARCHIVED %}in active{% endif %}" id="archived">
+      {% with available_quests=archived_quests %}
+        {% include "quest_manager/tab_quests_available.html" %}
+      {% endwith %}
+    </div>
     {% endif %}
 
   </div>

@@ -53,6 +53,7 @@
         <ul class="dropdown-menu dropdown-menu-right">
           {% if request.user.is_staff %}
             <li><a href="{% url 'quests:drafts' %}"><i class="fa fa-shield fa-flip-horizontal fa-fw"></i>&nbsp; Draft Quests</a></li>
+            <li><a href="{% url 'quests:archived' %}"><i class="fa fa-folder fa-fw"></i>&nbsp; Archived Quests</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Quest Setup</li>
             <li><a href="{% url 'tags:list' %}"><i class="fa fa-fw fa-tags"></i>&nbsp;{{ config.custom_name_for_tag }}s</a></li>

@@ -157,6 +157,12 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
+    def get_queryset(self):
+        # Allow staff to delete archived quests
+        if self.request.user.is_staff:
+            return Quest.objects.get_queryset(include_archived=True)
+        return Quest.objects.all()
+
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
@@ -215,6 +221,12 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
 
 
 class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
+    def get_queryset(self):
+        # Allow staff to edit archived quests
+        if self.request.user.is_staff:
+            return Quest.objects.get_queryset(include_archived=True)
+        return Quest.objects.all()
+
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -248,16 +260,23 @@ class QuestCopy(QuestCreate):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
 
-        # by default, set the quest this was copied from as the new_quest_prerequisite
-        # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
-        copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+        # Use a queryset that includes archived quests for staff
+        if self.request.user.is_staff:
+            qs = Quest.objects.get_queryset(include_archived=True)
+        else:
+            qs = Quest.objects.all()
+
+        # Fetch the quest to copy, including archived if staff
+        copied_quest = get_object_or_404(qs, pk=self.kwargs["quest_id"])
+        # Set initial tags and prerequisite for the form
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
 
-        new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+        # Create a new Quest instance based on the copied quest
+        new_quest = get_object_or_404(qs, pk=self.kwargs["quest_id"])
         new_quest.pk = None  # autogen a new primary key (quest_id by default)
-        new_quest.import_id = uuid.uuid4()
-        new_quest.name = new_quest.name + " - COPY"
+        new_quest.import_id = uuid.uuid4()  # assign a new import ID
+        new_quest.name = new_quest.name + " - COPY"  # indicate this is a copy
 
         kwargs["instance"] = new_quest
         return kwargs
@@ -412,6 +431,7 @@ class QuestListViewTabTypes:
     COMPLETED = 2
     PAST = 3
     DRAFT = 4
+    ARCHIVED = 5
 
 
 @non_public_only_view
@@ -422,6 +442,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = []
     past_submissions = []
     draft_quests = []
+    archived_quests = []
 
     view_type = QuestListViewTabTypes.AVAILABLE
     remove_hidden = True
@@ -442,6 +463,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         view_type = QuestListViewTabTypes.PAST
     elif "/drafts/" in request.path_info:
         view_type = QuestListViewTabTypes.DRAFT
+    elif "/archived/" in request.path_info:
+        view_type = QuestListViewTabTypes.ARCHIVED
     else:
         view_type = QuestListViewTabTypes.AVAILABLE
         if "/all/" in request.path_info:
@@ -477,12 +500,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
     past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     draft_quests = Quest.objects.all_drafts(request.user)
+    archived_quests = Quest.objects.all_archived(request.user)
 
     # Counts
     in_progress_submissions_count = in_progress_submissions.count()
     completed_submissions_count = completed_submissions.count()
     past_submissions_count = past_submissions.count()
     drafts_count = draft_quests.count()
+    archived_count = archived_quests.count()
     available_quests_count = (
         len(available_quests)
         if type(available_quests) is list
@@ -518,6 +543,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
         "num_drafts": drafts_count,
+        "archived_quests": archived_quests,
+        "num_archived": archived_count,
         "past_submissions": past_submissions,
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
@@ -539,7 +566,10 @@ def ajax_quest_info(request, quest_id=None):
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
             if quest_id:
-                quest = get_object_or_404(Quest, pk=quest_id)
+                if request.user.is_staff:
+                    quest = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
+                else:
+                    quest = get_object_or_404(Quest, pk=quest_id)
 
                 template = 'quest_manager/preview_content_quests_avail.html'
                 quest_info_html = render_to_string(template, {'q': quest, 'is_library_view': is_library_view}, request=request)
@@ -549,7 +579,7 @@ def ajax_quest_info(request, quest_id=None):
                 return JsonResponse(data)
 
             else:  # all quests, used for staff only.
-                quests = Quest.objects.all()
+                quests = Quest.objects.get_queryset(include_archived=True)
                 all_quest_info_html = {}
 
                 for q in quests:
@@ -620,7 +650,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest, pk=quest_id)
+    q = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
