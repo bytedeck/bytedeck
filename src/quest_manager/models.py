@@ -462,6 +462,17 @@ class QuestManager(models.Manager):
         """
         return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
 
+    def all_including_archived(self):
+        """
+        Return a QuestQuerySet of all quests including archived.
+
+        This calls `get_queryset` with `include_archived=True` to include archived quests.
+
+        Returns:
+            QuestQuerySet: The queryset including all quests regardless of archived status.
+        """
+        return self.get_queryset(include_archived=True)
+
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
