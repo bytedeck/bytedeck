@@ -24,12 +24,6 @@
         class="{% if inactive_tab_active %}active{% endif %}">
       <a href="{% url 'quests:categories_inactive' %}">Inactive</a>
     </li>
-    {% if config.enable_shared_library %}
-      <li role="presentation"
-          class="{% if library_tab_active %}active{% endif %}">
-        <a href="{% url 'library:category_list' %}">Library</a>
-      </li>
-    {% endif %}
   </ul>
   <!-- Tab panes -->
   <div class="tab-content">
@@ -39,8 +33,5 @@
     <div role="tabpanel"
          class="tab-pane fade {% if inactive_tab_active %}in active{% endif %}"
          id="campaign-inactive">{% include 'quest_manager/tab_campaigns_list.html' %}</div>
-    <div role="tabpanel"
-         class="tab-pane fade {% if library_tab_active %}in active{% endif %}"
-         id="campaign-library">{% include 'quest_manager/tab_campaigns_list.html' %}</div>
   </div>
 {% endblock %}
