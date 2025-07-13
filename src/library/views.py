@@ -26,18 +26,19 @@ def quests_library_list(request):
 
     with library_schema_context():
         # Get the active quests and force the query to run while still in the library schema
-        # by calling len() on the queryset
+        # by calling len() on the querysets
         library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
-        num_library = len(library_quests)
+        num_quests = len(library_quests)
+        num_categories = Category.objects.filter(active=True).count()
 
-        context = {
-            'heading': 'Quests',
-            'library_quests': library_quests,
-            'num_library': num_library,
-            'library_tab_active': True,
-        }
-
-    return render(request, 'library/library_quests.html', context)
+    context = {
+        'heading': 'Library',
+        'tab': 'quests',
+        'library_quests': library_quests,
+        'num_quests': num_quests,
+        'num_campaigns': num_categories,
+    }
+    return render(request, 'library/library_overview.html', context)
 
 
 @login_required
@@ -54,14 +55,20 @@ def campaigns_library_list(request):
     """
 
     with library_schema_context():
-        library_categories = list(Category.objects.all_active_with_importable_quests())
+        # Get the active quests and force the query to run while still in the library schema
+        # by calling len() on the queryset
+        num_quests = Quest.objects.get_active().count()
+        library_categories = Category.objects.all_active_with_importable_quests()
+        num_categories = len(library_categories)
 
-        context = {
-            'object_list': library_categories,
-            'library_tab_active': True,
-        }
-
-    return render(request, 'library/library_categories.html', context)
+    context = {
+        'heading': 'Library',
+        'tab': 'campaigns',
+        'library_categories': library_categories,
+        'num_campaigns': num_categories,
+        'num_quests': num_quests,
+    }
+    return render(request, 'library/library_overview.html', context)
 
 
 @login_required

@@ -191,24 +191,48 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
-    def test_side_bar_library_drop_down(self):
-        """Checks if library drop down is available when siteconfig.enable_shared_library is true"""
-        staff = baker.make(User, is_staff=True)
-        self.client.force_login(staff)
+    def test_quest_library_list__shows_correct_badge_count(self):
+        """
+        Ensure the quests tab displays the correct badge count for active quests.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # Get the correct quest count
+            quest_count = Quest.objects.get_active().count()
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+        # The badge should show the correct quest count
+        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
 
+    def test_library_sidebar__shown_if_shared_library_enabled(self):
+        """
+        The staff sidebar should show the Library link if the shared library is enabled.
+        Tests that it doesn't show when shared_library_enabled=False
+        Tests that it does show when shared_library_enabled=True
+        """
+        # Make sure the shared library is initially disabled
         config = SiteConfig.get()
-
-        # if `enable_shared_library=False` then "Quest Library" should not exist
         config.enable_shared_library = False
+        config.full_clean()
         config.save()
-        response = self.assert200('library:quest_list')
-        self.assertNotContains(response, '</i>&nbsp; Quest Library</a>')
 
-        # if `enable_shared_library=True` then "Quest Library" should exist
+        # Login as staff
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'))
+        # Checks if the html in the sidebar for library is there (shouldn't be)
+        self.assertNotContains(response, 'id="lg-menu-library"')
+
+        # Now enable the shared library
         config.enable_shared_library = True
+        config.full_clean()
         config.save()
-        response = self.assert200('library:quest_list')
-        self.assertContains(response, '</i>&nbsp; Quest Library</a>')
+
+        # Re-fetch the response after config change
+        response = self.client.get(reverse('library:quest_list'))
+
+        # Checks if the html in the sidebar for library is there (should be)
+        self.assertContains(response, 'id="lg-menu-library"')
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
@@ -256,7 +280,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:category_list')
         self.assert200('library:import_category', args=[self.library_category.import_id])
 
-    def test_import_campaign_already_exists(self):
+    def test_import_campaign__already_exists(self):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Create a category in the library tenant
@@ -270,7 +294,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign_success(self):
+    def test_import_campaign__success(self):
         self.client.force_login(self.test_teacher)
         self.assertEqual(Category.objects.count(), 1)
 
@@ -293,6 +317,32 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_campaigns_tab__shows_correct_badge_count(self):
+        """
+        Ensure the campaigns tab displays the correct badge count for active campaigns.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # get the correct campiagn count
+            campaign_count = Category.objects.all_active_with_importable_quests().count()
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        # The badge should show the correct campaign count
+        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
+
+    def test_campaigns_tab__only_shows_library_campaigns(self):
+        """
+        Ensure the campaigns tab only displays campaigns from the library schema.
+        """
+        self.client.force_login(self.test_teacher)
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        with library_schema_context():
+            campaign = Category.objects.all_active_with_importable_quests().first()
+        # The response should contain the campaign name if one exists
+        if campaign:
+            self.assertContains(response, campaign.name)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
@@ -370,3 +420,75 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         assert visible_quest.name in content
         assert archived_quest.name not in content
         assert invisible_quest.name not in content
+
+
+class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_password = 'password'
+
+        with library_schema_context():
+            # Set up a campaign to test with later
+            self.library_campaign = baker.make(Category, active=True)
+            # Set up a quest to test with later
+            self.library_quest = baker.make(Quest, campaign=self.library_campaign)
+
+        # Need a teacher before students can be created or the profile creation will fail when trying to notify
+        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
+        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
+
+    def test_library_overview_redirects_anonymous(self):
+        """
+        Anonymous users should be redirected to the login page when accessing the library overview.
+        """
+        response = self.client.get(reverse('library:quest_list'))
+
+        # Expect a 302 redirect
+        self.assert302('library:quest_list')
+
+        # Should redirect to login page with next param
+        self.assertTrue(response.url.startswith('/accounts/login/'))
+
+    def test_library_overview_for_students(self):
+        """
+        Authenticated students should receive a 403 Forbidden when trying to access the library
+        """
+        self.client.force_login(self.test_student)
+        self.assert403('library:quest_list')
+
+    def test_library_overview_for_staff_default_tab(self):
+        """
+        Staff users should see the library overview page with the Quests tab active by default
+        """
+        self.client.force_login(self.test_teacher)
+
+        # Request the main library overview URL (default tab = Quests)
+        response = self.client.get(reverse('library:quest_list'))
+
+        # Page should load successfuly
+        self.assert200('library:quest_list')
+        self.assertTemplateUsed(response, "library/library_overview.html")
+
+        # The sample quest should be included in the library_quests context
+        self.assertIn(self.library_quest, response.context['library_quests'])
+
+        # "Quests" should be the active tab
+        self.assertEqual(response.context['tab'], 'quests')
+
+    def test_library_overview__campaigns_tab(self):
+        """
+        Staff users should see the Campaigns tab content when the library is enabled
+        """
+        self.client.force_login(self.test_teacher)
+
+        # Go to the Campaigns tab
+        response = self.client.get(reverse('library:category_list'))
+
+        # Page should load successfully
+        self.assert200('library:category_list')
+
+        # The sample Campaign should be included in the library_categories
+        self.assertIn(self.library_campaign, response.context['library_categories'])
+
+        # "Campaigns" should be the active tab
+        self.assertEqual(response.context['tab'], 'campaigns')
