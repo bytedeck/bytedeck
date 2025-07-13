@@ -213,6 +213,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Make sure the shared library is initially disabled
         config = SiteConfig.get()
         config.enable_shared_library = False
+        config.full_clean()
         config.save()
 
         # Login as staff
@@ -224,6 +225,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         # Now enable the shared library
         config.enable_shared_library = True
+        config.full_clean()
         config.save()
 
         # Re-fetch the response after config change
@@ -323,7 +325,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # get the correct campiagn count
-            campaign_count = Category.objects.filter(active=True).count()
+            campaign_count = Category.objects.all_active_with_importable_quests().count()
         url = reverse('library:category_list')
         response = self.client.get(url)
         # The badge should show the correct campaign count
@@ -337,7 +339,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         url = reverse('library:category_list')
         response = self.client.get(url)
         with library_schema_context():
-            campaign = Category.objects.filter(active=True).first()
+            campaign = Category.objects.all_active_with_importable_quests().first()
         # The response should contain the campaign name if one exists
         if campaign:
             self.assertContains(response, campaign.name)
@@ -426,10 +428,10 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         self.test_password = 'password'
 
         with library_schema_context():
-            # Set up a quest to test with later
-            self.library_quest = baker.make(Quest)
             # Set up a campaign to test with later
             self.library_campaign = baker.make(Category, active=True)
+            # Set up a quest to test with later
+            self.library_quest = baker.make(Quest, campaign=self.library_campaign)
 
         # Need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -439,10 +441,10 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         """
         Anonymous users should be redirected to the login page when accessing the library overview.
         """
-        response = self.client.get(reverse('library:library'))
+        response = self.client.get(reverse('library:quest_list'))
 
         # Expect a 302 redirect
-        self.assert302('library:library')
+        self.assert302('library:quest_list')
 
         # Should redirect to login page with next param
         self.assertTrue(response.url.startswith('/accounts/login/'))
@@ -452,7 +454,7 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         Authenticated students should receive a 403 Forbidden when trying to access the library
         """
         self.client.force_login(self.test_student)
-        self.assert403('library:library')
+        self.assert403('library:quest_list')
 
     def test_library_overview_for_staff_default_tab(self):
         """
@@ -461,64 +463,32 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         # Request the main library overview URL (default tab = Quests)
-        response = self.client.get(reverse('library:library'))
+        response = self.client.get(reverse('library:quest_list'))
 
         # Page should load successfuly
-        self.assert200('library:library')
+        self.assert200('library:quest_list')
         self.assertTemplateUsed(response, "library/library_overview.html")
 
         # The sample quest should be included in the library_quests context
         self.assertIn(self.library_quest, response.context['library_quests'])
 
         # "Quests" should be the active tab
-        self.assertIn('tab_list', response.context)
-        self.assertTrue(any(tab['active'] and tab['name'] == 'Quests' for tab in response.context['tab_list']))
+        self.assertEqual(response.context['tab'], 'quests')
 
-    def test_library_overview_campaigns_tab(self):
+    def test_library_overview__campaigns_tab(self):
         """
         Staff users should see the Campaigns tab content when the library is enabled
         """
         self.client.force_login(self.test_teacher)
 
         # Go to the Campaigns tab
-        # ('?tab=campaigns' is to activate the campaign tab) otherwise just goes to "Quests" tab by default
-        response = self.client.get(reverse('library:library') + '?tab=campaigns')
+        response = self.client.get(reverse('library:category_list'))
 
         # Page should load successfully
-        self.assert200('library:library')
+        self.assert200('library:category_list')
 
         # The sample Campaign should be included in the library_categories
         self.assertIn(self.library_campaign, response.context['library_categories'])
 
         # "Campaigns" should be the active tab
-        self.assertTrue(any(tab['active'] and tab['name'] == 'Campaigns' for tab in response.context['tab_list']))
-
-    def test_sidebar_library_link_shown_if_shared_library_enabled(self):
-        """
-        The staff sidebar should show the Library link if the shared library is enabled.
-        """
-        # Make sure the shared library is initially disabled
-        config = SiteConfig.get()
-        config.enable_shared_library = False
-        config.save()
-
-        # Login as staff
-        self.client.force_login(self.test_teacher)
-
-        response = self.client.get(reverse('library:quest_list'))
-        # Makes sure staff still have sidebar menu items
-        self.assertContains(response, 'id="lg-menu-staff"')
-        # Checks if the html in the sidebar for library is there (shouldn't be)
-        self.assertNotContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
-
-        # Now enable the shared library
-        config.enable_shared_library = True
-        config.save()
-
-        # Re-fetch the response after config change
-        response = self.client.get(reverse('library:quest_list'))
-
-        # Makes sure staff still have sidebar menu items
-        self.assertContains(response, 'id="lg-menu-staff"')
-        # Checks if the html in the sidebar for library is there (should be)
-        self.assertContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
+        self.assertEqual(response.context['tab'], 'campaigns')

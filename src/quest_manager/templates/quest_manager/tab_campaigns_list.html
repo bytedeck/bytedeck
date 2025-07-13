@@ -1,3 +1,10 @@
+{% if '/library/' in request.path %}
+  <p>
+    <span class="text-danger">EXPERIMENTAL!</span>
+    The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
+    Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
+  </p>
+{% endif %}
 <table data-toggle='table'
        data-search='true'
        data-classes="table"
@@ -13,13 +20,6 @@
       <th>Action</th>
     </tr>
   </thead>
-  {% if '/library/' in request.path %}
-    <p>
-      <span class="text-danger">EXPERIMENTAL!</span>
-      The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
-      Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
-    </p>
-  {% endif %}
   <tbody>
     {% for object in object_list %}
       <tr {% if not object.active %}class="text-muted"{% endif %}>
