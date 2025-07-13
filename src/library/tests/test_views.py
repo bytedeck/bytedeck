@@ -191,7 +191,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
-    def test_quests_tab_shows_correct_badge_count(self):
+    def test_quest_library_list__shows_correct_badge_count(self):
         """
         Ensure the quests tab displays the correct badge count for active quests.
         """
@@ -204,18 +204,37 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # The badge should show the correct quest count
         self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
 
-    def test_quests_tab_only_shows_quests(self):
+    def test_library_sidebar__shown_if_shared_library_enabled(self):
         """
-        Ensure the quests tab only displays quests from the library schema.
+        The staff sidebar should show the Library link if the shared library is enabled.
+        Tests that it doesn't show when shared_library_enabled=False
+        Tests that it does show when shared_library_enabled=True
         """
+        # Make sure the shared library is initially disabled
+        config = SiteConfig.get()
+        config.enable_shared_library = False
+        config.save()
+
+        # Login as staff
         self.client.force_login(self.test_teacher)
-        url = reverse('library:quest_list')
-        response = self.client.get(url)
-        # Should contain a quest name from the library schema if one exists
-        with library_schema_context():
-            quest = Quest.objects.get_active().first()
-        if quest:
-            self.assertContains(response, quest.name)
+
+        response = self.client.get(reverse('library:quest_list'))
+        # Makes sure staff still have sidebar menu items
+        self.assertContains(response, 'id="lg-menu-staff"')
+        # Checks if the html in the sidebar for library is there (shouldn't be)
+        self.assertNotContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
+
+        # Now enable the shared library
+        config.enable_shared_library = True
+        config.save()
+
+        # Re-fetch the response after config change
+        response = self.client.get(reverse('library:quest_list'))
+
+        # Makes sure staff still have sidebar menu items
+        self.assertContains(response, 'id="lg-menu-staff"')
+        # Checks if the html in the sidebar for library is there (should be)
+        self.assertContains(response, '<span class="hidden-sm hidden-xs hidden-md">Library</span>')
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
@@ -263,7 +282,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:category_list')
         self.assert200('library:import_category', args=[self.library_category.import_id])
 
-    def test_import_campaign_already_exists(self):
+    def test_import_campaign__already_exists(self):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Create a category in the library tenant
@@ -277,7 +296,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign_success(self):
+    def test_import_campaign__success(self):
         self.client.force_login(self.test_teacher)
         self.assertEqual(Category.objects.count(), 1)
 
@@ -301,7 +320,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
 
-    def test_campaigns_tab_shows_correct_badge_count(self):
+    def test_campaigns_tab__shows_correct_badge_count(self):
         """
         Ensure the campaigns tab displays the correct badge count for active campaigns.
         """
@@ -314,7 +333,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # The badge should show the correct campaign count
         self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
 
-    def test_campaigns_tab_only_shows_campaigns(self):
+    def test_campaigns_tab__only_shows_library_campaigns(self):
         """
         Ensure the campaigns tab only displays campaigns from the library schema.
         """
