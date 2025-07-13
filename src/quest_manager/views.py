@@ -157,12 +157,6 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
-    def get_queryset(self):
-        # Allow staff to delete archived quests
-        if self.request.user.is_staff:
-            return Quest.objects.get_queryset(include_archived=True)
-        return Quest.objects.all()
-
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
@@ -221,12 +215,6 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
 
 
 class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
-    def get_queryset(self):
-        # Allow staff to edit archived quests
-        if self.request.user.is_staff:
-            return Quest.objects.get_queryset(include_archived=True)
-        return Quest.objects.all()
-
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -261,10 +249,7 @@ class QuestCopy(QuestCreate):
         kwargs = super().get_form_kwargs()
 
         # Use a queryset that includes archived quests for staff
-        if self.request.user.is_staff:
-            qs = Quest.objects.get_queryset(include_archived=True)
-        else:
-            qs = Quest.objects.all()
+        qs = Quest.objects.all()
 
         # Fetch the quest to copy, including archived if staff
         copied_quest = get_object_or_404(qs, pk=self.kwargs["quest_id"])
@@ -507,7 +492,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions_count = completed_submissions.count()
     past_submissions_count = past_submissions.count()
     drafts_count = draft_quests.count()
-    archived_count = archived_quests.count()
+    archived_count = len(archived_quests)
     available_quests_count = (
         len(available_quests)
         if type(available_quests) is list
@@ -650,7 +635,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest.objects.get_queryset(include_archived=True), pk=quest_id)
+    q = get_object_or_404(Quest.objects.get_queryset(), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
@@ -1115,6 +1100,19 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "show_all_blocks_button": show_all_blocks_button,
     }
     return render(request, template, context)
+
+
+@non_public_only_view
+@staff_member_required
+def unarchive(request, quest_id):
+    """
+    Unarchive a quest by setting its archived status to False.
+    """
+    quest = get_object_or_404(Quest, pk=quest_id)
+    quest.archived = False
+    quest.save()
+    messages.success(request, f"Quest '{quest.name}' has been unarchived.")
+    return redirect("quests:quests")
 
 
 #########################################

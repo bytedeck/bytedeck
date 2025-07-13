@@ -45,6 +45,12 @@
             <i class="fa fa-trash-o"></i>
           </a>
           {% endif %}
+        {% if q.archived %}
+          <a title="Unarchive Quest: this quest will be moved to the Available tab if not a draft, or the Drafts tab if it is."
+             class="btn btn-default" role="button" href="{% url 'quests:unarchive' q.id %}">
+             <i class="fa fa-archive"></i>
+          </a>
+        {% endif %}
 
     {% else %}
 

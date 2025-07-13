@@ -436,7 +436,7 @@ class QuestQuerySet(models.QuerySet):
 
 
 class QuestManager(models.Manager):
-    def get_queryset(self, include_archived=False):
+    def get_queryset(self, include_archived=True):
         qs = QuestQuerySet(self.model, using=self._db)
         if not include_archived:
             qs = qs.not_archived()
@@ -470,7 +470,7 @@ class QuestManager(models.Manager):
         return qs.not_in_progress_completed_or_cooldown(user)
 
     def all_drafts(self, user):
-        qs = self.get_queryset().filter(visible_to_students=False)
+        qs = self.get_queryset(include_archived=False).filter(visible_to_students=False)
 
         if user.is_staff:
             return qs
@@ -485,7 +485,7 @@ class QuestManager(models.Manager):
         if user.is_staff:
             return qs
         else:
-            return None
+            return []
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
