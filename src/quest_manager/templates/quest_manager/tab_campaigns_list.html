@@ -13,6 +13,13 @@
       <th>Action</th>
     </tr>
   </thead>
+  {% if '/library/' in request.path %}
+    <p>
+      <span class="text-danger">EXPERIMENTAL!</span>
+      The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
+      Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
+    </p>
+  {% endif %}
   <tbody>
     {% for object in object_list %}
       <tr {% if not object.active %}class="text-muted"{% endif %}>
@@ -24,7 +31,7 @@
         <td>{{ object.quest_count }}</td>
         <td>{{ object.xp_sum }}</td>
         <td>
-          {% if not library_tab_active %}
+          {% if not '/library/' in request.path %}
             <a class="btn btn-info"
                href="{% url 'quests:category_detail' object.id %}"
                role="button"
@@ -52,13 +59,11 @@
                 <i class="fa fa-trash-o"></i>
               </a>
           {% else %}
-            {% if object.import_id %}
-               <a href="{% url 'library:import_category' object.import_id %}"
-                  class="btn btn-sm btn-default"
-                  title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab.">
-                 <i class="fa fa-download"></i>
-               </a>
-            {% endif %}
+              <a href="{% url 'library:import_category' object.import_id %}"
+                class="btn btn-sm btn-default"
+                title="Import this Campaign into your Deck.  The campaign will appear in your Inactive tab.">
+                <i class="fa fa-download"></i>
+              </a>
           {% endif %}
         </td>
       </tr>
