@@ -105,7 +105,7 @@ class Category(IsAPrereqMixin, models.Model):
 
         # get all the active quests in this campaign/category
         # active = not expired, past availability date and time, not archived, visible to students (not draft)
-        quests = self.quest_set.get_active()
+        quests = Quest.objects.get_active().filter(campaign=self)
 
         # get all approved submissions of these quests for this user
         submissions = QuestSubmission.objects.all_approved(user=user, active_semester_only=False).filter(quest__in=quests)
@@ -443,7 +443,7 @@ class QuestManager(models.Manager):
         return qs
 
     def get_active(self):
-        return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
+        return self.get_queryset(include_archived=False).datetime_available().not_expired().visible().active_or_no_campaign()
 
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
