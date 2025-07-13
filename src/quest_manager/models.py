@@ -435,14 +435,32 @@ class QuestQuerySet(models.QuerySet):
 
 
 class QuestManager(models.Manager):
-    def get_queryset(self, include_archived=True):
+    def get_queryset(self, include_archived=False):
+        """
+        Return a QuestQuerySet for this manager.
+
+        Args:
+            include_archived (bool): If False (default), exclude archived quests from the queryset.
+                                    If True, include all quests.
+
+        Returns:
+            QuestQuerySet: The queryset, filtered according to the include_archived flag.
+        """
         qs = QuestQuerySet(self.model, using=self._db)
         if not include_archived:
             qs = qs.not_archived()
         return qs
 
     def get_active(self):
-        return self.get_queryset(include_archived=False).datetime_available().not_expired().visible().active_or_no_campaign()
+        """
+        Return all active quests
+
+        Returns:
+            QuestQuerySet: a queryset, which includes quests with an available date on or before the given day,
+                           excludes expired quests, and those that aren't visible.
+                           Finally filtered to include quests with an active campaign or no campaign.
+        """
+        return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
 
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
@@ -469,7 +487,17 @@ class QuestManager(models.Manager):
         return qs.not_in_progress_completed_or_cooldown(user)
 
     def all_drafts(self, user):
-        qs = self.get_queryset(include_archived=False).filter(visible_to_students=False)
+        """
+        Return a queryset of draft quests (not visible to students)
+        for staff and allowed TAs only.
+
+        Args:
+            user: The user requesting quests from the Drafts tab
+
+            Returns:
+                QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
+        """
+        qs = self.get_queryset().filter(visible_to_students=False)
 
         if user.is_staff:
             return qs
