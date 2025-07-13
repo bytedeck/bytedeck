@@ -435,13 +435,13 @@ class QuestQuerySet(models.QuerySet):
 
 
 class QuestManager(models.Manager):
-    def get_queryset(self, include_archived=False):
+    def get_queryset(self, include_archived=True):
         """
         Return a QuestQuerySet for this manager.
 
         Args:
-            include_archived (bool): If False (default), exclude archived quests from the queryset.
-                                    If True, include all quests.
+            include_archived (bool): If False, exclude archived quests from the queryset.
+                                    If True (default), include all quests.
 
         Returns:
             QuestQuerySet: The queryset, filtered according to the include_archived flag.
@@ -460,7 +460,7 @@ class QuestManager(models.Manager):
                            excludes expired quests, and those that aren't visible.
                            Finally filtered to include quests with an active campaign or no campaign.
         """
-        return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
+        return self.get_queryset(include_archived=False).datetime_available().not_expired().visible().active_or_no_campaign()
 
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
@@ -497,7 +497,7 @@ class QuestManager(models.Manager):
             Returns:
                 QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
         """
-        qs = self.get_queryset().filter(visible_to_students=False)
+        qs = self.get_queryset(include_archived=False).filter(visible_to_students=False)
 
         if user.is_staff:
             return qs
@@ -514,7 +514,8 @@ class QuestManager(models.Manager):
         Returns:
             QuerySet of archived quests if user is staff, empty list otherwise
         """
-        qs = self.get_queryset(include_archived=True).filter(archived=True)
+        # If the default of include_archived=False make sure this includes archived
+        qs = self.get_queryset().filter(archived=True)
         if user.is_staff:
             return qs
         else:

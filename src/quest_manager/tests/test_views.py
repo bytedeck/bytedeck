@@ -301,7 +301,10 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         Verifies that:
         - Staff can access the unarchive view
         - the quest's archived status is proerly cleared
-        = the user is redirected to the main quests page after unarchiving
+        - the user is redirected to the main quests page after unarchiving
+        - a success message is shown after unarchiving
+        - clicking the button again (you shouldn't be able to) sends you to the main quests page
+        - a message is shown after clicking the button again (you shouldn't be able to)
         """
         # Login a Teacher from setUp
         self.client.force_login(self.test_teacher)
@@ -313,14 +316,21 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         # Create the url leading to the unarchive view, same as button
         url = reverse('quests:unarchive', args=[archived_quest.id])
         # Simulate clicking the button
-        response = self.client.post(url)
-        # Make sure the teacher gets redirected
+        response = self.client.post(url, follow=True)
+        # Make sure the teacher gets redirected with the message
         self.assertRedirects(response, reverse('quests:quests'))
+        self.assertContains(response, f"Quest '{archived_quest.name}' has been unarchived.")
 
         # Refresh the quest
         archived_quest.refresh_from_db()
         # Make sure the quest is no longer archived
         self.assertFalse(archived_quest.archived)
+
+        # Simulate clicking the button again
+        response = self.client.post(url, follow=True)
+        # Make sure the teacher gets redirected with the message
+        self.assertRedirects(response, reverse('quests:quests'))
+        self.assertContains(response, f"Quest '{archived_quest.name}' is already unarchived.")
 
 
 class SubmissionViewTests(TenantTestCase):
