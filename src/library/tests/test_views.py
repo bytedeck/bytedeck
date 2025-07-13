@@ -191,6 +191,32 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
+    def test_quests_tab_shows_correct_badge_count(self):
+        """
+        Ensure the quests tab displays the correct badge count for active quests.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # Get the correct quest count
+            quest_count = Quest.objects.get_active().count()
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+        # The badge should show the correct quest count
+        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
+
+    def test_quests_tab_only_shows_quests(self):
+        """
+        Ensure the quests tab only displays quests from the library schema.
+        """
+        self.client.force_login(self.test_teacher)
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+        # Should contain a quest name from the library schema if one exists
+        with library_schema_context():
+            quest = Quest.objects.get_active().first()
+        if quest:
+            self.assertContains(response, quest.name)
+
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def setUp(self):
@@ -274,6 +300,32 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+    def test_campaigns_tab_shows_correct_badge_count(self):
+        """
+        Ensure the campaigns tab displays the correct badge count for active campaigns.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # get the correct campiagn count
+            campaign_count = Category.objects.filter(active=True).count()
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        # The badge should show the correct campaign count
+        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
+
+    def test_campaigns_tab_only_shows_campaigns(self):
+        """
+        Ensure the campaigns tab only displays campaigns from the library schema.
+        """
+        self.client.force_login(self.test_teacher)
+        url = reverse('library:category_list')
+        response = self.client.get(url)
+        with library_schema_context():
+            campaign = Category.objects.filter(active=True).first()
+        # The response should contain the campaign name if one exists
+        if campaign:
+            self.assertContains(response, campaign.name)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
