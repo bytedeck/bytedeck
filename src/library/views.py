@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.db import connection
-from django.db.models import Count, Sum, Q
 from django.contrib.auth.decorators import login_required
 from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
