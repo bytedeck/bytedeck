@@ -47,7 +47,7 @@ class LibraryQuestListView(TemplateView):
             # this forces all quests to load.
             quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
             num_quests = len(quests)
-            num_campaigns = Category.objects.filter(active=True).count()
+            num_campaigns = Category.objects.all_active_with_importable_quests().count()
 
         context.update({
             'heading': 'Library',

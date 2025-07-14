@@ -197,12 +197,16 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         """
         self.client.force_login(self.test_teacher)
         with library_schema_context():
-            # Get the correct quest count
+            # Get the correct quest and campaign count
             quest_count = Quest.objects.get_active().count()
+            campaign_count = Category.objects.all_active_with_importable_quests().count()
+
         url = reverse('library:quest_list')
         response = self.client.get(url)
-        # The badge should show the correct quest count
+
+        # The badges should show the correct quest count
         self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
+        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
 
     def test_library_sidebar__shown_if_shared_library_enabled(self):
         """
@@ -324,11 +328,15 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         """
         self.client.force_login(self.test_teacher)
         with library_schema_context():
-            # get the correct campiagn count
+            # get the correct quest and campiagn count
+            quest_count = Quest.objects.get_active().count()
             campaign_count = Category.objects.all_active_with_importable_quests().count()
+
         url = reverse('library:category_list')
         response = self.client.get(url)
-        # The badge should show the correct campaign count
+
+        # The badges should show the correct campaign count
+        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
         self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
 
     def test_campaigns_tab__only_shows_library_campaigns(self):
