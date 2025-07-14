@@ -23,27 +23,39 @@ class CategoryManager(models.Manager):
 
     def all_active_with_importable_quests(self):
         """
-        Returns a queryset of active campaigns (categories) that have
-        at least one quest visible_to_students (published) and not archived.
+        Returns a queryset of active campaigns (categories) in the library schema
+        that have at least one importable quest — meaning a quest that is
+        visible to students (published) and not archived.
 
-        This helps efficiently filter campaigns relevant for display
-        or import in the library context.
+        Each returned campaign is annotated with:
+        - quest_count: the number of importable quests in the campaign
+        - xp_sum: the total XP across those importable quests
+
+        This queryset is suitable for listing campaigns available for import
+        or display in the shared library tab.
         """
 
         # Start with all categories filtered to only those marked active
         qs = self.get_queryset().filter(active=True)
 
-        # Annotate each category with a count of related quests that:
-        # - are visible_to_students (published)
+        # Annotate with counts and sums of quests that are visible and not archived.
+        # Naming matches template fields for easier integration.
+
+        # Note: These differ from the similarly named Category instance methods,
+        # which run per object and query the local schema instead of the library schema.
         qs = qs.annotate(
-            current_quest_count=Count(
+            quest_count=Count(
                 'quest',
+                filter=Q(quest__visible_to_students=True, quest__archived=False)
+            ),
+            xp_sum=Sum(
+                'quest__xp',
                 filter=Q(quest__visible_to_students=True, quest__archived=False)
             )
         )
 
-        # Filter out categories that do not have any qualifying quests
-        qs = qs.filter(current_quest_count__gt=0)
+        # Exclude campaigns without any qualifying quests
+        qs = qs.filter(quest_count__gt=0)
 
         return qs
 
