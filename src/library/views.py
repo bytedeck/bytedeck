@@ -170,7 +170,11 @@ class ImportQuestView(View):
             quest = get_object_or_404(Quest, import_id=quest_import_id)
             # Use dest_schema because current schema is library
             import_quests_to(destination_schema=dest_schema, quest_import_ids=[quest.import_id])
-            messages.success(request, f"Successfully imported '{quest.name}' to your deck.")
+
+        # Show a message with a link to the imported quest
+        quest = get_object_or_404(Quest, import_id=quest_import_id)
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        messages.success(request, f"Successfully imported '{link}' to your deck.")
 
         return redirect('quests:drafts')
 
@@ -248,9 +252,14 @@ class ImportCampaignView(View):
             # Collect import IDs for all quests in the campaign
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+            link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
             # Use dest_schema because current schema is library
             import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
-            messages.success(request, f"Successfully imported '{category.name}' to your deck.")
+
+        # Show a message with a link to the imported campiagn
+        category = get_object_or_404(Category, import_id=campaign_import_id)
+        link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
+        messages.success(request, f"Successfully imported '{link}' to your deck.")
 
         # Make the campaign inactive post-import
         # The quests are made inactive by the importer
