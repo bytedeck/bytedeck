@@ -7,13 +7,114 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from courses.models import Semester
-from quest_manager.models import Quest, QuestSubmission
+from quest_manager.models import Quest, QuestSubmission, Category
 from siteconfig.models import SiteConfig
 from django_tenants.test.cases import TenantTestCase
 from unittest.mock import patch
+from library.utils import library_schema_context
+from library.tests.test_views import LibraryTenantTestCaseMixin
 
 
 User = get_user_model()
+
+
+class CategoryManagerTests(LibraryTenantTestCaseMixin):
+
+    def setUp(self):
+        super().setUp()
+        # Create campaign (category) and quests in library schema
+        with library_schema_context():
+            self.category = baker.make(Category, title="Test Campaign", active=True)
+            self.quest1 = baker.make(
+                Quest,
+                campaign=self.category,
+                visible_to_students=True,
+                archived=False,
+                xp=100,
+                name="Visible Quest 1"
+            )
+            self.quest2 = baker.make(
+                Quest,
+                campaign=self.category,
+                visible_to_students=False,
+                archived=False,
+                xp=200,
+                name="Invisible Quest"
+            )
+            self.quest3 = baker.make(
+                Quest,
+                campaign=self.category,
+                visible_to_students=True,
+                archived=True,
+                xp=300,
+                name="Archived Quest"
+            )
+
+    def test_all_active_with_importable_quests__annotations(self):
+        """
+        Verifies that the queryset includes active campaigns with importable quests,
+        and that it correctly annotates quest_count and xp_sum based on quests
+        that are visible and not archived.
+        """
+        with library_schema_context():
+            qs = Category.objects.all_active_with_importable_quests()
+            self.assertIn(self.category, qs)
+
+            category = qs.get(pk=self.category.pk)
+
+            self.assertEqual(category.quest_count, 1)
+            self.assertEqual(category.xp_sum, 100)
+
+    def test_excludes_categories_without_importable_quests(self):
+        """
+        Ensures that active campaigns with no importable quests are excluded
+        from the queryset.
+        """
+        with library_schema_context():
+            empty_category = baker.make(Category, title="Empty Campaign", active=True)
+
+        qs = Category.objects.all_active_with_importable_quests()
+        self.assertNotIn(empty_category, qs)
+
+    def test_all_active_with_importable_quests__mixed_quest_states(self):
+        """
+        Tests filtering logic against a mix of campaigns with:
+        - valid importable quests,
+        - only archived quests,
+        - only invisible quests,
+        - and inactive campaigns with valid quests.
+
+        Ensures only campaigns with visible and unarchived quests are returned.
+        """
+        with library_schema_context():
+            # Delete existing campaigns and quest before test
+            Quest.objects.all().delete()
+            Category.objects.all().delete()
+
+            # Campaign with 2 valid quests
+            campaign1 = baker.make(Category, active=True)
+            baker.make(Quest, campaign=campaign1, visible_to_students=True, archived=False, xp=50)
+            baker.make(Quest, campaign=campaign1, visible_to_students=True, archived=False, xp=30)
+
+            # Campaign with only archived quests
+            campaign2 = baker.make(Category, active=True)
+            baker.make(Quest, campaign=campaign2, visible_to_students=True, archived=True)
+
+            # Campaign with only invisible quests
+            campaign3 = baker.make(Category, active=True)
+            baker.make(Quest, campaign=campaign3, visible_to_students=False, archived=False)
+
+            # Inactive campaign with valid quest
+            campaign4 = baker.make(Category, active=False)
+            baker.make(Quest, campaign=campaign4, visible_to_students=True, archived=False)
+
+            qs = Category.objects.all_active_with_importable_quests()
+
+            # Only campaign1 should be returned
+            self.assertEqual(qs.count(), 1)
+            self.assertEqual(qs.first(), campaign1)
+            self.assertEqual(qs.first().quest_count, 2)
+            self.assertEqual(qs.first().xp_sum, 80)
 
 
 class QuestQuerysetTest(TenantTestCase):
