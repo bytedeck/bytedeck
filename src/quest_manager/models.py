@@ -158,8 +158,8 @@ class XPItem(models.Model):
     )
     archived = models.BooleanField(
         default=False,
-        help_text='Setting this will prevent it from appearing in admin quest lists.  '
-        'To un-archive a quest, you will need to access it through Site Administration.'
+        # TODO: Update help_text once archiving also affects prerequisites, submissions, or other quest behavior.
+        help_text="Move this quest into the Archived tab."
     )
     sort_order = models.IntegerField(default=0)
     max_repeats = models.IntegerField(default=0, help_text='0 = not repeatable; -1 = unlimited repeats')
@@ -437,13 +437,42 @@ class QuestQuerySet(models.QuerySet):
 
 class QuestManager(models.Manager):
     def get_queryset(self, include_archived=False):
+        """
+        Return a QuestQuerySet for this manager.
+
+        Args:
+            include_archived (bool): If False (default), exclude archived quests from the queryset.
+                                    If True, include archived (all quests would be in the queryset).
+
+        Returns:
+            QuestQuerySet: The queryset, filtered according to the include_archived flag.
+        """
         qs = QuestQuerySet(self.model, using=self._db)
         if not include_archived:
             qs = qs.not_archived()
         return qs
 
     def get_active(self):
+        """
+        Return all active quests
+
+        Returns:
+            QuestQuerySet: a queryset, which includes quests with an available date on or before the given day,
+                           excludes expired quests, and those that aren't visible.
+                           Finally filtered to include quests with an active campaign or no campaign.
+        """
         return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
+
+    def all_including_archived(self):
+        """
+        Return a QuestQuerySet of all quests including archived.
+
+        This calls `get_queryset` with `include_archived=True` to include archived quests.
+
+        Returns:
+            QuestQuerySet: The queryset including all quests regardless of archived status.
+        """
+        return self.get_queryset(include_archived=True)
 
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
@@ -470,12 +499,37 @@ class QuestManager(models.Manager):
         return qs.not_in_progress_completed_or_cooldown(user)
 
     def all_drafts(self, user):
+        """
+        Return a queryset of draft quests (not visible to students)
+        for staff and allowed TAs only.
+
+        Args:
+            user: The user requesting quests from the Drafts tab
+
+            Returns:
+                QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
+        """
         qs = self.get_queryset().filter(visible_to_students=False)
 
         if user.is_staff:
             return qs
         else:  # TA
             return qs.editable(user)
+
+    def all_archived(self, user):
+        """
+        Return a queryset of archived quests for staff users only.
+
+        Args:
+            user: The user requesting archived quests
+
+        Returns:
+            QuerySet of archived quests if user is staff, empty list otherwise
+        """
+        if user.is_staff:
+            qs = self.get_queryset(include_archived=True).filter(archived=True)
+            return qs
+        return self.get_queryset().none()
 
 
 class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):

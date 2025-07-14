@@ -73,6 +73,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
+        self.archived_quest = baker.make(Quest, archived=True)
 
         # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         # self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
@@ -88,6 +89,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
+        archived_quest_pk = self.archived_quest.pk
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
@@ -123,6 +125,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
 
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 403)
 
@@ -131,6 +134,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -139,10 +143,12 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
+        archived_quest_pk = self.archived_quest.pk
 
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 302)
 
         self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
@@ -287,6 +293,38 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(url)
         self.assertContains(response, "You have no new quests available")
         self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
+
+    def test_teacher_can_unarchive_quest(self):
+        """
+        Test that staff users can successfully unarchive an archived quest.
+
+        Verifies that:
+        - Staff can access the unarchive view
+        - the quest's archived status is proerly cleared
+        - the user is redirected to the main quests page after unarchiving
+        - a success message is shown after unarchiving
+        - clicking the button again (you shouldn't be able to) sends you to the main quests page
+        - a message is shown after clicking the button again (you shouldn't be able to)
+        """
+        # Login a Teacher from setUp
+        self.client.force_login(self.test_teacher)
+        # Create an archived quest
+        archived_quest = baker.make(Quest, archived=True)
+        # Make sure it's archived
+        self.assertTrue(archived_quest.archived)
+
+        # Create the url leading to the unarchive view, same as button
+        url = reverse('quests:unarchive', args=[archived_quest.id])
+        # Simulate clicking the button
+        response = self.client.post(url, follow=True)
+        # Make sure the teacher gets redirected with the message
+        self.assertRedirects(response, reverse('quests:drafts'))
+        self.assertContains(response, "has been unarchived and moved to the Drafts tab.")
+
+        # Refresh the quest
+        archived_quest.refresh_from_db()
+        # Make sure the quest is no longer archived
+        self.assertFalse(archived_quest.archived)
 
 
 class SubmissionViewTests(TenantTestCase):

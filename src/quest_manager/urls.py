@@ -46,6 +46,7 @@ urlpatterns = [
     re_path(r'^completed/$', views.quest_list, name='completed'),
     re_path(r'^past/$', views.quest_list, name='past'),
     re_path(r'^drafts/$', views.quest_list, name='drafts'),
+    re_path(r'^archived/$', views.quest_list, name='archived'),
 
     # Approvals
     re_path(r'^approvals/$', views.approvals, name='approvals'),
@@ -64,6 +65,7 @@ urlpatterns = [
     re_path(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.QuestPrereqsUpdate.as_view(), name='quest_prereqs_update'),
     re_path(r'^(?P<quest_id>[0-9]+)/copy/$', views.QuestCopy.as_view(), name='quest_copy'),
     re_path(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
+    re_path(r'^(?P<quest_id>[0-9]+)/unarchive/', views.unarchive, name='unarchive'),
     re_path(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     re_path(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     re_path(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),

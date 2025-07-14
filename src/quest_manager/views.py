@@ -251,13 +251,15 @@ class QuestCopy(QuestCreate):
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+        # Set initial tags and prerequisite for the form
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
 
+        # Create a new Quest instance based on the copied quest
         new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
         new_quest.pk = None  # autogen a new primary key (quest_id by default)
-        new_quest.import_id = uuid.uuid4()
-        new_quest.name = new_quest.name + " - COPY"
+        new_quest.import_id = uuid.uuid4()  # assign a new import ID
+        new_quest.name = new_quest.name + " - COPY"  # indicate this is a copy
 
         kwargs["instance"] = new_quest
         return kwargs
@@ -412,6 +414,7 @@ class QuestListViewTabTypes:
     COMPLETED = 2
     PAST = 3
     DRAFT = 4
+    ARCHIVED = 5
 
 
 @non_public_only_view
@@ -422,6 +425,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = []
     past_submissions = []
     draft_quests = []
+    archived_quests = []
 
     view_type = QuestListViewTabTypes.AVAILABLE
     remove_hidden = True
@@ -442,6 +446,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         view_type = QuestListViewTabTypes.PAST
     elif "/drafts/" in request.path_info:
         view_type = QuestListViewTabTypes.DRAFT
+    elif "/archived/" in request.path_info:
+        view_type = QuestListViewTabTypes.ARCHIVED
     else:
         view_type = QuestListViewTabTypes.AVAILABLE
         if "/all/" in request.path_info:
@@ -477,12 +483,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
     past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     draft_quests = Quest.objects.all_drafts(request.user)
+    archived_quests = Quest.objects.all_archived(request.user)
 
     # Counts
     in_progress_submissions_count = in_progress_submissions.count()
     completed_submissions_count = completed_submissions.count()
     past_submissions_count = past_submissions.count()
     drafts_count = draft_quests.count()
+    archived_count = archived_quests.count()
     available_quests_count = (
         len(available_quests)
         if type(available_quests) is list
@@ -518,6 +526,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
         "num_drafts": drafts_count,
+        "archived_quests": archived_quests,
+        "num_archived": archived_count,
         "past_submissions": past_submissions,
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
@@ -539,7 +549,10 @@ def ajax_quest_info(request, quest_id=None):
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
             if quest_id:
-                quest = get_object_or_404(Quest, pk=quest_id)
+                if request.user.is_staff:
+                    quest = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
+                else:
+                    quest = get_object_or_404(Quest, pk=quest_id)
 
                 template = 'quest_manager/preview_content_quests_avail.html'
                 quest_info_html = render_to_string(template, {'q': quest, 'is_library_view': is_library_view}, request=request)
@@ -620,7 +633,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest, pk=quest_id)
+    q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
@@ -1085,6 +1098,35 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "show_all_blocks_button": show_all_blocks_button,
     }
     return render(request, template, context)
+
+
+@non_public_only_view
+@staff_member_required
+def unarchive(request, quest_id):
+    """
+    Unarchive a quest by setting its archived status to False.
+    Send the quest to the Drafts tab by making sure visible_to_students=False.
+    Only staff members can unarchive quests.
+
+    Args:
+        request: HTTP request object
+        quest_id: ID of the quest to unarchive
+
+    Returns:
+        Redirect to quests list with success message
+    """
+    quest = Quest.objects.all_including_archived().get(id=quest_id)
+
+    # Make the link that leads to the quests detail page to include in the message
+    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+    quest.archived = False
+    # Make sure the quest goes to the Drafts tab
+    quest.visible_to_students = False
+    quest.full_clean()
+    quest.save()
+    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    # Since the quest is sent to the Drafts tab redirect them there
+    return redirect("quests:drafts")
 
 
 #########################################

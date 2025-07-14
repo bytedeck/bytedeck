@@ -75,6 +75,8 @@ function loadQuestOrSubmissionContent(id) {
       data: postData,
       success: function (data) {
           $contentContainer.html(data.quest_info_html).addClass("ajax-content-loaded");
+          // Rebind preventDoubleSubmission to any new forms just inserted
+          $contentContainer.find('form').preventDoubleSubmission();
           $('div.pack').pack();
       },
       error: function (xhr) {
