@@ -252,11 +252,10 @@ class ImportCampaignView(View):
             # Collect import IDs for all quests in the campaign
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
-            link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
             # Use dest_schema because current schema is library
             import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
 
-        # Show a message with a link to the imported campiagn
+        # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         messages.success(request, f"Successfully imported '{link}' to your deck.")
