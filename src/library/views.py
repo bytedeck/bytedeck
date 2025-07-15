@@ -264,3 +264,54 @@ class ImportCampaignView(View):
         # The quests are made inactive by the importer
         local_category_qs.update(active=False)
         return redirect('quest_manager:categories_inactive')
+
+
+@login_required
+@staff_member_required
+def view_library_campaign(request, campaign_name):
+    """
+    View the content of a campaign (category) from the shared library.
+
+    Args:
+        request: HttpRequest object containing request data
+        campaign_name: String name of the campaign to view
+
+    Returns:
+        HttpResponse: Rendered template with campaign/category context
+    """
+    with library_schema_context():
+        category = get_object_or_404(Category, title=campaign_name)
+        category_icon_url = category.get_icon_url()
+        category_id = category.pk
+        category_quest_count = category.quest_count()
+        category_total_xp_available = category.xp_sum()
+        category_active = category.active
+        category_displayed_quests = list(category.quest_set.all())
+
+        # Add detailed quest info if needed
+        for q in category_displayed_quests:
+            quest_info = [
+                {
+                    'id': q.id,
+                    'name': q.name,
+                    'xp': q.xp,
+                    'tags': list(q.tags.all()),
+                    'icon_url': q.get_icon_url(),
+                    'visible_to_stuednts': q.visible_to_students,
+                    'expired': getattr(q, 'expired', False),
+                }
+            ]
+
+    context = {
+        'category': category,
+        'category_id': category_id,
+        'category_campaign_name': campaign_name,
+        'category_icon_url': category_icon_url,
+        'category_quest_count': category_quest_count,
+        'category_total_xp_available': category_total_xp_available,
+        'category_active': category_active,
+        'category_displayed_quests': category_displayed_quests,
+        'quest_info': quest_info,
+        'use_schema': get_library_schema_name(),
+    }
+    return render(request, 'library/view_library_campaign.html', context)
