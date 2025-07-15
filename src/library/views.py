@@ -264,3 +264,67 @@ class ImportCampaignView(View):
         # The quests are made inactive by the importer
         local_category_qs.update(active=False)
         return redirect('quest_manager:categories_inactive')
+
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class CategoryDetailView(TemplateView):
+    """
+    View the content of a campaign (category) from the shared library.
+    """
+    template_name = 'library/category_detail_view.html'
+
+    def get_context_data(self, **kwargs):
+        """
+        Extend context data with detailed information about a specific campaign (category)
+        and its associated quests from the shared library schema.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments, expected to include 'campaign_import_id' (UUID)
+                    which identifies the campaign to fetch.
+
+        Returns:
+            dict: Context dictionary updated with:
+                - category (Category): The campaign/category instance.
+                - category_id (int): Primary key of the campaign.
+                - category_campaign_name (str): Title of the campaign.
+                - category_quest_count (int): Number of quests in the campaign.
+                - category_total_xp_available (int): Sum of XP from all publsihed quests in the campaign.
+                - category_displayed_quests (list[Quest]): List of quest objects to display.
+                - quest_info (list[dict]): List of dicts with detailed quest info.
+                - use_schema (str): Name of the library schema currently in use.
+        """
+        campaign_import_id = kwargs.get('campaign_import_id')
+        context = super().get_context_data(**kwargs)
+
+        with library_schema_context():
+            category = get_object_or_404(Category, import_id=campaign_import_id)
+
+            displayed_quests = list(category.current_quests())
+
+            if displayed_quests:
+                quest_info = [
+                    {
+                        'id': q.id,
+                        'name': q.name,
+                        'xp': q.xp,
+                        'tags': list(q.tags.all()),
+                        'visible_to_students': q.visible_to_students,
+                        'expired': getattr(q, 'expired', False),
+                    }
+                    for q in displayed_quests
+                ]
+            else:
+                quest_info = []
+
+            context.update({
+                'category': category,
+                'category_id': category.pk,
+                'category_campaign_name': category.title,
+                'category_quest_count': category.quest_count(),
+                'category_total_xp_available': category.xp_sum(),
+                'category_displayed_quests': displayed_quests,
+                'quest_info': quest_info,
+                'use_schema': get_library_schema_name(),
+            })
+
+        return context

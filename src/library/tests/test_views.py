@@ -274,6 +274,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertRedirectsLogin('library:category_list')
         # Import campaign view
         self.assertRedirectsLogin('library:import_category', args=[self.library_category.import_id])
+        # Category detail view
+        self.assertRedirectsLogin('library:category_detail_view', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_students(self):
         """
@@ -284,6 +286,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # Students should not have access to the library pages
         self.assert403('library:category_list')
         self.assert403('library:import_category', args=[self.library_category.import_id])
+        self.assert403('library:category_detail_view', args=[self.library_category.import_id])
 
     def test_all_library_category_page_status_codes_for_staff(self):
         """
@@ -294,6 +297,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # Staff should have access to the library pages
         self.assert200('library:category_list')
         self.assert200('library:import_category', args=[self.library_category.import_id])
+        self.assert200('library:category_detail_view', args=[self.library_category.import_id])
 
     def test_import_campaign__already_exists(self):
         self.client.force_login(self.test_teacher)
@@ -448,6 +452,39 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         assert visible_quest.name in content
         assert archived_quest.name not in content
         assert invisible_quest.name not in content
+
+    def test_category_detail_view__quest_info(self):
+        """
+        Test that quest_info in the context contains correct details
+        about quests in the campaign.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # Add some quests to the library category for this test
+            baker.make(Quest, campaign=self.library_category, visible_to_students=True, archived=False, _quantity=2)
+
+        url = reverse('library:category_detail_view', args=[self.library_category.import_id])
+        response = self.client.get(url)
+        quest_info = response.context['quest_info']
+
+        # There should be as many quest_info dicts as displayed quests
+        self.assertEqual(len(quest_info), len(response.context['category_displayed_quests']))
+
+        # Check keys present in the first quest_info dict
+        if quest_info:
+            expected_quest_keys = {'id', 'name', 'xp', 'tags', 'visible_to_students', 'expired'}
+            self.assertTrue(expected_quest_keys.issubset(quest_info[0].keys()))
+
+    def test_category_detail_view__404_for_invalid_import_id(self):
+        """
+        Test that providing a non-existent campaign import_id
+        results in a 404 response.
+        """
+        self.client.force_login(self.test_teacher)
+        invalid_id = '00000000-0000-0000-0000-000000000000'
+        url = reverse('library:category_detail_view', args=[invalid_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
 
 
 class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
