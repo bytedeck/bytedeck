@@ -1,5 +1,6 @@
 import uuid
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.db import connection
 from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
@@ -191,6 +192,16 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
+        # Ensure the success message includes a link to the imported quest
+        messages = list(get_messages(response.wsgi_request))
+        self.assertEqual(len(messages), 1)
+        message = messages[0].message
+
+        imported_quest = quest_qs.get()
+        expected_link = f'<a href="{imported_quest.get_absolute_url()}">{imported_quest.name}</a>'
+
+        self.assertIn(expected_link, message)
+
     def test_quest_library_list__shows_correct_badge_count(self):
         """
         Ensure the quests tab displays the correct badge count for active quests.
@@ -321,6 +332,15 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # all imported quests should be inactive for this campaign
         self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+
+        # Assert that the success message includes a link to the imported campaign
+        messages = list(get_messages(response.wsgi_request))
+        self.assertEqual(len(messages), 1)
+        message = messages[0].message
+
+        expected_link = f'<a href="{imported_library_campaign.get_absolute_url()}">{imported_library_campaign.name}</a>'
+
+        self.assertIn(expected_link, message)
 
     def test_campaigns_tab__shows_correct_badge_count(self):
         """
