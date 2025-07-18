@@ -20,7 +20,7 @@ This file chronologically records all notable changes to this website, including
  - Avatar styling on profile page [#822](https://github.com/bytedeck/bytedeck/issues/822)
 * Refactor/Optimizations:
 * Bugfixes:
- - Add rate limit 429 error page [#1776](https://github.com/bytedeck/bytedeck/issues/1776)
+ - Add rate limit 429 error page [#1766](https://github.com/bytedeck/bytedeck/issues/1766)
  - Handle empty 'XP Requested' field [#1561](https://github.com/bytedeck/bytedeck/issues/1561)
  - Add blank values for Quests in Campaign and Total XP available on Campaign detail view [#1748](https://github.com/bytedeck/bytedeck/issues/1748)
  - Fix user access to the Library tab.  Only authenticated staff can access [#1789](https://github.com/bytedeck/bytedeck/issues/1789)
