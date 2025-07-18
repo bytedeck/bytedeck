@@ -134,7 +134,7 @@ class ImportQuestView(View):
                 - local_quest: The local quest with a matching import_id, if one exists.
         """
         # Check for local existence to warn the user before importing
-        local_quest = Quest.objects.filter(import_id=quest_import_id).first()
+        local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
 
         # Fetch the quest from the shared library
         with library_schema_context():
@@ -163,7 +163,7 @@ class ImportQuestView(View):
         dest_schema = connection.schema_name
 
         # Block import if the quest already exists locally (shouldn't happen because import button would be disabled)
-        if Quest.objects.filter(import_id=quest_import_id).exists():
+        if Quest.objects.all_including_archived().filter(import_id=quest_import_id).exists():
             raise PermissionDenied(f'Quest with import_id {quest_import_id} already exists in the current deck.')
 
         with library_schema_context():

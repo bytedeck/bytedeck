@@ -144,14 +144,34 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # import_id already on the current deck
         # TODO: When we add an overwrite feature, this quest will need to be modified to test that feature
 
-        # Create a quest in the local test schema
+        # Create quests in the local test schema with varying states
         quest = baker.make(Quest)
+        quest_2 = baker.make(Quest, visible_to_students=False)
+        quest_3 = baker.make(Quest, archived=True)
 
-        # create a quest in the library schema with same import_id
+        # create quests in the library schema with same import_ids
         with library_schema_context():
             library_quest = baker.make(Quest, import_id=quest.import_id)
+            library_quest_2 = baker.make(Quest, import_id=quest_2.import_id)
+            library_quest_3 = baker.make(Quest, import_id=quest_3.import_id)
 
         url = reverse('library:import_quest', args=[library_quest.import_id])
+
+        # Check that it sends you to the confrimation page with
+        self.assertContains(
+            self.client.get(url),
+            'Your deck already contains a quest with a matching Import ID'
+        )
+
+        url = reverse('library:import_quest', args=[library_quest_2.import_id])
+
+        # Check that it sends you to the confrimation page with
+        self.assertContains(
+            self.client.get(url),
+            'Your deck already contains a quest with a matching Import ID'
+        )
+
+        url = reverse('library:import_quest', args=[library_quest_3.import_id])
 
         # Check that it sends you to the confrimation page with
         self.assertContains(
