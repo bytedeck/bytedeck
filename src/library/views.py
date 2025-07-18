@@ -133,7 +133,7 @@ class ImportQuestView(View):
                 - quest: The quest from the shared library.
                 - local_quest: The local quest with a matching import_id, if one exists.
         """
-        # Check for local existence to warn the user before importing
+        # Look for a matching local quest (even if archived) to show a warning if it already exists
         local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
 
         # Fetch the quest from the shared library
@@ -142,6 +142,7 @@ class ImportQuestView(View):
 
         return render(request, self.template_name, {
             'quest': quest,
+            # A Quest from the local deck matching the import_id, or None if not found.
             'local_quest': local_quest,
         })
 
