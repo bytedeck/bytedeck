@@ -56,7 +56,7 @@
              aria-multiselectable="true">
         {% for q in category_displayed_quests %}
           <tr class="accordian-trigger panel-title
-              {% if not q.visible_to_students %}danger
+              {% if not q.published %}danger
               {% elif q.expired %}warning
               {% else %}default{% endif %}
               {% if q.id == active_q_id %} active {% endif %}"
@@ -94,7 +94,7 @@
     {% endcomment %}
     <div style="display: none"
          id="collapse-quest-{{ q.id }}"
-         class="{% if not q.visible_to_students %}danger {% elif q.expired %}warning {% else %}default{% endif %}"
+         class="{% if not q.published %}danger {% elif q.expired %}warning {% else %}default{% endif %}"
          role="tabpanel"
          aria-labelledby="heading-quest-{{ q.id }}">
       <ul class="list-group">

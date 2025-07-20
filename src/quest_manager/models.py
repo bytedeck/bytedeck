@@ -98,14 +98,14 @@ class Category(IsAPrereqMixin, models.Model):
 
     def current_quests(self):
         """ Returns a queryset containing every currently available quest in this campaign."""
-        return self.quest_set.all().visible().not_archived()
+        return self.quest_set.all().published_quests().not_archived()
 
     def quest_count(self):
         """ Returns the total number of quests available in this campaign."""
         return self.current_quests().count()
 
     def xp_sum(self):
-        """ Returns the total XP available from completing all visible quests in this campaign.
+        """ Returns the total XP available from completing all published quests in this campaign.
         Repeating quests are only counted once."""
         return self.current_quests().aggregate(Sum('xp'))['xp__sum']
 
@@ -116,7 +116,7 @@ class Category(IsAPrereqMixin, models.Model):
         """
 
         # get all the active quests in this campaign/category
-        # active = not expired, past availability date and time, not archived, visible to students (not draft)
+        # active = not expired, past availability date and time, not archived, published (not draft)
         quests = self.quest_set.get_active()
 
         # get all approved submissions of these quests for this user
@@ -164,9 +164,9 @@ class XPItem(models.Model):
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
     datetime_last_edit = models.DateTimeField(auto_now_add=False, auto_now=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
-    visible_to_students = models.BooleanField(
-        default=True, verbose_name="published",
-        help_text="If not checked, this quest will not be visible to students and will appear in your Drafts tab."
+    published = models.BooleanField(
+        default=True,
+        help_text="If not checked, this quest will not be published and will appear in your Drafts tab."
     )
     archived = models.BooleanField(
         default=False,
@@ -223,8 +223,8 @@ class XPItem(models.Model):
         Available as a property to make compatible with Badge.active attribute
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
-        # XPItem is not active if it is not published (i.e. a draft = visible_to_students=False), or archived
-        if not self.visible_to_students or self.archived:
+        # XPItem is not active if it is not published (i.e. a draft), or archived
+        if not self.published or self.archived:
             return False
 
         # XPItem/Quest object is inactive if it's a part of an inactive campaign
@@ -317,8 +317,8 @@ class QuestQuerySet(models.QuerySet):
         # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
         return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
 
-    def visible(self):
-        return self.filter(visible_to_students=True)
+    def published_quests(self):
+        return self.filter(published=True)
 
     def active_or_no_campaign(self):
         """With self as an argument, returns a filtered queryset
@@ -489,7 +489,7 @@ class QuestManager(models.Manager):
     def get_available(self, user, remove_hidden=True, blocking=True):
         """ Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired
-        2. Quests that are not visible to students or archived
+        2. Quests that are not published or archived
         3. Quests that are a part of an inactive campaign
         4. Quests whose prerequisites have not been met
         5. Quests that are not currently submitted for approval or already in progress
@@ -674,7 +674,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         if user.is_staff:
             return True
         else:
-            return user == self.editor and not self.visible_to_students
+            return user == self.editor and not self.published
 
     def expired(self):
         """Returns True if the quest has expired, False otherwise.
@@ -760,15 +760,15 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def exclude_archived_quests(self):
         return self.exclude(quest__archived=True)
 
-    def exclude_quests_not_visible_to_students(self):
-        return self.exclude(quest__visible_to_students=False)
+    def exclude_quests_not_published(self):
+        return self.exclude(quest__published=False)
 
 
 class QuestSubmissionManager(models.Manager):
     def get_queryset(self,
                      active_semester_only=False,
                      exclude_archived_quests=True,
-                     exclude_quests_not_visible_to_students=True,
+                     exclude_quests_not_published=True,
                      include_related=True):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
@@ -776,8 +776,8 @@ class QuestSubmissionManager(models.Manager):
             qs = qs.get_semester(SiteConfig.get().active_semester.pk)
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
-        if exclude_quests_not_visible_to_students:
-            qs = qs.exclude_quests_not_visible_to_students()
+        if exclude_quests_not_published:
+            qs = qs.exclude_quests_not_published()
 
         # Add effiencies by getting additional related objects we'll almost always need
         if include_related:
@@ -798,7 +798,7 @@ class QuestSubmissionManager(models.Manager):
         """
         qs = self.get_queryset(active_semester_only,
                                exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False
+                               exclude_quests_not_published=False
                                ).approved()
 
         if user:
@@ -834,13 +834,13 @@ class QuestSubmissionManager(models.Manager):
 
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False).get_user(user).completed()
+                               exclude_quests_not_published=False).get_user(user).completed()
         return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
                                exclude_archived_quests=False,
-                               exclude_quests_not_visible_to_students=False
+                               exclude_quests_not_published=False
                                )
         if user is None:
             qs = qs.completed()

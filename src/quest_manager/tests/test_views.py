@@ -346,7 +346,7 @@ class SubmissionViewTests(TenantTestCase):
 
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
-        self.quest3 = baker.make(Quest, visible_to_students=False)
+        self.quest3 = baker.make(Quest, published=False)
 
         self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
@@ -402,7 +402,7 @@ class SubmissionViewTests(TenantTestCase):
 
     def test_student_can_view_completed_submission_when_hidden(self):
         """
-        Make sure user can view quest even when visible_to_students is False
+        Make sure user can view quest even when published is False
         and a student has a submission to it.
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -534,10 +534,10 @@ class SubmissionViewTests(TenantTestCase):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Make quest invisible to students
-        self.quest1.visible_to_students = False
+        # Unpublish quest
+        self.quest1.published = False
         self.quest1.save()
-        self.assertFalse(self.quest1.visible_to_students)
+        self.assertFalse(self.quest1.published)
 
         # TODO: should redirect, not 404?
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
@@ -1179,8 +1179,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # Should redirect to the new quest:
         self.assertRedirects(response, new_quest.get_absolute_url())
 
-        # Confirm the quest is a draft and not visible to students
-        self.assertFalse(new_quest.visible_to_students)
+        # Confirm the quest is a draft and not published
+        self.assertFalse(new_quest.published)
         # also they should be the quest's editor
         self.assertEqual(new_quest.editor, test_ta)
 
@@ -1243,11 +1243,11 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         quest_to_update.editor = test_ta
         quest_to_update.save()
 
-        # Still can't access Update view becuase the quest is visible_to_students
+        # Still can't access Update view becuase the quest is published
         # Don't want TA's editing "live" quests
         self.assert403('quests:quest_update', kwargs={'pk': quest_to_update.pk})
 
-        quest_to_update.visible_to_students = False
+        quest_to_update.published = False
         quest_to_update.save()
 
         self.assert200('quests:quest_update', kwargs={'pk': quest_to_update.pk})
@@ -1295,8 +1295,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(scape.name in str(messages[0]))
 
     # TODO
-    # TAs should not be able to make a quest visible_to_students
-    # When a quest is made visible_to_students by a teacher, the editor should be removed
+    # TAs should not be able to make a quest published
+    # When a quest is published by a teacher, the editor should be removed
 
     def test_create_with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
@@ -1581,10 +1581,10 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
-        # self.assertFalse(form_data['visible_to_students']) ? When is this changed?
+        # self.assertFalse(form_data['published']) ? When is this changed?
 
-        # Also, TA's should not be able to set visible_to_students, but it is by default
-        # just make sure it is visible, and then check again after form is posted
+        # Also, TA's should not be able to set published, but it is by default
+        # just make sure it is published, and then check again after form is posted
 
     def test_TA_copy_quest_POST(self):
         self.client.force_login(self.test_ta)
@@ -1597,8 +1597,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(Quest.objects.filter(name='Test Quest - COPY').exists())
         new_quest = Quest.objects.get(name='Test Quest - COPY')
 
-        # For TAs only, quest should be forced to not visible to students
-        self.assertFalse(new_quest.visible_to_students)
+        # For TAs only, quest should be forced to not published
+        self.assertFalse(new_quest.published)
         # and the TA should have been set as the editor
         self.assertEqual(new_quest.editor, self.test_ta)
 
@@ -1884,10 +1884,10 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         Admin should see every quest assigned to the campaign
         """
 
-        # campaign with visible and non-visible quest created to test visibility for Admin and Student
+        # campaign with published and unpublished quest created to test visibility for Admin and Student
         view_test_campaign = baker.make(Category)
-        baker.make(Quest, visible_to_students=True, campaign=view_test_campaign)
-        baker.make(Quest, visible_to_students=False, campaign=view_test_campaign)
+        baker.make(Quest, published=True, campaign=view_test_campaign)
+        baker.make(Quest, published=False, campaign=view_test_campaign)
 
         # Admin should be able to access view
         self.client.force_login(self.test_teacher)

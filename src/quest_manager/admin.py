@@ -20,15 +20,15 @@ from .models import Quest, Category, QuestSubmission, CommonData
 
 
 def publish_selected_quests(modeladmin, request, queryset):
-    num_updates = queryset.update(visible_to_students=True, editor=None)
+    num_updates = queryset.update(published=True, editor=None)
 
-    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now visible to students.".format(
+    msg_str = "{} quest(s) updated. Editors have been removed and the quest is now published.".format(
         str(num_updates))  # noqa
     messages.success(request, msg_str)
 
 
 def archive_selected_quests(modeladmin, request, queryset):
-    num_updates = queryset.update(archived=True, visible_to_students=False, editor=None)
+    num_updates = queryset.update(archived=True, published=False, editor=None)
 
     msg_str = str(num_updates) + " quest(s) archived. These quests will now only be visible through this admin menu."
     messages.success(request, msg_str)
@@ -70,11 +70,11 @@ class QuestSubmissionAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin
     search_fields = ['user__username']
     autocomplete_fields = ("draft_comment",)
 
-    # default queryset doesn't return other semesters, or submissions for archived quests, or not visible to students
+    # default queryset doesn't return other semesters, or submissions for archived quests, or not published
     def get_queryset(self, request):
         qs = QuestSubmission.objects.get_queryset(active_semester_only=False,
                                                   exclude_archived_quests=False,
-                                                  exclude_quests_not_visible_to_students=False)
+                                                  exclude_quests_not_published=False)
         ordering = self.get_ordering(request)
         if ordering:
             qs = qs.order_by(*ordering)
@@ -299,9 +299,9 @@ class QuestResource(resources.ModelResource):
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
     resource_class = QuestResource
-    list_display = ('id', 'name', 'xp', 'archived', 'visible_to_students', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
+    list_display = ('id', 'name', 'xp', 'archived', 'published', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
-    list_filter = ['archived', 'visible_to_students', 'max_repeats', 'verification_required', 'editor',
+    list_filter = ['archived', 'published', 'max_repeats', 'verification_required', 'editor',
                    'specific_teacher_to_notify', 'common_data', 'campaign']
     search_fields = ['name', 'instructions', 'submission_details', 'short_description', 'campaign__title']
     inlines = [

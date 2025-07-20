@@ -85,7 +85,7 @@ class ProfileTestModel(TenantTestCase):
         self.assertFalse(self.profile.is_quest_hidden(quest_hidden))
 
     def test_num_hidden_quests_doesnt_include_unavailable(self):
-        """If a hidden quest has been made unavailable for some reason (visible=False, etc) then it shouldn't count"""
+        """If a hidden quest has been made unavailable for some reason (published=False, etc) then it shouldn't count"""
         self.create_active_course_registration()
         quest = baker.make('quest_manager.quest', name='Hide Me')
 
@@ -94,7 +94,7 @@ class ProfileTestModel(TenantTestCase):
         self.assertEqual(self.profile.num_hidden_quests(), 1)
 
         # make the quest invisible and it shouldn't appear in the hidden quest count
-        quest.visible_to_students = False
+        quest.published = False
         quest.save()
         self.assertEqual(self.profile.num_hidden_quests(), 0)
 

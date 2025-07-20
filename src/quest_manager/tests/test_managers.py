@@ -282,7 +282,7 @@ class QuestManagerTest(TenantTestCase):
         self.initial_quest_list = list(Quest.objects.all())
         # print(self.initial_quest_list)
         self.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
-        # this includes 6 quests, all visible to students, but only one
+        # this includes 6 quests, all published, but only one
         # available at the start as the rest have prerequisites.
 
         self.teacher = baker.make(User, username='teacher', is_staff=True)
@@ -384,10 +384,10 @@ class QuestManagerTest(TenantTestCase):
 
     def test_quest_qs_visible(self):
         """QuestQuerySet.visible should return visible for students quests"""
-        # baker.make(Quest, name='Quest-visible', visible_to_students=True)
-        baker.make(Quest, name='Quest-invisible', visible_to_students=False)
-        # self.assertListEqual(list(Quest.objects.all().visible().values_list('name', flat=True)), ['Quest-visible'])
-        self.assertListEqual(list(Quest.objects.all().visible()), self.initial_quest_list)
+        # baker.make(Quest, name='Quest-visible', published=True)
+        baker.make(Quest, name='Quest-invisible', published=False)
+        # self.assertListEqual(list(Quest.objects.all().published_quests().values_list('name', flat=True)), ['Quest-visible'])
+        self.assertListEqual(list(Quest.objects.all().published_quests()), self.initial_quest_list)
 
     def test_quest_qs_not_archived(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
@@ -475,7 +475,7 @@ class QuestManagerTest(TenantTestCase):
         """ DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
-        2. Quests that are not visible to students or archived  <<<< COVERED HERE
+        2. Quests that are not published or archived  <<<< COVERED HERE
         3. Quests that are a part of an inactive campaign/category <<<< COVERED HERE
         4. Quests who's prerequisites have not been met
         5. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
@@ -490,7 +490,7 @@ class QuestManagerTest(TenantTestCase):
         # a couple additions just for this test:
         baker.make(Quest, name='Quest-expired', date_expired=(localtime() - timedelta(days=1)))  # 1
         baker.make(Quest, name='Quest-future', date_available=(localtime() + timedelta(days=1)))  # 1
-        baker.make(Quest, name='Quest-not-visible', visible_to_students=False)  # 2
+        baker.make(Quest, name='Quest-not-visible', published=False)  # 2
         baker.make(Quest, name='Quest-archived', archived=True)  # 2
         inactive_campaign = baker.make('quest_manager.Category', active=False)
         baker.make(Quest, name='Quest-inactive-campaign', campaign=inactive_campaign)  # 3
@@ -694,13 +694,13 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_exclude_quests_not_visible_to_students(self):
+    def test_quest_submission_qs_exclude_quests_not_published(self):
         """
-        QuestSubmissionQuerySet.exclude_quests_not_visible_to_students should return quest submissions
+        QuestSubmissionQuerySet.exclude_quests_not_published should return quest submissions
         without submissions for invisible quests
         """
-        first = baker.make(QuestSubmission, quest__visible_to_students=True)
-        baker.make(QuestSubmission, quest__visible_to_students=False)
+        first = baker.make(QuestSubmission, quest__published=True)
+        baker.make(QuestSubmission, quest__published=False)
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
@@ -764,7 +764,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         SiteConfig.get().set_active_semester(self.active_semester.id)
 
     def test_get_queryset_default(self):
-        """QuestSubmissionManager.get_queryset by default should return all visible, not archived quest submissions"""
+        """QuestSubmissionManager.get_queryset by default should return all published, not archived quest submissions"""
         qs = QuestSubmission.objects.get_queryset()
         self.assertQuerysetEqual(qs, [self.sub1, self.sub2], ordered=False)
 
@@ -774,12 +774,12 @@ class QuestSubmissionManagerTest(TenantTestCase):
 
     def test_get_queryset_for_all_quests(self):
         qs = QuestSubmission.objects.get_queryset(
-            exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
+            exclude_archived_quests=False, exclude_quests_not_published=False)
         self.assertEqual(qs.count(), 7)
 
     def test_all_for_user_quest(self):
         """
-        QuestSubmissionManager.all_for_user_quest should return all visible not archived quest submissions
+        QuestSubmissionManager.all_for_user_quest should return all published not archived quest submissions
         for active semester, given user and quest
         """
         quest = self.sub1.quest
@@ -791,19 +791,19 @@ class QuestSubmissionManagerTest(TenantTestCase):
         """Generate 7 submissions, 3 from one semester and 4 from a different semester, each with different settings
 
         Returns:
-            [tuple]: the two submissions, one from each semester, where the quest is visible and not archived
+            [tuple]: the two submissions, one from each semester, where the quest is published and not archived
         """
         semester = baker.make(Semester)
         another_semester = baker.make(Semester)
 
-        sub1 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=True, quest__archived=True, semester=semester)
+        sub1 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=semester)
 
-        sub2 = baker.make(QuestSubmission, quest__visible_to_students=True, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=True, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=False, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__visible_to_students=True, quest__archived=True, semester=another_semester)
+        sub2 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=another_semester)
 
         return sub1, sub2
 

@@ -173,12 +173,12 @@ class QuestFormViewMixin:
     model = Quest
 
     def form_valid(self, form):
-        # TA created quests should not be visible to students.
+        # TA created quests should not be published.
         if self.request.user.profile.is_TA:
-            form.instance.visible_to_students = False
+            form.instance.published = False
             form.instance.editor = self.request.user
-        # When a teacher makes a form visible, remove editor abilities.
-        elif form.instance.visible_to_students:
+        # When a teacher makes a form published, remove editor abilities.
+        elif form.instance.published:
             form.instance.editor = None
 
         # Save the object so we can add prereqs to it
@@ -459,7 +459,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if request.user.is_staff:
         available_quests = (
             Quest.objects.all()
-            .visible()
+            .published_quests()
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
         )
@@ -580,7 +580,7 @@ def ajax_quest_info(request, quest_id=None):
 @login_required
 def ajax_approval_info(request, submission_id=None):
     if request.method == "POST":
-        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_published=False)
 
         sub = get_object_or_404(qs, pk=submission_id)
         template = 'quest_manager/preview_content_approvals.html'

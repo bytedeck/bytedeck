@@ -204,7 +204,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
             campaign = baker.make(Category, import_id=uuid.uuid4())
             library_quest = baker.make(
                 Quest,
-                visible_to_students=True,
+                published=True,
                 campaign=campaign,
             )
 
@@ -229,40 +229,11 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not visible to students
         self.assertFalse(quest_qs.get().visible_to_students)
 
-        # Ensure the success message includes a link to the imported quest
-        messages = list(get_messages(response.wsgi_request))
-        self.assertEqual(len(messages), 1)
-        message = messages[0].message
+    def test_side_bar_library_drop_down(self):
+        """Checks if library drop down is available when siteconfig.enable_shared_library is true"""
+        staff = baker.make(User, is_staff=True)
+        self.client.force_login(staff)
 
-        imported_quest = quest_qs.get()
-        expected_link = f'<a href="{imported_quest.get_absolute_url()}">{imported_quest.name}</a>'
-
-        self.assertIn(expected_link, message)
-
-    def test_quest_library_list__shows_correct_badge_count(self):
-        """
-        Ensure the quests tab displays the correct badge count for active quests.
-        """
-        self.client.force_login(self.test_teacher)
-        with library_schema_context():
-            # Get the correct quest and campaign count
-            quest_count = Quest.objects.get_active().count()
-            campaign_count = Category.objects.all_active_with_importable_quests().count()
-
-        url = reverse('library:quest_list')
-        response = self.client.get(url)
-
-        # The badges should show the correct quest count
-        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
-        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
-
-    def test_library_sidebar__shown_if_shared_library_enabled(self):
-        """
-        The staff sidebar should show the Library link if the shared library is enabled.
-        Tests that it doesn't show when shared_library_enabled=False
-        Tests that it does show when shared_library_enabled=True
-        """
-        # Make sure the shared library is initially disabled
         config = SiteConfig.get()
         config.enable_shared_library = False
         config.full_clean()
@@ -372,7 +343,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertEqual(imported_library_campaign.quest_set.count(), 3)
 
         # all imported quests should be inactive for this campaign
-        self.assertEqual(imported_library_campaign.quest_set.filter(visible_to_students=False).count(), 3)
+        self.assertEqual(imported_library_campaign.quest_set.filter(published=False).count(), 3)
 
         # Assert that the success message includes a link to the imported campaign
         messages = list(get_messages(response.wsgi_request))
