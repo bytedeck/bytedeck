@@ -20,7 +20,7 @@ class LibraryQuestListView(TemplateView):
     """
     View for displaying a list of active quests from the shared library.
 
-    Only quests that are both visible_to_students (published) and not archived
+    Only quests that are both published and not archived
     will be shown. Access is restricted to logged-in staff users.
     """
     # Shared template, tab context determines which section is shown
@@ -65,7 +65,7 @@ class LibraryCampaignListView(TemplateView):
     View for displaying a list of active campaigns (categories) from the shared library.
 
     Only campaigns that are active and contain at least one quest that is both
-    visible_to_students (published) and not archived will be shown.
+    published and not archived will be shown.
     Access is restricted to logged-in staff users.
     """
     # Shared template, tab context determines which section is shown
@@ -82,7 +82,7 @@ class LibraryCampaignListView(TemplateView):
                 - library_campaigns (QuerySet[Category]): A queryset of active campaigns
                     (categories) from the shared library. Each campaign includes at least one
                     quest that is:
-                        - visible_to_students=True (published)
+                        - published=True
                         - archived=False (not archived)
                 - num_campaigns (int): Number of campaigns in the displayed list, used for the UI badge.
                 - num_quests (int): Total number of visible (published and not archived) quests,
@@ -309,7 +309,7 @@ class CategoryDetailView(TemplateView):
                         'name': q.name,
                         'xp': q.xp,
                         'tags': list(q.tags.all()),
-                        'visible_to_students': q.visible_to_students,
+                        'published': q.published,
                         'expired': getattr(q, 'expired', False),
                     }
                     for q in displayed_quests

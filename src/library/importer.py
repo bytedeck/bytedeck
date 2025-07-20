@@ -12,7 +12,7 @@ def import_quests_to(*, destination_schema, quest_import_ids):
     """
 
     with library_schema_context():
-        quests = Quest.objects.select_related('campaign').filter(visible_to_students=True, import_id__in=quest_import_ids)
+        quests = Quest.objects.select_related('campaign').filter(published=True, import_id__in=quest_import_ids)
         export_data = QuestResource().export(quests)
 
     dry_run = False
@@ -23,8 +23,8 @@ def import_quests_to(*, destination_schema, quest_import_ids):
         for row in res.rows:
             if row.new_record:
                 object_ids.append(row.object_id)
-        # Set visible_to_students to False for imported quests
+        # Set published to False for imported quests
         # since the imported quests will be orphans
-        Quest.objects.filter(pk__in=object_ids).update(visible_to_students=False)
+        Quest.objects.filter(pk__in=object_ids).update(published=False)
 
     return res

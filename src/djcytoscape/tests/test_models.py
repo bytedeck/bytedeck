@@ -272,14 +272,14 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         self.map.regenerate()
 
     def test_maps_dont_include_drafts(self):
-        """Draft (unpublished) quests should not appear in maps (quest.visible_to_students = False)"""
+        """Draft unpublished quests should not appear in maps"""
 
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
         self.assertIn("/quests/6/", self.map.elements_json)
 
         # Make quest 6 a draft and regenerate the map
         quest_6 = Quest.objects.get(id=6)
-        quest_6.visible_to_students = False  # draft/unpublished
+        quest_6.published = False  # draft/unpublished
         quest_6.save()
         self.map.regenerate()
 
