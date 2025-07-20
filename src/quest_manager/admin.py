@@ -99,6 +99,8 @@ class QuestResource(resources.ModelResource):
     Related behavior like prerequisites and tags are handled by associated mixins
     on the Quest model, not directly by this class.
     """
+    local_visibility_map = {}
+
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
@@ -237,6 +239,9 @@ class QuestResource(resources.ModelResource):
         the method attempts to find a campaign by its title. If neither exists, a new campaign is created
         using the provided title, icon, short description, and import_id.
 
+        Additionally, if local visibility information for the quest is available (via a visibility map),
+        the quest's `visible_to_students` attribute is preserved; otherwise, it defaults to not visible.
+
         Args:
             quest (Quest): The quest instance to which the campaign will be assigned.
             data_dict (dict): A dictionary containing campaign data, including:
@@ -247,7 +252,8 @@ class QuestResource(resources.ModelResource):
 
         Side Effects:
             - The quest's `campaign` field is updated and saved.
-            - A new Category Object may be created if no existing match is found.
+            - The quest's visibility (`visible_to_students`) may be updated based on local data.
+            - A new Category object may be created if no existing match is found.
         """
         campaign_title = data_dict.get('campaign_title')
         campaign_icon = data_dict.get('campaign_icon')
@@ -281,13 +287,22 @@ class QuestResource(resources.ModelResource):
 
         # Assign the campaign to the quest
         quest.campaign = campaign
-        # Make sure any quests that already exist don't get published
-        quest.visible_to_students = False
+
+        # Preserve local quest visibility if known; otherwise default to not visible
+        import_id_str = str(quest.import_id)
+        if import_id_str in self.local_visibility_map:
+            quest.visible_to_students = self.local_visibility_map[import_id_str]
+        else:
+            quest.visible_to_students = False
+
         quest.full_clean()
         quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         if not dry_run:
+            # Store local visibility info to preserve quest visibility during import
+            local_visibility_map = kwargs.get('local_visibility_map', {})
+            self.local_visibility_map = local_visibility_map
             # Include the option to not import the campaign set the default to False
             import_campaign = kwargs.get('import_campaign', False)
             for data_dict in dataset.dict:

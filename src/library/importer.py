@@ -24,17 +24,12 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
     dry_run = False
     with schema_context(destination_schema):
-        # Explicitly import the campaign as well
-        result = QuestResource().import_data(export_data, dry_run=dry_run, import_campaign=True)
 
-        object_ids = []
-        for row in result.rows:
-            if row.new_record:
-                object_ids.append(row.object_id)
-        # Set published to False for imported quests,
-        # using update() for efficiency and to avoid triggering full model validation or signals,
-        # since we're only flipping a simple boolean flag on multiple objects at once.
-        Quest.objects.filter(pk__in=object_ids).update(published=False)
+        existing_quests = Quest.objects.filter(import_id__in=quest_import_ids)
+        local_visibility_map = {str(q.import_id): q.visible_to_students for q in existing_quests}
+
+        # Explicitly import the campaign as well
+        result = QuestResource().import_data(export_data, dry_run=dry_run, import_campaign=True, local_visibility_map=local_visibility_map)
 
         category = Category.objects.filter(import_id=campaign_import_id).first()
         if category:
@@ -54,9 +49,19 @@ def import_quest_to(*, destination_schema, quest_import_id):
     Args:
         destination_schema (str): The schema to import the quest into.
         quest_import_id (UUID): The import ID of the quest to import.
+
+    Returns:
+        ImportResult: The result of the import operation, including row-level status info.
+
+    Raises:
+        ValueError: If the quest with the given import_id does not exist in the source schema
+                    or cannot be found in the destination schema after import.
     """
     with library_schema_context():
-        quest = Quest.objects.get(import_id=quest_import_id)
+        try:
+            quest = Quest.objects.get(import_id=quest_import_id)
+        except Quest.DoesNotExist():
+            raise ValueError(f"Failed to retrieve imported quest with import_id {quest_import_id}")
 
         export_data = QuestResource().export([quest])
 
@@ -68,10 +73,12 @@ def import_quest_to(*, destination_schema, quest_import_id):
             use_transactions=True,
         )
 
-        imported_quest = Quest.objects.get(import_id=quest_import_id)
-        if imported_quest:
+        try:
+            imported_quest = Quest.objects.get(import_id=quest_import_id)
             imported_quest.visible_to_students = False
             imported_quest.full_clean()
             imported_quest.save()
+        except Quest.DoesNotExist():
+            raise ValueError(f"Failed to retrieve imported quest with import_id {quest_import_id}")
 
     return result
