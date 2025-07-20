@@ -89,8 +89,9 @@ class QuestResource(resources.ModelResource):
     such as importing from the library into tenant schemas. It supports linking
     related data like campaigns (Categories) using a UUID-based `import_id`.
 
-    generate_campaign_from_import_data: Automatically finds or creates a Campaign
-    for the imported Quest based on import_id or title, ensuring proper cross-schema linking.
+    generate_campaign_from_import_data: Finds or creates a Campaign for the imported Quest
+    only when the import_campaign flag is enabled and either campaign_title or campaign_import_id is provided,
+    avoiding creation of unnecessary campaigns for standalone quests.
 
     Intended for use in multi-tenant environments where Quests need to be
     shared, cloned, or updated from a central library source.
