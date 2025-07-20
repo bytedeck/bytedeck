@@ -37,9 +37,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
         Quest.objects.filter(pk__in=object_ids).update(published=False)
 
         category = Category.objects.filter(import_id=campaign_import_id).first()
-        category.active = False
-        category.full_clean()
-        category.save()
+        if category:
+            category.active = False
+            category.full_clean()
+            category.save()
 
     return result
 
@@ -68,8 +69,9 @@ def import_quest_to(*, destination_schema, quest_import_id):
         )
 
         imported_quest = Quest.objects.get(import_id=quest_import_id)
-        imported_quest.visible_to_students = False
-        imported_quest.full_clean()
-        imported_quest.save()
+        if imported_quest:
+            imported_quest.visible_to_students = False
+            imported_quest.full_clean()
+            imported_quest.save()
 
     return result
