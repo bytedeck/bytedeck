@@ -97,7 +97,7 @@ class Category(IsAPrereqMixin, models.Model):
 
     def current_quests(self):
         """ Returns a queryset containing every currently available quest in this campaign."""
-        return self.quest_set.all().published_quests().not_archived()
+        return self.quest_set.all().published().not_archived()
 
     def quest_count(self):
         """ Returns the total number of quests available in this campaign."""
@@ -316,7 +316,10 @@ class QuestQuerySet(models.QuerySet):
         # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
         return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
 
-    def published_quests(self):
+    def published(self):
+        """
+        Returns a queryset containing only quests that are published.
+        """
         return self.filter(published=True)
 
     def active_or_no_campaign(self):
@@ -472,7 +475,7 @@ class QuestManager(models.Manager):
                            excludes expired quests, and those that aren't published.
                            Finally filtered to include quests with an active campaign or no campaign.
         """
-        return self.get_queryset().datetime_available().not_expired().published_quests().active_or_no_campaign()
+        return self.get_queryset().datetime_available().not_expired().published().active_or_no_campaign()
 
     def all_including_archived(self):
         """

@@ -383,11 +383,11 @@ class QuestManagerTest(TenantTestCase):
         self.assertSetEqual(set(qs), set(result + self.initial_quest_name_list))
 
     def test_quest_qs_visible(self):
-        """QuestQuerySet.published_quests should return published for students quests"""
+        """QuestQuerySet.published should return published for students quests"""
         # baker.make(Quest, name='Quest-visible', published=True)
         baker.make(Quest, name='Quest-invisible', published=False)
-        # self.assertListEqual(list(Quest.objects.all().published_quests().values_list('name', flat=True)), ['Quest-visible'])
-        self.assertListEqual(list(Quest.objects.all().published_quests()), self.initial_quest_list)
+        # self.assertListEqual(list(Quest.objects.all().published().values_list('name', flat=True)), ['Quest-visible'])
+        self.assertListEqual(list(Quest.objects.all().published()), self.initial_quest_list)
 
     def test_quest_qs_not_archived(self):
         """QuestQuerySet.not_archived should return not_archived quests"""

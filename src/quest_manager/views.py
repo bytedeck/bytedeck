@@ -459,7 +459,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if request.user.is_staff:
         available_quests = (
             Quest.objects.all()
-            .published_quests()
+            .published()
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
         )

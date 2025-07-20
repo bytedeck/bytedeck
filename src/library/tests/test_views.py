@@ -160,7 +160,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Second is a quest that's not published also not archived
         # Third is a quest that's archived
         quest = baker.make(Quest)
-        quest_2 = baker.make(Quest, visible_to_students=False)
+        quest_2 = baker.make(Quest, published=False)
         quest_3 = baker.make(Quest, archived=True)
 
         # create quests in the library schema with same import_ids
