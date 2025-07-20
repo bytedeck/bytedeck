@@ -9,7 +9,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
     """
     Imports the given campaign and all quests from the library schema into the given destination schema.
 
-    Automatically sets imported quests to not be visible to students (not published),
+    Automatically sets imported quests to not published,
     and deactivates the associated campaign if one is present.
 
     Args:
@@ -26,7 +26,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
     with schema_context(destination_schema):
 
         existing_quests = Quest.objects.filter(import_id__in=quest_import_ids)
-        local_visibility_map = {str(q.import_id): q.visible_to_students for q in existing_quests}
+        local_visibility_map = {str(q.import_id): q.published for q in existing_quests}
 
         # Explicitly import the campaign as well
         result = QuestResource().import_data(export_data, dry_run=dry_run, import_campaign=True, local_visibility_map=local_visibility_map)
@@ -44,7 +44,7 @@ def import_quest_to(*, destination_schema, quest_import_id):
     """
     Imports a single quest into the destination schema without importing its campaign.
 
-    Automatically sets imported quest to not be visible to students (not published)
+    Automatically sets imported quest to not published
 
     Args:
         destination_schema (str): The schema to import the quest into.
@@ -58,10 +58,7 @@ def import_quest_to(*, destination_schema, quest_import_id):
                     or cannot be found in the destination schema after import.
     """
     with library_schema_context():
-        try:
-            quest = Quest.objects.get(import_id=quest_import_id)
-        except Quest.DoesNotExist():
-            raise ValueError(f"Failed to retrieve imported quest with import_id {quest_import_id}")
+        quest = Quest.objects.get(import_id=quest_import_id)
 
         export_data = QuestResource().export([quest])
 
@@ -73,12 +70,9 @@ def import_quest_to(*, destination_schema, quest_import_id):
             use_transactions=True,
         )
 
-        try:
-            imported_quest = Quest.objects.get(import_id=quest_import_id)
-            imported_quest.visible_to_students = False
-            imported_quest.full_clean()
-            imported_quest.save()
-        except Quest.DoesNotExist():
-            raise ValueError(f"Failed to retrieve imported quest with import_id {quest_import_id}")
+        imported_quest = Quest.objects.get(import_id=quest_import_id)
+        imported_quest.published = False
+        imported_quest.full_clean()
+        imported_quest.save()
 
     return result

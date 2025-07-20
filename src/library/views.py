@@ -170,7 +170,7 @@ class ImportQuestView(View):
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
             # Use dest_schema because current schema is library
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=[quest.import_id])
+            import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
@@ -254,7 +254,7 @@ class ImportCampaignView(View):
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
+            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)

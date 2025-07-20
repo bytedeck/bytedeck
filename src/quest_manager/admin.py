@@ -240,7 +240,7 @@ class QuestResource(resources.ModelResource):
         using the provided title, icon, short description, and import_id.
 
         Additionally, if local visibility information for the quest is available (via a visibility map),
-        the quest's `visible_to_students` attribute is preserved; otherwise, it defaults to not visible.
+        the quest's `published` attribute is preserved; otherwise, it defaults to not published.
 
         Args:
             quest (Quest): The quest instance to which the campaign will be assigned.
@@ -252,7 +252,7 @@ class QuestResource(resources.ModelResource):
 
         Side Effects:
             - The quest's `campaign` field is updated and saved.
-            - The quest's visibility (`visible_to_students`) may be updated based on local data.
+            - The quest's `published` field may be updated based on local data.
             - A new Category object may be created if no existing match is found.
         """
         campaign_title = data_dict.get('campaign_title')
@@ -288,12 +288,12 @@ class QuestResource(resources.ModelResource):
         # Assign the campaign to the quest
         quest.campaign = campaign
 
-        # Preserve local quest visibility if known; otherwise default to not visible
+        # Preserve local quest published state if known; otherwise default to not published
         import_id_str = str(quest.import_id)
         if import_id_str in self.local_visibility_map:
-            quest.visible_to_students = self.local_visibility_map[import_id_str]
+            quest.published = self.local_visibility_map[import_id_str]
         else:
-            quest.visible_to_students = False
+            quest.published = False
 
         quest.full_clean()
         quest.save()

@@ -363,7 +363,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         with library_schema_context():
             library_campaign = baker.make(Category)
-            baker.make(Quest, campaign=library_campaign, _quantity=3)
+            baker.make(Quest, published=True, campaign=library_campaign, _quantity=3)
             self.assertEqual(library_campaign.quest_set.count(), 3)
 
         import_url = reverse('library:import_category', args=[library_campaign.import_id])
@@ -425,7 +425,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         Tests that importing a campaign preserves the local visibility state of existing quests.
 
         Specifically:
-        - Quests imported individually default to unpublished (not visible).
+        - Quests imported individually default to unpublished.
         - If a locally imported quest was manually published, re-importing the campaign
         does not overwrite its visibility to unpublished.
         - Quests not previously imported are set to unpublished by default.
@@ -435,8 +435,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         with library_schema_context():
             library_campaign = baker.make(Category)
-            # Create 2 quests in library: both visible_to_students (published)
-            library_quests = baker.make(Quest, campaign=library_campaign, visible_to_students=True, _quantity=2)
+            # Create 2 quests in library: both published
+            library_quests = baker.make(Quest, campaign=library_campaign, published=True, _quantity=2)
 
         # Import first quest individually (will be unpublished by default)
         import_quest_to(destination_schema=connection.schema_name, quest_import_id=library_quests[0].import_id)
@@ -446,7 +446,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Update the second quest to be published locally
         published_local_quest = Quest.objects.get(import_id=library_quests[1].import_id)
-        published_local_quest.visible_to_students = True
+        published_local_quest.published = True
         published_local_quest.full_clean()
         published_local_quest.save()
 
@@ -461,8 +461,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         unpublished_local_quest = Quest.objects.get(import_id=library_quests[0].import_id)
         published_local_quest.refresh_from_db()
 
-        self.assertFalse(unpublished_local_quest.visible_to_students)
-        self.assertTrue(published_local_quest.visible_to_students)
+        self.assertFalse(unpublished_local_quest.published)
+        self.assertTrue(published_local_quest.published)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
