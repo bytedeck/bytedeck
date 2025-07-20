@@ -226,11 +226,43 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         quest_qs = Quest.objects.filter(import_id=library_quest.import_id)
         self.assertTrue(quest_qs.exists())
 
-        # Ensure that the newly imported quest is not visible to students
-        self.assertFalse(quest_qs.get().visible_to_students)
+        # Ensure that the newly imported quest is not published
+        self.assertFalse(quest_qs.get().published)
 
-    def test_side_bar_library_drop_down(self):
-        """Checks if library drop down is available when siteconfig.enable_shared_library is true"""
+        # Ensure the success message includes a link to the imported quest
+        messages = list(get_messages(response.wsgi_request))
+        self.assertEqual(len(messages), 1)
+        message = messages[0].message
+
+        imported_quest = quest_qs.get()
+        expected_link = f'<a href="{imported_quest.get_absolute_url()}">{imported_quest.name}</a>'
+
+        self.assertIn(expected_link, message)
+
+    def test_quest_library_list__shows_correct_badge_count(self):
+        """
+        Ensure the quests tab displays the correct badge count for active quests.
+        """
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            # Get the correct quest and campaign count
+            quest_count = Quest.objects.get_active().count()
+            campaign_count = Category.objects.all_active_with_importable_quests().count()
+
+        url = reverse('library:quest_list')
+        response = self.client.get(url)
+
+        # The badges should show the correct quest count
+        self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
+        self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
+
+    def test_library_sidebar__shown_if_shared_library_enabled(self):
+        """
+        The staff sidebar should show the Library link if the shared library is enabled.
+        Tests that it doesn't show when shared_library_enabled=False
+        Tests that it does show when shared_library_enabled=True
+        """
+        # Make sure the shared library is initially disabled
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
 
@@ -387,7 +419,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
         Campaigns are only included in the library list if they have at least one
-        visible_to_students (published) and unarchived quest.
+        published and unarchived quest.
         """
         self.client.force_login(self.test_teacher)
 
@@ -400,13 +432,13 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             excluded_invisible = baker.make(Category, title='Invisible Only')
 
             # Make a current quest on the library and put it in a campaign — should be included
-            baker.make(Quest, campaign=included, visible_to_students=True, archived=False)
+            baker.make(Quest, campaign=included, published=True, archived=False)
 
             # Make an archived quest on the library and put it in a campaign — should not count
-            baker.make(Quest, campaign=excluded_archived, visible_to_students=True, archived=True)
+            baker.make(Quest, campaign=excluded_archived, published=True, archived=True)
 
             # Make and invisible quest (draft) on the library and put it in a campaign — should not count
-            baker.make(Quest, campaign=excluded_invisible, visible_to_students=False, archived=False)
+            baker.make(Quest, campaign=excluded_invisible, published=False, archived=False)
 
         # Go to the list on the local deck
         response = self.client.get(reverse('library:category_list'))
@@ -418,18 +450,18 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     def test_campaigns_library_list__excludes_inactive_campaigns(self):
         """
         Inactive campaigns should not appear in the library category list,
-        even if they contain visible_to_students (published) and unarchived quests.
+        even if they contain published and unarchived quests.
         """
         self.client.force_login(self.test_teacher)
 
         with library_schema_context():
-            # Should be shown: active campaign with a visible/unarchived quest
+            # Should be shown: active campaign with a published/unarchived quest
             active_campaign = baker.make(Category, title='Active Campaign', active=True)
-            baker.make(Quest, campaign=active_campaign, visible_to_students=True, archived=False)
+            baker.make(Quest, campaign=active_campaign, published=True, archived=False)
 
             # Should be hidden: inactive campaign even though quest is valid
             inactive_campaign = baker.make(Category, title='Inactive Campaign', active=False)
-            baker.make(Quest, campaign=inactive_campaign, visible_to_students=True, archived=False)
+            baker.make(Quest, campaign=inactive_campaign, published=True, archived=False)
 
         response = self.client.get(reverse('library:category_list'))
 
@@ -438,24 +470,24 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
     def test_import_campaign_view__shows_only_current_quests(self):
         """
-        Only current quests (visible_to_students (published) and not archived) should be shown when confirming a campaign import.
+        Only current quests (published and not archived) should be shown when confirming a campaign import.
         """
         self.client.force_login(self.test_teacher)
 
         with library_schema_context():
-            # Create a campaign with a mix of visible (published), archived, and invisible quests
+            # Create a campaign with a mix of published, archived, and invisible quests
             campaign = baker.make(Category, title='Visible Campaign')
             # Create a quest that should be displayed
-            visible_quest = baker.make(Quest, campaign=campaign, name='Visible', visible_to_students=True, archived=False)
+            visible_quest = baker.make(Quest, campaign=campaign, name='published', published=True, archived=False)
             # Create a quest that should not be displayed (archived)
-            archived_quest = baker.make(Quest, campaign=campaign, name='ArchivedQuest', visible_to_students=True, archived=True)
+            archived_quest = baker.make(Quest, campaign=campaign, name='ArchivedQuest', published=True, archived=True)
             # Create a quest that should not be displayed (unpublished/draft)
-            invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', visible_to_students=False, archived=False)
+            invisible_quest = baker.make(Quest, campaign=campaign, name='Invisible', published=False, archived=False)
 
         # Go to the import confirmation page for the campaign
         response = self.client.get(reverse('library:import_category', args=[campaign.import_id]))
 
-        # Should include only the visible (published), non-archived quest
+        # Should include only the published, non-archived quest
         content = response.content.decode()
         assert visible_quest.name in content
         assert archived_quest.name not in content
@@ -469,7 +501,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Add some quests to the library category for this test
-            baker.make(Quest, campaign=self.library_category, visible_to_students=True, archived=False, _quantity=2)
+            baker.make(Quest, campaign=self.library_category, published=True, archived=False, _quantity=2)
 
         url = reverse('library:category_detail_view', args=[self.library_category.import_id])
         response = self.client.get(url)
@@ -480,7 +512,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         # Check keys present in the first quest_info dict
         if quest_info:
-            expected_quest_keys = {'id', 'name', 'xp', 'tags', 'visible_to_students', 'expired'}
+            expected_quest_keys = {'id', 'name', 'xp', 'tags', 'published', 'expired'}
             self.assertTrue(expected_quest_keys.issubset(quest_info[0].keys()))
 
     def test_category_detail_view__404_for_invalid_import_id(self):

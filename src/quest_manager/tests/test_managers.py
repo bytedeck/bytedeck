@@ -28,15 +28,15 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.quest1 = baker.make(
                 Quest,
                 campaign=self.category,
-                visible_to_students=True,
+                published=True,
                 archived=False,
                 xp=100,
-                name="Visible Quest 1"
+                name="Published Quest 1"
             )
             self.quest2 = baker.make(
                 Quest,
                 campaign=self.category,
-                visible_to_students=False,
+                published=False,
                 archived=False,
                 xp=200,
                 name="Invisible Quest"
@@ -44,7 +44,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.quest3 = baker.make(
                 Quest,
                 campaign=self.category,
-                visible_to_students=True,
+                published=True,
                 archived=True,
                 xp=300,
                 name="Archived Quest"
@@ -54,7 +54,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
         """
         Verifies that the queryset includes active campaigns with importable quests,
         and that it correctly annotates quest_count and xp_sum based on quests
-        that are visible and not archived.
+        that are published and not archived.
         """
         with library_schema_context():
             qs = Category.objects.all_active_with_importable_quests()
@@ -84,7 +84,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
         - only invisible quests,
         - and inactive campaigns with valid quests.
 
-        Ensures only campaigns with visible and unarchived quests are returned.
+        Ensures only campaigns with published and unarchived quests are returned.
         """
         with library_schema_context():
             # Delete existing campaigns and quest before test
@@ -93,20 +93,20 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
 
             # Campaign with 2 valid quests
             campaign1 = baker.make(Category, active=True)
-            baker.make(Quest, campaign=campaign1, visible_to_students=True, archived=False, xp=50)
-            baker.make(Quest, campaign=campaign1, visible_to_students=True, archived=False, xp=30)
+            baker.make(Quest, campaign=campaign1, published=True, archived=False, xp=50)
+            baker.make(Quest, campaign=campaign1, published=True, archived=False, xp=30)
 
             # Campaign with only archived quests
             campaign2 = baker.make(Category, active=True)
-            baker.make(Quest, campaign=campaign2, visible_to_students=True, archived=True)
+            baker.make(Quest, campaign=campaign2, published=True, archived=True)
 
             # Campaign with only invisible quests
             campaign3 = baker.make(Category, active=True)
-            baker.make(Quest, campaign=campaign3, visible_to_students=False, archived=False)
+            baker.make(Quest, campaign=campaign3, published=False, archived=False)
 
             # Inactive campaign with valid quest
             campaign4 = baker.make(Category, active=False)
-            baker.make(Quest, campaign=campaign4, visible_to_students=True, archived=False)
+            baker.make(Quest, campaign=campaign4, published=True, archived=False)
 
             qs = Category.objects.all_active_with_importable_quests()
 
@@ -383,7 +383,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertSetEqual(set(qs), set(result + self.initial_quest_name_list))
 
     def test_quest_qs_visible(self):
-        """QuestQuerySet.visible should return visible for students quests"""
+        """QuestQuerySet.published_quests should return published for students quests"""
         # baker.make(Quest, name='Quest-visible', published=True)
         baker.make(Quest, name='Quest-invisible', published=False)
         # self.assertListEqual(list(Quest.objects.all().published_quests().values_list('name', flat=True)), ['Quest-visible'])
@@ -515,7 +515,7 @@ class QuestManagerTest(TenantTestCase):
         self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
         ########################################
-        # 2. Quests that are not visible to students or archived
+        # 2. Quests that are not published to students or archived
         #########################################
         # The assert above checks this condition, because these two do not appear:
         #  Quest-not-visible

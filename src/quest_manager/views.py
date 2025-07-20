@@ -1105,7 +1105,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting its archived status to False.
-    Send the quest to the Drafts tab by making sure visible_to_students=False.
+    Send the quest to the Drafts tab by making sure published=False.
     Only staff members can unarchive quests.
 
     Args:
@@ -1121,7 +1121,7 @@ def unarchive(request, quest_id):
     link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
-    quest.visible_to_students = False
+    quest.published = False
     quest.full_clean()
     quest.save()
     messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")

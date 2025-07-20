@@ -24,8 +24,7 @@ class CategoryManager(models.Manager):
     def all_active_with_importable_quests(self):
         """
         Returns a queryset of active campaigns (categories) in the library schema
-        that have at least one importable quest — meaning a quest that is
-        visible to students (published) and not archived.
+        that have at least one importable quest — meaning a quest that is published and not archived.
 
         Each returned campaign is annotated with:
         - quest_count: the number of importable quests in the campaign
@@ -38,7 +37,7 @@ class CategoryManager(models.Manager):
         # Start with all categories filtered to only those marked active
         qs = self.get_queryset().filter(active=True)
 
-        # Annotate with counts and sums of quests that are visible and not archived.
+        # Annotate with counts and sums of quests that are published and not archived.
         # Naming matches template fields for easier integration.
 
         # Note: These differ from the similarly named Category instance methods,
@@ -46,11 +45,11 @@ class CategoryManager(models.Manager):
         qs = qs.annotate(
             quest_count=Count(
                 'quest',
-                filter=Q(quest__visible_to_students=True, quest__archived=False)
+                filter=Q(quest__published=True, quest__archived=False)
             ),
             xp_sum=Sum(
                 'quest__xp',
-                filter=Q(quest__visible_to_students=True, quest__archived=False)
+                filter=Q(quest__published=True, quest__archived=False)
             )
         )
 
@@ -470,10 +469,10 @@ class QuestManager(models.Manager):
 
         Returns:
             QuestQuerySet: a queryset, which includes quests with an available date on or before the given day,
-                           excludes expired quests, and those that aren't visible.
+                           excludes expired quests, and those that aren't published.
                            Finally filtered to include quests with an active campaign or no campaign.
         """
-        return self.get_queryset().datetime_available().not_expired().visible().active_or_no_campaign()
+        return self.get_queryset().datetime_available().not_expired().published_quests().active_or_no_campaign()
 
     def all_including_archived(self):
         """
@@ -512,7 +511,7 @@ class QuestManager(models.Manager):
 
     def all_drafts(self, user):
         """
-        Return a queryset of draft quests (not visible to students)
+        Return a queryset of draft quests (not published)
         for staff and allowed TAs only.
 
         Args:
@@ -521,7 +520,7 @@ class QuestManager(models.Manager):
             Returns:
                 QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
         """
-        qs = self.get_queryset().filter(visible_to_students=False)
+        qs = self.get_queryset().filter(published=False)
 
         if user.is_staff:
             return qs
@@ -549,7 +548,7 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     A model representing a Quest.
 
     A Quest in this context is an assignment or task that the student must complete.
-    It contains several options for controlling how and when the quest is visible and completed.
+    It contains several options for controlling how and when the quest is published and completed.
 
     IsAPrereqMixin: Requires that the condition_met_as_prerequisite method be implemented,
                     allowing this to function as a prerequisite to other quests.
