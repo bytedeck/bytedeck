@@ -127,8 +127,19 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def test_import_quest_to_current_deck(self):
         """
-        Add tests that check if the import quest to current deck view works.
-        2 tests where the quest doesn't import and 1 test of a quest succeeding to import
+        Tests the quest import view for various scenarios:
+
+        - Case 1: Fails to import a non-existent quest (invalid import_id).
+        - Case 2: Fails to import a quest that already exists locally in one of three states:
+            a) Published and active
+            b) Unpublished
+            c) Archived
+        In all cases, the import is blocked and a confirmation message is shown.
+        - Case 3: Successfully imports a new library quest that does not yet exist on the local deck.
+        Verifies:
+            - The quest is added to the local schema.
+            - It is not immediately visible to students.
+            - A success message with a link to the imported quest is displayed.
         """
         self.client.force_login(self.test_teacher)
 
@@ -144,14 +155,40 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # import_id already on the current deck
         # TODO: When we add an overwrite feature, this quest will need to be modified to test that feature
 
-        # Create a quest in the local test schema
+        # Create quests in the local test schema
+        # First is a published quest that's not archived
+        # Second is a quest that's not published also not archived
+        # Third is a quest that's archived
         quest = baker.make(Quest)
+        quest_2 = baker.make(Quest, visible_to_students=False)
+        quest_3 = baker.make(Quest, archived=True)
 
-        # create a quest in the library schema with same import_id
+        # create quests in the library schema with same import_ids
         with library_schema_context():
             library_quest = baker.make(Quest, import_id=quest.import_id)
+            library_quest_2 = baker.make(Quest, import_id=quest_2.import_id)
+            library_quest_3 = baker.make(Quest, import_id=quest_3.import_id)
 
+        # Published quest
         url = reverse('library:import_quest', args=[library_quest.import_id])
+
+        # Check that it sends you to the confrimation page with
+        self.assertContains(
+            self.client.get(url),
+            'Your deck already contains a quest with a matching Import ID'
+        )
+
+        # Unpublished quest
+        url = reverse('library:import_quest', args=[library_quest_2.import_id])
+
+        # Check that it sends you to the confrimation page with
+        self.assertContains(
+            self.client.get(url),
+            'Your deck already contains a quest with a matching Import ID'
+        )
+
+        # Archived quest
+        url = reverse('library:import_quest', args=[library_quest_3.import_id])
 
         # Check that it sends you to the confrimation page with
         self.assertContains(
