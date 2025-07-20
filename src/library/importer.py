@@ -40,7 +40,10 @@ def import_quests_to(*, destination_schema, quest_import_ids):
         Quest.objects.filter(pk__in=object_ids).update(published=False)
 
         # Deactivate related campaign if one exists
-        if campaign_import_id:
-            Category.objects.filter(import_id=campaign_import_id).update(active=False)
+        campaign = Category.objects.filter(import_id=campaign_import_id).first()
+        if campaign:
+            campaign.active = False
+            campaign.full_clean()
+            campaign.save()
 
     return res

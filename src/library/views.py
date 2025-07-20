@@ -261,9 +261,7 @@ class ImportCampaignView(View):
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         messages.success(request, f"Successfully imported '{link}' to your deck.")
 
-        # Make the campaign inactive post-import
-        # The quests are made inactive by the importer
-        local_category_qs.update(active=False)
+        # The campaign will be deactivated by import_quests_to()
         return redirect('quest_manager:categories_inactive')
 
 
