@@ -229,6 +229,10 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not published
         self.assertFalse(quest_qs.get().published)
 
+        # Ensure that the campaign is NOT imported (it's an orphan quest import)
+        imported_campaign = Category.objects.filter(import_id=campaign.import_id).first()
+        self.assertIsNone(imported_campaign)
+
         # Ensure the success message includes a link to the imported quest
         messages = list(get_messages(response.wsgi_request))
         self.assertEqual(len(messages), 1)

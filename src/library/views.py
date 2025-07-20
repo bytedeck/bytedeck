@@ -11,7 +11,7 @@ from hackerspace_online.decorators import staff_member_required
 
 from quest_manager.models import Quest, Category
 
-from .importer import import_quests_to
+from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context
 
 
@@ -261,7 +261,7 @@ class ImportCampaignView(View):
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         messages.success(request, f"Successfully imported '{link}' to your deck.")
 
-        # The campaign will be deactivated by import_quests_to()
+        # The campaign will be deactivated by import_campaign_to()
         return redirect('quest_manager:categories_inactive')
 
 
