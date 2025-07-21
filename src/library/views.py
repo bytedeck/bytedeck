@@ -11,7 +11,7 @@ from hackerspace_online.decorators import staff_member_required
 
 from quest_manager.models import Quest, Category
 
-from .importer import import_quests_to
+from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context
 
 
@@ -170,7 +170,7 @@ class ImportQuestView(View):
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
             # Use dest_schema because current schema is library
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=[quest.import_id])
+            import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
@@ -254,16 +254,14 @@ class ImportCampaignView(View):
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
+            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         messages.success(request, f"Successfully imported '{link}' to your deck.")
 
-        # Make the campaign inactive post-import
-        # The quests are made inactive by the importer
-        local_category_qs.update(active=False)
+        # The campaign will be deactivated by import_campaign_to()
         return redirect('quest_manager:categories_inactive')
 
 

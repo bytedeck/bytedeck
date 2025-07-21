@@ -89,8 +89,9 @@ class QuestResource(resources.ModelResource):
     such as importing from the library into tenant schemas. It supports linking
     related data like campaigns (Categories) using a UUID-based `import_id`.
 
-    generate_campaign_from_import_data: Automatically finds or creates a Campaign
-    for the imported Quest based on import_id or title, ensuring proper cross-schema linking.
+    generate_campaign_from_import_data: Finds or creates a Campaign for the imported Quest
+    only when the import_campaign flag is enabled and either campaign_title or campaign_import_id is provided,
+    avoiding creation of unnecessary campaigns for standalone quests.
 
     Intended for use in multi-tenant environments where Quests need to be
     shared, cloned, or updated from a central library source.
@@ -98,6 +99,8 @@ class QuestResource(resources.ModelResource):
     Related behavior like prerequisites and tags are handled by associated mixins
     on the Quest model, not directly by this class.
     """
+    local_visibility_map = {}
+
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
@@ -236,6 +239,9 @@ class QuestResource(resources.ModelResource):
         the method attempts to find a campaign by its title. If neither exists, a new campaign is created
         using the provided title, icon, short description, and import_id.
 
+        Additionally, if local visibility information for the quest is available (via a visibility map),
+        the quest's `published` attribute is preserved; otherwise, it defaults to not published.
+
         Args:
             quest (Quest): The quest instance to which the campaign will be assigned.
             data_dict (dict): A dictionary containing campaign data, including:
@@ -246,7 +252,8 @@ class QuestResource(resources.ModelResource):
 
         Side Effects:
             - The quest's `campaign` field is updated and saved.
-            - A new Category Object may be created if no existing match is found.
+            - The quest's `published` field may be updated based on local data.
+            - A new Category object may be created if no existing match is found.
         """
         campaign_title = data_dict.get('campaign_title')
         campaign_icon = data_dict.get('campaign_icon')
@@ -259,7 +266,6 @@ class QuestResource(resources.ModelResource):
         if campaign_import_id:
             try:
                 # Try to parse import_id as UUID.
-                # Catch ValueError to handle malformed UUIDs, which might come from manual edits by superusers.
                 campaign = Category.objects.get(import_id=UUID(campaign_import_id))
             except (Category.DoesNotExist):
                 pass
@@ -281,19 +287,33 @@ class QuestResource(resources.ModelResource):
 
         # Assign the campaign to the quest
         quest.campaign = campaign
+
+        # Preserve local quest published state if known; otherwise default to not published
+        import_id_str = str(quest.import_id)
+        if import_id_str in self.local_visibility_map:
+            quest.published = self.local_visibility_map[import_id_str]
+        else:
+            quest.published = False
+
         quest.full_clean()
         quest.save()
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         if not dry_run:
+            # Store local visibility info to preserve quest visibility during import
+            local_visibility_map = kwargs.get('local_visibility_map', {})
+            self.local_visibility_map = local_visibility_map
+            # Include the option to not import the campaign set the default to False
+            import_campaign = kwargs.get('import_campaign', False)
             for data_dict in dataset.dict:
                 import_id = data_dict['import_id']
                 parent_quest = Quest.objects.get(import_id=import_id)
 
                 self.generate_simple_prereqs(parent_quest, data_dict)
-                if data_dict.get('campaign_title') or data_dict.get('campaign_import_id'):
-                    # Only generate campaign if title or import_id is provided
-                    # This prevents unnecessary campaign creation for quests without campaigns
+                if import_campaign and (data_dict.get('campaign_title') or data_dict.get('campaign_import_id')):
+                    # Only generate a campaign if importing campaigns is enabled
+                    # and either a campaign title or import ID is present.
+                    # This avoids creating unnecessary campaigns when importing standalone quests.
                     self.generate_campaign(parent_quest, data_dict)
 
 

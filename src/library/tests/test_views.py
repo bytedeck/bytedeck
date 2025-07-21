@@ -9,6 +9,7 @@ from django_tenants.utils import schema_exists
 from django_tenants.utils import tenant_context
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
+from library.importer import import_quest_to, import_campaign_to
 from model_bakery import baker
 from quest_manager.models import Category, Quest
 from siteconfig.models import SiteConfig
@@ -229,6 +230,9 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Ensure that the newly imported quest is not published
         self.assertFalse(quest_qs.get().published)
 
+        # Ensure that the campaign is NOT imported (it's an orphan quest import)
+        self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
         # Ensure the success message includes a link to the imported quest
         messages = list(get_messages(response.wsgi_request))
         self.assertEqual(len(messages), 1)
@@ -339,7 +343,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:import_category', args=[self.library_category.import_id])
         self.assert200('library:category_detail_view', args=[self.library_category.import_id])
 
-    def test_import_campaign__already_exists(self):
+    def test_import_campaign___already_exists(self):
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Create a category in the library tenant
@@ -353,13 +357,13 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign__success(self):
+    def test_import_campaign___success(self):
         self.client.force_login(self.test_teacher)
         self.assertEqual(Category.objects.count(), 1)
 
         with library_schema_context():
             library_campaign = baker.make(Category)
-            baker.make(Quest, campaign=library_campaign, _quantity=3)
+            baker.make(Quest, published=True, campaign=library_campaign, _quantity=3)
             self.assertEqual(library_campaign.quest_set.count(), 3)
 
         import_url = reverse('library:import_category', args=[library_campaign.import_id])
@@ -415,6 +419,50 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # The response should contain the campaign name if one exists
         if campaign:
             self.assertContains(response, campaign.name)
+
+    def test_import_campaign__preserves_local_quest_visibility(self):
+        """
+        Tests that importing a campaign preserves the local visibility state of existing quests.
+
+        Specifically:
+        - Quests imported individually default to unpublished.
+        - If a locally imported quest was manually published, re-importing the campaign
+        does not overwrite its visibility to unpublished.
+        - Quests not previously imported are set to unpublished by default.
+        """
+        self.client.force_login(self.test_teacher)
+        self.assertEqual(Category.objects.count(), 1)
+
+        with library_schema_context():
+            library_campaign = baker.make(Category)
+            # Create 2 quests in library: both published
+            library_quests = baker.make(Quest, campaign=library_campaign, published=True, _quantity=2)
+
+        # Import first quest individually (will be unpublished by default)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=library_quests[0].import_id)
+
+        # Import second quest individually
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=library_quests[1].import_id)
+
+        # Update the second quest to be published locally
+        published_local_quest = Quest.objects.get(import_id=library_quests[1].import_id)
+        published_local_quest.published = True
+        published_local_quest.full_clean()
+        published_local_quest.save()
+
+        # Import full campaign
+        import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[q.import_id for q in library_quests],
+            campaign_import_id=library_campaign.import_id
+        )
+
+        # Reload quests from DB
+        unpublished_local_quest = Quest.objects.get(import_id=library_quests[0].import_id)
+        published_local_quest.refresh_from_db()
+
+        self.assertFalse(unpublished_local_quest.published)
+        self.assertTrue(published_local_quest.published)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
