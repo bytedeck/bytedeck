@@ -15,26 +15,34 @@
     <div class="media-left">
       <img class="media-object icon-lg img-rounded" src="{{ badge.get_icon_url }}" alt="icon" />
     </div>
+
     <div class="media-body">
-      {{ badge.short_description|safe }}
-      <div class="pull-right btn-group">
-        <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}" role="button">
-          <i class="fa fa-edit"></i>
-        </a>
-        <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}" role="button">
-          <i class="fa fa-copy"></i>
-        </a>
-        <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}" role="button">
-          <i class="fa fa-trash-o"></i>
-        </a>
-        <a class="btn btn-success" title="Grant to a student"
-          href="{% url 'badges:grant' badge.id 0 %}" role="button">
-          <i class="fa fa-user"></i>
-        </a>
-        <a class="btn btn-success" title="Bulk grant to multiple student"
-          href="{% url 'badges:bulk_grant_badge' badge.id %}" role="button">
-          <i class="fa fa-users"></i>
-        </a>
+      <div class="row">
+        <div class="col-xs-12 col-sm-8">
+          {{ badge.short_description|safe }}
+        </div>
+
+        {% if request.user.is_staff %}
+        <div class="col-xs-12 col-sm-4 text-right">
+          <div class="pull-right">
+            <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
+              <i class="fa fa-edit"></i>
+            </a>
+            <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}">
+              <i class="fa fa-copy"></i>
+            </a>
+            <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}">
+              <i class="fa fa-trash-o"></i>
+            </a>
+            <a class="btn btn-success" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}">
+              <i class="fa fa-user"></i>
+            </a>
+            <a class="btn btn-success" title="Bulk grant to multiple student" href="{% url 'badges:bulk_grant_badge' badge.id %}">
+              <i class="fa fa-users"></i>
+            </a>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -53,11 +61,11 @@
         </div>
         <div class="col-sm-6">
           <ul class="list-unstyled">
-            <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}<br></li>
+            <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}</li>
             {% if not request.user.is_staff %}
-            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge user_obj=request.user %}</li>
             {% else %}
-            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}<br></li>
+            <li>{% tag_name %}s: {% include 'tags/snippets/tag-list.html' with object=badge %}</li>
             {% endif %}
             <li>Prerequisites:
                   {% if request.user.is_staff %}<a class="btn btn-info btn-xs" href="{% url 'badges:badge_prereqs_update' badge.id %}">Edit</a>{% endif %}
