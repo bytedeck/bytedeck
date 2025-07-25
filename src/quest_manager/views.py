@@ -325,7 +325,8 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
 
         If archiving proceeds:
         - Set `archived=True` and validate/save the quest.
-        - Recalculate XP for all users who previously submitted the quest.
+        - Delete all submissions associated with the quest.
+        - Recalculate/invalidate XP for all users who previously submitted the quest.
         - Display a success message.
         - Redirect to the archived quests list.
 
@@ -333,6 +334,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
             HttpResponseRedirect: Either to the quest detail page (if blocked) or the archived list (if successful).
         """
         quest = self.get_object()
+
         if quest.is_used_prereq():
             messages.error(
                 request,
@@ -340,26 +342,37 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
                 "Remove it as a prerequisite from all dependent quests before archiving."
             )
             return redirect("quests:quest_detail", quest.id)
-        else:
-            link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
 
-            quest.archived = True
-            quest.published = False
-            quest.full_clean()
-            quest.save()
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
 
-            # Find all users who submitted the quest for XP
-            user_ids = QuestSubmission._base_manager.filter(quest=quest).values_list('user_id', flat=True).distinct()
+        # Archive the quest
+        quest.archived = True
+        quest.published = False
+        quest.full_clean()
+        quest.save()
 
-            # Recalculate XP for all affected users
-            for user_id in user_ids:
-                try:
-                    profile = Profile.objects.get(user_id=user_id)
-                    profile.xp_invalidate_cache()
-                except Profile.DoesNotExist:
-                    continue
-            messages.success(request, f"Quest '{link}' has successfully archived.")
-            return redirect("quests:archived")
+        # Use the base manager to include all submissions (even if your default manager filters some out)
+        base_qs = QuestSubmission._base_manager.filter(quest=quest)
+
+        # Grab affected user IDs before deletion
+        user_ids = list(base_qs.values_list('user_id', flat=True).distinct())
+
+        # Delete all submissions in one go
+        base_qs.delete()
+
+        # Invalidate XP for each affected user
+        for user_id in user_ids:
+            try:
+                profile = Profile.objects.get(user_id=user_id)
+                profile.xp_invalidate_cache()
+            except Profile.DoesNotExist:
+                continue
+
+        messages.success(
+            request,
+            f"Quest '{link}' has been archived and all its submissions have been deleted."
+        )
+        return redirect("quests:archived")
 
 
 @method_decorator(staff_member_required, name="dispatch")
