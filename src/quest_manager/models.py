@@ -935,7 +935,7 @@ class QuestSubmissionManager(models.Manager):
         total_xp = 0
 
         # Get all of the user's XP granting submissions for the active semester
-        submissions_qs = self.all_approved(user, up_to_date=date).grant_xp().exclude_archived_quests()
+        submissions_qs = self.all_approved(user, up_to_date=date).grant_xp()
         # print("\nSubmission_qs: ", submissions_qs)
 
         # annotate with xp_earned, since xp could come from xp_requested on the submission, or from the quest's xp value

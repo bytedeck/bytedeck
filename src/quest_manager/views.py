@@ -313,7 +313,13 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
         """
         context = super().get_context_data(**kwargs)
         quest = self.get_object()
-        context['prereq_of'] = quest.get_reliant_objects(active_only=False)
+        prereq_of = []
+        for obj in quest.get_reliant_objects(active_only=False):
+            # add an attribute 'model_name' for template use
+            obj.model_name = obj.__class__.__name__
+            prereq_of.append(obj)
+
+        context['prereq_of'] = prereq_of
         return context
 
     def post(self, request, *args, **kwargs):
@@ -1206,17 +1212,6 @@ def unarchive(request, quest_id):
     quest.published = False
     quest.full_clean()
     quest.save()
-
-    # Find all users who submitted the quest for XP
-    user_ids = QuestSubmission._base_manager.filter(quest=quest).values_list('user_id', flat=True).distinct()
-
-    # Recalculate XP for all affected users
-    for user_id in user_ids:
-        try:
-            profile = Profile.objects.get(user_id=user_id)
-            profile.xp_invalidate_cache()
-        except Profile.DoesNotExist:
-            continue
 
     messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
     # Since the quest is sent to the Drafts tab redirect them there

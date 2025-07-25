@@ -4,41 +4,30 @@
 {% block heading_inner %}Archive Quest{% endblock %}
 
 {% block content %}
-<form action="" method="post">{% csrf_token %}
+<form action="archive" method="post">{% csrf_token %}
+  {% if object.is_used_prereq %}
+    <div class="alert alert-danger" role="alert">
+      You cannot archive this quest while it is a prerequisite for another object (e.g. a quest or a badge).
+      Remove it as a prerequisite from all dependent quests before archiving.
+    </div>
+  {% endif %}
   <div class="alert alert-warning" role="alert">
-    <strong>Warning:</strong>
-    Archiving a quest will hide it from students and remove all existing submissions. Any XP awarded for this quest will be revoked. This action is reversible.
-    {% if object.is_used_prereq %}
-    <br>
-    <strong>Note:</strong> You cannot archive this quest while it is a prerequisite for other quests.
-    Remove it as a prerequisite from all dependent quests before archiving.
-    {% endif %}
+    <strong>Warning:</strong> Archiving a quest will hide it from students, delete all existing submissions, and revoke any XP earned from those submissions. This action is reversible by restoring the quest from the "Archived" tab; however, deleted submissions and revoked XP will not be restored.
   </div>
 
-  <p>
-    Archiving this quest will:
-  </p>
-  <ul>
-    <li>Delete all student submissions for this quest.</li>
-    <li>Revoke any XP previously earned from those submissions.</li>
-    <li>Hide the quest from students and prevent new submissions until it is restored.</li>
-  </ul>
-
-  <p>
-    You can restore this quest at any time from the "Archived" tab, but deleted submissions and removed XP will not be restored.
-  </p>
-
   <div class="well">
-    <p>Quest Name: {{ object.name }}</p>
+    <h4>Quest: {{ object.name }}</h4>
     <p>Quest ID: {{ object.id }}</p>
     <p>This Quest is a prerequisite for:</p>
-    <ul>
-    {% for p in prereq_of %}
-      <li><a href="{{ p.get_absolute_url }}">{{ p }}</a></li>
-    {% empty %}
-      <li>None</li>
-    {% endfor %}
-    </ul>
+    <div class="prereq_list">
+      <ul>
+      {% for p in prereq_of %}
+        <li><a href="{{ p.get_absolute_url }}">({{ p.model_name }}) {{ p }}</a></li>
+      {% empty %}
+        <li>None</li>
+      {% endfor %}
+      </ul>
+    </div>
   </div>
 
   <a href="{% url 'quests:quest_detail' object.id %}" role="button" class="btn btn-info">Cancel</a>
