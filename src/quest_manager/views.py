@@ -344,6 +344,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
             link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
 
             quest.archived = True
+            quest.published = False
             quest.full_clean()
             quest.save()
 
