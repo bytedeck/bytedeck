@@ -32,6 +32,7 @@ from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
+from profile_manager.models import Profile
 
 from .forms import (
     QuestForm,
@@ -296,6 +297,68 @@ class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
         context["latest_submission_time"] = latest_submission_time
 
         return context
+
+
+@method_decorator([staff_member_required], name="dispatch")
+class QuestArchive(NonPublicOnlyViewMixin, DetailView):
+    model = Quest
+    template_name = "quest_manager/quest_confirm_archive.html"
+
+    def get_context_data(self, **kwargs):
+        """
+        Add prerequisite information to the context for the archive confirmation page.
+
+        Includes a list of all objects that list this quest as a prerequisite, regardless of active status,
+        under the 'prereq_of' key for use in the template.
+        """
+        context = super().get_context_data(**kwargs)
+        quest = self.get_object()
+        context['prereq_of'] = quest.get_reliant_objects(active_only=False)
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """
+        Archive a quest after confirmation, unless it is currently used as a prerequisite.
+
+        If the quest is a prerequisite for any other quests, prevent archiving, display
+        an error message, and redirect the user to the quest detail page.
+
+        If archiving proceeds:
+        - Set `archived=True` and validate/save the quest.
+        - Recalculate XP for all users who previously submitted the quest.
+        - Display a success message.
+        - Redirect to the archived quests list.
+
+        Returns:
+            HttpResponseRedirect: Either to the quest detail page (if blocked) or the archived list (if successful).
+        """
+        quest = self.get_object()
+        if quest.is_used_prereq():
+            messages.error(
+                request,
+                "You cannot archive this quest while it is a prerequisite for other quests. "
+                "Remove it as a prerequisite from all dependent quests before archiving."
+            )
+            return redirect("quests:quest_detail", quest.id)
+        else:
+            link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+
+            quest.archived = True
+            quest.full_clean()
+            quest.save()
+
+            # Find all users who submitted the quest for XP
+            user_ids = QuestSubmission._base_manager.filter(quest=quest).values_list('user_id', flat=True).distinct()
+
+            # Recalculate XP for all affected users
+            for user_id in user_ids:
+                try:
+                    profile = Profile.objects.get(user_id=user_id)
+                    profile.xp_invalidate_cache()
+                except Profile.DoesNotExist:
+                    continue
+            messages.success(request, f"Quest '{link}' has successfully archived.")
+            return redirect("quests:archived")
 
 
 @method_decorator(staff_member_required, name="dispatch")
@@ -1104,26 +1167,43 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 @staff_member_required
 def unarchive(request, quest_id):
     """
-    Unarchive a quest by setting its archived status to False.
-    Send the quest to the Drafts tab by making sure published=False.
-    Only staff members can unarchive quests.
+    Unarchive a quest by setting `archived=False` and ensure it is unpublished
+    so it appears in the Drafts tab.
+
+    This also triggers a recalculation of XP for any users who previously submitted
+    this quest, to account for its status change.
+
+    Only staff members can perform this action.
 
     Args:
-        request: HTTP request object
-        quest_id: ID of the quest to unarchive
+        request: The HTTP request object.
+        quest_id: The ID of the quest to unarchive.
 
     Returns:
-        Redirect to quests list with success message
+        HttpResponseRedirect: Redirects to the Drafts tab with a success message.
     """
     quest = Quest.objects.all_including_archived().get(id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
     link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
     quest.published = False
     quest.full_clean()
     quest.save()
+
+    # Find all users who submitted the quest for XP
+    user_ids = QuestSubmission._base_manager.filter(quest=quest).values_list('user_id', flat=True).distinct()
+
+    # Recalculate XP for all affected users
+    for user_id in user_ids:
+        try:
+            profile = Profile.objects.get(user_id=user_id)
+            profile.xp_invalidate_cache()
+        except Profile.DoesNotExist:
+            continue
+
     messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
     # Since the quest is sent to the Drafts tab redirect them there
     return redirect("quests:drafts")

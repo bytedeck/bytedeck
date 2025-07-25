@@ -1,0 +1,58 @@
+{% extends "quest_manager/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Archive Quest{% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+  <div class="alert alert-warning" role="alert">
+    <strong>Warning:</strong>
+    Archiving a quest will hide it from students and prevent new submissions. This action is reversible.
+    {% if object.is_used_prereq %}
+    <br>
+    <strong>Note:</strong> You cannot archive this quest while it is a prerequisite for other quests.
+    Remove it as a prerequisite from all dependent quests before archiving.
+    {% endif %}
+  </div>
+
+  <p>
+    Archiving this quest will:
+  </p>
+  <ul>
+    <li>Preserve all existing submissions, which remain visible to students and staff.</li>
+    <li>Keep any XP already earned credited to students.</li>
+    <li>Remove the quest from all active listings and prevent new submissions until restored.</li>
+  </ul>
+
+  <p>
+    You can restore this quest at any time from the "Archived" tab.
+  </p>
+
+  <div class="well">
+    <p>Quest Name: {{ object.name }}</p>
+    <p>Quest ID: {{ object.id }}</p>
+    <p>This Quest is a prerequisite for:</p>
+    <ul>
+    {% for p in prereq_of %}
+      <li><a href="{{ p.get_absolute_url }}">{{ p }}</a></li>
+    {% empty %}
+      <li>None</li>
+    {% endfor %}
+    </ul>
+  </div>
+
+  <a href="{% url 'quests:quest_detail' object.id %}" role="button" class="btn btn-info">Cancel</a>
+  <input
+    type="submit"
+    value="Archive"
+    class="btn btn-warning"
+    {% if object.is_used_prereq %}
+      disabled
+      title="Can't archive this quest because it is a prerequisite for other quests. Remove it as a prerequisite before archiving."
+      aria-disabled="true"
+    {% else %}
+      title="Archive this quest: Move it into the Archived tab"
+    {% endif %}
+  />
+</form>
+{% endblock %}

@@ -293,6 +293,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
         # Archive quest #6 and regenerate the map
         quest_6 = Quest.objects.get(id=6)
         quest_6.archived = True
+        quest_6.full_clean()
         quest_6.save()
         self.map.regenerate()
 

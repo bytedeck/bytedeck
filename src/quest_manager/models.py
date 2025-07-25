@@ -799,7 +799,6 @@ class QuestSubmissionManager(models.Manager):
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         """
         qs = self.get_queryset(active_semester_only,
-                               exclude_archived_quests=False,
                                exclude_quests_not_published=False
                                ).approved()
 
@@ -835,13 +834,11 @@ class QuestSubmissionManager(models.Manager):
             return qs
 
     def all_completed_past(self, user):
-        qs = self.get_queryset(exclude_archived_quests=False,
-                               exclude_quests_not_published=False).get_user(user).completed()
+        qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
         return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
-                               exclude_archived_quests=False,
                                exclude_quests_not_published=False
                                )
         if user is None:
@@ -938,7 +935,7 @@ class QuestSubmissionManager(models.Manager):
         total_xp = 0
 
         # Get all of the user's XP granting submissions for the active semester
-        submissions_qs = self.all_approved(user, up_to_date=date).grant_xp()
+        submissions_qs = self.all_approved(user, up_to_date=date).grant_xp().exclude_archived_quests()
         # print("\nSubmission_qs: ", submissions_qs)
 
         # annotate with xp_earned, since xp could come from xp_requested on the submission, or from the quest's xp value

@@ -206,6 +206,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
             library_quest = baker.make(
                 Quest,
                 published=True,
+                published=True,
                 campaign=campaign,
             )
 

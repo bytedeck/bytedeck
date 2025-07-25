@@ -180,7 +180,6 @@ class QuestForm(forms.ModelForm):
                         'date_expired',
                         'time_expired',
                         'available_outside_course',
-                        'archived',
                         'editor',
                         active=False,
                         template='crispy_forms/bootstrap3/accordion-group.html',
