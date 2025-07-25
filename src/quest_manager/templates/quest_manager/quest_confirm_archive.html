@@ -7,7 +7,7 @@
 <form action="" method="post">{% csrf_token %}
   <div class="alert alert-warning" role="alert">
     <strong>Warning:</strong>
-    Archiving a quest will hide it from students and prevent new submissions. This action is reversible.
+    Archiving a quest will hide it from students and remove all existing submissions. Any XP awarded for this quest will be revoked. This action is reversible.
     {% if object.is_used_prereq %}
     <br>
     <strong>Note:</strong> You cannot archive this quest while it is a prerequisite for other quests.
@@ -19,13 +19,13 @@
     Archiving this quest will:
   </p>
   <ul>
-    <li>Preserve all existing submissions, which remain visible to students and staff.</li>
-    <li>Keep any XP already earned credited to students.</li>
-    <li>Remove the quest from all active listings and prevent new submissions until restored.</li>
+    <li>Delete all student submissions for this quest.</li>
+    <li>Revoke any XP previously earned from those submissions.</li>
+    <li>Hide the quest from students and prevent new submissions until it is restored.</li>
   </ul>
 
   <p>
-    You can restore this quest at any time from the "Archived" tab.
+    You can restore this quest at any time from the "Archived" tab, but deleted submissions and removed XP will not be restored.
   </p>
 
   <div class="well">
