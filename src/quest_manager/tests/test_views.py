@@ -11,6 +11,7 @@ or they could be moved into a `test_urls.py` module.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
@@ -25,6 +26,7 @@ from courses.models import Block, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
@@ -3035,3 +3037,100 @@ class CommonDataViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         self.assertEqual(CommonData.objects.count(), 1)
+
+
+class QuestArchiveViewTest(TenantTestCase):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.staff_user = User.objects.create_user(username='staff', password='pass', is_staff=True)
+        self.client.force_login(self.staff_user)
+
+        # Quest A: This quest will be used as a prerequisite for another quest (Quest B).
+        # It should NOT be archivable.
+        self.quest_a = baker.make(Quest, name="Quest A", archived=False, published=True)
+
+        # Quest B: This quest depends on Quest A (has it as a prerequisite),
+        # but is not itself a prerequisite for anything. It SHOULD be archivable.
+        self.quest_b = baker.make(Quest, name="Quest B", archived=False, published=True)
+
+        # Set up the prerequisite link: Quest B requires Quest A
+        Prereq.add_simple_prereq(parent_object=self.quest_b, prereq_object=self.quest_a)
+
+    def test_get_context__includes_prereq_of(self):
+        """
+        The archive view context should include 'prereq_of', showing which quests depend on this one.
+        """
+        url = reverse('quests:quest_archive', args=[self.quest_a.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Should include 'prereq_of' key in context
+        self.assertIn('prereq_of', response.context)
+        # Verifies the view uses the correct method to populate this value
+        self.assertEqual(response.context['prereq_of'], self.quest_a.get_reliant_objects(active_only=False))
+
+    def test_post__blocked_if_prerequisite(self):
+        """
+        Attempting to archive a quest that is used as a prerequisite
+        should redirect to the quest detail page with an error message.
+        """
+        url = reverse('quests:quest_archive', args=[self.quest_a.id])  # Quest A is used as a prerequisite
+        response = self.client.post(url)
+
+        # Redirect back to the quest detail page because archiving is blocked
+        self.assertRedirects(response, reverse('quests:quest_detail', args=[self.quest_a.id]))
+
+        # Confirm an error message is shown explaining why archiving is not allowed
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("cannot archive this quest" in str(m) for m in messages))
+
+    def test_post__archives_quest_and_deletes_submissions(self):
+        """
+        Posting to archive a quest that is not used as a prerequisite
+        should archive the quest, delete its submissions, invalidate XP cache for related profiles,
+        show a success message, and redirect to the archived quests page.
+        """
+        # Use quest_b which is archivable (not a prerequisite for others)
+        quest_to_archive = self.quest_b
+
+        # Create users and submissions tied to the quest to be archived
+        user1 = baker.make(User)
+        user2 = baker.make(User)
+
+        submission1 = baker.make(QuestSubmission, quest=quest_to_archive, user=user1)
+        submission2 = baker.make(QuestSubmission, quest=quest_to_archive, user=user2)
+
+        profile1 = Profile.objects.get(user=user1)
+        profile2 = Profile.objects.get(user=user2)
+
+        url = reverse('quests:quest_archive', args=[quest_to_archive.id])
+
+        # Patch xp_invalidate_cache to monitor calls without invoking real logic
+        with patch.object(Profile, 'xp_invalidate_cache', autospec=True) as mock_xp_invalidate:
+            response = self.client.post(url)
+
+        quest_to_archive.refresh_from_db()
+        self.assertTrue(quest_to_archive.archived)
+        self.assertFalse(quest_to_archive.published)
+
+        # Confirm submissions were deleted
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission1.id).exists(),
+            "submission1 should be deleted after archiving"
+        )
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission2.id).exists(),
+            "submission2 should be deleted after archiving"
+        )
+
+        # xp_invalidate_cache should be called once per related profile
+        self.assertEqual(mock_xp_invalidate.call_count, 2)
+        calls = [call.args[0] for call in mock_xp_invalidate.call_args_list]
+        self.assertIn(profile1, calls)
+        self.assertIn(profile2, calls)
+
+        # Check success message presence
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("has been archived" in str(m) for m in messages))
+
+        # Confirm redirect to archived quests page
+        self.assertRedirects(response, reverse('quests:archived'))

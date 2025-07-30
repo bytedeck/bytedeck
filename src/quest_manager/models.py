@@ -799,7 +799,6 @@ class QuestSubmissionManager(models.Manager):
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         """
         qs = self.get_queryset(active_semester_only,
-                               exclude_archived_quests=False,
                                exclude_quests_not_published=False
                                ).approved()
 
@@ -835,13 +834,11 @@ class QuestSubmissionManager(models.Manager):
             return qs
 
     def all_completed_past(self, user):
-        qs = self.get_queryset(exclude_archived_quests=False,
-                               exclude_quests_not_published=False).get_user(user).completed()
+        qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
         return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
-                               exclude_archived_quests=False,
                                exclude_quests_not_published=False
                                )
         if user is None:
