@@ -116,8 +116,8 @@ class BadgeQuerySet(models.query.QuerySet):
     def get_type(self, badge_type):
         return self.filter(badge_type=badge_type)
 
-    def get_active(self):
-        return self.filter(active=True)
+    def get_published(self):
+        return self.filter(published=True)
 
 
 class BadgeManager(models.Manager):
@@ -128,7 +128,7 @@ class BadgeManager(models.Manager):
     # extend models.Model (e.g. PrereqModel) and prereq users should subclass it
     def get_conditions_met(self, user):
         pk_met_list = [
-            obj.pk for obj in self.get_queryset().get_active()
+            obj.pk for obj in self.get_queryset().get_published()
             if Prereq.objects.all_conditions_met(obj, user, False)
             # if not obj.badge_type.manual_only and Prereq.objects.all_conditions_met(obj, user)
         ]
@@ -153,7 +153,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     badge_type = models.ForeignKey(BadgeType, on_delete=models.PROTECT)
     icon = models.ImageField(upload_to='icons/badges/', blank=True, null=True)  # needs Pillow for ImageField
     sort_order = models.PositiveIntegerField(blank=True, null=True)
-    active = models.BooleanField(default=True)
+    published = models.BooleanField(default=True)
 
     import_id = models.UUIDField(
         default=uuid.uuid4, unique=True,
