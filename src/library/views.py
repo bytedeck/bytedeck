@@ -47,7 +47,7 @@ class LibraryQuestListView(TemplateView):
             # this forces all quests to load.
             quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
             num_quests = len(quests)
-            num_campaigns = Category.objects.all_active_with_importable_quests().count()
+            num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
         context.update({
             'heading': 'Library',
@@ -94,7 +94,7 @@ class LibraryCampaignListView(TemplateView):
             # Explicitly call len() to force evaluation inside the library context
             # this forces all Campaigns to load.
             quests_count = Quest.objects.get_active().count()
-            campaigns = Category.objects.all_active_with_importable_quests()
+            campaigns = Category.objects.all_published_with_importable_quests()
             num_campaigns = len(campaigns)
 
         context.update({
@@ -220,7 +220,7 @@ class ImportCampaignView(View):
                 'category_icon_url': category.get_icon_url(),
                 'category_quest_count': category.quest_count(),
                 'category_total_xp_available': category.xp_sum(),
-                'category_active': category.active,
+                'category_active': category.published,
                 'category_displayed_quests': list(category.current_quests()),
                 'use_schema': get_library_schema_name(),
             }

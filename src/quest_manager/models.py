@@ -21,9 +21,9 @@ from tags.models import TagsModelMixin
 
 class CategoryManager(models.Manager):
 
-    def all_active_with_importable_quests(self):
+    def all_published_with_importable_quests(self):
         """
-        Returns a queryset of active campaigns (categories) in the library schema
+        Returns a queryset of published campaigns (categories) in the library schema
         that have at least one importable quest — meaning a quest that is published and not archived.
 
         Each returned campaign is annotated with:
@@ -34,8 +34,8 @@ class CategoryManager(models.Manager):
         or display in the shared library tab.
         """
 
-        # Start with all categories filtered to only those marked active
-        qs = self.get_queryset().filter(active=True)
+        # Start with all categories filtered to only those marked published
+        qs = self.get_queryset().filter(published=True)
 
         # Annotate with counts and sums of quests that are published and not archived.
         # Naming matches template fields for easier integration.
@@ -65,9 +65,9 @@ class Category(IsAPrereqMixin, models.Model):
     title = models.CharField(max_length=50, unique=True)
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     short_description = models.CharField(max_length=500, blank=True, null=True)
-    active = models.BooleanField(
+    published = models.BooleanField(
         default=True,
-        help_text="Quests that are a part of an inactive campaign won't appear on quest maps and won't be available to students."
+        help_text="Quests that are a part of an unpublished campaign won't appear on quest maps and won't be available to students."
     )
 
     import_id = models.UUIDField(
@@ -227,7 +227,7 @@ class XPItem(models.Model):
             return False
 
         # XPItem/Quest object is inactive if it's a part of an inactive campaign
-        if hasattr(self, 'campaign') and self.campaign and not self.campaign.active:
+        if hasattr(self, 'campaign') and self.campaign and not self.campaign.published:
             return False
 
         if self.expired():
@@ -324,9 +324,9 @@ class QuestQuerySet(models.QuerySet):
 
     def active_or_no_campaign(self):
         """With self as an argument, returns a filtered queryset
-        containing only quests in active campaigns or quests without campaigns.
+        containing only quests in published campaigns or quests without campaigns.
         """
-        return self.exclude(campaign__active=False)
+        return self.exclude(campaign__published=False)
 
     def not_archived(self):
         return self.exclude(archived=True)

@@ -22,7 +22,7 @@
   </thead>
   <tbody>
     {% for object in object_list %}
-      <tr {% if not object.active %}class="text-muted"{% endif %}>
+      <tr {% if not object.published %}class="text-muted"{% endif %}>
         <td>{{ object.title }}</td>
         <td>
           <img class="img-responsive panel-title-img img-rounded"

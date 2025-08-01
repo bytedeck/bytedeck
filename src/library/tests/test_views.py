@@ -251,7 +251,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         with library_schema_context():
             # Get the correct quest and campaign count
             quest_count = Quest.objects.get_active().count()
-            campaign_count = Category.objects.all_active_with_importable_quests().count()
+            campaign_count = Category.objects.all_published_with_importable_quests().count()
 
         url = reverse('library:quest_list')
         response = self.client.get(url)
@@ -373,7 +373,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertEqual(Category.objects.count(), 2)
         imported_library_campaign = Category.objects.filter(title=library_campaign.name).first()
         self.assertIsNotNone(imported_library_campaign)
-        self.assertFalse(imported_library_campaign.active)
+        self.assertFalse(imported_library_campaign.published)
 
         # ensure all 3 quests were imported
         self.assertEqual(imported_library_campaign.quest_set.count(), 3)
@@ -398,7 +398,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         with library_schema_context():
             # get the correct quest and campiagn count
             quest_count = Quest.objects.get_active().count()
-            campaign_count = Category.objects.all_active_with_importable_quests().count()
+            campaign_count = Category.objects.all_published_with_importable_quests().count()
 
         url = reverse('library:category_list')
         response = self.client.get(url)
@@ -415,7 +415,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         url = reverse('library:category_list')
         response = self.client.get(url)
         with library_schema_context():
-            campaign = Category.objects.all_active_with_importable_quests().first()
+            campaign = Category.objects.all_published_with_importable_quests().first()
         # The response should contain the campaign name if one exists
         if campaign:
             self.assertContains(response, campaign.name)
@@ -503,18 +503,18 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         with library_schema_context():
-            # Should be shown: active campaign with a published/unarchived quest
-            active_campaign = baker.make(Category, title='Active Campaign', active=True)
-            baker.make(Quest, campaign=active_campaign, published=True, archived=False)
+            # Should be shown: published campaign with a published/unarchived quest
+            published_campaign = baker.make(Category, title='published Campaign', published=True)
+            baker.make(Quest, campaign=published_campaign, published=True, archived=False)
 
-            # Should be hidden: inactive campaign even though quest is valid
-            inactive_campaign = baker.make(Category, title='Inactive Campaign', active=False)
-            baker.make(Quest, campaign=inactive_campaign, published=True, archived=False)
+            # Should be hidden: unpublished campaign even though quest is valid
+            unpublished_campaign = baker.make(Category, title='unpublished Campaign', published=False)
+            baker.make(Quest, campaign=unpublished_campaign, published=True, archived=False)
 
         response = self.client.get(reverse('library:category_list'))
 
-        self.assertContains(response, active_campaign.title)
-        self.assertNotContains(response, inactive_campaign.title)
+        self.assertContains(response, published_campaign.title)
+        self.assertNotContains(response, unpublished_campaign.title)
 
     def test_import_campaign_view__shows_only_current_quests(self):
         """
@@ -582,7 +582,7 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
         with library_schema_context():
             # Set up a campaign to test with later
-            self.library_campaign = baker.make(Category, active=True)
+            self.library_campaign = baker.make(Category, published=True)
             # Set up a quest to test with later
             self.library_quest = baker.make(Quest, campaign=self.library_campaign)
 

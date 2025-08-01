@@ -79,9 +79,9 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         queryset = super().get_queryset()
 
         if self.inactive_tab_active:
-            queryset = queryset.filter(active=False)
+            queryset = queryset.filter(published=False)
         else:
-            queryset = queryset.filter(active=True)
+            queryset = queryset.filter(published=True)
 
         return queryset
 
@@ -127,7 +127,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "short_description", "icon", "active")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -140,7 +140,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "short_description", "icon", "active")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     success_url = reverse_lazy("quests:categories")
 

@@ -1917,7 +1917,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'New category',
-            'active': True,
+            'published': True,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
@@ -1930,13 +1930,13 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'My Updated Title',
-            'active': False,
+            'published': False,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
-        self.assertEqual(course.active, data['active'])
+        self.assertEqual(course.published, data['published'])
 
     def test_CategoryDelete_view(self):
         """ Admin should be able to delete a course """

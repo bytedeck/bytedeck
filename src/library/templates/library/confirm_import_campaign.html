@@ -20,7 +20,7 @@
         Import ID: {{ local_category.import_id }}
       </p>
     </div>
-  {% elif object.active or request.user.is_staff %}
+  {% elif object.published or request.user.is_staff %}
     {% with object as category %}
       <form action="" method="post">
         {% csrf_token %}
