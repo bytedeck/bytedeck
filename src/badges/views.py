@@ -40,7 +40,7 @@ class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, Redire
 @login_required
 def badge_list(request):
     badge_types = BadgeType.objects.all()
-    inactive_badges = Badge.objects.all().filter(active=False)
+    unpublished_badges = Badge.objects.all().filter(published=False)
 
     # http://stackoverflow.com/questions/32421214/django-queryset-all-model1-objects-where-a-model2-exists-with-a-model1-and-the
     earned_badges = Badge.objects.filter(badgeassertion__user=request.user)
@@ -50,7 +50,7 @@ def badge_list(request):
         # "badge_type_dicts": badge_type_dicts,
         "badge_types": badge_types,
         "earned_badges": earned_badges,
-        "inactive_badges": inactive_badges
+        "unpublished_badges": unpublished_badges
     }
     return render(request, "badges/list.html", context)
 

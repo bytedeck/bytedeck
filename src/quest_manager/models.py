@@ -219,7 +219,7 @@ class XPItem(models.Model):
     @property  # requiredfor prerequisite checking
     def active(self):
         """
-        Available as a property to make compatible with Badge.active attribute
+        Available as a property to make compatible with Badge.published attribute
         :return: True if should appear to students (need to still check prereqs and previous submissions)
         """
         # XPItem is not active if it is not published (i.e. a draft), or archived

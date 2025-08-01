@@ -159,7 +159,7 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
 
 class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):
     resource_class = BadgeResource
-    list_display = ('name', 'xp', 'active')
+    list_display = ('name', 'xp', 'published')
     inlines = [
         PrereqInline,
     ]
