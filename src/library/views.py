@@ -221,13 +221,13 @@ class ImportCampaignView(View):
             category_total_xp_available = library_category.xp_sum()
             category_published = library_category.published
 
+            # Force evaluation of the queryset in the library to get full Quest objects for rendering.
             shared_quests = list(library_category.current_quests())
+            # Extract import_ids from the list to compare with the local quests.
             quest_import_ids = [q.import_id for q in shared_quests]
 
-        # Get just the import IDs of matching local quests
-        local_quest_import_ids = set(
-            Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
-        )
+        # Need local import_ids so the template can indicate which library quests already exist locally
+        local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
 
         context = {
             'category': library_category,

@@ -79,7 +79,7 @@
             </td>
             <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">
               {% if q.import_id in local_quest_import_ids %}
-                <i title="This quest already exists in your deck" class="icon-spacing fa fa-fw fa-download">
+                <i title="This quest already exists in your deck and any local changes will be overwritten." class="icon-spacing fa fa-fw fa-exclamation-triangle">
               {% endif %}
             </td>
           </tr>
