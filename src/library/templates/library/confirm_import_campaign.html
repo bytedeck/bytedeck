@@ -34,12 +34,16 @@
       </form>
 
       <div class="well panel-top">
-        <p>Are you sure you want to import this campaign into your deck? This action involves:</p>
-        <ul>
-          <li>Importing all quests associated with the campaign</li>
-          <li>If any of the quests from the campaign already exist on your Deck, they'll be added into the campaign</li>
-        </ul>
+        <p>Are you sure you want to import this campaign into your deck?</p>
+        <p>This will import all quests associated with the campaign from the shared library.</p>
       </div>
+      {% if local_quest_import_ids %}
+        <div class="alert alert-warning">
+          <strong>Warning:</strong> One or more quests in this campaign already exist in your deck.
+          Importing this campaign will <strong>overwrite</strong> those existing quests with the versions from the library.
+          This may replace local changes with the original shared content.
+        </div>
+      {% endif %}
       {% include "quest_manager/category_detail_content.html" %}
     {% endwith %}
   {% else %}

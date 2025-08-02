@@ -77,7 +77,11 @@
             <td class="col-sm-1 hidden-xs text-center">
               <small>{{ q.tags.all|join:", "|default:"-" }}</small>
             </td>
-            <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted"></td>
+            <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">
+              {% if q.import_id in local_quest_import_ids %}
+                <i title="This quest already exists in your deck" class="icon-spacing fa fa-fw fa-download">
+              {% endif %}
+            </td>
           </tr>
           <!-- accordian -->
         {% endfor %}

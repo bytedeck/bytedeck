@@ -202,28 +202,46 @@ class ImportCampaignView(View):
             campaign_import_id (UUID): The import ID of the campaign to import.
 
         Returns:
-            HttpResponse: Rendered confirmation template with:
-                - campaign: The shared library campaign.
-                - local_category: The local campaign (if it exists).
-                - additional campaign details: name, icon, XP total, quest count, etc.
+            HttpResponse: Renders the confirmation page with:
+                - category: The shared library campaign.
+                - local_category: A local campaign with the same import ID, if one exists.
+                - shared_quests: List of quests currently associated with the campaign.
+                - local_quest_import_ids: Set of import IDs for local quests that match.
+                - Additional campaign details (name, icon, XP, quest count, etc.)
         """
         # Check if the campaign already exists locally
         local_category = Category.objects.filter(import_id=campaign_import_id).first()
 
         with library_schema_context():
-            category = get_object_or_404(Category, import_id=campaign_import_id)
-            context = {
-                'local_category': local_category,
-                'category': category,
-                'category_id': category.pk,
-                'category_campaign_name': category.name,
-                'category_icon_url': category.get_icon_url(),
-                'category_quest_count': category.quest_count(),
-                'category_total_xp_available': category.xp_sum(),
-                'category_active': category.published,
-                'category_displayed_quests': list(category.current_quests()),
-                'use_schema': get_library_schema_name(),
-            }
+            library_category = get_object_or_404(Category, import_id=campaign_import_id)
+            category_id = library_category.pk
+            category_name = library_category.name
+            category_icon = library_category.get_icon_url()
+            category_quest_count = library_category.quest_count()
+            category_total_xp_available = library_category.xp_sum()
+            category_published = library_category.published
+
+            shared_quests = list(library_category.current_quests())
+            quest_import_ids = [q.import_id for q in shared_quests]
+
+        # Get just the import IDs of matching local quests
+        local_quest_import_ids = set(
+            Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
+        )
+
+        context = {
+            'category': library_category,
+            'category_id': category_id,
+            'category_name': category_name,
+            'category_icon_url': category_icon,
+            'category_quest_count': category_quest_count,
+            'category_total_xp_available': category_total_xp_available,
+            'category_published': category_published,
+            'category_displayed_quests': shared_quests,
+            'local_category': local_category,
+            'local_quest_import_ids': local_quest_import_ids,
+            'use_schema': get_library_schema_name(),
+        }
         return render(request, self.template_name, context)
 
     def post(self, request, campaign_import_id):
