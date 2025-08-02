@@ -24,7 +24,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
         super().setUp()
         # Create campaign (category) and quests in library schema
         with library_schema_context():
-            self.category = baker.make(Category, title="Test Campaign", active=True)
+            self.category = baker.make(Category, title="Test Campaign", published=True)
             self.quest1 = baker.make(
                 Quest,
                 campaign=self.category,
@@ -50,14 +50,14 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
                 name="Archived Quest"
             )
 
-    def test_all_active_with_importable_quests__annotations(self):
+    def test_all_published_with_importable_quests__annotations(self):
         """
-        Verifies that the queryset includes active campaigns with importable quests,
+        Verifies that the queryset includes published campaigns with importable quests,
         and that it correctly annotates quest_count and xp_sum based on quests
         that are published and not archived.
         """
         with library_schema_context():
-            qs = Category.objects.all_active_with_importable_quests()
+            qs = Category.objects.all_published_with_importable_quests()
             self.assertIn(self.category, qs)
 
             category = qs.get(pk=self.category.pk)
@@ -67,22 +67,22 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
 
     def test_excludes_categories_without_importable_quests(self):
         """
-        Ensures that active campaigns with no importable quests are excluded
+        Ensures that published campaigns with no importable quests are excluded
         from the queryset.
         """
         with library_schema_context():
-            empty_category = baker.make(Category, title="Empty Campaign", active=True)
+            empty_category = baker.make(Category, title="Empty Campaign", published=True)
 
-        qs = Category.objects.all_active_with_importable_quests()
+        qs = Category.objects.all_published_with_importable_quests()
         self.assertNotIn(empty_category, qs)
 
-    def test_all_active_with_importable_quests__mixed_quest_states(self):
+    def test_all_published_with_importable_quests__mixed_quest_states(self):
         """
         Tests filtering logic against a mix of campaigns with:
         - valid importable quests,
         - only archived quests,
         - only invisible quests,
-        - and inactive campaigns with valid quests.
+        - and unpublished campaigns with valid quests.
 
         Ensures only campaigns with published and unarchived quests are returned.
         """
@@ -92,23 +92,23 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             Category.objects.all().delete()
 
             # Campaign with 2 valid quests
-            campaign1 = baker.make(Category, active=True)
+            campaign1 = baker.make(Category, published=True)
             baker.make(Quest, campaign=campaign1, published=True, archived=False, xp=50)
             baker.make(Quest, campaign=campaign1, published=True, archived=False, xp=30)
 
             # Campaign with only archived quests
-            campaign2 = baker.make(Category, active=True)
+            campaign2 = baker.make(Category, published=True)
             baker.make(Quest, campaign=campaign2, published=True, archived=True)
 
             # Campaign with only invisible quests
-            campaign3 = baker.make(Category, active=True)
+            campaign3 = baker.make(Category, published=True)
             baker.make(Quest, campaign=campaign3, published=False, archived=False)
 
             # Inactive campaign with valid quest
-            campaign4 = baker.make(Category, active=False)
+            campaign4 = baker.make(Category, published=False)
             baker.make(Quest, campaign=campaign4, published=True, archived=False)
 
-            qs = Category.objects.all_active_with_importable_quests()
+            qs = Category.objects.all_published_with_importable_quests()
 
             # Only campaign1 should be returned
             self.assertEqual(qs.count(), 1)
@@ -476,7 +476,7 @@ class QuestManagerTest(TenantTestCase):
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
         2. Quests that are not published or archived  <<<< COVERED HERE
-        3. Quests that are a part of an inactive campaign/category <<<< COVERED HERE
+        3. Quests that are a part of an unpublished campaign/category <<<< COVERED HERE
         4. Quests who's prerequisites have not been met
         5. Quests that are not currently submitted for approval or already in progress <<<< COVERED HERE
         6. Quests who's maximum repeats have been completed <<<< COVERED HERE
@@ -492,8 +492,8 @@ class QuestManagerTest(TenantTestCase):
         baker.make(Quest, name='Quest-future', date_available=(localtime() + timedelta(days=1)))  # 1
         baker.make(Quest, name='Quest-not-visible', published=False)  # 2
         baker.make(Quest, name='Quest-archived', archived=True)  # 2
-        inactive_campaign = baker.make('quest_manager.Category', active=False)
-        baker.make(Quest, name='Quest-inactive-campaign', campaign=inactive_campaign)  # 3
+        unpublished_campaign = baker.make('quest_manager.Category', published=False)
+        baker.make(Quest, name='Quest-inactive-campaign', campaign=unpublished_campaign)  # 3
 
         ########################################
         # 8. Check for blocking quests (available and in-progress), if present, remove all others

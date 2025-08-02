@@ -33,7 +33,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
         category = Category.objects.filter(import_id=campaign_import_id).first()
         if category:
-            category.active = False
+            category.published = False
             category.full_clean()
             category.save()
 

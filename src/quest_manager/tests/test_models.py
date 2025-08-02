@@ -194,7 +194,7 @@ class QuestTestModel(TenantTestCase):
             self.assertFalse(q.active)
 
         # create and test a quest that's a part of an inactive campaign
-        inactive_campaign = baker.make(Category, title="inactive-campaign", active=False)
+        inactive_campaign = baker.make(Category, title="inactive-campaign", published=False)
         q = baker.make(Quest, campaign=inactive_campaign)
         self.assertFalse(q.active)
 
