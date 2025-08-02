@@ -110,7 +110,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:in_progress')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
@@ -2748,15 +2748,15 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def test_returned(self):
         """ Completed quests for current teacher that have been returned to the student. """
-        with patch('quest_manager.views.QuestSubmission.objects.all_returned', return_value=[self.sub]):
-            response = self.client.get(reverse('quests:returned'))
+        with patch('quest_manager.views.QuestSubmission.objects.all_not_completed', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
+            response = self.client.get(reverse('quests:in_progress'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
+        # Tabs: 0-Submitted, 1-In Progress, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][1]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
-        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:returned'))
+        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:in_progress'))
 
     def test_approved(self):
         """ Completed quests (submissions) that have been approved by a teacher """
@@ -2765,7 +2765,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:approved'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
+        # Tabs: 0-Submitted, 1-In Progress, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][2]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -2906,9 +2906,9 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].APPROVED)
         self.assertContains(response, 'class="active"')
 
-        # RETURNED
-        response = self.client.get(reverse('quests:returned'))
-        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].RETURNED)
+        # INPROGRESS
+        response = self.client.get(reverse('quests:in_progress'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INPROGRESS)
         self.assertContains(response, 'class="active"')
 
         # FLAGGED
