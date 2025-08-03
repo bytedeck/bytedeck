@@ -390,6 +390,41 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
+    def test_import_campaign_get_identifies_existing_local_quests(self):
+        """
+        Ensure the import campaign view correctly identifies which quests from the
+        selected library campaign already exist locally and includes their import IDs
+        in the response context. Also verifies that the warning message is shown when
+        such conflicts are detected.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            # Create a campaign in the library schema with quests
+            library_campaign = baker.make(Category)
+            # Create 3 published quests in this library campaign
+            library_quests = baker.make(Quest, campaign=library_campaign, published=True, _quantity=3)
+
+        # Import one of these quests individually into the local schema to simulate existing local quest
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=library_quests[0].import_id)
+
+        # Now call the import campaign GET view
+        import_url = reverse('library:import_category', args=[library_campaign.import_id])
+        response = self.client.get(import_url)
+
+        self.assertEqual(response.status_code, 200)
+
+        # The context variable 'local_quest_import_ids' should include the import_id of the imported quest
+        local_ids = response.context['local_quest_import_ids']
+        self.assertIn(library_quests[0].import_id, local_ids)
+
+        # The other quests' import_ids should not be in local_quest_import_ids
+        for quest in library_quests[1:]:
+            self.assertNotIn(quest.import_id, local_ids)
+
+        # Check the warning text appears in the rendered content
+        self.assertContains(response, "One or more quests in this campaign already exist")
+
     def test_campaigns_tab__shows_correct_badge_count(self):
         """
         Ensure the campaigns tab displays the correct badge count for active campaigns.
