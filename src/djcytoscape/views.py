@@ -53,6 +53,11 @@ class ScapeUpdate(NonPublicOnlyViewMixin, UpdateView):
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        self.object.regenerate()
+        return response
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class ScapeDelete(NonPublicOnlyViewMixin, DeleteView):
