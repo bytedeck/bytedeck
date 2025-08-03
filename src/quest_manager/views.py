@@ -1049,7 +1049,7 @@ class ApprovalsViewTabTypes:
     """
     SUBMITTED = 0
     APPROVED = 1
-    RETURNED = 2
+    INPROGRESS = 2
     FLAGGED = 3
 
 
@@ -1064,7 +1064,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
         Submitted (i.e. awaiting approval)
-        Returned
+        In progress
         Approved
         Flagged
 
@@ -1093,7 +1093,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     submitted_submissions = []
     approved_submissions = []
-    returned_submissions = []
+    in_progress_submissions = []
     flagged_submissions = []
 
     view_type = ApprovalsViewTabTypes.SUBMITTED
@@ -1101,10 +1101,10 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     page = request.GET.get("page")
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-    if "/returned/" in request.path_info:
-        view_type = ApprovalsViewTabTypes.RETURNED
-        returned_submissions = QuestSubmission.objects.all_returned()
-        returned_submissions = paginate(returned_submissions, page)
+    if "/in-progress/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.INPROGRESS
+        in_progress_submissions = QuestSubmission.objects.all_not_completed().order_by(F("time_completed").desc(nulls_last=True))
+        in_progress_submissions = paginate(in_progress_submissions, page)
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
@@ -1135,11 +1135,11 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
             "url": reverse("quests:submitted"),
         },
         {
-            "name": "Returned",
-            "submissions": returned_submissions,
-            "active": view_type == ApprovalsViewTabTypes.RETURNED,
-            "time_heading": "Returned",
-            "url": reverse("quests:returned"),
+            "name": "In Progress",
+            "submissions": in_progress_submissions,
+            "active": view_type == ApprovalsViewTabTypes.INPROGRESS,
+            "time_heading": "inprogress",
+            "url": reverse("quests:in_progress"),
         },
         {
             "name": "Approved",
