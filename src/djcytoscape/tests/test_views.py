@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from djcytoscape.models import CytoScape
 
+from profile_manager.models import Profile
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
@@ -25,6 +26,10 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+        # Ensure profiles exist without duplicating them (in case a signal already created them)
+        Profile.objects.get_or_create(user=self.test_teacher)
+        Profile.objects.get_or_create(user=self.test_student1)
 
         self.map = baker.make('djcytoscape.CytoScape')
 
