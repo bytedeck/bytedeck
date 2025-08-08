@@ -1097,8 +1097,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
-        Submitted (i.e. awaiting approval)
         In progress
+        Submitted (i.e. awaiting approval)
         Approved
         Flagged
 
@@ -1162,18 +1162,18 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     tab_list = [
         {
-            "name": "Submitted",
-            "submissions": submitted_submissions,
-            "active": view_type == ApprovalsViewTabTypes.SUBMITTED,
-            "time_heading": "Submitted",
-            "url": reverse("quests:submitted"),
-        },
-        {
             "name": "In Progress",
             "submissions": in_progress_submissions,
             "active": view_type == ApprovalsViewTabTypes.INPROGRESS,
             "time_heading": "inprogress",
             "url": reverse("quests:in_progress"),
+        },
+        {
+            "name": "Submitted",
+            "submissions": submitted_submissions,
+            "active": view_type == ApprovalsViewTabTypes.SUBMITTED,
+            "time_heading": "Submitted",
+            "url": reverse("quests:submitted"),
         },
         {
             "name": "Approved",
