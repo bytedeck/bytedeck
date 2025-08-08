@@ -1942,15 +1942,20 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         Staff should be able to delete a campaign *only* if it has no published quests.
 
-        This test covers two cases:
+        This test covers three cases:
         1. Deleting a campaign with no associated quests (should succeed).
         2. Attempting to delete a campaign that contains published quests
         (should fail and not remove the campaign from the database).
+        3. Race condition: User loads delete page when quests are unpublished,
+        but they get published before submission (should still block deletion).
         """
         self.client.force_login(self.test_teacher)
 
         # 1. Create and delete an empty campaign (should succeed)
-        empty_campaign = Category.objects.create(title="Temporary Campaign", active=True)
+        empty_campaign = Category.objects.create(title="Temporary Campaign", published=True)
+        empty_campaign.full_clean()
+        empty_campaign.save()
+
         before_delete_count = Category.objects.count()
         response = self.client.post(reverse('quests:category_delete', args=[empty_campaign.id]))
         after_delete_count = Category.objects.count()
@@ -1962,7 +1967,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertIsNotNone(orientation)
 
         # Confirm that the campaign actually has published quests
-        published_quests = Quest.objects.get_active().filter(campaign=orientation)
+        published_quests = Quest.objects.filter(campaign=orientation, published=True)
         self.assertGreater(published_quests.count(), 0)
 
         # This POST should NOT delete the campaign
@@ -1970,6 +1975,50 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse('quests:category_delete', args=[orientation.id]))
         after = Category.objects.count()
         self.assertEqual(before, after)
+
+        # Also check that the delete button is disabled in the template
+        response = self.client.get(reverse('quests:category_delete', args=[orientation.id]))
+        self.assertContains(response, 'type="submit"', status_code=200)
+        self.assertContains(response, 'disabled')
+        self.assertContains(
+            response,
+            "Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first",
+        )
+
+        # 3. Simulate race condition: quest is unpublished when page loads, then gets published
+        race_campaign = Category.objects.create(title="Race Condition Campaign", published=True)
+        race_campaign.full_clean()
+        race_campaign.save()
+
+        quest = Quest.objects.create(
+            name="Unpublished Quest",
+            campaign=race_campaign,
+            published=False,
+        )
+        quest.full_clean()
+        quest.save()
+
+        # Load the delete page while the quest is unpublished (button would be enabled)
+        response = self.client.get(reverse("quests:category_delete", args=[race_campaign.id]))
+        self.assertContains(response, 'type="submit"')
+        self.assertNotContains(response, 'disabled')
+
+        # Simulate the quest being published before form submission
+        quest.published = True
+        quest.full_clean()
+        quest.save()
+
+        # Now submit the form (should be blocked server-side)
+        before = Category.objects.count()
+        response = self.client.post(reverse("quests:category_delete", args=[race_campaign.id]), follow=True)
+        after = Category.objects.count()
+
+        self.assertEqual(before, after)
+        self.assertTrue(Category.objects.filter(id=race_campaign.id).exists())
+        self.assertContains(
+            response,
+            "You can't delete this campaign because it contains published quests"
+        )
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):

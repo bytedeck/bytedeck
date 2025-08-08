@@ -165,18 +165,23 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
 
     def delete(self, request, *args, **kwargs):
         """
-        Attempt to delete the Category object only if it has no quests
-        published. If published quests exist, prevent deletion
-        and display an error message.
+        Attempt to delete the Category object only if it has no published quests.
+        If published quests exist, prevent deletion and display an error message.
+
+        This logic protects against race conditions where the user loads the delete
+        confirmation page while the campaign appears deletable (e.g., only has
+        unpublished quests), but by the time they submit the form, one or more
+        quests may have been published.
+        https://github.com/bytedeck/bytedeck/pull/1837#discussion_r2232233693
 
         Returns:
             HttpResponseRedirect on successful deletion or redirect back with error.
         """
         self.object = self.get_object()
-        self.object.refresh_from_db()
 
-        # Check for any published quests in this category
-        if self.object.quest_set.filter(published=True).exists():
+        # Use a fresh queryset directly from Quest.objects instead of self.object.quest_set
+        # to avoid stale cached related objects and ensure we check the latest DB state.
+        if Quest.objects.filter(campaign=self.object, published=True).exists():
             messages.error(
                 request,
                 "You can't delete this campaign because it contains published quests"
