@@ -156,6 +156,35 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Category
     success_url = reverse_lazy("quests:categories")
 
+    def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests by delegating to the delete method to
+        enforce custom deletion logic and validation.
+        """
+        return self.delete(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Attempt to delete the Category object only if it has no quests
+        published. If published quests exist, prevent deletion
+        and display an error message.
+
+        Returns:
+            HttpResponseRedirect on successful deletion or redirect back with error.
+        """
+        self.object = self.get_object()
+        self.object.refresh_from_db()
+
+        # Check for any published quests in this category
+        if self.object.quest_set.filter(published=True).exists():
+            messages.error(
+                request,
+                "You can't delete this campaign because it contains published quests"
+            )
+            return redirect(self.success_url)
+
+        return super().delete(request, *args, **kwargs)
+
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):

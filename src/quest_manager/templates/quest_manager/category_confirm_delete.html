@@ -4,13 +4,22 @@
 {% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %}Delete Campaign {% endblock %}{% endblock %}
 
 {% block content %}
-<form action="" method="post">{% csrf_token %}
-  <p>Are you sure you want to delete this campaign?<p>
+<form action="{% url 'quests:category_delete' object.id %}" method="post">{% csrf_token %}
+  <p>Are you sure you want to delete this campaign?</p>
   <div class="well">
     <p>Campaign Name: {{object.title}}</p>
     <p>Campaign ID: {{object.id}}</p>
   </div>
   <a href="{% url 'quests:categories'%}" role="button" class="btn btn-info">Cancel</a>
-  <input type="submit" value="Delete" class="btn btn-danger" />
+  <input
+    type="submit"
+    value="Delete"
+    class="btn btn-danger"
+    {% if object.quest_count != 0 %}
+      disabled
+      aria-disabled="true"
+      title="Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first"
+    {% endif %}
+  />
 </form>
 {% endblock %}

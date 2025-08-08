@@ -1939,7 +1939,14 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.published, data['published'])
 
     def test_CategoryDelete_view(self):
-        """ Admin should be able to delete a course """
+        """
+        Staff should be able to delete a campaign *only* if it has no published quests.
+
+        This test covers two cases:
+        1. Deleting a campaign with no associated quests (should succeed).
+        2. Attempting to delete a campaign that contains published quests
+        (should fail and not remove the campaign from the database).
+        """
         self.client.force_login(self.test_teacher)
 
         # 1. Create and delete an empty campaign (should succeed)
@@ -1950,7 +1957,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(response, reverse('quests:categories'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
-        # 2. Attempt to delete a campaign with published quests (should fail, but currently doesn't)
+        # 2. Attempt to delete a campaign with published quests (should fail to delete)
         orientation = Category.objects.filter(title="Orientation").first()
         self.assertIsNotNone(orientation)
 
@@ -1958,12 +1965,11 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         published_quests = Quest.objects.get_active().filter(campaign=orientation)
         self.assertGreater(published_quests.count(), 0)
 
-        # This POST should NOT delete the campaign, but currently it does
+        # This POST should NOT delete the campaign
         before = Category.objects.count()
         response = self.client.post(reverse('quests:category_delete', args=[orientation.id]))
         after = Category.objects.count()
-        if before - 1 == after:
-            self.fail()
+        self.assertEqual(before, after)
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
