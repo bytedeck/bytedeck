@@ -1942,11 +1942,28 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Admin should be able to delete a course """
         self.client.force_login(self.test_teacher)
 
+        # 1. Create and delete an empty campaign (should succeed)
+        empty_campaign = Category.objects.create(title="Temporary Campaign", active=True)
         before_delete_count = Category.objects.count()
-        response = self.client.post(reverse('quests:category_delete', args=[Category.objects.filter(title="Orientation")[0].id]))
+        response = self.client.post(reverse('quests:category_delete', args=[empty_campaign.id]))
         after_delete_count = Category.objects.count()
         self.assertRedirects(response, reverse('quests:categories'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
+
+        # 2. Attempt to delete a campaign with published quests (should fail, but currently doesn't)
+        orientation = Category.objects.filter(title="Orientation").first()
+        self.assertIsNotNone(orientation)
+
+        # Confirm that the campaign actually has published quests
+        published_quests = Quest.objects.get_active().filter(campaign=orientation)
+        self.assertGreater(published_quests.count(), 0)
+
+        # This POST should NOT delete the campaign, but currently it does
+        before = Category.objects.count()
+        response = self.client.post(reverse('quests:category_delete', args=[orientation.id]))
+        after = Category.objects.count()
+        if before - 1 == after:
+            self.fail()
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
