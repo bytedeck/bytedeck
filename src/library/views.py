@@ -5,14 +5,23 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 
 from hackerspace_online.decorators import staff_member_required
 
 from quest_manager.models import Quest, Category
 
+from siteconfig.models import SiteConfig
+
+from notifications.signals import notify
+
+
+from .exporter import export_quest_to_library
 from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context
+
+User = get_user_model()
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')
@@ -281,6 +290,109 @@ class ImportCampaignView(View):
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quest_manager:categories_inactive')
+
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class ExportQuestView(View):
+    """
+    View for exporting a single quest from the current deck into the shared library.
+
+    Only the deck owner may export unless `allow_staff_export` is set to True.
+    """
+    template_name = 'library/confirm_export_quest.html'
+
+    def _require_export_permission(self, request):
+        """
+        Check whether the requesting user has permission to export a quest.
+
+        Raises:
+            PermissionDenied: If the user is not the deck owner and `allow_staff_export` is False.
+        """
+        config = SiteConfig.get()
+
+        if not (config.allow_staff_export or request.user == config.deck_owner):
+            raise PermissionDenied("Only the deck owner can export quests unless allow_staff_export is enabled.")
+
+    def get(self, request, quest_import_id):
+        """
+        Display the confirmation page for exporting a quest to the shared library.
+
+        Args:
+            request (HttpRequest): The current request object.
+            quest_import_id (UUID): The import ID of the quest to export.
+
+        Returns:
+            HttpResponse: Rendered confirmation template with quest details.
+        """
+        self._require_export_permission(request)
+
+        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.filter(import_id=quest.import_id).first()
+
+        return render(request, self.template_name, {
+            'quest': quest,
+            'library_quest': library_quest,
+        })
+
+    def post(self, request, quest_import_id):
+        """
+        Handle the export of a quest to the shared library.
+
+        Steps:
+            1. Validate user export permissions.
+            2. Ensure the quest does not already exist in the library.
+            3. Export the quest from the current schema to the library schema.
+            4. Send a notification to the library owner.
+            5. Display a success message to the exporter.
+
+        Args:
+            request (HttpRequest): The current request object.
+            quest_import_id (UUID): The import ID of the quest to export.
+
+        Returns:
+            HttpResponseRedirect: Redirect to the drafts list after successful export.
+
+        Raises:
+            PermissionDenied: If a quest with the same import ID already exists in the library.
+        """
+        self._require_export_permission(request)
+
+        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+
+        source_schema = connection.schema_name
+
+        with library_schema_context():
+            if Quest.objects.filter(import_id=quest.import_id).exists():
+                raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
+
+            # Perform export
+            export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+
+            # Get the newly exported quest
+            exported_quest = Quest.objects.get(import_id=quest.import_id)
+
+            config = SiteConfig.get()
+            sender = config.deck_ai
+
+            recipients = User.objects.filter(is_active=True, is_staff=True)
+
+            # Notification sent to all active Library staff about the export
+            notify.send(
+                sender=sender,
+                recipient=None,
+                affected_users=list(recipients),
+                verb=f"{request.user} exported a quest to the library from {source_schema}:",
+                action=quest,
+                target=exported_quest,
+                icon="<i class='fa fa-book'></i>"
+            )
+
+        # Success message displayed on local deck
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        messages.success(request, f"Successfully exported '{link}' to the shared library.")
+        return redirect('quests:drafts')
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')

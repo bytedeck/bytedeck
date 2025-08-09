@@ -28,6 +28,7 @@ class SiteConfigForm(forms.ModelForm):
         "custom_javascript",
         "deck_owner",
         "enable_shared_library",
+        "allow_staff_export",
     ]
 
     def __init__(self, *args, **kwargs):
@@ -41,6 +42,7 @@ class SiteConfigForm(forms.ModelForm):
 
         self.fields['enable_google_signin'].disabled = True
         self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
+        self.fields['allow_staff_export'].label = self.fields['allow_staff_export'].label + " - EXPERIMENTAL WIP"
 
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 
