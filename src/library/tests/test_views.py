@@ -11,6 +11,7 @@ from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
 from model_bakery import baker
+from notifications.models import Notification
 from quest_manager.models import Category, Quest
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
@@ -60,13 +61,18 @@ class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, TenantTestCase):
 class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
     def setUp(self):
         self.client = TenantClient(self.tenant)
+        self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
         self.test_password = 'password'
 
         with library_schema_context():
             # Create a quest in the library tenant
+            self.shared_quest = baker.make(Quest)
             self.library_quest = baker.make(Quest)
+
+        self.local_quest = baker.make(Quest)
+        baker.make(Quest, import_id=self.shared_quest.import_id)
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -262,18 +268,17 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def test_library_sidebar__shown_if_shared_library_enabled(self):
         """
-        The staff sidebar should show the Library link if the shared library is enabled.
-        Tests that it doesn't show when shared_library_enabled=False
-        Tests that it does show when shared_library_enabled=True
+        The staff sidebar should show the Library link if enable_shared_library is enabled.
+        Tests that it doesn't show when enable_shared_library=False
+        Tests that it does show when enable_shared_library=True
         """
-        # Make sure the shared library is initially disabled
+        # Make sure enable_shared_library is initially disabled
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
 
-        config = SiteConfig.get()
-        config.enable_shared_library = False
-        config.full_clean()
-        config.save()
+        self.config.enable_shared_library = False
+        self.config.full_clean()
+        self.config.save()
 
         # Login as staff
         self.client.force_login(self.test_teacher)
@@ -283,15 +288,128 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertNotContains(response, 'id="lg-menu-library"')
 
         # Now enable the shared library
-        config.enable_shared_library = True
-        config.full_clean()
-        config.save()
+        self.config.enable_shared_library = True
+        self.config.full_clean()
+        self.config.save()
 
         # Re-fetch the response after config change
         response = self.client.get(reverse('library:quest_list'))
 
         # Checks if the html in the sidebar for library is there (should be)
         self.assertContains(response, 'id="lg-menu-library"')
+
+    def test_require_export_permission__denied_non_owner_and_staff_permission_disabled(self):
+        """
+        Test that a non-owner cannot export a quest when staff export is disabled.
+        """
+        self.config.allow_staff_export = False
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse("library:export_quest", kwargs={"quest_import_id": str(self.local_quest.import_id)})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_require_export_permission__allowed_owner_and_staff_permission_disabled(self):
+        """
+        Test that the deck owner can export a quest even when staff export is disabled.
+        """
+        self.config.allow_staff_export = False
+        self.config.full_clean()
+        self.config.save()
+
+        deck_owner = self.config.deck_owner
+
+        self.client.force_login(deck_owner)
+
+        url = reverse('library:export_quest', args=[self.local_quest.import_id])
+        response = self.client.get(url)
+        self.assert200URL(url)
+        self.assertContains(response, self.local_quest.name)
+
+    def test_require_export_permission__allowed_non_owner_and_staff_permission_enabled(self):
+        """
+        Test that a non-owner can export a quest when staff export is enabled.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_quest', args=[self.local_quest.import_id])
+        response = self.client.get(url)
+        self.assert200URL(url)
+        self.assertContains(response, self.local_quest.name)
+
+    def test_export_get__shows_error_if_quest_already_in_library(self):
+        """
+        Test that the export confirmation view shows an error if the quest already exists in the library.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_quest', args=[self.shared_quest.import_id])
+        response = self.client.get(url)
+        self.assertContains(response, "A quest with the same import ID already exists in the shared library. Exporting again is not allowed.")
+
+    def test_export_post__success(self):
+        """
+        Test that exporting a quest to the library succeeds and notifies all library staff except the sender (deck_ai).
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)  # user performing export
+
+        url = reverse('library:export_quest', args=[self.local_quest.import_id])
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('quests:drafts'))
+
+        with library_schema_context():
+            exported_quest = Quest.objects.get(import_id=self.local_quest.import_id)
+            self.assertIsNotNone(exported_quest)
+
+            deck_ai = User.objects.get(pk=SiteConfig.get().deck_ai.pk)
+
+            # Get all active staff users in the library schema
+            staff_users = User.objects.filter(is_active=True, is_staff=True)
+
+            # For each staff user except deck_ai (sender), check notification exists
+            for user in staff_users:
+                if user == deck_ai:
+                    continue
+
+                exists = Notification.objects.filter(
+                    recipient=user,
+                    target_object_id=exported_quest.pk,
+                    verb__icontains="exported a quest"
+                ).exists()
+                self.assertTrue(exists, f"Expected notification not found for staff user {user.username}.")
+
+    def test_export_post__denied_if_quest_already_exists_in_library(self):
+        """
+        Test that a POST request to export is denied with 403 if the quest already exists in the library.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse("library:export_quest", kwargs={"quest_import_id": str(self.shared_quest.import_id)})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 403)
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
