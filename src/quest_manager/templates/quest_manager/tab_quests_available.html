@@ -7,7 +7,8 @@
     > DRAFTS (tab_quests_available.html)
     > ARCHIVED (tab_quests_available.html)
 -->
-{% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+
+{% if bulk_edit_mode %}
   <form id="bulk-edit-form" method="POST" action="{% url 'quests:bulk_edit_quests' %}">
     {% csrf_token %}
     <input type="hidden" name="action" value="" id="bulk-action-type">
@@ -47,7 +48,7 @@
          data-custom-search="multiKeywordSearch">
     <thead>
       <tr class="panel-heading">
-        {% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+        {% if bulk_edit_mode %}
           <th><input type="checkbox" id="select-all-checkbox" onclick="toggleAllCheckboxes(this)"></th>
         {% endif %}
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
@@ -75,7 +76,7 @@
           id="heading-quest-{{q.id}}"
           data-id="{{ q.id }}"
         >
-          {% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+          {% if bulk_edit_mode %}
             <td>
               <input type="checkbox" name="selected_quests[]" value="{{ q.id }}" form="bulk-edit-form">
             </td>
@@ -131,6 +132,6 @@
   <p>No quests are available.</p>
 {% endif %}
 
-{% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+{% if bulk_edit_mode %}
   </form>
 {% endif %}

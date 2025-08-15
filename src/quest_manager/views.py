@@ -421,6 +421,39 @@ class QuestBulkEditView(UserPassesTestMixin, View):
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
+    @staticmethod
+    def bulk_update_quests(quests, field_updates: dict, extra_update_fields: list = None):
+        """
+        Apply field updates to each quest in the queryset and save them individually.
+
+        Args:
+            quests (QuerySet): A queryset of Quest instances.
+            field_updates (dict): Field name -> new value.
+            extra_update_fields (list): Any extra fields to save beyond those in field_updates.
+
+        Returns:
+            int: Number of quests updated.
+        """
+        count = 0
+        update_fields = list(field_updates.keys())
+        if extra_update_fields:
+            update_fields.extend(extra_update_fields)
+
+        for quest in quests:
+            for field, value in field_updates.items():
+                setattr(quest, field, value)
+            quest.full_clean()
+            quest.save(update_fields=update_fields)
+            count += 1
+        return count
+
+    def get(self, request, *args, **kwargs):
+        bulk_edit_mode = request.user.is_staff and 'bulk_edit' in request.GET
+        context = {
+            'bulk_edit_mode': bulk_edit_mode,
+        }
+        return render(request, 'quest_manager/tab_quests_available.html', context)
+
     def post(self, request, *args, **kwargs):
         """
         Handle bulk editing operations on selected quests, including:
@@ -441,7 +474,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
         quest_ids = request.POST.getlist("selected_quests[]")
         action = request.POST.get("action")
 
-        if not quest_ids or not action:
+        if not quest_ids:
             messages.warning(request, "No quests selected.")
             return redirect("quests:quests")
         if action in ["unarchive", "delete"]:
@@ -452,28 +485,25 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             quests = Quest.objects.filter(id__in=quest_ids)
 
         if action == "delete":
-            count = quests.count()
-            quests.delete()
+            count, _ = quests.delete()
             messages.success(request, f"{count} quest(s) deleted.")
         elif action == "publish":
-            success_count = 0
-            for quest in quests:
-                quest.published = True
-                quest.editor = None
-                quest.full_clean()
-                quest.save()
-                success_count += 1
-            messages.success(request, f"{success_count} quest(s) published.")
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"published": True, "editor": None}
+            )
+            messages.success(request, f"{count} quest(s) published.")
         elif action == "unpublish":
-            count = 0
-            for quest in quests:
-                if quest.published:
-                    quest.published = False
-                    quest.save(update_fields=["published"])
-                    count += 1
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"published": False}
+            )
             messages.success(request, f"{count} quest(s) unpublished.")
         elif action == "unarchive":
-            count = quests.update(archived=False)
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"archived": False}
+            )
             messages.success(request, f"{count} quest(s) unarchived.")
 
         return redirect("quests:quests")
@@ -724,6 +754,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
         "quick_reply_form": quick_reply_form,
+        "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
     }
     return render(request, template, context)
 

@@ -1121,9 +1121,9 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.quest1 = baker.make(Quest, published=False)
         self.quest2 = baker.make(Quest, published=True)
 
-    def test_bulk_edit__redirects_if_no_ids_or_action(self):
+    def test_bulk_edit__redirects_if_no_ids(self):
         """
-        Should redirect with a warning if no quest IDs or action are provided.
+        Should redirect with a warning if no quest IDs are provided.
         """
         response = self.client.post(self.url, {})
         self.assertEqual(response.status_code, 302)
@@ -1155,9 +1155,9 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.quest2.refresh_from_db()
         self.assertFalse(self.quest2.published)
 
-    def test_bulk_edit__deletes_quests_when_action_is_delete(self):
+    def test_bulk_edit__deletes_quests(self):
         """
-        Should delete the selected quests and display a success message.
+        Should delete the selected quests.
         """
         response = self.client.post(self.url, {
             "selected_quests[]": [self.quest2.id],
@@ -1180,6 +1180,67 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.quest1.refresh_from_db()
         self.assertFalse(self.quest1.archived)
+
+    def test_bulk_edit__delete_archived_quest(self):
+        """
+        Deleting an archived quest should also be allowed (uses all_including_archived()).
+        """
+        self.quest1.archived = True
+        self.quest1.save(update_fields=["archived"])
+
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "delete"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Quest.objects.filter(id=self.quest1.id).exists())
+
+    def test_bulk_edit_mode_flag(self):
+        """
+        bulk_edit_mode should be True when '?bulk_edit' param is present,
+        and False when missing.
+        """
+        # With param
+        url_with_param = reverse("quests:available") + "?bulk_edit"
+        response = self.client.get(url_with_param)
+        self.assertTrue(response.context["bulk_edit_mode"])
+
+        # Without param
+        url_without_param = reverse("quests:available")
+        response = self.client.get(url_without_param)
+        self.assertFalse(response.context["bulk_edit_mode"])
+
+    def test_bulk_edit_buttons__on_drafts_page(self):
+        """
+        Drafts bulk edit view should display 'Publish' and 'Delete' buttons,
+        but not the 'Unpublish' button.
+        """
+        url = reverse("quests:drafts") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertContains(response, "Publish All Selected")
+        self.assertNotContains(response, "Unpublish All Selected")
+        self.assertContains(response, "Delete All Selected")
+
+    def test_bulk_edit_buttons__on_available_page(self):
+        """
+        Available quests bulk edit view should display 'Unpublish' button,
+        but not the 'Publish' or 'Delete' buttons.
+        """
+        url = reverse("quests:available") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertNotContains(response, "Publish All Selected")
+        self.assertContains(response, "Unpublish All Selected")
+        self.assertNotContains(response, "Delete All Selected")
+
+    def test_bulk_edit_buttons__on_archived_page(self):
+        """
+        Archived quests bulk edit view should display 'Unarchive' and 'Delete'
+        buttons.
+        """
+        url = reverse("quests:archived") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertContains(response, "Unarchive All Selected")
+        self.assertContains(response, "Delete All Selected")
 
 
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
