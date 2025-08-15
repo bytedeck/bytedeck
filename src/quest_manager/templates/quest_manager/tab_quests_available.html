@@ -7,8 +7,27 @@
     > DRAFTS (tab_quests_available.html)
     > ARCHIVED (tab_quests_available.html)
 -->
-
-
+{% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
+  <div>
+    <a class="btn btn-danger"
+       href="?mass_edit"
+       role="button">
+       <i class="fa fa-trash"></i> Delete all selected
+    </a>
+    {% if "/drafts/" in request.path %}
+      <a class="btn btn-primary"
+         href="?mass_edit"
+         role="button">
+         <i class="fa fa-upload"></i> Publish all selected
+      </a>
+    {% endif %}
+    <a class="btn btn-info"
+       href="?mass_edit"
+       role="button">
+       <i class="fa fa-archive"></i> Archive all selected
+    </a>
+  </div>
+{% endif %}
 {% if available_quests %}
   <table id="accordion-available"
          class="accordian-table"
@@ -20,7 +39,9 @@
          data-custom-search="multiKeywordSearch">
     <thead>
       <tr class="panel-heading">
-        <th data-checkbox="true" data-field="state"></th>
+        {% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
+          <th data-checkbox="true" data-field="state"></th>
+        {% endif %}
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
         <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
         <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
@@ -46,7 +67,9 @@
           {% comment %} ID allows bootstrap-table-accordion.js populate detailed content {% endcomment %}
           id="heading-quest-{{q.id}}"
         >
-          <td></td>
+          {% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
+            <td></td>
+          {% endif %}
           <td class="col-sm-1 col-xs-2 col-icon">
             <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
           </td>
