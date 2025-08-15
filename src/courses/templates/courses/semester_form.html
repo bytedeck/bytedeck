@@ -65,17 +65,64 @@
     const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
     const initialForms = parseInt(formInitialForms.getAttribute("value"))-1;
 
+    // Parse date string as local date to avoid timezone issues
+    function parseLocalDate(dateStr) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);  // months are zero-based
+    }
+
+    function getNextWeekday(date) {
+        const d = new Date(date);
+        do {
+            d.setDate(d.getDate() + 1);
+        } while (d.getDay() === 0 || d.getDay() === 6); // skip Sunday(0) and Saturday(6)
+        return d;
+    }
+
     function AddForm() {
         // management form change data
         var totalForms = parseInt(formTotalForms.getAttribute("value"));
-        formTotalForms.setAttribute("value", totalForms+1);
 
-        // replace add button of second last el with remove button
+        // find last visible form's date and label
+        let lastDateInput = null;
+        let lastLabelInput = null;
+        for (let i = totalForms - 1; i >= 0; i--) {
+            const dateInput = document.querySelector(`#id_form-${i}-date`);
+            const labelInput = document.querySelector(`#id_form-${i}-label`);
+            if (dateInput && dateInput.closest(`#form-${i}-container`).style.display !== 'none') {
+                lastDateInput = dateInput;
+                lastLabelInput = labelInput;
+                break;
+            }
+        }
+
+        // determine next date
+        let nextDateStr = '';
+        if (lastDateInput && lastDateInput.value) {
+            const lastDate = parseLocalDate(lastDateInput.value);
+            if (lastDate) {
+                const nextDate = getNextWeekday(lastDate);
+                const yyyy = nextDate.getFullYear();
+                const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(nextDate.getDate()).padStart(2, '0');
+                nextDateStr = `${yyyy}-${mm}-${dd}`;
+            }
+        }
+
+        // copy label value
+        let copiedLabel = '';
+        if (lastLabelInput && lastLabelInput.value) {
+            copiedLabel = lastLabelInput.value;
+        }
+
+        // increment form count
+        formTotalForms.setAttribute("value", totalForms + 1);
+
         var buttonContainer = container.lastElementChild.querySelector(".button-container");
         buttonContainer.innerHTML = removeButtonCopy.replaceAll("__prefix__", totalForms-1);
 
         // create input field + add button to last el
-        var newIndex = totalForms
+        var newIndex = totalForms;
 
         // container for field + buttons [+, -]
         var formRowElement = document.createElement('div');
@@ -85,6 +132,16 @@
 
         // ExcludeDate form field
         formRowElement.innerHTML = `{% crispy formset.empty_form helper %}`.replaceAll("__prefix__", newIndex);
+
+        // set copied values
+        const newDateInput = document.querySelector(`#id_form-${newIndex}-date`);
+        if (newDateInput && nextDateStr) {
+            newDateInput.value = nextDateStr;
+        }
+        const newLabelInput = document.querySelector(`#id_form-${newIndex}-label`);
+        if (newLabelInput && copiedLabel) {
+            newLabelInput.value = copiedLabel;
+        }
 
         // container for buttons [+, -]
         var buttonElement = document.createElement('div');
