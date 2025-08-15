@@ -416,6 +416,27 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
 
 
 class QuestBulkEditView(UserPassesTestMixin, View):
+    """
+    View to handle bulk editing operations on Quest objects.
+
+    Allows staff users (and TAs for permission checks) to perform bulk actions
+    such as publishing, unpublishing, deleting, and unarchiving multiple quests at once.
+
+    GET requests redirect to the main quest list with bulk edit mode enabled.
+
+    POST requests perform the specified bulk action on the selected quests and
+    redirect back to the quest list with a success or error message.
+
+    Permissions:
+        Only users passing `is_staff_or_TA` check are allowed.
+
+    Actions supported:
+        - delete
+        - publish
+        - unpublish
+        - unarchive
+    """
+
     # Note: TAs pass this permission check, but bulk editing UI is currently restricted to staff only,
     # so TAs cannot perform bulk edits via the frontend yet.
     def test_func(self):
@@ -439,7 +460,10 @@ class QuestBulkEditView(UserPassesTestMixin, View):
         if extra_update_fields:
             update_fields.extend(extra_update_fields)
 
-        for quest in quests:
+        seen = set()
+        update_fields = [f for f in update_fields if not (f in seen or seen.add(f))]
+
+        for quest in quests.iterator():
             for field, value in field_updates.items():
                 setattr(quest, field, value)
             quest.full_clean()
@@ -485,7 +509,10 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             quests = Quest.objects.filter(id__in=quest_ids)
 
         if action == "delete":
-            count, _ = quests.delete()
+            count = 0
+            for quest in quests:
+                quest.delete()
+                count += 1
             messages.success(request, f"{count} quest(s) deleted.")
         elif action == "publish":
             count = self.bulk_update_quests(
@@ -502,7 +529,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
         elif action == "unarchive":
             count = self.bulk_update_quests(
                 quests,
-                field_updates={"archived": False}
+                field_updates={"archived": False, "published": False}
             )
             messages.success(request, f"{count} quest(s) unarchived.")
 

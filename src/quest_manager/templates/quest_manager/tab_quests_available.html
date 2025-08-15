@@ -7,8 +7,11 @@
     > DRAFTS (tab_quests_available.html)
     > ARCHIVED (tab_quests_available.html)
 -->
+{% load static %}
 
 {% if bulk_edit_mode %}
+  <script src="{% static 'quest_manager/js/custom-quest.js' %}"></script>
+
   <form id="bulk-edit-form" method="POST" action="{% url 'quests:bulk_edit_quests' %}">
     {% csrf_token %}
     <input type="hidden" name="action" value="" id="bulk-action-type">
