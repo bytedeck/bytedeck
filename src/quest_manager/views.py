@@ -25,7 +25,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
-from library.utils import from_library_schema_first
+from library.utils import from_library_schema_first, get_library_schema_name
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -665,6 +665,13 @@ def ajax_quest_info(request, quest_id=None):
 
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
+            site_config = SiteConfig.get()
+            current_schema = getattr(request.tenant, "schema_name", None)
+            can_export = (
+                (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
+                and current_schema != get_library_schema_name()
+            )
+
             if quest_id:
                 if request.user.is_staff:
                     quest = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
@@ -672,7 +679,9 @@ def ajax_quest_info(request, quest_id=None):
                     quest = get_object_or_404(Quest, pk=quest_id)
 
                 template = 'quest_manager/preview_content_quests_avail.html'
-                quest_info_html = render_to_string(template, {'q': quest, 'is_library_view': is_library_view}, request=request)
+                quest_info_html = render_to_string(template,
+                                                   {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                   request=request)
 
                 data = {'quest_info_html': quest_info_html}
 
@@ -683,7 +692,9 @@ def ajax_quest_info(request, quest_id=None):
                 all_quest_info_html = {}
 
                 for q in quests:
-                    all_quest_info_html[q.id] = render_to_string(template, {'q': q, 'is_library_view': is_library_view}, request=request)
+                    all_quest_info_html[q.id] = render_to_string(template,
+                                                                 {'q': q, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                                 request=request)
 
                 data = json.dumps(all_quest_info_html)
                 return JsonResponse(data, safe=False)
@@ -766,11 +777,19 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
+    site_config = SiteConfig.get()
+    current_schema = getattr(request.tenant, "schema_name", None)
+    can_export = (
+        (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
+        and current_schema != get_library_schema_name()
+    )
+
     context = {
         "heading": q.name,
         "q": q,
         "available": available,
         "maps": CytoScape.objects.get_related_maps(q),
+        "can_export": can_export,
     }
 
     return render(request, "quest_manager/detail.html", context)
