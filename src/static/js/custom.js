@@ -36,4 +36,17 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
+    // Bulk edit helpers
+    window.submitBulkAction = function(actionType) {
+        document.getElementById("bulk-action-type").value = actionType;
+        document.getElementById("bulk-edit-form").submit();
+    };
+
+    window.toggleAllCheckboxes = function(source) {
+        const checkboxes = document.querySelectorAll('input[name="selected_quests[]"]');
+        for (let i = 0; i < checkboxes.length; i++) {
+            checkboxes[i].checked = source.checked;
+        }
+    };
+
 });

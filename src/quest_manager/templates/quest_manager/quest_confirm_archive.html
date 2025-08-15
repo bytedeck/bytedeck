@@ -4,7 +4,7 @@
 {% block heading_inner %}Archive Quest{% endblock %}
 
 {% block content %}
-<form action="archive" method="post">{% csrf_token %}
+<form action="" method="post">{% csrf_token %}
   {% if object.is_used_prereq %}
     <div class="alert alert-danger" role="alert">
       You cannot archive this quest while it is a prerequisite for another object (e.g. a quest or a badge).

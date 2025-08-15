@@ -1110,6 +1110,78 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # self.assertEqual(response.status_code, 200)
 
 
+class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.client.login(username="test_teacher", password="password")
+
+        self.url = reverse("quests:bulk_edit_quests")
+        # create test quests here
+        self.quest1 = baker.make(Quest, published=False)
+        self.quest2 = baker.make(Quest, published=True)
+
+    def test_bulk_edit__redirects_if_no_ids_or_action(self):
+        """
+        Should redirect with a warning if no quest IDs or action are provided.
+        """
+        response = self.client.post(self.url, {})
+        self.assertEqual(response.status_code, 302)
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertIn("No quests selected.", messages[0])
+
+    def test_bulk_edit__publishes_unpublished_quests(self):
+        """
+        Should mark unpublished quests as published and clear the editor.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "publish"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest1.refresh_from_db()
+        self.assertTrue(self.quest1.published)
+        self.assertIsNone(self.quest1.editor)
+
+    def test_bulk_edit__unpublishes_published_quests(self):
+        """
+        Should set `published=False` for quests that were previously published.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest2.id],
+            "action": "unpublish"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest2.refresh_from_db()
+        self.assertFalse(self.quest2.published)
+
+    def test_bulk_edit__deletes_quests_when_action_is_delete(self):
+        """
+        Should delete the selected quests and display a success message.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest2.id],
+            "action": "delete"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Quest.objects.filter(id=self.quest2.id).exists())
+
+    def test_bulk_edit__unarchives_archived_quests(self):
+        """
+        Should set `archived=False` for selected archived quests.
+        """
+        self.quest1.archived = True
+        self.quest1.save(update_fields=["archived"])
+
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "unarchive"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest1.refresh_from_db()
+        self.assertFalse(self.quest1.archived)
+
+
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 

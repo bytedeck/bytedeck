@@ -28,7 +28,7 @@ back to its original look.
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
   {% endif %}
   {% if request.user.is_staff %}
-    <a class="btn btn-primary" href="?mass_edit" role="button"><i class="fa fa-edit"></i> Mass Edit</a>
+    <a class="btn btn-primary" href="?bulk_edit" role="button"><i class="fa fa-edit"></i> Bulk Edit</a>
   {% endif %}
   {% if view_type == VIEW_TYPES.AVAILABLE and remove_hidden and request.user.profile.num_hidden_quests and request.user.profile.has_current_course %}
     <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">

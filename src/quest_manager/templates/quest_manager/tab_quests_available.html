@@ -7,40 +7,48 @@
     > DRAFTS (tab_quests_available.html)
     > ARCHIVED (tab_quests_available.html)
 -->
-{% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
-  <div>
-    <a class="btn btn-danger"
-       href="?mass_edit"
-       role="button">
-       <i class="fa fa-trash"></i> Delete all selected
-    </a>
-    {% if "/drafts/" in request.path %}
-      <a class="btn btn-primary"
-         href="?mass_edit"
-         role="button">
-         <i class="fa fa-upload"></i> Publish all selected
-      </a>
-    {% endif %}
-    <a class="btn btn-info"
-       href="?mass_edit"
-       role="button">
-       <i class="fa fa-archive"></i> Archive all selected
-    </a>
-  </div>
+{% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+  <form id="bulk-edit-form" method="POST" action="{% url 'quests:bulk_edit_quests' %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="" id="bulk-action-type">
+
+    <div class="mb-3">
+      {% if "/drafts/" in request.path %}
+        <a href="#" class="btn btn-primary" onclick="submitBulkAction('publish')">
+          <i class="fa fa-upload"></i> Publish All Selected
+        </a>
+      {% elif "/available/" in request.path %}
+        <a href="#" class="btn btn-primary" onclick="submitBulkAction('unpublish')">
+          <i class="fa fa-upload"></i> Unpublish All Selected
+        </a>
+      {% endif %}
+      {% if "/archived/" in request.path %}
+        <a href="#" class="btn btn-info" onclick="submitBulkAction('unarchive')">
+          <i class="fa fa-archive"></i> Unarchive All Selected
+        </a>
+      {% endif %}
+      {% if not "/available/" in request.path %}
+        <a href="#" class="btn btn-danger" onclick="submitBulkAction('delete')">
+          <i class="fa fa-trash"></i> Delete All Selected
+        </a>
+      {% endif %}
+    </div>
 {% endif %}
-{% if available_quests %}
+
+{% if quests %}
   <table id="accordion-available"
          class="accordian-table"
          data-classes="table table-hover table-responsive"
          data-toggle="table"
          data-detail-view="true"
+         data-unique-id="id"
          data-search="true"
          data-trim-on-search="false"
          data-custom-search="multiKeywordSearch">
     <thead>
       <tr class="panel-heading">
-        {% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
-          <th data-checkbox="true" data-field="state"></th>
+        {% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+          <th><input type="checkbox" id="select-all-checkbox" onclick="toggleAllCheckboxes(this)"></th>
         {% endif %}
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
         <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
@@ -51,7 +59,7 @@
       </tr>
     </thead>
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
-      {% for q in available_quests %}
+      {% for q in quests %}
         <tr class="accordian-trigger panel-title
           {% if request.user.is_staff %}
             {% if not q.published %}danger
@@ -64,11 +72,13 @@
           role="tab"
           aria-expanded="{% if q.id == active_q_id %}true{% else %}false{% endif %}"
           aria-controls="collapse-quest-{{q.id}}"
-          {% comment %} ID allows bootstrap-table-accordion.js populate detailed content {% endcomment %}
           id="heading-quest-{{q.id}}"
+          data-id="{{ q.id }}"
         >
-          {% if request.user.is_staff and "?mass_edit" in request.get_full_path %}
-            <td></td>
+          {% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+            <td>
+              <input type="checkbox" name="selected_quests[]" value="{{ q.id }}" form="bulk-edit-form">
+            </td>
           {% endif %}
           <td class="col-sm-1 col-xs-2 col-icon">
             <img class="img-responsive panel-title-img img-rounded" src="{{ q.get_icon_url }}" alt="icon"/>
@@ -90,7 +100,7 @@
     </tbody>
   </table>
 
-  {% for q in available_quests %}
+  {% for q in quests %}
     {% comment %}
       ### COLLAPSING CONTENT ###
       This is the content that is hidden until the row is clicked.
@@ -119,4 +129,8 @@
   {% endfor %}
 {% else %}
   <p>No quests are available.</p>
+{% endif %}
+
+{% if request.user.is_staff and "?bulk_edit" in request.get_full_path %}
+  </form>
 {% endif %}

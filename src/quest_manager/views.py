@@ -415,6 +415,70 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
         return redirect("quests:archived")
 
 
+class QuestBulkEditView(UserPassesTestMixin, View):
+    # Note: TAs pass this permission check, but bulk editing UI is currently restricted to staff only,
+    # so TAs cannot perform bulk edits via the frontend yet.
+    def test_func(self):
+        return is_staff_or_TA(self.request.user)
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handle bulk editing operations on selected quests, including:
+        - Deletion
+        - Publishing
+        - Unpublishing
+        - Unarchiving
+
+        Expects:
+            - 'selected_quests[]': A list of quest IDs to act upon.
+            - 'action': The bulk action to perform (e.g., "delete", "publish").
+
+        Redirects to the quest list view with a success or warning message.
+
+        Returns:
+            HttpResponseRedirect: Redirect to the quest list page with feedback.
+        """
+        quest_ids = request.POST.getlist("selected_quests[]")
+        action = request.POST.get("action")
+
+        if not quest_ids or not action:
+            messages.warning(request, "No quests selected.")
+            return redirect("quests:quests")
+        if action in ["unarchive", "delete"]:
+            # Include archived quests for delete and unarchive actions because
+            # those target quests excluded from the default queryset.
+            quests = Quest.objects.all_including_archived().filter(id__in=quest_ids)
+        else:
+            quests = Quest.objects.filter(id__in=quest_ids)
+
+        if action == "delete":
+            count = quests.count()
+            quests.delete()
+            messages.success(request, f"{count} quest(s) deleted.")
+        elif action == "publish":
+            success_count = 0
+            for quest in quests:
+                quest.published = True
+                quest.editor = None
+                quest.full_clean()
+                quest.save()
+                success_count += 1
+            messages.success(request, f"{success_count} quest(s) published.")
+        elif action == "unpublish":
+            count = 0
+            for quest in quests:
+                if quest.published:
+                    quest.published = False
+                    quest.save(update_fields=["published"])
+                    count += 1
+            messages.success(request, f"{count} quest(s) unpublished.")
+        elif action == "unarchive":
+            count = quests.update(archived=False)
+            messages.success(request, f"{count} quest(s) unarchived.")
+
+        return redirect("quests:quests")
+
+
 @method_decorator(staff_member_required, name="dispatch")
 class CommonDataListView(ListView):
     model = CommonData
@@ -627,6 +691,13 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
 
+    if view_type == QuestListViewTabTypes.DRAFT:
+        quests = draft_quests
+    elif view_type == QuestListViewTabTypes.ARCHIVED:
+        quests = archived_quests
+    else:
+        quests = available_quests
+
     # Used to explain why the "Available" tab is empty, if it is
     awaiting_approval = QuestSubmission.objects.filter(
         user=request.user, is_approved=False, is_completed=True
@@ -634,6 +705,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     context = {
         "heading": "Quests",
+        "quests": quests,
         "awaiting_approval": awaiting_approval,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
