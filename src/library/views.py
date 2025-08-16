@@ -352,7 +352,7 @@ class ExportQuestView(View):
             quest_import_id (UUID): The import ID of the quest to export.
 
         Returns:
-            HttpResponseRedirect: Redirect to the drafts list after successful export.
+            HttpResponseRedirect: Redirect to the main quests list after successful export.
 
         Raises:
             PermissionDenied: If a quest with the same import ID already exists in the library.
@@ -392,7 +392,7 @@ class ExportQuestView(View):
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         messages.success(request, f"Successfully exported '{link}' to the shared library.")
-        return redirect('quests:drafts')
+        return redirect('quests:quests')
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')

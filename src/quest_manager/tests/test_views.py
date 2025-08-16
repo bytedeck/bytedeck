@@ -31,6 +31,7 @@ from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
+from library.utils import library_schema_context
 
 from datetime import datetime
 
@@ -2253,7 +2254,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
         self.quest = baker.make(Quest)
-        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2294,6 +2295,59 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
         self.assertEqual(type(response), JsonResponse)
+
+    def test_can_export_student_false(self):
+        """
+        Students should never see can_export=True in the rendered preview.
+        """
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        html = data['quest_info_html']
+        # The export button is rendered only if can_export=True
+        self.assertNotIn('id="export-quest"', html)
+
+    def test_can_export_staff_true(self):
+        """
+        Staff should see can_export=True if allowed by site config and schema is not library.
+        """
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.full_clean()
+        site_config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        data = response.json()
+        html = data['quest_info_html']
+        # There should be something in the HTML rendered only if can_export=True
+        self.assertIn('title="Export this quest to the Library"', html)
+
+    def test_can_export_false_on_library_schema(self):
+        """
+        When on the Library, should not be able to export to the Library
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            response = self.client.post(
+                reverse('quests:ajax_quest_info', args=[self.quest.id]),
+                content_type='application/json',
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            )
+            data = response.json()
+            html = data['quest_info_html']
+            self.assertNotIn('id="export-quest"', html)
 
 
 class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
@@ -2474,6 +2528,7 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
 
@@ -2532,6 +2587,35 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
+
+    def test_can_export_in_detail_view(self):
+        """
+        Verify 'can_export' context variable is correctly set in quest detail view
+        for staff and students, and that it is disabled in the library schema.
+        """
+        # Make a staff user
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.full_clean()
+        site_config.save()
+
+        # Staff user in a normal tenant schema
+        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+
+        # Should be in the context
+        self.assertIn('can_export', response.context)
+
+        # Since staff and export allowed, should be True
+        self.assertTrue(response.context['can_export'])
+
+        # Now test as normal student
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_export'])
 
 
 class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
