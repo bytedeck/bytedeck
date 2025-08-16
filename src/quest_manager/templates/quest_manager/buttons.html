@@ -52,6 +52,12 @@
             title="Archive this quest" >
             <i class="fa fa-fw fa-archive"></i>
           </a>
+          {% if can_export %}
+            <a class="btn btn-default" href="{% url 'library:export_quest' q.import_id %}" role="button"
+              title="Export this quest to the Library">
+              <i class="fa fa-fw fa-upload"></i>
+            </a>
+          {% endif %}
           <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
             title = "Delete this quest" >
             <i class="fa fa-trash-o"></i>

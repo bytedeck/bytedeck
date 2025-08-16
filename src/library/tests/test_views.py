@@ -372,8 +372,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         url = reverse('library:export_quest', args=[self.local_quest.import_id])
         response = self.client.post(url)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('quests:drafts'))
+        self.assertRedirects(response, reverse('quests:quests'))
 
         with library_schema_context():
             exported_quest = Quest.objects.get(import_id=self.local_quest.import_id)
