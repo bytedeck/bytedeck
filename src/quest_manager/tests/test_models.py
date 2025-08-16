@@ -58,14 +58,14 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertFalse(self.category.condition_met_as_prerequisite(user2))
 
     def test_condition_met_as_prerequisite__draft_and_archived_quests(self):
-        """ Test that visible_to_students=False (draft) and archived quests
+        """ Test that published=False (draft) and archived quests
         are not needed when checking if campaign is met as a prerequisite.
         """
         user = baker.make('user')
 
         quest1 = baker.make(Quest, campaign=self.category)
         # draft quest shouldn't be required to fulfill campaign
-        baker.make(Quest, campaign=self.category, visible_to_students=False)
+        baker.make(Quest, campaign=self.category, published=False)
         # archived quest shouldn't be required
         baker.make(Quest, campaign=self.category, archived=True)
 
@@ -94,7 +94,7 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         # create some quests as part of the test campaign, some are invalid and won't be included
         baker.make(Quest, campaign=self.category)  # included in queryset
         baker.make(Quest, campaign=self.category)  # included in queryset
-        baker.make(Quest, campaign=self.category, visible_to_students=False)  # NOT included in queryset because not visible
+        baker.make(Quest, campaign=self.category, published=False)  # NOT included in queryset because not published
         baker.make(Quest, campaign=self.category, archived=True)  # NOT included in queryset because archived
         baker.make(Quest)  # NOT included in queryset because in a different campaign
 
@@ -158,7 +158,7 @@ class QuestTestModel(TenantTestCase):
         1. The quest has an availability date/time that hasn't yet been reached (date_available, time_available are in the future)
         2. The quest is expired (Quest.expired == False; date_expired, time_expired are in the past)
         3. The quest is a part of an inactive campaign (Quest.campaign == True and Quest.campaign.active == False)
-        4. The quest is manually set to be invisible to students (Quest.visible_to_students == False)
+        4. The quest is manually set to be not published (Quest.published == False)
         5. The quest is archived
         """
 
@@ -194,12 +194,12 @@ class QuestTestModel(TenantTestCase):
             self.assertFalse(q.active)
 
         # create and test a quest that's a part of an inactive campaign
-        inactive_campaign = baker.make(Category, title="inactive-campaign", active=False)
+        inactive_campaign = baker.make(Category, title="inactive-campaign", published=False)
         q = baker.make(Quest, campaign=inactive_campaign)
         self.assertFalse(q.active)
 
-        # create and test a quest that's invisible to students
-        q = baker.make(Quest, visible_to_students=False)
+        # create and test a quest that's not published
+        q = baker.make(Quest, published=False)
         self.assertFalse(q.active)
 
         # create and test a quest that's archived

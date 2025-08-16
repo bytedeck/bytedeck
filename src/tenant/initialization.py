@@ -248,7 +248,7 @@ def create_initial_badges():
         short_description="<p>You have demonstrated your proficiency with this online platform. I hope you enjoy using it for this course!</p>",
         badge_type=badge_type,
         sort_order=10,
-        active=True,
+        published=True,
         import_id='fa3b0518-cf9c-443c-8fe4-f4a887b495a7'
     )
     bytedeck_proficiency.tags.add(intro_tag)
@@ -262,7 +262,7 @@ def create_initial_badges():
             short_description="<p>According to the Royal Canadian Mint, the official national term of the coin is the <i>one-cent piece</i>, but in practice the terms penny and cent predominate. Originally, \"penny\" referred to a two-cent coin. When the two-cent coin was discontinued, penny took over as the new one-cent coin's name. </p>\r\n\r\n<p>These cents were originally issued to bring some kind of order to the Canadian monetary system, which, until 1858, relied on British coinage, bank and commercial tokens, U.S. currency and Spanish milled dollars. Canada no longer uses the penny, but we still do!</p>",  # noqa
             badge_type=badge_type,
             sort_order=10,
-            active=True,
+            published=True,
             import_id='033afa34-bd34-4252-80f1-6542a4055f7e'
         ),
         Badge(
@@ -271,7 +271,7 @@ def create_initial_badges():
             short_description="<p>The nickel as we are familiar with it was introduced in 1922, originally made from 99.9% nickel metal. These coins were magnetic, due to the high nickel content. Versions during World War II were minted in copper-zinc, then chrome and nickel-plated steel, and finally returned again to nickel, at the end of the war. A plated steel version was again made 1951–54 during the Korean War. Rising nickel prices eventually caused another switch to cupronickel in 1982 (an alloy similar to the U.S. nickel), but more recently, Canadian nickels are minted in nickel-plated steel, containing a small amount of copper.</p>",  # noqa
             badge_type=badge_type,
             sort_order=20,
-            active=True,
+            published=True,
             import_id='82da2a3a-fb21-4d61-b997-b22978699a51'
         ),
         Badge(
@@ -280,7 +280,7 @@ def create_initial_badges():
             short_description="<p>According to the Royal Canadian Mint, the official national term of the coin is the <i>10 cent piece</i>, but in practice, the term dime predominates in English-speaking Canada. It is nearly identical in size to the American dime, but unlike its counterpart, the Canadian dime is magnetic due to a distinct metal composition: from 1968 to 1999 it was composed entirely of nickel, and since 2000 it has had a high steel content.</p>",  # noqa
             badge_type=badge_type,
             sort_order=30,
-            active=True,
+            published=True,
             import_id='bb12b3d1-ce6e-40e3-a411-f43aadfe571a'
         ),
     ])
@@ -294,7 +294,7 @@ def create_initial_badges():
             short_description="<p>You are a member of the Red team!</p>",
             badge_type=badge_type,
             sort_order=10,
-            active=True,
+            published=True,
             import_id='c71495cf-030e-4c2c-8dd9-8a977502cb9e'
         ),
         Badge(
@@ -303,7 +303,7 @@ def create_initial_badges():
             short_description="<p>You are a member of the Green team!</p>",
             badge_type=badge_type,
             sort_order=20,
-            active=True,
+            published=True,
             import_id='2ad30116-13e9-4ef8-a963-f87a4a2b3663'
         ),
         Badge(
@@ -312,7 +312,7 @@ def create_initial_badges():
             short_description="<p>You are a member of the Blue team!</p>",
             badge_type=badge_type,
             sort_order=30,
-            active=True,
+            published=True,
             import_id='1f939945-5c02-45cc-ac44-6b8de4100dae'
         ),
     ])

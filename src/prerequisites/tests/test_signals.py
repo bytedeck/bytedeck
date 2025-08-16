@@ -90,10 +90,11 @@ class PrerequisitesSignalsTest(TenantTestCase):
 
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
     def test_update_prereq_cache_triggered_by_badge(self, task):
-        """Creation and Update of a badge should...
         """
-        badge = baker.make(Badge, active=True)  # creation
-        badge.active = False
+        Creation and Update of a prereq where the parent is not a quest should not trigger a cache update
+        """
+        badge = baker.make(Badge, published=True)  # creation
+        badge.published = False
         badge.save()  # update
         self.assertEqual(task.call_count, 2)
 

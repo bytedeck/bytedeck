@@ -11,6 +11,7 @@ or they could be moved into a `test_urls.py` module.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
@@ -25,10 +26,12 @@ from courses.models import Block, Rank
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 from comments.models import Comment
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
+from library.utils import library_schema_context
 
 from datetime import datetime
 
@@ -73,6 +76,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
+        self.archived_quest = baker.make(Quest, archived=True)
 
         # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         # self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
@@ -88,6 +92,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
+        archived_quest_pk = self.archived_quest.pk
 
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
@@ -106,7 +111,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:returned')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:in_progress')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
@@ -123,6 +128,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
 
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 403)
 
@@ -131,6 +137,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
@@ -139,10 +146,12 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
+        archived_quest_pk = self.archived_quest.pk
 
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 302)
 
         self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
@@ -288,6 +297,38 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "You have no new quests available")
         self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
 
+    def test_teacher_can_unarchive_quest(self):
+        """
+        Test that staff users can successfully unarchive an archived quest.
+
+        Verifies that:
+        - Staff can access the unarchive view
+        - the quest's archived status is proerly cleared
+        - the user is redirected to the main quests page after unarchiving
+        - a success message is shown after unarchiving
+        - clicking the button again (you shouldn't be able to) sends you to the main quests page
+        - a message is shown after clicking the button again (you shouldn't be able to)
+        """
+        # Login a Teacher from setUp
+        self.client.force_login(self.test_teacher)
+        # Create an archived quest
+        archived_quest = baker.make(Quest, archived=True)
+        # Make sure it's archived
+        self.assertTrue(archived_quest.archived)
+
+        # Create the url leading to the unarchive view, same as button
+        url = reverse('quests:unarchive', args=[archived_quest.id])
+        # Simulate clicking the button
+        response = self.client.post(url, follow=True)
+        # Make sure the teacher gets redirected with the message
+        self.assertRedirects(response, reverse('quests:drafts'))
+        self.assertContains(response, "has been unarchived and moved to the Drafts tab.")
+
+        # Refresh the quest
+        archived_quest.refresh_from_db()
+        # Make sure the quest is no longer archived
+        self.assertFalse(archived_quest.archived)
+
 
 class SubmissionViewTests(TenantTestCase):
 
@@ -308,7 +349,7 @@ class SubmissionViewTests(TenantTestCase):
 
         self.quest1 = baker.make(Quest)
         self.quest2 = baker.make(Quest)
-        self.quest3 = baker.make(Quest, visible_to_students=False)
+        self.quest3 = baker.make(Quest, published=False)
 
         self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
         self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
@@ -364,7 +405,7 @@ class SubmissionViewTests(TenantTestCase):
 
     def test_student_can_view_completed_submission_when_hidden(self):
         """
-        Make sure user can view quest even when visible_to_students is False
+        Make sure user can view quest even when published is False
         and a student has a submission to it.
         """
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
@@ -496,10 +537,10 @@ class SubmissionViewTests(TenantTestCase):
         success = self.client.login(username=self.test_student1.username, password=self.test_password)
         self.assertTrue(success)
 
-        # Make quest invisible to students
-        self.quest1.visible_to_students = False
+        # Unpublish quest
+        self.quest1.published = False
         self.quest1.save()
-        self.assertFalse(self.quest1.visible_to_students)
+        self.assertFalse(self.quest1.published)
 
         # TODO: should redirect, not 404?
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
@@ -1070,6 +1111,139 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         # self.assertEqual(response.status_code, 200)
 
 
+class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.client.login(username="test_teacher", password="password")
+
+        self.url = reverse("quests:bulk_edit_quests")
+        # create test quests here
+        self.quest1 = baker.make(Quest, published=False)
+        self.quest2 = baker.make(Quest, published=True)
+
+    def test_bulk_edit__redirects_if_no_ids(self):
+        """
+        Should redirect with a warning if no quest IDs are provided.
+        """
+        response = self.client.post(self.url, {})
+        self.assertEqual(response.status_code, 302)
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertIn("No quests selected.", messages[0])
+
+    def test_bulk_edit__publishes_unpublished_quests(self):
+        """
+        Should mark unpublished quests as published and clear the editor.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "publish"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest1.refresh_from_db()
+        self.assertTrue(self.quest1.published)
+        self.assertIsNone(self.quest1.editor)
+
+    def test_bulk_edit__unpublishes_published_quests(self):
+        """
+        Should set `published=False` for quests that were previously published.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest2.id],
+            "action": "unpublish"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest2.refresh_from_db()
+        self.assertFalse(self.quest2.published)
+
+    def test_bulk_edit__deletes_quests(self):
+        """
+        Should delete the selected quests.
+        """
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest2.id],
+            "action": "delete"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Quest.objects.filter(id=self.quest2.id).exists())
+
+    def test_bulk_edit__unarchives_archived_quests(self):
+        """
+        Should set `archived=False` for selected archived quests.
+        """
+        self.quest1.archived = True
+        self.quest1.save(update_fields=["archived"])
+
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "unarchive"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.quest1.refresh_from_db()
+        self.assertFalse(self.quest1.archived)
+
+    def test_bulk_edit__delete_archived_quest(self):
+        """
+        Deleting an archived quest should also be allowed (uses all_including_archived()).
+        """
+        self.quest1.archived = True
+        self.quest1.save(update_fields=["archived"])
+
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "delete"
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Quest.objects.filter(id=self.quest1.id).exists())
+
+    def test_bulk_edit_mode_flag(self):
+        """
+        bulk_edit_mode should be True when '?bulk_edit' param is present,
+        and False when missing.
+        """
+        # With param
+        url_with_param = reverse("quests:available") + "?bulk_edit"
+        response = self.client.get(url_with_param)
+        self.assertTrue(response.context["bulk_edit_mode"])
+
+        # Without param
+        url_without_param = reverse("quests:available")
+        response = self.client.get(url_without_param)
+        self.assertFalse(response.context["bulk_edit_mode"])
+
+    def test_bulk_edit_buttons__on_drafts_page(self):
+        """
+        Drafts bulk edit view should display 'Publish' and 'Delete' buttons,
+        but not the 'Unpublish' button.
+        """
+        url = reverse("quests:drafts") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertContains(response, "Publish All Selected")
+        self.assertNotContains(response, "Unpublish All Selected")
+        self.assertContains(response, "Delete All Selected")
+
+    def test_bulk_edit_buttons__on_available_page(self):
+        """
+        Available quests bulk edit view should display 'Unpublish' button,
+        but not the 'Publish' or 'Delete' buttons.
+        """
+        url = reverse("quests:available") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertNotContains(response, "Publish All Selected")
+        self.assertContains(response, "Unpublish All Selected")
+        self.assertNotContains(response, "Delete All Selected")
+
+    def test_bulk_edit_buttons__on_archived_page(self):
+        """
+        Archived quests bulk edit view should display 'Unarchive' and 'Delete'
+        buttons.
+        """
+        url = reverse("quests:archived") + "?bulk_edit"
+        response = self.client.get(url)
+        self.assertContains(response, "Unarchive All Selected")
+        self.assertContains(response, "Delete All Selected")
+
+
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
     """ Tests for:
 
@@ -1141,8 +1315,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         # Should redirect to the new quest:
         self.assertRedirects(response, new_quest.get_absolute_url())
 
-        # Confirm the quest is a draft and not visible to students
-        self.assertFalse(new_quest.visible_to_students)
+        # Confirm the quest is a draft and not published
+        self.assertFalse(new_quest.published)
         # also they should be the quest's editor
         self.assertEqual(new_quest.editor, test_ta)
 
@@ -1205,11 +1379,11 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         quest_to_update.editor = test_ta
         quest_to_update.save()
 
-        # Still can't access Update view becuase the quest is visible_to_students
+        # Still can't access Update view becuase the quest is published
         # Don't want TA's editing "live" quests
         self.assert403('quests:quest_update', kwargs={'pk': quest_to_update.pk})
 
-        quest_to_update.visible_to_students = False
+        quest_to_update.published = False
         quest_to_update.save()
 
         self.assert200('quests:quest_update', kwargs={'pk': quest_to_update.pk})
@@ -1257,8 +1431,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(scape.name in str(messages[0]))
 
     # TODO
-    # TAs should not be able to make a quest visible_to_students
-    # When a quest is made visible_to_students by a teacher, the editor should be removed
+    # TAs should not be able to make a quest published
+    # When a quest is published by a teacher, the editor should be removed
 
     def test_create_with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
@@ -1543,10 +1717,10 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
-        # self.assertFalse(form_data['visible_to_students']) ? When is this changed?
+        # self.assertFalse(form_data['published']) ? When is this changed?
 
-        # Also, TA's should not be able to set visible_to_students, but it is by default
-        # just make sure it is visible, and then check again after form is posted
+        # Also, TA's should not be able to set published, but it is by default
+        # just make sure it is published, and then check again after form is posted
 
     def test_TA_copy_quest_POST(self):
         self.client.force_login(self.test_ta)
@@ -1559,8 +1733,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(Quest.objects.filter(name='Test Quest - COPY').exists())
         new_quest = Quest.objects.get(name='Test Quest - COPY')
 
-        # For TAs only, quest should be forced to not visible to students
-        self.assertFalse(new_quest.visible_to_students)
+        # For TAs only, quest should be forced to not published
+        self.assertFalse(new_quest.published)
         # and the TA should have been set as the editor
         self.assertEqual(new_quest.editor, self.test_ta)
 
@@ -1846,10 +2020,10 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         Admin should see every quest assigned to the campaign
         """
 
-        # campaign with visible and non-visible quest created to test visibility for Admin and Student
+        # campaign with published and unpublished quest created to test visibility for Admin and Student
         view_test_campaign = baker.make(Category)
-        baker.make(Quest, visible_to_students=True, campaign=view_test_campaign)
-        baker.make(Quest, visible_to_students=False, campaign=view_test_campaign)
+        baker.make(Quest, published=True, campaign=view_test_campaign)
+        baker.make(Quest, published=False, campaign=view_test_campaign)
 
         # Admin should be able to access view
         self.client.force_login(self.test_teacher)
@@ -1877,7 +2051,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'New category',
-            'active': True,
+            'published': True,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
@@ -1890,23 +2064,95 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'My Updated Title',
-            'active': False,
+            'published': False,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
-        self.assertEqual(course.active, data['active'])
+        self.assertEqual(course.published, data['published'])
 
     def test_CategoryDelete_view(self):
-        """ Admin should be able to delete a course """
+        """
+        Staff should be able to delete a campaign *only* if it has no published quests.
+
+        This test covers three cases:
+        1. Deleting a campaign with no associated quests (should succeed).
+        2. Attempting to delete a campaign that contains published quests
+        (should fail and not remove the campaign from the database).
+        3. Race condition: User loads delete page when quests are unpublished,
+        but they get published before submission (should still block deletion).
+        """
         self.client.force_login(self.test_teacher)
 
+        # 1. Create and delete an empty campaign (should succeed)
+        empty_campaign = Category.objects.create(title="Temporary Campaign", published=True)
+        empty_campaign.full_clean()
+        empty_campaign.save()
+
         before_delete_count = Category.objects.count()
-        response = self.client.post(reverse('quests:category_delete', args=[Category.objects.filter(title="Orientation")[0].id]))
+        response = self.client.post(reverse('quests:category_delete', args=[empty_campaign.id]))
         after_delete_count = Category.objects.count()
         self.assertRedirects(response, reverse('quests:categories'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
+
+        # 2. Attempt to delete a campaign with published quests (should fail to delete)
+        orientation = Category.objects.filter(title="Orientation").first()
+        self.assertIsNotNone(orientation)
+
+        # Confirm that the campaign actually has published quests
+        published_quests = Quest.objects.filter(campaign=orientation, published=True)
+        self.assertGreater(published_quests.count(), 0)
+
+        # This POST should NOT delete the campaign
+        before = Category.objects.count()
+        response = self.client.post(reverse('quests:category_delete', args=[orientation.id]))
+        after = Category.objects.count()
+        self.assertEqual(before, after)
+
+        # Also check that the delete button is disabled in the template
+        response = self.client.get(reverse('quests:category_delete', args=[orientation.id]))
+        self.assertContains(response, 'type="submit"', status_code=200)
+        self.assertContains(response, 'disabled')
+        self.assertContains(
+            response,
+            "Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first",
+        )
+
+        # 3. Simulate race condition: quest is unpublished when page loads, then gets published
+        race_campaign = Category.objects.create(title="Race Condition Campaign", published=True)
+        race_campaign.full_clean()
+        race_campaign.save()
+
+        quest = Quest.objects.create(
+            name="Unpublished Quest",
+            campaign=race_campaign,
+            published=False,
+        )
+        quest.full_clean()
+        quest.save()
+
+        # Load the delete page while the quest is unpublished (button would be enabled)
+        response = self.client.get(reverse("quests:category_delete", args=[race_campaign.id]))
+        self.assertContains(response, 'type="submit"')
+        self.assertNotContains(response, 'disabled')
+
+        # Simulate the quest being published before form submission
+        quest.published = True
+        quest.full_clean()
+        quest.save()
+
+        # Now submit the form (should be blocked server-side)
+        before = Category.objects.count()
+        response = self.client.post(reverse("quests:category_delete", args=[race_campaign.id]), follow=True)
+        after = Category.objects.count()
+
+        self.assertEqual(before, after)
+        self.assertTrue(Category.objects.filter(id=race_campaign.id).exists())
+        self.assertContains(
+            response,
+            "You can't delete this campaign because it contains published quests"
+        )
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
@@ -2008,7 +2254,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
         self.quest = baker.make(Quest)
-        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2049,6 +2295,59 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
         self.assertEqual(type(response), JsonResponse)
+
+    def test_can_export_student_false(self):
+        """
+        Students should never see can_export=True in the rendered preview.
+        """
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        html = data['quest_info_html']
+        # The export button is rendered only if can_export=True
+        self.assertNotIn('id="export-quest"', html)
+
+    def test_can_export_staff_true(self):
+        """
+        Staff should see can_export=True if allowed by site config and schema is not library.
+        """
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.full_clean()
+        site_config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        data = response.json()
+        html = data['quest_info_html']
+        # There should be something in the HTML rendered only if can_export=True
+        self.assertIn('title="Export this quest to the Library"', html)
+
+    def test_can_export_false_on_library_schema(self):
+        """
+        When on the Library, should not be able to export to the Library
+        """
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            response = self.client.post(
+                reverse('quests:ajax_quest_info', args=[self.quest.id]),
+                content_type='application/json',
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            )
+            data = response.json()
+            html = data['quest_info_html']
+            self.assertNotIn('id="export-quest"', html)
 
 
 class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
@@ -2229,6 +2528,7 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
+        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
 
@@ -2287,6 +2587,35 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
+
+    def test_can_export_in_detail_view(self):
+        """
+        Verify 'can_export' context variable is correctly set in quest detail view
+        for staff and students, and that it is disabled in the library schema.
+        """
+        # Make a staff user
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.full_clean()
+        site_config.save()
+
+        # Staff user in a normal tenant schema
+        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+
+        # Should be in the context
+        self.assertIn('can_export', response.context)
+
+        # Since staff and export allowed, should be True
+        self.assertTrue(response.context['can_export'])
+
+        # Now test as normal student
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_export'])
 
 
 class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
@@ -2643,7 +2972,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             url(r'^approvals/$', views.approvals, name='approvals'),
             url(r'^approvals/submitted/$', views.approvals, name='submitted'),
             url(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
-            url(r'^approvals/returned/$', views.approvals, name='returned'),
+            url(r'^approvals/in-progress/$', views.approvals, name='in_progress'),
             url(r'^approvals/approved/$', views.approvals, name='approved'),
             url(r'^approvals/flagged/$', views.approvals, name='flagged'),
             url(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
@@ -2687,11 +3016,11 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].SUBMITTED)
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
-        self.assertTrue(response.context['tab_list'][0]['active'])
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
+        self.assertTrue(response.context['tab_list'][1]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
-        self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:submitted'))
+        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:submitted'))
 
     def test_submitted_all(self):
         """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block)
@@ -2700,23 +3029,23 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:submitted_all'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
-        self.assertTrue(response.context['tab_list'][0]['active'])
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
+        self.assertTrue(response.context['tab_list'][1]['active'])
         self.assertFalse(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
-        self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:submitted'))
+        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:submitted'))
 
     def test_returned(self):
         """ Completed quests for current teacher that have been returned to the student. """
-        with patch('quest_manager.views.QuestSubmission.objects.all_returned', return_value=[self.sub]):
-            response = self.client.get(reverse('quests:returned'))
+        with patch('quest_manager.views.QuestSubmission.objects.all_not_completed', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
+            response = self.client.get(reverse('quests:in_progress'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
-        self.assertTrue(response.context['tab_list'][1]['active'])
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
+        self.assertTrue(response.context['tab_list'][0]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
-        self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:returned'))
+        self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:in_progress'))
 
     def test_approved(self):
         """ Completed quests (submissions) that have been approved by a teacher """
@@ -2725,7 +3054,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:approved'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][2]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -2792,7 +3121,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][3]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertIsNone(response.context['quest'])
@@ -2803,7 +3132,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
     #         response = self.client.get(reverse('quests:skipped'))
     #     self.assertEqual(response.status_code, 200)
     #     self.assertContains(response, str(self.sub))
-    #     # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Skipped
+    #     # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
     #     self.assertTrue(response.context['tab_list'][3]['active'])
     #     self.assertTrue(response.context['current_teacher_only'])
     #     self.assertIsNone(response.context['quest'])
@@ -2816,7 +3145,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             response = self.client.get(reverse('quests:approved_for_quest', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
-        # Tabs: 0-Submitted, 1-Returned, 2-Approved, 3- Flagged
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
         self.assertTrue(response.context['tab_list'][2]['active'])
         self.assertTrue(response.context['current_teacher_only'])
         self.assertEqual(response.context['quest'], self.quest)
@@ -2866,9 +3195,9 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].APPROVED)
         self.assertContains(response, 'class="active"')
 
-        # RETURNED
-        response = self.client.get(reverse('quests:returned'))
-        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].RETURNED)
+        # INPROGRESS
+        response = self.client.get(reverse('quests:in_progress'))
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INPROGRESS)
         self.assertContains(response, 'class="active"')
 
         # FLAGGED
@@ -2997,3 +3326,100 @@ class CommonDataViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         self.assertEqual(CommonData.objects.count(), 1)
+
+
+class QuestArchiveViewTest(TenantTestCase):
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.staff_user = User.objects.create_user(username='staff', password='pass', is_staff=True)
+        self.client.force_login(self.staff_user)
+
+        # Quest A: This quest will be used as a prerequisite for another quest (Quest B).
+        # It should NOT be archivable.
+        self.quest_a = baker.make(Quest, name="Quest A", archived=False, published=True)
+
+        # Quest B: This quest depends on Quest A (has it as a prerequisite),
+        # but is not itself a prerequisite for anything. It SHOULD be archivable.
+        self.quest_b = baker.make(Quest, name="Quest B", archived=False, published=True)
+
+        # Set up the prerequisite link: Quest B requires Quest A
+        Prereq.add_simple_prereq(parent_object=self.quest_b, prereq_object=self.quest_a)
+
+    def test_get_context__includes_prereq_of(self):
+        """
+        The archive view context should include 'prereq_of', showing which quests depend on this one.
+        """
+        url = reverse('quests:quest_archive', args=[self.quest_a.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Should include 'prereq_of' key in context
+        self.assertIn('prereq_of', response.context)
+        # Verifies the view uses the correct method to populate this value
+        self.assertEqual(response.context['prereq_of'], self.quest_a.get_reliant_objects(active_only=False))
+
+    def test_post__blocked_if_prerequisite(self):
+        """
+        Attempting to archive a quest that is used as a prerequisite
+        should redirect to the quest detail page with an error message.
+        """
+        url = reverse('quests:quest_archive', args=[self.quest_a.id])  # Quest A is used as a prerequisite
+        response = self.client.post(url)
+
+        # Redirect back to the quest detail page because archiving is blocked
+        self.assertRedirects(response, reverse('quests:quest_detail', args=[self.quest_a.id]))
+
+        # Confirm an error message is shown explaining why archiving is not allowed
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("cannot archive this quest" in str(m) for m in messages))
+
+    def test_post__archives_quest_and_deletes_submissions(self):
+        """
+        Posting to archive a quest that is not used as a prerequisite
+        should archive the quest, delete its submissions, invalidate XP cache for related profiles,
+        show a success message, and redirect to the archived quests page.
+        """
+        # Use quest_b which is archivable (not a prerequisite for others)
+        quest_to_archive = self.quest_b
+
+        # Create users and submissions tied to the quest to be archived
+        user1 = baker.make(User)
+        user2 = baker.make(User)
+
+        submission1 = baker.make(QuestSubmission, quest=quest_to_archive, user=user1)
+        submission2 = baker.make(QuestSubmission, quest=quest_to_archive, user=user2)
+
+        profile1 = Profile.objects.get(user=user1)
+        profile2 = Profile.objects.get(user=user2)
+
+        url = reverse('quests:quest_archive', args=[quest_to_archive.id])
+
+        # Patch xp_invalidate_cache to monitor calls without invoking real logic
+        with patch.object(Profile, 'xp_invalidate_cache', autospec=True) as mock_xp_invalidate:
+            response = self.client.post(url)
+
+        quest_to_archive.refresh_from_db()
+        self.assertTrue(quest_to_archive.archived)
+        self.assertFalse(quest_to_archive.published)
+
+        # Confirm submissions were deleted
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission1.id).exists(),
+            "submission1 should be deleted after archiving"
+        )
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission2.id).exists(),
+            "submission2 should be deleted after archiving"
+        )
+
+        # xp_invalidate_cache should be called once per related profile
+        self.assertEqual(mock_xp_invalidate.call_count, 2)
+        calls = [call.args[0] for call in mock_xp_invalidate.call_args_list]
+        self.assertIn(profile1, calls)
+        self.assertIn(profile2, calls)
+
+        # Check success message presence
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("has been archived" in str(m) for m in messages))
+
+        # Confirm redirect to archived quests page
+        self.assertRedirects(response, reverse('quests:archived'))

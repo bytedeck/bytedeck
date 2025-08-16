@@ -30,7 +30,8 @@ RUN apt-get install -y libicu[0-9][0-9]
 RUN apt-get install -y build-essential
 
 #https://stackoverflow.com/questions/21669354/rebuild-uwsgi-with-pcre-support
-RUN apt-get install -y libpcre3 libpcre3-dev
+RUN apt-get update && \
+    apt-get install -y libpcre2-8-0 libpcre2-dev
 
 RUN python3 -m pip install --upgrade pip
 

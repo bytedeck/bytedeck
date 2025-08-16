@@ -1,182 +1,459 @@
 from django.contrib import messages
-from django.db import connection
-from django.contrib.auth.decorators import login_required
-from hackerspace_online.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.shortcuts import get_object_or_404, redirect, render
-from quest_manager.models import Quest
-from quest_manager.models import Category
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.generic import TemplateView
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
 
-from .importer import import_quests_to
+from hackerspace_online.decorators import staff_member_required
+
+from quest_manager.models import Quest, Category
+
+from siteconfig.models import SiteConfig
+
+from notifications.signals import notify
+
+
+from .exporter import export_quest_to_library
+from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context
 
+User = get_user_model()
 
-@login_required
-@staff_member_required
-def quests_library_list(request):
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class LibraryQuestListView(TemplateView):
     """
-    Display a list of all active quests available in the shared library
+    View for displaying a list of active quests from the shared library.
 
-    Args:
-        request: HttpRequest object containing request data
-
-    Returns:
-        HttpResponse: Rendered template with library quests context
+    Only quests that are both published and not archived
+    will be shown. Access is restricted to logged-in staff users.
     """
+    # Shared template, tab context determines which section is shown
+    template_name = 'library/library_overview.html'
 
-    with library_schema_context():
-        # Get the active quests and force the query to run while still in the library schema
-        # by calling len() on the queryset
-        library_quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
-        num_library = len(library_quests)
+    def get_context_data(self, **kwargs):
+        """
+        Populate context with active quests from the shared library.
 
-        context = {
-            'heading': 'Quests',
-            'library_quests': library_quests,
-            'num_library': num_library,
-            'library_tab_active': True,
-        }
+        Returns:
+            dict: Template context including:
+                - heading (str): Page title.
+                - tab (str): Active tab identifier.
+                - library_quests (QuerySet[Quest]): Evaluated queryset of active quest objects,
+                    with related Campaign and tags prefetched.
+                - num_quests (int): Number of quests in the displayed list, used for the UI badge.
+                - num_campaigns (int): Number of active Campaigns with importable quests,
+                    used for the UI badge in the Campaign tab.
+        """
+        context = super().get_context_data(**kwargs)
 
-    return render(request, 'library/library_quests.html', context)
+        with library_schema_context():
+            # Explicitly call len() to force evaluation inside the library context
+            # this forces all quests to load.
+            quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
+            num_quests = len(quests)
+            num_campaigns = Category.objects.all_published_with_importable_quests().count()
+
+        context.update({
+            'heading': 'Library',
+            'tab': 'quests',
+            'library_quests': quests,
+            'num_quests': num_quests,
+            'num_campaigns': num_campaigns,
+        })
+        return context
 
 
-@login_required
-@staff_member_required
-def campaigns_library_list(request):
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class LibraryCampaignListView(TemplateView):
     """
-    Display a list of all active campaigns (categories) available in the shared library.
+    View for displaying a list of active campaigns (categories) from the shared library.
 
-    Args:
-        request: HttpRequest object containing request data
-
-    Returns:
-        HttpResponse: Rendered template with library categories context
+    Only campaigns that are active and contain at least one quest that is both
+    published and not archived will be shown.
+    Access is restricted to logged-in staff users.
     """
+    # Shared template, tab context determines which section is shown
+    template_name = 'library/library_overview.html'
 
-    with library_schema_context():
-        # Get the active quests and force the query to run while still in the library schema
-        # by calling list() on the queryset
-        library_categories = list(Category.objects.filter(active=True))
+    def get_context_data(self, **kwargs):
+        """
+        Populate context with active campaigns from the shared library.
 
-        context = {
-            'object_list': library_categories,
-            'library_tab_active': True,
-        }
+        Returns:
+            dict: Template context including:
+                - heading (str): Page title.
+                - tab (str): Active tab identifier.
+                - library_campaigns (QuerySet[Category]): A queryset of active campaigns
+                    (categories) from the shared library. Each campaign includes at least one
+                    quest that is:
+                        - published=True
+                        - archived=False (not archived)
+                - num_campaigns (int): Number of campaigns in the displayed list, used for the UI badge.
+                - num_quests (int): Total number of visible (published and not archived) quests,
+                    used for the UI badge in the quest tab.
+        """
+        context = super().get_context_data(**kwargs)
 
-    return render(request, 'library/library_categories.html', context)
+        with library_schema_context():
+            # Explicitly call len() to force evaluation inside the library context
+            # this forces all Campaigns to load.
+            quests_count = Quest.objects.get_active().count()
+            campaigns = Category.objects.all_published_with_importable_quests()
+            num_campaigns = len(campaigns)
+
+        context.update({
+            'heading': 'Library',
+            'tab': 'campaigns',
+            'library_categories': campaigns,
+            'num_campaigns': num_campaigns,
+            'num_quests': quests_count,
+        })
+        return context
 
 
-@login_required
-@staff_member_required
-def import_quest_to_current_deck(request, quest_import_id):
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class ImportQuestView(View):
     """
-    Import a quest from the library to the current deck.
+    View for importing a single quest from the shared library into the current deck.
 
-    Args:
-        request: HttpRequest object containing request data
-        quest_import_id: String ID of the quest to import
+    Handles both GET and POST requests:
+    - GET: Renders a confirmation page before importing.
+    - POST: Performs the import if the quest does not already exist locally.
 
-    Returns:
-        HttpResponse: GET requests return rendered confirmation template
-        HttpResponseRedirect: POST requests redirect to drafts view
+    Only accessible to authenticated staff users.
     """
+    template_name = 'library/confirm_import_quest.html'
 
-    if request.method == 'GET':
-        # Check if the quest already exists in the deck
-        local_quest = Quest.objects.filter(import_id=quest_import_id).first()
+    def get(self, request, quest_import_id):
+        """
+        Display a confirmation page for importing the selected quest.
 
+        Args:
+            request (HttpRequest): The current HTTP request.
+            quest_import_id (UUID): The import ID of the quest to import.
+
+        Returns:
+            HttpResponse: Rendered confirmation template with:
+                - quest: The quest from the shared library.
+                - local_quest: The local quest with a matching import_id, if one exists.
+        """
+        # Look for a matching local quest (even if archived) to show a warning if it already exists
+        local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
+
+        # Fetch the quest from the shared library
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
 
-        context = {
+        return render(request, self.template_name, {
             'quest': quest,
+            # A Quest from the local deck matching the import_id, or None if not found.
             'local_quest': local_quest,
-        }
-        return render(request, 'library/confirm_import_quest.html', context)
+        })
 
-    elif request.method == 'POST':
+    def post(self, request, quest_import_id):
+        """
+        Import the selected quest into the current deck.
+
+        Args:
+            request (HttpRequest): The current HTTP request.
+            quest_import_id (UUID): The import ID of the quest to import.
+
+        Returns:
+            HttpResponseRedirect: Redirects to the draft quests view on success.
+
+        Raises:
+            PermissionDenied: If a quest with the same import ID already exists locally.
+        """
+        # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # If the quest already exists in the destination schema, throw 404.
-        # Shouldn't get here because the "Import" button is disabled
-        local_quest = Quest.objects.filter(import_id=quest_import_id).first()
-        if local_quest:
+        # Block import if the quest already exists locally (shouldn't happen because import button would be disabled)
+        if Quest.objects.all_including_archived().filter(import_id=quest_import_id).exists():
             raise PermissionDenied(f'Quest with import_id {quest_import_id} already exists in the current deck.')
 
         with library_schema_context():
             quest = get_object_or_404(Quest, import_id=quest_import_id)
-            quest_ids = [quest.import_id]
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
-            messages.success(request, f"Successfully imported '{quest.name}' to your deck.")
+            # Use dest_schema because current schema is library
+            import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
 
-    return redirect('quests:drafts')
+        # Show a message with a link to the imported quest
+        quest = get_object_or_404(Quest, import_id=quest_import_id)
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        messages.success(request, f"Successfully imported '{link}' to your deck.")
+
+        return redirect('quests:drafts')
 
 
-@login_required
-@staff_member_required
-def import_campaign(request, campaign_import_id):
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class ImportCampaignView(View):
     """
-    Import all quests from a specified campaign (category) to the current deck.
+    View for importing a full campaign (category) from the shared library into the current deck.
 
-    Args:
-        request: HttpRequest object containing request data
-        campaign_import_id: import ID (UUID) of the campaign to import
+    Handles both GET and POST requests:
+    - GET: Displays a confirmation page with campaign and quest details.
+    - POST: Imports all quests from the selected campaign.
 
-    Returns:
-        HttpResponse: GET requests return rendered confirmation template
-        HttpResponseRedirect: POST requests redirect to inactive categories view
+    Only accessible to authenticated staff users.
     """
+    template_name = 'library/confirm_import_campaign.html'
 
-    if request.method == 'GET':
-        # Check if the quest already exists in the deck
+    def get(self, request, campaign_import_id):
+        """
+        Display a confirmation page for importing a campaign.
+
+        Args:
+            request (HttpRequest): The current HTTP request.
+            campaign_import_id (UUID): The import ID of the campaign to import.
+
+        Returns:
+            HttpResponse: Renders the confirmation page with:
+                - category: The shared library campaign.
+                - local_category: A local campaign with the same import ID, if one exists.
+                - shared_quests: List of quests currently associated with the campaign.
+                - local_quest_import_ids: Set of import IDs for local quests that match.
+                - Additional campaign details (name, icon, XP, quest count, etc.)
+        """
+        # Check if the campaign already exists locally
         local_category = Category.objects.filter(import_id=campaign_import_id).first()
 
-        # Fetch and load the items, and include them in the context so we get the correct
-        # value from the database while we are still within the lbrary schema context.
         with library_schema_context():
-            category = get_object_or_404(Category, import_id=campaign_import_id)
-            category_icon_url = category.get_icon_url()
-            category_id = category.pk
-            category_quest_count = category.quest_count()
-            category_total_xp_available = category.xp_sum()
-            category_active = category.active
-            category_displayed_quests = list(category.quest_set.all())
-            category_name = category.name
+            library_category = get_object_or_404(Category, import_id=campaign_import_id)
+            category_id = library_category.pk
+            category_name = library_category.name
+            category_icon = library_category.get_icon_url()
+            category_quest_count = library_category.quest_count()
+            category_total_xp_available = library_category.xp_sum()
+            category_published = library_category.published
+
+            # Force evaluation of the queryset in the library to get full Quest objects for rendering.
+            shared_quests = list(library_category.current_quests())
+            # Extract import_ids from the list to compare with the local quests.
+            quest_import_ids = [q.import_id for q in shared_quests]
+
+        # Need local import_ids so the template can indicate which library quests already exist locally
+        local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
 
         context = {
-            'local_category': local_category,
-            'category': category,
+            'category': library_category,
             'category_id': category_id,
-            'category_campaign_name': category_name,
-            'category_icon_url': category_icon_url,
+            'category_name': category_name,
+            'category_icon_url': category_icon,
             'category_quest_count': category_quest_count,
             'category_total_xp_available': category_total_xp_available,
-            'category_active': category_active,
-            'category_displayed_quests': category_displayed_quests,
+            'category_published': category_published,
+            'category_displayed_quests': shared_quests,
+            'local_category': local_category,
+            'local_quest_import_ids': local_quest_import_ids,
             'use_schema': get_library_schema_name(),
         }
-        return render(request, 'library/confirm_import_campaign.html', context)
+        return render(request, self.template_name, context)
 
-    elif request.method == 'POST':
+    def post(self, request, campaign_import_id):
+        """
+        Import all quests from the selected campaign into the current deck.
+
+        Args:
+            request (HttpRequest): The current HTTP request.
+            campaign_import_id (UUID): The import ID of the campaign to import.
+
+        Returns:
+            HttpResponseRedirect: Redirects to the inactive campaigns view after import.
+
+        Raises:
+            PermissionDenied: If a campaign with the same import ID already exists locally.
+        """
+        # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # If the quest already exists in the destination schema, throw 404.
-        # Shouldn't get here because the "Import" button is disabled
-
+        # Block import if campaign already exists locally (shouldn't happen because import button would be disabled)
         local_category_qs = Category.objects.filter(import_id=campaign_import_id)
+        if local_category_qs.exists():
+            raise PermissionDenied(f'Campaign with import ID {campaign_import_id} already exists in the current deck.')
 
-        local_category = local_category_qs.first()
-        if local_category:
-            raise PermissionDenied(f'Campaign with name {campaign_import_id} already exists in the current deck.')
+        with library_schema_context():
+            category = get_object_or_404(Category, import_id=campaign_import_id)
+            # Collect import IDs for all quests in the campaign
+            # Inactive quests are filtered out by the importer
+            quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+            # Use dest_schema because current schema is library
+            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
+
+        # Show a message with a link to the imported campaign
+        category = get_object_or_404(Category, import_id=campaign_import_id)
+        link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
+        messages.success(request, f"Successfully imported '{link}' to your deck.")
+
+        # The campaign will be deactivated by import_campaign_to()
+        return redirect('quest_manager:categories_inactive')
+
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class ExportQuestView(View):
+    """
+    View for exporting a single quest from the current deck into the shared library.
+
+    Only the deck owner may export unless `allow_staff_export` is set to True.
+    """
+    template_name = 'library/confirm_export_quest.html'
+
+    def _require_export_permission(self, request):
+        """
+        Check whether the requesting user has permission to export a quest.
+
+        Raises:
+            PermissionDenied: If the user is not the deck owner and `allow_staff_export` is False.
+        """
+        config = SiteConfig.get()
+
+        if not (config.allow_staff_export or request.user == config.deck_owner):
+            raise PermissionDenied("Only the deck owner can export quests unless allow_staff_export is enabled.")
+
+    def get(self, request, quest_import_id):
+        """
+        Display the confirmation page for exporting a quest to the shared library.
+
+        Args:
+            request (HttpRequest): The current request object.
+            quest_import_id (UUID): The import ID of the quest to export.
+
+        Returns:
+            HttpResponse: Rendered confirmation template with quest details.
+        """
+        self._require_export_permission(request)
+
+        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.filter(import_id=quest.import_id).first()
+
+        return render(request, self.template_name, {
+            'quest': quest,
+            'library_quest': library_quest,
+        })
+
+    def post(self, request, quest_import_id):
+        """
+        Handle the export of a quest to the shared library.
+
+        Steps:
+            1. Validate user export permissions.
+            2. Ensure the quest does not already exist in the library.
+            3. Export the quest from the current schema to the library schema.
+            4. Send a notification to the library owner.
+            5. Display a success message to the exporter.
+
+        Args:
+            request (HttpRequest): The current request object.
+            quest_import_id (UUID): The import ID of the quest to export.
+
+        Returns:
+            HttpResponseRedirect: Redirect to the main quests list after successful export.
+
+        Raises:
+            PermissionDenied: If a quest with the same import ID already exists in the library.
+        """
+        self._require_export_permission(request)
+
+        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+
+        source_schema = connection.schema_name
+
+        with library_schema_context():
+            if Quest.objects.filter(import_id=quest.import_id).exists():
+                raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
+
+            # Perform export
+            export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+
+            # Get the newly exported quest
+            exported_quest = Quest.objects.get(import_id=quest.import_id)
+
+            config = SiteConfig.get()
+            sender = config.deck_ai
+
+            recipients = User.objects.filter(is_active=True, is_staff=True)
+
+            # Notification sent to all active Library staff about the export
+            notify.send(
+                sender=sender,
+                recipient=None,
+                affected_users=list(recipients),
+                verb=f"{request.user} exported a quest to the library from {source_schema}:",
+                action=quest,
+                target=exported_quest,
+                icon="<i class='fa fa-book'></i>"
+            )
+
+        # Success message displayed on local deck
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        messages.success(request, f"Successfully exported '{link}' to the shared library.")
+        return redirect('quests:quests')
+
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class CategoryDetailView(TemplateView):
+    """
+    View the content of a campaign (category) from the shared library.
+    """
+    template_name = 'library/category_detail_view.html'
+
+    def get_context_data(self, **kwargs):
+        """
+        Extend context data with detailed information about a specific campaign (category)
+        and its associated quests from the shared library schema.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments, expected to include 'campaign_import_id' (UUID)
+                    which identifies the campaign to fetch.
+
+        Returns:
+            dict: Context dictionary updated with:
+                - category (Category): The campaign/category instance.
+                - category_id (int): Primary key of the campaign.
+                - category_campaign_name (str): Title of the campaign.
+                - category_quest_count (int): Number of quests in the campaign.
+                - category_total_xp_available (int): Sum of XP from all publsihed quests in the campaign.
+                - category_displayed_quests (list[Quest]): List of quest objects to display.
+                - quest_info (list[dict]): List of dicts with detailed quest info.
+                - use_schema (str): Name of the library schema currently in use.
+        """
+        campaign_import_id = kwargs.get('campaign_import_id')
+        context = super().get_context_data(**kwargs)
 
         with library_schema_context():
             category = get_object_or_404(Category, import_id=campaign_import_id)
 
-            # Import all quests
-            quest_ids = list(category.quest_set.values_list('import_id', flat=True))
-            import_quests_to(destination_schema=dest_schema, quest_import_ids=quest_ids)
-            messages.success(request, f"Successfully imported '{category.name}' to your deck.")
+            displayed_quests = list(category.current_quests())
 
-        # Set the campaign to inactive after importing
-        local_category_qs.update(active=False)
-    return redirect('quest_manager:categories_inactive')
+            if displayed_quests:
+                quest_info = [
+                    {
+                        'id': q.id,
+                        'name': q.name,
+                        'xp': q.xp,
+                        'tags': list(q.tags.all()),
+                        'published': q.published,
+                        'expired': getattr(q, 'expired', False),
+                    }
+                    for q in displayed_quests
+                ]
+            else:
+                quest_info = []
+
+            context.update({
+                'category': category,
+                'category_id': category.pk,
+                'category_campaign_name': category.title,
+                'category_quest_count': category.quest_count(),
+                'category_total_xp_available': category.xp_sum(),
+                'category_displayed_quests': displayed_quests,
+                'quest_info': quest_info,
+                'use_schema': get_library_schema_name(),
+            })
+
+        return context

@@ -20,7 +20,7 @@
         Import ID: {{ local_category.import_id }}
       </p>
     </div>
-  {% elif object.active or request.user.is_staff %}
+  {% elif object.published or request.user.is_staff %}
     {% with object as category %}
       <form action="" method="post">
         {% csrf_token %}
@@ -32,6 +32,18 @@
                class="btn btn-success"
                {% if local_category %}disabled{% endif %} />
       </form>
+      {% if local_quest_import_ids %}
+        <div class="alert alert-danger panel-top">
+          <strong>Warning:</strong> One or more quests in this campaign already exist in your deck;
+          they are indicated with this icon <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the quest list below.
+          Importing this campaign will <strong>overwrite</strong> those existing quests with the versions from the library.
+          You will lose any local changes.
+        </div>
+      {% endif %}
+      <div class="well panel-top">
+        <p>Are you sure you want to import this campaign into your deck?</p>
+        <p>This will import all quests associated with the campaign from the shared library.</p>
+      </div>
       {% include "quest_manager/category_detail_content.html" %}
     {% endwith %}
   {% else %}

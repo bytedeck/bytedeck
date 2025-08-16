@@ -1,0 +1,48 @@
+{% extends "quest_manager/base.html" %}
+
+{% block head_title %}Library | Export Quest to Shared Library{% endblock %}
+
+{% block heading %}<i class="fa fa-book pull-right"></i>{% block heading_inner %}Export Quest to Library{% endblock%}{% endblock %}
+
+{% block content %}
+
+  {% if library_quest %}
+    <div class="alert alert-danger">
+      A quest with the same import ID already exists in the shared library. Exporting again is not allowed.
+    </div>
+  {% else %}
+    <p>Please read and agree to the following license before sharing this quest:</p>
+
+    <div class="alert alert-info">
+      This quest will be shared under the
+      <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">
+        Creative Commons Attribution-ShareAlike 4.0 International License.
+      </a>
+    </div>
+
+    <p class="text-muted">
+      Want to share more about this quest or start a discussion?
+      Join the conversation on the
+      <a href="https://github.com/bytedeck/bytedeck/discussions" target="_blank" rel="noopener noreferrer">
+        ByteDeck Library Discussions.
+      </a>
+    </p>
+
+    <form method="post" id="export-form">
+      {% csrf_token %}
+
+      <div class="form-check mb-3">
+        <input type="checkbox" class="form-check-input" id="agreeLicense" name="agreeLicense" required />
+        <label class="form-check-label" for="agreeLicense">
+          I agree to share this quest under the Creative Commons Attribution-ShareAlike 4.0 International License.*
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Share Quest to Library</button>
+      <a href="{% url 'quests:drafts' %}" class="btn btn-info">Cancel</a>
+    </form>
+
+    <h3>{{ quest.name }}</h3>
+    {% include 'quest_manager/quest_detail_content.html' %}
+  {% endif %}
+{% endblock %}

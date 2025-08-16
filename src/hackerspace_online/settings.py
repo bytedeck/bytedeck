@@ -773,9 +773,26 @@ DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
 TAGGIT_CASE_INSENSITIVE = True
 
 
+# TESTING ##################################################
+
+TESTING = 'test' in sys.argv
+if TESTING:
+    # Use weaker password hasher for speeding up tests
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
+
+    # django.test.override_settings does not simply work as expected.
+    # overriding settings here instead
+    CACHES['default'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'test-loc'
+    }
+
+
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
-if DEBUG:
+if DEBUG and not TESTING:
 
     import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
@@ -822,20 +839,3 @@ if DEBUG:
     # DEBUG_TOOLBAR_CONFIG = {
     #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
     # }
-
-
-# TESTING ##################################################
-
-TESTING = 'test' in sys.argv
-if TESTING:
-    # Use weaker password hasher for speeding up tests
-    PASSWORD_HASHERS = [
-        'django.contrib.auth.hashers.MD5PasswordHasher',
-    ]
-
-    # django.test.override_settings does not simply work as expected.
-    # overriding settings here instead
-    CACHES['default'] = {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'test-loc'
-    }

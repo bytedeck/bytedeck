@@ -1,0 +1,12 @@
+{% extends "quest_manager/base.html" %}
+
+{% block heading %}
+  <i class="fa fa-compass pull-right"></i>
+  {% block heading_inner %} {{ category.title }} Campaign{% endblock %}
+{% endblock %}
+
+{% block content %}
+  {% with object=category %}
+    {% include "quest_manager/category_detail_content.html" %}
+  {% endwith %}
+{% endblock %}

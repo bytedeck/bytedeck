@@ -27,6 +27,9 @@ back to its original look.
   {% if request.user.is_staff or request.user.profile.is_TA %}
     <a class="btn btn-primary" href="{% url 'quests:quest_create' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
   {% endif %}
+  {% if request.user.is_staff %}
+    <a class="btn btn-primary" href="?bulk_edit" role="button"><i class="fa fa-edit"></i> Bulk Edit</a>
+  {% endif %}
   {% if view_type == VIEW_TYPES.AVAILABLE and remove_hidden and request.user.profile.num_hidden_quests and request.user.profile.has_current_course %}
     <a class="btn btn-default" href="{% url 'quests:available_all' %}" role="button">
       Show Hidden Quests <span class="badge badge-muted">{{ request.user.profile.num_hidden_quests }}</span>
@@ -74,15 +77,14 @@ back to its original look.
       </li>
     {% endif %}
 
-    {% if config.enable_shared_library %}
-      {% if request.user.profile.is_TA or request.user.is_staff %}
-        <li role="presentation" {% if library_tab_active %}class="active"{% endif %}>
-          <a href="{% url 'library:quest_list' %}">
-            Library
-            <span class="badge">{{ num_library | default:"" }}</span>
-          </a>
-        </li>
-      {% endif %}
+
+    {% if request.user.is_staff %}
+      <li role="presentation" {% if view_type == VIEW_TYPES.ARCHIVED %}class="active"{% endif %}>
+        <a href="{% url 'quests:archived' %}">
+          Archived
+          <span class="badge">{{ num_archived | default:"" }}</span>
+        </a>
+      </li>
     {% endif %}
   </ul>
   <!-- Tab panes -->
@@ -134,13 +136,13 @@ back to its original look.
       </div>
     {% endif %}
 
-    {% if config.enable_shared_library %}
-      {% if request.user.profile.is_TA or request.user.is_staff %}
-        <div role="tabpanel"
-          class="tab-pane fade {% if library_tab_active %}in active{% endif %}" id="library">
-          {% include 'library/tab_library_quests.html' %}
-        </div>
-      {% endif %}
+    {% if request.user.is_staff %}
+    <div role="tabpanel"
+        class="tab-pane fade {% if view_type == VIEW_TYPES.ARCHIVED %}in active{% endif %}" id="archived">
+      {% with available_quests=archived_quests %}
+        {% include "quest_manager/tab_quests_available.html" %}
+      {% endwith %}
+    </div>
     {% endif %}
 
   </div>

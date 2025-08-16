@@ -283,6 +283,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.config.custom_stylesheet.name, '')  # use `.name` because field files are never empty (ie. <FieldFile: None>)
         self.assertEqual(self.config.custom_javascript.name, '')
         self.assertEqual(self.config.enable_shared_library, False)
+        self.assertEqual(self.config.allow_staff_export, False)
 
         # test deck owner fields on staff (non deck owner)
         # should not be affected by form data
@@ -292,6 +293,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
             'custom_javascript': SimpleUploadedFile('staff.js', b' ', content_type='text/javascript'),
             'deck_owner': staff.id,
             'enable_shared_library': True,
+            'allow_staff_export': True,
         })
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()
@@ -299,6 +301,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse('staff' in self.config.custom_javascript.name)
         self.assertNotEqual(self.config.deck_owner, staff)
         self.assertNotEqual(self.config.enable_shared_library, True)
+        self.assertFalse(self.config.allow_staff_export)
 
         # test deck owner fields on deck owner
         # should be affected by form data
@@ -309,6 +312,7 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
             'custom_javascript': SimpleUploadedFile('owner.js', b' ', content_type='text/javascript'),
             'deck_owner': staff.id,
             'enable_shared_library': True,
+            'allow_staff_export': True,
         })
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()
@@ -316,3 +320,4 @@ class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue('owner' in self.config.custom_javascript.name)
         self.assertEqual(self.config.deck_owner, staff)
         self.assertEqual(self.config.enable_shared_library, True)
+        self.assertTrue(self.config.allow_staff_export)

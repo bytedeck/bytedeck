@@ -13,7 +13,7 @@ class BadgeForm(forms.ModelForm):
         model = Badge
         fields = (
             'name', 'xp', 'icon', 'short_description', 'badge_type', 'tags',
-            'sort_order', 'active', 'map_transition', 'import_id'
+            'sort_order', 'published', 'map_transition', 'import_id'
         )
 
         widgets = {

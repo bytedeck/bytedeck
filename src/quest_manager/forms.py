@@ -61,12 +61,12 @@ class QuestForm(forms.ModelForm):
     campaign = forms.ModelChoiceField(
         queryset=Category.objects.all(),
         required=False,
-        limit_choices_to={'active': True}
+        limit_choices_to={'published': True}
     )
 
     class Meta:
         model = Quest
-        fields = ('name', 'visible_to_students', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
+        fields = ('name', 'published', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
                   'campaign', 'common_data', 'submission_details', 'instructor_notes',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
@@ -134,7 +134,7 @@ class QuestForm(forms.ModelForm):
                 'name',
                 'xp',
                 'xp_can_be_entered_by_students',
-                'visible_to_students',
+                'published',
                 'verification_required',
                 'icon',
                 'short_description',
@@ -180,7 +180,6 @@ class QuestForm(forms.ModelForm):
                         'date_expired',
                         'time_expired',
                         'available_outside_course',
-                        'archived',
                         'editor',
                         active=False,
                         template='crispy_forms/bootstrap3/accordion-group.html',
@@ -211,8 +210,8 @@ class TAQuestForm(QuestForm):
     """ Modified QuestForm that removes some fields TAs should not be able to set. """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # SET visible to students here to?
-        self.fields['visible_to_students'].widget = forms.HiddenInput()
+        # SET published here to?
+        self.fields['published'].widget = forms.HiddenInput()
         self.fields['available_outside_course'].widget = forms.HiddenInput()
         self.fields['archived'].widget = forms.HiddenInput()
         self.fields['editor'].widget = forms.HiddenInput()
