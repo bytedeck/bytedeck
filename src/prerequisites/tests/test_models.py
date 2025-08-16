@@ -107,9 +107,9 @@ class HasPrereqsMixinTest(TenantTestCase):
 
 class IsAPrereqMixinTest(TenantTestCase):
     def setUp(self):
-        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
-        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
-        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+        self.quest_parent = baker.make('quest_manager.Quest', name="parent", verification_required=True)
+        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq", verification_required=True)
+        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq", verification_required=True)
 
         self.prereq_with_or = Prereq.objects.create(
             parent_object=self.quest_parent,
@@ -117,7 +117,7 @@ class IsAPrereqMixinTest(TenantTestCase):
             or_prereq_object=self.quest_or_prereq
         )
 
-        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2", verification_required=True)
 
         self.prereq_without_or = Prereq.objects.create(
             parent_object=self.quest_parent,
