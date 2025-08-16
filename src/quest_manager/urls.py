@@ -67,6 +67,7 @@ urlpatterns = [
     re_path(r'^(?P<pk>[0-9]+)/delete/$', views.QuestDelete.as_view(), name='quest_delete'),
     re_path(r'^(?P<pk>[0-9]+)/archive/$', views.QuestArchive.as_view(), name="quest_archive"),
     re_path(r'^(?P<quest_id>[0-9]+)/unarchive/', views.unarchive, name='unarchive'),
+    re_path(r'^bulk-edit/$', views.QuestBulkEditView.as_view(), name='bulk_edit_quests'),
     re_path(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     re_path(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     re_path(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
