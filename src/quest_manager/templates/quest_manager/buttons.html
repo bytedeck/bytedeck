@@ -44,6 +44,12 @@
             title = "View past submissions of this quest" >
             <i class="fa fa-folder-open-o"></i>
           </a>
+          {% if request.resolver_match.url_name != 'quest_user_status' %}
+          <a class="btn btn-default" href="{% url 'quests:quest_user_status' q.id %}" role="button"
+            title="View status of all students for this quest">
+            <i class="fa fa-users"></i>
+          </a>
+          {% endif %}
           <a class="btn btn-default" href="{% url 'quests:summary' q.id %}" role="button"
             title="View summary data for this quest" >
             <i class="fa fa-fw fa-bar-chart"></i>

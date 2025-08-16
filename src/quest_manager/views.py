@@ -33,6 +33,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 from profile_manager.models import Profile
+from collections import Counter
 
 from .forms import (
     QuestForm,
@@ -923,6 +924,98 @@ def detail(request, quest_id):
     }
 
     return render(request, "quest_manager/detail.html", context)
+
+
+@non_public_only_view
+@staff_member_required
+def quest_user_status(request, quest_id):
+    """
+    Display the status of all active students for a given quest.
+
+    Retrieves all active student profiles and their latest submission for the specified quest.
+    For each student, determines their submission status, including:
+    - Not Started (no submission)
+    - Approved (approved submission)
+    - Returned (submission returned for revisions)
+    - Awaiting Approval (submission pending review)
+    - In Progress (submission in progress but not yet approved/returned)
+
+    Passes the quest and a list of user statuses with their submissions to the template
+    for rendering.
+
+    Args:
+        request (HttpRequest): The HTTP request object.
+        quest_id (int): The primary key of the quest.
+
+    Returns:
+        HttpResponse: Rendered page showing the user status list for the quest.
+    """
+    quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
+
+    active_students = Profile.objects.all_active().students_only().select_related('user')
+    user_ids = active_students.values_list('user_id', flat=True)
+
+    submissions = (
+        QuestSubmission.objects.filter(
+            quest=quest,
+            user_id__in=user_ids,
+        )
+        .select_related('user')
+        # Latest attempt first per user
+        .order_by('user_id', '-time_approved', '-id')
+    )
+
+    # Map each user to their latest submission using the first occurrence in the ordered queryset.
+    latest_sub_by_user = {}
+    for sub in submissions:
+        if sub.user_id not in latest_sub_by_user:
+            latest_sub_by_user[sub.user_id] = sub
+
+    user_status_list = []
+    for profile in active_students:
+        sub = latest_sub_by_user.get(profile.user_id)
+        if sub is None:
+            status = "Not Started"
+        elif sub.is_approved:
+            status = "Approved"
+        elif sub.is_returned():
+            status = "Returned"
+        elif sub.is_awaiting_approval():
+            status = "Awaiting Approval"
+        else:
+            status = "In Progress"
+
+        user_status_list.append({"user": profile.user, "status": status, "submission": sub})
+
+    total_students = len(user_status_list)
+    status_counts = Counter(user['status'] for user in user_status_list)
+    STATUS_ORDER = ["Approved", "Returned", "Awaiting Approval", "In Progress", "Not Started"]
+    status_stats = []
+
+    for status in STATUS_ORDER:
+        count = status_counts.get(status, 0)
+        percent = (count / total_students * 100) if total_students else 0
+        status_stats.append({
+            "status": status,
+            "count": count,
+            "percent": f"{percent:.0f}%"
+        })
+
+    status_order_index = {status: i for i, status in enumerate(STATUS_ORDER)}
+
+    # sort user-status_list by the desired status order
+    user_status_list.sort(key=lambda x: status_order_index.get(x['status'], 99))
+
+    context = {
+        "q": quest,
+        "maps": CytoScape.objects.get_related_maps(quest),
+        "user_status_list": user_status_list,
+        "status_stats": status_stats,
+        "no_details": False,
+        "is_library_view": False,
+    }
+
+    return render(request, "quest_manager/quest_user_status.html", context)
 
 
 #######################################

@@ -16,6 +16,8 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from django.http import JsonResponse
+from django.utils import timezone
+
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -114,6 +116,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:in_progress')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('quests:quest_user_status', args=[q_pk])).status_code, 403)
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
@@ -150,6 +153,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse('quests:quest_user_status', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 302)
 
@@ -1242,6 +1246,141 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(url)
         self.assertContains(response, "Unarchive All Selected")
         self.assertContains(response, "Delete All Selected")
+
+
+class QuestUserStatusViewTests(ViewTestUtilsMixin, TenantTestCase):
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        # staff user to login as
+        self.staff_user = baker.make(User, username='staff', password='pass', is_staff=True)
+        self.client.force_login(self.staff_user)
+
+        # create a quest
+        self.quest = baker.make(Quest, name="Test Quest")
+
+        # create 3 student users (Profiles auto-created by signal)
+        self.students = baker.make(User, _quantity=3, username=baker.seq("student"))
+        self.student1, self.student2, self.student3 = self.students
+
+        for u in self.students:
+            baker.make('courses.CourseStudent', user=u, semester=SiteConfig.get().active_semester)
+
+    def test_view_displays_users_and_statuses(self):
+        """
+        Verify that the quest_user_status view:
+        - Lists all relevant users with the correct status label
+        (Approved, Returned, Awaiting Approval, and optionally Not Started).
+        - Provides accurate counts and percentages in status_stats.
+        - Correctly maps:
+            * Approved submissions -> Approved
+            * Returned submissions -> Returned
+            * Submitted but not approved submissions -> Awaiting Approval
+        """
+        # Approved submission
+        QuestSubmission.objects.create(
+            quest=self.quest,
+            user=self.student1,
+            is_approved=True,
+            is_completed=True,
+            time_approved=timezone.now(),
+            time_completed=timezone.now(),
+            ordinal=1,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        # Returned submission
+        QuestSubmission.objects.create(
+            quest=self.quest,
+            user=self.student2,
+            is_approved=False,
+            is_completed=False,
+            time_returned=timezone.now(),
+            time_completed=timezone.now(),
+            ordinal=1,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        # Pending submission
+        QuestSubmission.objects.create(
+            quest=self.quest,
+            user=self.student3,
+            is_approved=False,
+            is_completed=True,
+            time_completed=timezone.now(),
+            ordinal=1,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        url = reverse('quests:quest_user_status', args=[self.quest.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify user_status_list
+        user_status_list = response.context['user_status_list']
+        self.assertEqual(len(user_status_list), 3)
+        usernames = [entry['user'].username for entry in user_status_list]
+        self.assertIn(self.student1.username, usernames)
+        self.assertIn(self.student2.username, usernames)
+        self.assertIn(self.student3.username, usernames)
+
+        statuses = {entry['user'].username: entry['status'] for entry in user_status_list}
+        self.assertEqual(statuses[self.student1.username], 'Approved')
+        self.assertEqual(statuses[self.student2.username], 'Returned')
+        self.assertEqual(statuses[self.student3.username], 'Awaiting Approval')
+
+        # Verify status_stats
+        status_stats = response.context['status_stats']
+        stats_dict = {stat['status']: stat for stat in status_stats}
+        self.assertEqual(stats_dict['Approved']['count'], 1)
+        self.assertEqual(stats_dict['Returned']['count'], 1)
+        self.assertEqual(stats_dict['Awaiting Approval']['count'], 1)
+        self.assertEqual(stats_dict['Approved']['percent'], "33%")
+        self.assertEqual(stats_dict['Returned']['percent'], "33%")
+        self.assertEqual(stats_dict['Awaiting Approval']['percent'], "33%")
+
+    def test_users_with_no_submission_show_not_started(self):
+        url = reverse('quests:quest_user_status', args=[self.quest.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        user_status_list = response.context['user_status_list']
+        self.assertEqual(len(user_status_list), 3)
+        for entry in user_status_list:
+            self.assertEqual(entry['status'], 'Not Started')
+            self.assertIsNone(entry['submission'])
+
+    def test_latest_attempt_is_used_when_multiple_submissions_exist(self):
+        """
+        If a student has an older approved submission and then makes a new attempt
+        (awaiting approval), the status should reflect the newest attempt.
+        """
+        # Student1: older approved
+        QuestSubmission.objects.create(
+            quest=self.quest,
+            user=self.student1,
+            is_approved=True,
+            is_completed=True,
+            time_approved=timezone.now(),
+            time_completed=timezone.now(),
+            ordinal=1,
+            semester=SiteConfig.get().active_semester,
+        )
+        # Newer pending attempt (creation happens after the above)
+        QuestSubmission.objects.create(
+            quest=self.quest,
+            user=self.student1,
+            is_approved=False,
+            is_completed=True,
+            time_completed=timezone.now(),
+            ordinal=2,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        statuses = {entry['user'].username: entry['status'] for entry in response.context['user_status_list']}
+        self.assertEqual(statuses[self.student1.username], 'Awaiting Approval')
 
 
 class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
