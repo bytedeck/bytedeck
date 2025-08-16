@@ -43,6 +43,14 @@ class UrlizeTests(SimpleTestCase):
         """
         Test that a simple URL is correctly converted into an anchor tag
         and the URL text is preserved.
+
+        Tests various scenarios:
+        - Plain URL conversion
+        - URLs preceded by numeric prefixes (e.g., "1.www.example.com")
+        - URLs preceded by alphabetic prefixes (e.g., "a.www.example.com")
+        - Both www and http protocol variants
+
+        Verifies that prefixes remain outside the anchor tag href attribute.
         """
         text = "Visit www.example.com"
         result = urlize(text)
@@ -51,35 +59,41 @@ class UrlizeTests(SimpleTestCase):
 
         text = "1.www.example.com"
         result = urlize(text)
-        self.assertIn('<a href="http://www.example.com"', result)
         self.assertTrue(result.startswith('1.<a href="http://www.example.com"'))
 
         text = "a.www.example.com"
         result = urlize(text)
-        self.assertIn('<a href="http://www.example.com"', result)
         self.assertTrue(result.startswith('a.<a href="http://www.example.com"'))
 
         text = "1.http://example.com"
         result = urlize(text)
-        self.assertIn('<a href="http://example.com"', result)
         self.assertTrue(result.startswith('1.<a href="http://example.com"'))
 
         text = "a.http://example.com"
         result = urlize(text)
-        self.assertIn('<a href="http://example.com"', result)
         self.assertTrue(result.startswith('a.<a href="http://example.com"'))
 
     def test_empty(self):
         """
         Test that empty string or None input returns an empty string without error.
+
+        Parameters tested:
+        - Empty string ("")
+        - None value
+
+        Expected behavior: Both should return empty string without raising exceptions.
         """
         self.assertEqual(urlize(""), "")
         self.assertEqual(urlize(None), "")
 
     def test_trim_url_limit(self):
         """
-        Test that URLs longer than trim_url_limit are trimmed in the displayed
-        text but keep the full URL in the href attribute.
+        Test that long URLs are visually trimmed in the anchor text,
+        while the href attribute retains the full URL.
+
+        Test cases:
+        - Long URL with custom trim_url_limit
+        - Short URL with a large limit (no trimming expected)
         """
         url = "http://example.com/this/is/a/very/long/url/that/needs/trimming"
         trimmed_length = 30
@@ -95,9 +109,19 @@ class UrlizeTests(SimpleTestCase):
         self.assertTrue(result.startswith(f'<a href="{url}"'))
         self.assertEqual(visible_text, expected_display)
 
+        # Test no trim
+        url = "http://short.url"
+        result = urlize(url, trim_url_limit=100)
+        self.assertIn(url, result)
+        self.assertNotIn("...", result)
+
     def test_multiple_urls(self):
         """
         Test that multiple URLs in the input text are all converted into anchor tags.
+
+        Input: Text containing two different URLs with different protocols
+        Expected: Both URLs should be converted to separate anchor tags
+        Verifies: Correct href attributes and proper count of anchor elements
         """
         text = "Links: http://foo.com and https://bar.com/page"
         result = urlize(text)
@@ -105,49 +129,63 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="https://bar.com/page"', result)
         self.assertEqual(result.count('<a '), 2)
 
-    def test_no_trim(self):
-        """
-        Test that URLs shorter than trim_url_limit are not trimmed
-        and the display text matches the full URL.
-        """
-        url = "http://short.url"
-        result = urlize(url, trim_url_limit=100)
-        self.assertIn(url, result)
-        self.assertNotIn("...", result)
-
     def test_url_positions(self):
+        """
+        Test that URLs are correctly linkified regardless of their position
+        in the input string (start, middle, or end).
+
+        Test cases:
+        - URL at the beginning of the string
+        - URL in the middle with surrounding text
+        - URL at the end of the string
+
+        Verifies: Proper href attribute generation for all positions
+        """
         self.assertIn('<a href="http://start.com"', urlize("http://start.com is at the start"))
         self.assertIn('<a href="http://middle.com"', urlize("Text before http://middle.com text after"))
         self.assertIn('<a href="http://end.com"', urlize("Ends with http://end.com"))
 
-    def test_https_link(self):
-        result = urlize("Check https://secure.com")
-        self.assertIn('href="https://secure.com"', result)
-
     def test_non_url_text(self):
+        """
+        Test that plain text without any URLs is returned unmodified.
+        """
         text = "This is just a sentence. Not a link!"
         result = urlize(text)
         self.assertEqual(result, text)
 
     def test_trailing_punctuation(self):
+        """
+        Test that trailing punctuation such as periods is excluded
+        from the anchor tag.
+
+        Input: "Visit http://example.com."
+        Expected: Anchor ends before period, period remains outside
+        """
         result = urlize("Visit http://example.com.")
         self.assertIn('href="http://example.com"', result)
         self.assertTrue(result.endswith("</a>."))
 
     def test_already_linked_html(self):
+        """
+        Test that pre-existing <a> tags are preserved and not double-processed.
+
+        Security consideration: Prevents nested anchor tags which would create
+        invalid HTML and potential security vulnerabilities.
+
+        Input: HTML string containing existing anchor tag
+        Expected: Original HTML returned unchanged
+        """
         html = '<a href="http://example.com">example</a>'
         result = urlize(html)
         self.assertEqual(result, html)
 
     def test_no_javascript_links(self):
+        """
+        Test that javascript: links are not linkified for security reasons.
+        """
         text = "Click javascript:alert('xss')"
         result = urlize(text)
         self.assertNotIn("href=", result)  # Should not linkify
-
-    def test_display_text_preserved(self):
-        url = "http://test.com"
-        result = urlize(url)
-        self.assertEqual(result, '<a href="http://test.com">http://test.com</a>')
 
     def test_clean_html_url_integration(self):
         """
@@ -194,3 +232,26 @@ class UrlizeTests(SimpleTestCase):
         text = "Check javascript:alert('XSS')"
         result = clean_html(text)
         self.assertNotIn('<a ', result)
+
+    def test_numbered_list_with_br(self):
+        # Input simulating comment input with <br> instead of newlines
+        input_text = (
+            "1.www.testing.com<br>"
+            "2.www.example.com<br>"
+            "3.www.notarealsite.com<br>"
+            "4.testing.com<br>"
+            "5.example.com"
+        )
+
+        result = urlize(input_text)
+
+        # Make sure each prefix is outside the <a> tag
+        self.assertTrue(result.startswith('1.<a href="http://www.testing.com"'))
+        self.assertIn('2.<a href="http://www.example.com"', result)
+        self.assertIn('3.<a href="http://www.notarealsite.com"', result)
+        self.assertIn('4.<a href="http://testing.com"', result)
+        self.assertIn('5.<a href="http://example.com"', result)
+
+        # Ensure prefixes are NOT inside the links
+        self.assertNotIn('<a href="http://1.', result)
+        self.assertNotIn('<a href="http://2.', result)

@@ -20,16 +20,6 @@
         <ul class="list-unstyled">
           <li><h4>XP: {{quest.xp}}{% if quest.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}</h4></li>
           <li>Campaign: {% if quest.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' quest.campaign.id %}">{{ quest.campaign }}</a>{% else %}{{ quest.campaign }}{% endif %}{% else %}-{% endif %}</li>
-          <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}</li>
-          {% if request.user.is_staff %}
-          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
-          {% else %}
-          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
-          {% endif %}
-        </ul>
-      </div>
-      <div class="col-sm-6">
-        <ul class="list-unstyled">
           <li>Expiry: {{quest.date_expired}}</li>
           <li>Repeatable: {% if quest.max_repeats == 0 %}No
                  {% else %}
@@ -40,6 +30,16 @@
                    - every {{ quest.hours_between_repeats}} hrs
                    {% endif %}
                 {% endif %}</li>
+        </ul>
+      </div>
+      <div class="col-sm-6">
+        <ul class="list-unstyled">
+          <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}</li>
+          {% if request.user.is_staff %}
+          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
+          {% else %}
+          <li>{% tag_name %}s: {% with quest as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
+          {% endif %}
           {% if quest.max_repeats != 0 %}
           <li>Maximum total XP: {% if quest.max_xp == -1 %} Unlimited
               {% else %} {{quest.max_xp}}

@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
+from django.contrib.contenttypes.models import ContentType
 from unittest import TestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
@@ -14,14 +15,21 @@ class NotificationModelTest(TenantTestCase):
         User = get_user_model()
         self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         self.student = baker.make(User)
-        self.notification = baker.make(Notification)
         # self.assertion = baker.make(BadgeAssertion)
         # self.badge = Recipe(Badge, xp=20).make()
         # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
 
     def test_notification_creation(self):
-        self.assertIsInstance(self.notification, Notification)
-        self.assertIsNotNone(str(self.notification))
+        notification = Notification.objects.create(
+            recipient=self.student,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher),
+            sender_object_id=self.teacher.id,
+            verb="sent you a notification"
+        )
+        notification.full_clean()
+        notification.save()
+        self.assertIsInstance(notification, Notification)
+        self.assertIsNotNone(str(notification))
 
     def test_mark_read(self):
         notification = baker.make(Notification)
@@ -89,8 +97,17 @@ class NotificationModelTest(TenantTestCase):
         self.assertEqual(notification.action_object_id, comment.id)
 
         # Base case: check if notification without comment does not have hash
-        self.assertFalse('#comment-' in self.notification.get_url())
-        self.assertFalse('#comment-' in str(self.notification))
+        base_notification = Notification.objects.create(
+            recipient=self.student,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher),
+            sender_object_id=self.teacher.id,
+            verb="sent you a notification"
+        )
+        base_notification.full_clean()
+        base_notification.save()
+
+        self.assertFalse('#comment-' in base_notification.get_url())
+        self.assertFalse('#comment-' in str(base_notification))
 
         # check if notification with comment has a hash
         comment_hash = f'#comment-{comment.id}'

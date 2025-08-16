@@ -1,7 +1,7 @@
 {% load utility_tags %}
 
-{% if not badge.active %}
-    <p class='text-danger'><i class='fa fa-eye-slash'></i> INACTIVE</p>
+{% if not badge.published %}
+    <p class='text-danger'><i class='fa fa-eye-slash'></i> UNPUBLISHED</p>
 {% endif %}
 
 <p>{{badge.short_description}}</p>

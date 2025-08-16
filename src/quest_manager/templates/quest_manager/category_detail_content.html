@@ -20,7 +20,7 @@
         <ul class="list-unstyled">
           <li>Published quests in this campaign: {% firstof category_quest_count category.quest_count "0" %}</li>
           <li>Total XP available: {% firstof category_total_xp_available category.xp_sum "0" %}</li>
-          <li>Active: {% firstof category_active category.active %}</li>
+          <li>Published: {% firstof category_published category.published %}</li>
         </ul>
       </div>
     </div>
@@ -56,7 +56,7 @@
              aria-multiselectable="true">
         {% for q in category_displayed_quests %}
           <tr class="accordian-trigger panel-title
-              {% if not q.visible_to_students %}danger
+              {% if not q.published %}danger
               {% elif q.expired %}warning
               {% else %}default{% endif %}
               {% if q.id == active_q_id %} active {% endif %}"
@@ -77,7 +77,11 @@
             <td class="col-sm-1 hidden-xs text-center">
               <small>{{ q.tags.all|join:", "|default:"-" }}</small>
             </td>
-            <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted"></td>
+            <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">
+              {% if q.import_id in local_quest_import_ids %}
+                <i title="This quest already exists in your deck and any local changes will be overwritten." class="icon-spacing fa fa-fw fa-exclamation-triangle">
+              {% endif %}
+            </td>
           </tr>
           <!-- accordian -->
         {% endfor %}
@@ -94,7 +98,7 @@
     {% endcomment %}
     <div style="display: none"
          id="collapse-quest-{{ q.id }}"
-         class="{% if not q.visible_to_students %}danger {% elif q.expired %}warning {% else %}default{% endif %}"
+         class="{% if not q.published %}danger {% elif q.expired %}warning {% else %}default{% endif %}"
          role="tabpanel"
          aria-labelledby="heading-quest-{{ q.id }}">
       <ul class="list-group">

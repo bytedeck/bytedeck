@@ -25,13 +25,14 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
-from library.utils import from_library_schema_first
+from library.utils import from_library_schema_first, get_library_schema_name
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
+from profile_manager.models import Profile
 
 from .forms import (
     QuestForm,
@@ -78,9 +79,9 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         queryset = super().get_queryset()
 
         if self.inactive_tab_active:
-            queryset = queryset.filter(active=False)
+            queryset = queryset.filter(published=False)
         else:
-            queryset = queryset.filter(active=True)
+            queryset = queryset.filter(published=True)
 
         return queryset
 
@@ -126,7 +127,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "short_description", "icon", "active")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -139,7 +140,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "short_description", "icon", "active")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -154,6 +155,40 @@ class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
 class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
     model = Category
     success_url = reverse_lazy("quests:categories")
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests by delegating to the delete method to
+        enforce custom deletion logic and validation.
+        """
+        return self.delete(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Attempt to delete the Category object only if it has no published quests.
+        If published quests exist, prevent deletion and display an error message.
+
+        This logic protects against race conditions where the user loads the delete
+        confirmation page while the campaign appears deletable (e.g., only has
+        unpublished quests), but by the time they submit the form, one or more
+        quests may have been published.
+        https://github.com/bytedeck/bytedeck/pull/1837#discussion_r2232233693
+
+        Returns:
+            HttpResponseRedirect on successful deletion or redirect back with error.
+        """
+        self.object = self.get_object()
+
+        # Use a fresh queryset directly from Quest.objects instead of self.object.quest_set
+        # to avoid stale cached related objects and ensure we check the latest DB state.
+        if Quest.objects.filter(campaign=self.object, published=True).exists():
+            messages.error(
+                request,
+                "You can't delete this campaign because it contains published quests"
+            )
+            return redirect(self.success_url)
+
+        return super().delete(request, *args, **kwargs)
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
@@ -173,12 +208,12 @@ class QuestFormViewMixin:
     model = Quest
 
     def form_valid(self, form):
-        # TA created quests should not be visible to students.
+        # TA created quests should not be published.
         if self.request.user.profile.is_TA:
-            form.instance.visible_to_students = False
+            form.instance.published = False
             form.instance.editor = self.request.user
-        # When a teacher makes a form visible, remove editor abilities.
-        elif form.instance.visible_to_students:
+        # When a teacher makes a form published, remove editor abilities.
+        elif form.instance.published:
             form.instance.editor = None
 
         # Save the object so we can add prereqs to it
@@ -251,13 +286,15 @@ class QuestCopy(QuestCreate):
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+        # Set initial tags and prerequisite for the form
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
 
+        # Create a new Quest instance based on the copied quest
         new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
         new_quest.pk = None  # autogen a new primary key (quest_id by default)
-        new_quest.import_id = uuid.uuid4()
-        new_quest.name = new_quest.name + " - COPY"
+        new_quest.import_id = uuid.uuid4()  # assign a new import ID
+        new_quest.name = new_quest.name + " - COPY"  # indicate this is a copy
 
         kwargs["instance"] = new_quest
         return kwargs
@@ -294,6 +331,209 @@ class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
         context["latest_submission_time"] = latest_submission_time
 
         return context
+
+
+@method_decorator([staff_member_required], name="dispatch")
+class QuestArchive(NonPublicOnlyViewMixin, DetailView):
+    model = Quest
+    template_name = "quest_manager/quest_confirm_archive.html"
+
+    def get_context_data(self, **kwargs):
+        """
+        Add prerequisite information to the context for the archive confirmation page.
+
+        Includes a list of all objects that list this quest as a prerequisite, regardless of active status,
+        under the 'prereq_of' key for use in the template.
+        """
+        context = super().get_context_data(**kwargs)
+        quest = self.get_object()
+        prereq_of = []
+        for obj in quest.get_reliant_objects(active_only=False):
+            # add an attribute 'model_name' for template use
+            obj.model_name = obj.__class__.__name__
+            prereq_of.append(obj)
+
+        context['prereq_of'] = prereq_of
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """
+        Archive a quest after confirmation, unless it is currently used as a prerequisite.
+
+        If the quest is a prerequisite for any other quests, prevent archiving, display
+        an error message, and redirect the user to the quest detail page.
+
+        If archiving proceeds:
+        - Set `archived=True` and validate/save the quest.
+        - Delete all submissions associated with the quest.
+        - Recalculate/invalidate XP for all users who previously submitted the quest.
+        - Display a success message.
+        - Redirect to the archived quests list.
+
+        Returns:
+            HttpResponseRedirect: Either to the quest detail page (if blocked) or the archived list (if successful).
+        """
+        quest = self.get_object()
+
+        if quest.is_used_prereq():
+            messages.error(
+                request,
+                "You cannot archive this quest while it is a prerequisite for other quests. "
+                "Remove it as a prerequisite from all dependent quests before archiving."
+            )
+            return redirect("quests:quest_detail", quest.id)
+
+        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+
+        # Archive the quest
+        quest.archived = True
+        quest.published = False
+        quest.full_clean()
+        quest.save()
+
+        # Use the base manager to include all submissions (even if your default manager filters some out)
+        base_qs = QuestSubmission._base_manager.filter(quest=quest)
+
+        # Grab affected user IDs before deletion
+        user_ids = list(base_qs.values_list('user_id', flat=True).distinct())
+
+        # Delete all submissions in one go
+        base_qs.delete()
+
+        # Invalidate XP for each affected user
+        for user_id in user_ids:
+            try:
+                profile = Profile.objects.get(user_id=user_id)
+                profile.xp_invalidate_cache()
+            except Profile.DoesNotExist:
+                continue
+
+        messages.success(
+            request,
+            f"Quest '{link}' has been archived and all its submissions have been deleted."
+        )
+        return redirect("quests:archived")
+
+
+class QuestBulkEditView(UserPassesTestMixin, View):
+    """
+    View to handle bulk editing operations on Quest objects.
+
+    Allows staff users (and TAs for permission checks) to perform bulk actions
+    such as publishing, unpublishing, deleting, and unarchiving multiple quests at once.
+
+    GET requests redirect to the main quest list with bulk edit mode enabled.
+
+    POST requests perform the specified bulk action on the selected quests and
+    redirect back to the quest list with a success or error message.
+
+    Permissions:
+        Only users passing `is_staff_or_TA` check are allowed.
+
+    Actions supported:
+        - delete
+        - publish
+        - unpublish
+        - unarchive
+    """
+
+    # Note: TAs pass this permission check, but bulk editing UI is currently restricted to staff only,
+    # so TAs cannot perform bulk edits via the frontend yet.
+    def test_func(self):
+        return is_staff_or_TA(self.request.user)
+
+    @staticmethod
+    def bulk_update_quests(quests, field_updates: dict, extra_update_fields: list = None):
+        """
+        Apply field updates to each quest in the queryset and save them individually.
+
+        Args:
+            quests (QuerySet): A queryset of Quest instances.
+            field_updates (dict): Field name -> new value.
+            extra_update_fields (list): Any extra fields to save beyond those in field_updates.
+
+        Returns:
+            int: Number of quests updated.
+        """
+        count = 0
+        update_fields = list(field_updates.keys())
+        if extra_update_fields:
+            update_fields.extend(extra_update_fields)
+
+        seen = set()
+        update_fields = [f for f in update_fields if not (f in seen or seen.add(f))]
+
+        for quest in quests.iterator():
+            for field, value in field_updates.items():
+                setattr(quest, field, value)
+            quest.full_clean()
+            quest.save(update_fields=update_fields)
+            count += 1
+        return count
+
+    def get(self, request, *args, **kwargs):
+        bulk_edit_mode = request.user.is_staff and 'bulk_edit' in request.GET
+        context = {
+            'bulk_edit_mode': bulk_edit_mode,
+        }
+        return render(request, 'quest_manager/tab_quests_available.html', context)
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handle bulk editing operations on selected quests, including:
+        - Deletion
+        - Publishing
+        - Unpublishing
+        - Unarchiving
+
+        Expects:
+            - 'selected_quests[]': A list of quest IDs to act upon.
+            - 'action': The bulk action to perform (e.g., "delete", "publish").
+
+        Redirects to the quest list view with a success or warning message.
+
+        Returns:
+            HttpResponseRedirect: Redirect to the quest list page with feedback.
+        """
+        quest_ids = request.POST.getlist("selected_quests[]")
+        action = request.POST.get("action")
+
+        if not quest_ids:
+            messages.warning(request, "No quests selected.")
+            return redirect("quests:quests")
+        if action in ["unarchive", "delete"]:
+            # Include archived quests for delete and unarchive actions because
+            # those target quests excluded from the default queryset.
+            quests = Quest.objects.all_including_archived().filter(id__in=quest_ids)
+        else:
+            quests = Quest.objects.filter(id__in=quest_ids)
+
+        if action == "delete":
+            count = 0
+            for quest in quests:
+                quest.delete()
+                count += 1
+            messages.success(request, f"{count} quest(s) deleted.")
+        elif action == "publish":
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"published": True, "editor": None}
+            )
+            messages.success(request, f"{count} quest(s) published.")
+        elif action == "unpublish":
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"published": False}
+            )
+            messages.success(request, f"{count} quest(s) unpublished.")
+        elif action == "unarchive":
+            count = self.bulk_update_quests(
+                quests,
+                field_updates={"archived": False, "published": False}
+            )
+            messages.success(request, f"{count} quest(s) unarchived.")
+
+        return redirect("quests:quests")
 
 
 @method_decorator(staff_member_required, name="dispatch")
@@ -412,6 +652,7 @@ class QuestListViewTabTypes:
     COMPLETED = 2
     PAST = 3
     DRAFT = 4
+    ARCHIVED = 5
 
 
 @non_public_only_view
@@ -422,6 +663,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = []
     past_submissions = []
     draft_quests = []
+    archived_quests = []
 
     view_type = QuestListViewTabTypes.AVAILABLE
     remove_hidden = True
@@ -442,6 +684,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         view_type = QuestListViewTabTypes.PAST
     elif "/drafts/" in request.path_info:
         view_type = QuestListViewTabTypes.DRAFT
+    elif "/archived/" in request.path_info:
+        view_type = QuestListViewTabTypes.ARCHIVED
     else:
         view_type = QuestListViewTabTypes.AVAILABLE
         if "/all/" in request.path_info:
@@ -453,7 +697,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     if request.user.is_staff:
         available_quests = (
             Quest.objects.all()
-            .visible()
+            .published()
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
         )
@@ -477,12 +721,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     completed_submissions = QuestSubmission.objects.all_completed(request.user)
     past_submissions = QuestSubmission.objects.all_completed_past(request.user)
     draft_quests = Quest.objects.all_drafts(request.user)
+    archived_quests = Quest.objects.all_archived(request.user)
 
     # Counts
     in_progress_submissions_count = in_progress_submissions.count()
     completed_submissions_count = completed_submissions.count()
     past_submissions_count = past_submissions.count()
     drafts_count = draft_quests.count()
+    archived_count = archived_quests.count()
     available_quests_count = (
         len(available_quests)
         if type(available_quests) is list
@@ -502,6 +748,13 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         past_submissions = paginate(past_submissions, page)
         # available_quests = []
 
+    if view_type == QuestListViewTabTypes.DRAFT:
+        quests = draft_quests
+    elif view_type == QuestListViewTabTypes.ARCHIVED:
+        quests = archived_quests
+    else:
+        quests = available_quests
+
     # Used to explain why the "Available" tab is empty, if it is
     awaiting_approval = QuestSubmission.objects.filter(
         user=request.user, is_approved=False, is_completed=True
@@ -509,6 +762,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     context = {
         "heading": "Quests",
+        "quests": quests,
         "awaiting_approval": awaiting_approval,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
@@ -518,6 +772,8 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "completed_submissions": completed_submissions,
         "draft_quests": draft_quests,
         "num_drafts": drafts_count,
+        "archived_quests": archived_quests,
+        "num_archived": archived_count,
         "past_submissions": past_submissions,
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
@@ -525,6 +781,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
         "quick_reply_form": quick_reply_form,
+        "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
     }
     return render(request, template, context)
 
@@ -538,11 +795,23 @@ def ajax_quest_info(request, quest_id=None):
 
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
+            site_config = SiteConfig.get()
+            current_schema = getattr(request.tenant, "schema_name", None)
+            can_export = (
+                (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
+                and current_schema != get_library_schema_name()
+            )
+
             if quest_id:
-                quest = get_object_or_404(Quest, pk=quest_id)
+                if request.user.is_staff:
+                    quest = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
+                else:
+                    quest = get_object_or_404(Quest, pk=quest_id)
 
                 template = 'quest_manager/preview_content_quests_avail.html'
-                quest_info_html = render_to_string(template, {'q': quest, 'is_library_view': is_library_view}, request=request)
+                quest_info_html = render_to_string(template,
+                                                   {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                   request=request)
 
                 data = {'quest_info_html': quest_info_html}
 
@@ -553,7 +822,9 @@ def ajax_quest_info(request, quest_id=None):
                 all_quest_info_html = {}
 
                 for q in quests:
-                    all_quest_info_html[q.id] = render_to_string(template, {'q': q, 'is_library_view': is_library_view}, request=request)
+                    all_quest_info_html[q.id] = render_to_string(template,
+                                                                 {'q': q, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                                 request=request)
 
                 data = json.dumps(all_quest_info_html)
                 return JsonResponse(data, safe=False)
@@ -567,7 +838,7 @@ def ajax_quest_info(request, quest_id=None):
 @login_required
 def ajax_approval_info(request, submission_id=None):
     if request.method == "POST":
-        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_visible_to_students=False)
+        qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_published=False)
 
         sub = get_object_or_404(qs, pk=submission_id)
         template = 'quest_manager/preview_content_approvals.html'
@@ -620,7 +891,7 @@ def detail(request, quest_id):
     :return:
     """
 
-    q = get_object_or_404(Quest, pk=quest_id)
+    q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
 
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
@@ -636,11 +907,19 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
+    site_config = SiteConfig.get()
+    current_schema = getattr(request.tenant, "schema_name", None)
+    can_export = (
+        (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
+        and current_schema != get_library_schema_name()
+    )
+
     context = {
         "heading": q.name,
         "q": q,
         "available": available,
         "maps": CytoScape.objects.get_related_maps(q),
+        "can_export": can_export,
     }
 
     return render(request, "quest_manager/detail.html", context)
@@ -953,7 +1232,7 @@ class ApprovalsViewTabTypes:
     """
     SUBMITTED = 0
     APPROVED = 1
-    RETURNED = 2
+    INPROGRESS = 2
     FLAGGED = 3
 
 
@@ -967,8 +1246,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
+        In progress
         Submitted (i.e. awaiting approval)
-        Returned
         Approved
         Flagged
 
@@ -997,7 +1276,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     submitted_submissions = []
     approved_submissions = []
-    returned_submissions = []
+    in_progress_submissions = []
     flagged_submissions = []
 
     view_type = ApprovalsViewTabTypes.SUBMITTED
@@ -1005,10 +1284,10 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     page = request.GET.get("page")
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
-    if "/returned/" in request.path_info:
-        view_type = ApprovalsViewTabTypes.RETURNED
-        returned_submissions = QuestSubmission.objects.all_returned()
-        returned_submissions = paginate(returned_submissions, page)
+    if "/in-progress/" in request.path_info:
+        view_type = ApprovalsViewTabTypes.INPROGRESS
+        in_progress_submissions = QuestSubmission.objects.all_not_completed().order_by(F("time_completed").desc(nulls_last=True))
+        in_progress_submissions = paginate(in_progress_submissions, page)
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
@@ -1032,18 +1311,18 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     tab_list = [
         {
+            "name": "In Progress",
+            "submissions": in_progress_submissions,
+            "active": view_type == ApprovalsViewTabTypes.INPROGRESS,
+            "time_heading": "inprogress",
+            "url": reverse("quests:in_progress"),
+        },
+        {
             "name": "Submitted",
             "submissions": submitted_submissions,
             "active": view_type == ApprovalsViewTabTypes.SUBMITTED,
             "time_heading": "Submitted",
             "url": reverse("quests:submitted"),
-        },
-        {
-            "name": "Returned",
-            "submissions": returned_submissions,
-            "active": view_type == ApprovalsViewTabTypes.RETURNED,
-            "time_heading": "Returned",
-            "url": reverse("quests:returned"),
         },
         {
             "name": "Approved",
@@ -1085,6 +1364,41 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "show_all_blocks_button": show_all_blocks_button,
     }
     return render(request, template, context)
+
+
+@non_public_only_view
+@staff_member_required
+def unarchive(request, quest_id):
+    """
+    Unarchive a quest by setting `archived=False` and ensure it is unpublished
+    so it appears in the Drafts tab.
+
+    This also triggers a recalculation of XP for any users who previously submitted
+    this quest, to account for its status change.
+
+    Only staff members can perform this action.
+
+    Args:
+        request: The HTTP request object.
+        quest_id: The ID of the quest to unarchive.
+
+    Returns:
+        HttpResponseRedirect: Redirects to the Drafts tab with a success message.
+    """
+    quest = Quest.objects.all_including_archived().get(id=quest_id)
+
+    # Make the link that leads to the quests detail page to include in the message
+    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+
+    quest.archived = False
+    # Make sure the quest goes to the Drafts tab
+    quest.published = False
+    quest.full_clean()
+    quest.save()
+
+    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    # Since the quest is sent to the Drafts tab redirect them there
+    return redirect("quests:drafts")
 
 
 #########################################

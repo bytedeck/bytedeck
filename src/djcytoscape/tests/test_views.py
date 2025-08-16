@@ -5,9 +5,11 @@ from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
+from unittest.mock import patch
 
 from djcytoscape.models import CytoScape
 
+from profile_manager.models import Profile
 from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
@@ -24,6 +26,10 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
         self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+
+        # Ensure profiles exist without duplicating them (in case a signal already created them)
+        Profile.objects.get_or_create(user=self.test_teacher)
+        Profile.objects.get_or_create(user=self.test_student1)
 
         self.map = baker.make('djcytoscape.CytoScape')
 
@@ -130,8 +136,10 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         form_data = generate_form_data(model_form=QuestMapForm, name='Updated Name')
         form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'})
 
-        # response tests
-        response = self.client.post(reverse('djcytoscape:update', args=[self.map.pk]), data=form_data)
+        with patch.object(CytoScape, 'regenerate') as mock_regenerate:
+            # response tests
+            response = self.client.post(reverse('djcytoscape:update', args=[self.map.pk]), data=form_data)
+
         self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[self.map.pk]))
 
         # assert map exists
@@ -141,6 +149,9 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         map_ = CytoScape.objects.get(name='Updated Name')
         self.assertEqual(map_.initial_content_type, content_type)
         self.assertEqual(map_.initial_object_id, object_.id)
+
+        # assert regenerate was called
+        mock_regenerate.assert_called_once()
 
 
 class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
