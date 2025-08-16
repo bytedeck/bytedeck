@@ -4,6 +4,35 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.27.0] 2025-08-15 Marcus II
+* New Features:
+ - New quest tab for Archived quests [#1800] and full rework of process for Archiving quests [#1846]
+ - New Detail view for Campaigns [#1794]
+ - "Returned" tab for teachers renamed to "In Progress" and includes all in-progress quests as well as returned, with returned quests sorted at the top by default [#1820]
+ - Ability to import full Campaigns [#1842] [#1833]
+ - Ability to export individual quests to the Library [#1860] and [#1848]
+ - Option to Bulk Edit quests from the quest list (bulk editing options are context dependant to which tab you are on) [#1758]
+* Tweaks:
+ - Rearrange Library menu items [#1806]
+ - Link to quests in Library import message [#1830]
+ - Improve consistancy between Badge and Quest detail pages [#1821]
+ - Trigger regeneration of a map when the Map form is updated.
+ - Only allow deletion of a CCmapign if it has no quests [#1824]
+ - Auto-increment date and copy label when adding new excluded dates to a Semester [#1419]
+* Refactor/Optimizations:
+ - Rename Quest's `visible_to_students` field and Badge and Category/Campaign `active` fields all to `published` consistancy accross models [#1818] and [#1839]
+* Bugfixes:
+ - Campaign import filter so only campaigns with published quests appear [#1812]
+ - Fix campaign info displayed in the Library [#1801]
+ - Fix number of quests/campaigns shown on Library tabs [#1829]
+ - Check if quest already exists in Archived quests before importing it from Library [#1834]
+ - Importing a single quest within a campaign no longer imports the campaign as well [#1810]
+ - Another attempt to fix auto-linkification of urls within lists [#1826]
+* Devops:
+ - Library views converted to CBV [#1813]
+ - Fiddle with build and tests automation [#1869], [#1868], [#1870]
+
+
 ### [1.26.0] 2025-07-10 Marcus I
 * New Features:
  - New Campaign 'Description' field [#1772](https://github.com/bytedeck/bytedeck/issues/1772)
