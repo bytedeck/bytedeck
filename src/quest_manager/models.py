@@ -2,6 +2,7 @@ import uuid
 import json
 import datetime
 
+from django.db import transaction
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
@@ -126,6 +127,27 @@ class Category(IsAPrereqMixin, models.Model):
         submissions = submissions.order_by('quest_id').distinct('quest')
 
         return quests.count() == submissions.count()
+
+    def publish_with_quests(self):
+        """
+        Publish this campaign and all its associated non-archived quests atomically.
+
+        This method sets the campaign's `published` field to True and updates all related quests
+        to be published as well. The entire operation is wrapped in an atomic transaction to ensure
+        data consistency: if any part of the update fails, all changes are rolled back so the
+        campaign and quests are never left in a partially published state.
+
+        This prevents scenarios where the campaign might be marked as published but some quests are not,
+        or vice versa, maintaining integrity between the campaign and its quests.
+        """
+        with transaction.atomic():
+            self.published = True
+            self.full_clean()
+            self.save(update_fields=['published'])
+            for quest in self.quest_set.filter(archived=False, published=False):
+                quest.published = True
+                quest.full_clean()
+                quest.save(update_fields=['published'])
 
     @staticmethod
     def autocomplete_search_fields():  # for grapelli prereq selection

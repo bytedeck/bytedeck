@@ -2185,7 +2185,6 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
 
     def test_CategoryCreate_view(self):
-
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -2292,6 +2291,69 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
             response,
             "You can't delete this campaign because it contains published quests"
         )
+
+    def test_CategoryPublish_view(self):
+        """
+        Test CategoryPublish end-to-end:
+        - Staff can see the "Publish Campaign and all its Quests" button on an unpublished campaign.
+        - Posting to the publish URL as staff sets published=True on the campaign and all related quests,
+            and redirects back to the categories list.
+        - After publishing, the button is no longer shown to staff.
+        - Non-staff POST to the publish URL is forbidden (403) and does not change publish states.
+        """
+        campaign = baker.make(Category, published=False)
+        quest_1 = baker.make(Quest, campaign=campaign, published=False)
+        quest_2 = baker.make(Quest, campaign=campaign, published=False)
+        archived_quest = baker.make(Quest, campaign=campaign, archived=True, published=False)
+
+        # Login as staff (should see the publish button on the unpublished campaign)
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertContains(response, '<button type="submit" class="btn btn-success"')
+        self.assertIn('Publish Campaign and all its Quests', response.content.decode())
+
+        publish_url = reverse('quests:category_publish', args=[campaign.id])
+        response = self.client.post(publish_url)
+
+        # Should redirect after successful publish
+        self.assertRedirects(response, reverse('quests:categories'))
+
+        campaign.refresh_from_db()
+        quest_1.refresh_from_db()
+        quest_2.refresh_from_db()
+        archived_quest.refresh_from_db()
+        self.assertTrue(campaign.published)
+        self.assertTrue(quest_1.published)
+        self.assertTrue(quest_2.published)
+        self.assertFalse(archived_quest.published)
+
+        # After publishing, the publish button should no longer appear for staff
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertNotContains(response, '<button type="submit" class="btn btn-success"')
+
+        campaign.published = False
+        quest_1.published = False
+        quest_2.published = False
+        campaign.full_clean()
+        campaign.save()
+        quest_1.full_clean()
+        quest_1.save()
+        quest_2.full_clean()
+        quest_2.save()
+
+        # Non-staff POST to publish URL should be forbidden
+        self.client.force_login(self.test_student1)
+        response = self.client.post(publish_url)
+        self.assertEqual(response.status_code, 403)
+
+        # Confirm campaign and quests remain unpublished (no unauthorized publish)
+        campaign.refresh_from_db()
+        quest_1.refresh_from_db()
+        quest_2.refresh_from_db()
+        self.assertFalse(campaign.published)
+        self.assertFalse(quest_1.published)
+        self.assertFalse(quest_2.published)
+        self.assertFalse(archived_quest.published)
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
