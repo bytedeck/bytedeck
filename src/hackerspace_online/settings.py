@@ -772,6 +772,22 @@ DJANGORESIZED_DEFAULT_FORCE_FORMAT = None
 # django-taggit
 TAGGIT_CASE_INSENSITIVE = True
 
+# stripe
+STRIPE_LIVE_MODE = env('STRIPE_LIVE_MODE', default=False)  # Change to True in production
+STRIPE_LIVE_SECRET_KEY = env('STRIPE_LIVE_SECRET_KEY', default='')  # production
+STRIPE_TEST_SECRET_KEY = env('STRIPE_TEST_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='')
+
+# TODO: We need to add the products and their price id
+STRIPE_PRICE_ID_MAP = {
+    'biannual_40': 'price_b123',
+    'biannual_80': 'price_b456',
+    'biannual_120': 'price_b790',
+
+    'annual_40': 'price_a123',
+    'annual_80': 'price_a456',
+    'annual_120': 'price_a789',
+}
 
 # TESTING ##################################################
 

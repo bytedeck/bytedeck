@@ -127,6 +127,18 @@ class Tenant(TenantMixin):
         default=False,
         help_text="This is a cached field: Whether Google signon has been enabled for this deck."
     )
+    stripe_customer_id = models.CharField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="This is the stripe customer id for the deck owner.",
+    )
+    stripe_subscription_id = models.CharField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="This is the stripe subscription id for the deck owner.",
+    )
     # END CALCULATED / CACHED FIELDS ##################################
 
     def __str__(self):
