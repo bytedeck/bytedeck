@@ -3,11 +3,11 @@
 {% block heading_inner %}Import Quest from Library{% endblock %}
 {% block content %}
   {% if local_quest %}
-    <p>
+    <div class="alert alert-danger">
       Your deck already contains a quest with a matching Import ID.  Overwriting existing quests is not yet supported.
       If you still want to import this quest from the Library, you need to delete the existing quest from your deck
       or change it's Import ID:
-    </p>
+    </div>
     <div class="well">
       <p>
         Existing Quest: <a href="{{ local_quest.get_absolute_url }}">{{ local_quest.name }}</a>
