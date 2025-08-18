@@ -326,10 +326,10 @@ class ExportQuestView(View):
         """
         self._require_export_permission(request)
 
-        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+        quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
 
         with library_schema_context():
-            library_quest = Quest.objects.filter(import_id=quest.import_id).first()
+            library_quest = Quest.objects.all_including_archived().filter(import_id=quest.import_id).first()
 
         return render(request, self.template_name, {
             'quest': quest,
@@ -359,12 +359,12 @@ class ExportQuestView(View):
         """
         self._require_export_permission(request)
 
-        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+        quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
 
         source_schema = connection.schema_name
 
         with library_schema_context():
-            if Quest.objects.filter(import_id=quest.import_id).exists():
+            if Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists():
                 raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
 
             # Perform export

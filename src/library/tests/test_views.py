@@ -347,13 +347,25 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def test_export_get__shows_error_if_quest_already_in_library(self):
         """
-        Test that the export confirmation view shows an error if the quest already exists in the library.
+        Test that the export confirmation view shows an error if the quest already exists in the library,
+        whether the existing library quest is archived or not. Exporting again should not be allowed
+        in either case.
         """
         self.config.allow_staff_export = True
         self.config.full_clean()
         self.config.save()
 
         self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_quest', args=[self.shared_quest.import_id])
+        response = self.client.get(url)
+        self.assertContains(response, "A quest with the same import ID already exists in the shared library. Exporting again is not allowed.")
+
+        # Archive the quest to test it again but against an archived quest
+        with library_schema_context():
+            self.shared_quest.archived = True
+            self.shared_quest.full_clean()
+            self.shared_quest.save()
 
         url = reverse('library:export_quest', args=[self.shared_quest.import_id])
         response = self.client.get(url)
