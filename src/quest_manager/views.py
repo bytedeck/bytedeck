@@ -225,6 +225,12 @@ class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageM
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
 
+    def get_queryset(self):
+        """
+        Include archived quests so that archived quests can be deleted using this views.
+        """
+        return Quest.objects.all_including_archived()
+
     model = Quest
     success_url = reverse_lazy("quests:quests")
 

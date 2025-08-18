@@ -24,6 +24,11 @@
         </button>
       </form>
 
+      <a class="btn btn-danger" href="{% url 'quests:quest_delete' q.id %}" role="button"
+        title = "Delete this quest" >
+        <i class="fa fa-trash-o"></i>
+      </a>
+
     {% elif  request.user.is_staff or request.user == q.editor %}
         {% if is_library_view %}
           <a href="{% url 'library:import_quest' q.import_id %}"
