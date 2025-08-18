@@ -39,6 +39,9 @@ def badge_regenerate_related_maps(sender, instance, **kwargs):
 @receiver([post_save, post_delete], sender=Prereq)
 def prereq_regenerate_related_maps(sender, instance, **kwargs):
     """ Regenerates any related map(s) when a prereq is saved or deleted. """
+    if not instance.parent_content_type or not instance.parent_object_id:
+        # Prereq is incomplete or missing required references
+        return
 
     # get parent object of prereq
     model_class = instance.parent_content_type.model_class()
@@ -48,6 +51,7 @@ def prereq_regenerate_related_maps(sender, instance, **kwargs):
 
     # means this signal was called when object_ was deleted
     except model_class.DoesNotExist:
+        # Parent object was deleted
         return
 
     regenerate_related_maps(object_)
