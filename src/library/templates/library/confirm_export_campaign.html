@@ -1,0 +1,59 @@
+{% extends "quest_manager/base.html" %}
+
+{% block head_title %}Library | Export Campaign to Shared Library{% endblock %}
+
+{% block heading %}
+  <i class="fa fa-book pull-right"></i>
+  {% block heading_inner %}Export Campaign to Library{% endblock %}
+{% endblock %}
+
+{% block content %}
+
+  {% if existing_campaign %}
+    <div class="alert alert-danger">
+      A campaign with the same import ID already exists in the shared library. Exporting again is not allowed.
+    </div>
+  {% else %}
+    <p>Please read and agree to the following license before sharing this campaign:</p>
+
+    <div class="alert alert-info">
+      This campaign and its quests will be shared under the
+      <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">
+        Creative Commons Attribution-ShareAlike 4.0 International License.
+      </a>
+    </div>
+
+    <p class="text-muted">
+      Want to share more about this campaign or start a discussion?
+      Join the conversation on the
+      <a href="https://github.com/bytedeck/bytedeck/discussions" target="_blank" rel="noopener noreferrer">
+        ByteDeck Library Discussions.
+      </a>
+    </p>
+
+    <form method="post" id="export-form">
+      {% csrf_token %}
+
+      <div class="form-check mb-3">
+        <input type="checkbox" class="form-check-input" id="agreeLicense" name="agreeLicense" required />
+        <label class="form-check-label" for="agreeLicense">
+          I agree to share this campaign and all its quests under the Creative Commons Attribution-ShareAlike 4.0 International License.*
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Share Campaign to Library</button>
+      <a href="{% url 'quests:categories' %}" class="btn btn-info">Cancel</a>
+    </form>
+    {% if library_quest_import_ids %}
+        <div class="alert alert-danger panel-top">
+          {% comment %} TODO: Update this message to the new method of dealing with conflicts. {% endcomment %}
+            <strong>Warning:</strong> One or more quests in this campaign already exist in the library;
+            they are indicated with this icon <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the quest list below.
+            Exporting this campaign will <strong>overwrite</strong> those existing quests with the local versions.
+        </div>
+    {% endif %}
+    <h3>{{ campaign.name }}</h3>
+    {% include "quest_manager/category_detail_content.html" %}
+  {% endif %}
+
+{% endblock %}

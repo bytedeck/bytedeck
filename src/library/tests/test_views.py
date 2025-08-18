@@ -430,9 +430,20 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.test_password = 'password'
 
+        self.config = SiteConfig.get()
+        self.deck_owner = self.config.deck_owner
+
+        self.local_category = baker.make(Category)
+        self.shared_category = baker.make(Category)
+
+        baker.make(Quest, campaign=self.local_category, published=True)
+        baker.make(Quest, campaign=self.local_category, published=True)
+
         with library_schema_context():
             # Create a category in the library tenant
             self.library_category = baker.make(Category)
+            self.library_quest = baker.make(Quest, campaign=self.library_category, published=True)
+            baker.make(Category, import_id=self.shared_category.import_id)
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
@@ -488,7 +499,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
     def test_import_campaign___success(self):
         self.client.force_login(self.test_teacher)
-        self.assertEqual(Category.objects.count(), 1)
+        # Capture baseline to assert relative change after import
+        initial_category_count = Category.objects.count()
 
         with library_schema_context():
             library_campaign = baker.make(Category)
@@ -499,7 +511,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         response = self.client.post(import_url)
         self.assertEqual(response.url, reverse('quests:categories_inactive'))
-        self.assertEqual(Category.objects.count(), 2)
+        # Expect one additional category after import
+        self.assertEqual(Category.objects.count(), initial_category_count + 1)
         imported_library_campaign = Category.objects.filter(title=library_campaign.name).first()
         self.assertIsNotNone(imported_library_campaign)
         self.assertFalse(imported_library_campaign.published)
@@ -595,7 +608,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         - Quests not previously imported are set to unpublished by default.
         """
         self.client.force_login(self.test_teacher)
-        self.assertEqual(Category.objects.count(), 1)
+        # Capture baseline to assert relative change after campaign import
+        initial_category_count = Category.objects.count()
 
         with library_schema_context():
             library_campaign = baker.make(Category)
@@ -620,6 +634,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             quest_import_ids=[q.import_id for q in library_quests],
             campaign_import_id=library_campaign.import_id
         )
+
+        # Expect one additional category after import
+        self.assertEqual(Category.objects.count(), initial_category_count + 1)
 
         # Reload quests from DB
         unpublished_local_quest = Quest.objects.get(import_id=library_quests[0].import_id)
@@ -737,6 +754,121 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         url = reverse('library:category_detail_view', args=[invalid_id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
+
+    def test_export__permission_denied_for_non_owner_staff_export_disabled(self):
+        """
+        Ensure that staff users who are not the deck owner are denied access
+        to the export view when staff export permission is disabled.
+        """
+        self.config.allow_staff_export = False
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.library_category.import_id)})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_export__permission_allowed_for_owner_staff_export_disabled(self):
+        """
+        Ensure that the deck owner can access the export view even when
+        staff export permission is disabled.
+        """
+        self.config.allow_staff_export = False
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.deck_owner)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
+        # Ensure at least one additional staff user exists in the library schema
+        with library_schema_context():
+            baker.make(User, is_staff=True, is_active=True)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.local_category.name)
+
+    def test_export__permission_allowed_for_non_owner_staff_export_enabled(self):
+        """
+        Ensure that staff users other than the deck owner can access the export view
+        when staff export permission is enabled.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.local_category.name)
+
+    def test_export_get__shows_error_if_campaign_already_exists_in_library(self):
+        """
+        Ensure the export GET view displays an error message if the campaign
+        already exists in the shared library schema, preventing duplicate exports.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.shared_category.import_id)})
+        response = self.client.get(url)
+        self.assertContains(response, "A campaign with the same import ID already exists in the shared library")
+
+    def test_export_post__denied_if_campaign_exists(self):
+        """
+        Ensure that attempting to POST (perform export) for a campaign that already
+        exists in the library schema is forbidden and returns HTTP 403.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.shared_category.import_id)})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_export_post__successful_export_and_notifications(self):
+        """
+        Test that a successful campaign export via POST:
+        - Redirects the user to the quests categories page
+        - Creates the campaign in the library schema
+        - Sends notifications to all active staff users (except the deck_ai user)
+        about the export action
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse('quests:categories'))
+
+        with library_schema_context():
+            exported_campaign = Category.objects.filter(import_id=self.local_category.import_id).first()
+            self.assertIsNotNone(exported_campaign)
+            self.assertFalse(exported_campaign.published)
+
+            deck_ai = User.objects.get(pk=SiteConfig.get().deck_ai.pk)
+            staff_users = User.objects.filter(is_active=True, is_staff=True)
+
+            for user in staff_users:
+                if user == deck_ai:
+                    continue
+                self.assertTrue(
+                    Notification.objects.filter(
+                        recipient=user,
+                        verb__icontains="exported a campaign",
+                        target_object_id=exported_campaign.pk,
+                    ).exists(),
+                    f"Notification not found for {user.username}"
+                )
 
 
 class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
