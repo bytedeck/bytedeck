@@ -19,6 +19,15 @@
                 <i class="fa fa-edit"></i>
             </a>
 
+            {% if not object.published %}
+                <form method="post" action="{% url 'quests:category_publish' object.id %}" class="preview-action-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success" title="Publish Campaign and all its Quests">
+                        <i class="fa fa-upload"></i>
+                    </button>
+                </form>
+            {% endif %}
+
             <a class="btn btn-danger"
                 {% if object.quest_count != 0 %}
                     disabled

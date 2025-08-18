@@ -97,6 +97,7 @@ urlpatterns = [
     path('campaigns/inactive/', views.CategoryList.as_view(), name='categories_inactive'),
     path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
+    path('campaigns/<int:pk>/publish/', views.CategoryPublish.as_view(), name='category_publish'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
 

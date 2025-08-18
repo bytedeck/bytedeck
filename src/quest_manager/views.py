@@ -192,6 +192,35 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryPublish(View):
+    http_method_names = ['post']
+
+    def post(self, request, pk):
+        """
+        Handle POST request to publish a campaign and all its associated quests.
+
+        Retrieves the Category by primary key (pk). Attempts to publish the campaign along
+        with all related quests using the model method `publish_with_quests()`. On success,
+        adds a success message linking to the campaign detail. On failure, adds an error message.
+
+        Finally, redirects the user to the campaigns list view.
+
+        Args:
+            request: The HTTP request object.
+            pk: Primary key of the campaign to publish.
+
+        Returns:
+            HttpResponseRedirect to the campaigns list page.
+        """
+        category = get_object_or_404(Category, pk=pk)
+        category.publish_with_quests()
+        link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
+        messages.success(request, f'Campaign "{link}" and all quests published.')
+
+        return redirect("quests:categories")
+
+
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
