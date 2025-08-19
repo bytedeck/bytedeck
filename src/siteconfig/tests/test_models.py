@@ -5,6 +5,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.timezone import localtime
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.conf import settings
 
 from django_tenants.test.cases import TenantTestCase
@@ -137,3 +138,32 @@ class SiteConfigModelTest(TenantTestCase):
 
         self.assertNotEqual(get_default_deck_owner(), old_owner_pk)
         self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk
+
+    def test_can_user_export_to_library(self):
+        """Verify can_user_export_to_library respects deck owner and staff settings."""
+
+        # Owner should always be able to export
+        owner = self.config.deck_owner
+        self.assertTrue(self.config.can_user_export_to_library(owner))
+
+        # Create a staff user who is not the deck owner
+        staff_user = baker.make('auth.User', is_staff=True)
+
+        # If allow_staff_export is False, non-owner staff cannot export
+        self.config.allow_staff_export = False
+        self.config.full_clean()
+        self.config.save()
+        self.assertFalse(self.config.can_user_export_to_library(staff_user))
+
+        # If allow_staff_export is True, non-owner staff can export
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.assertTrue(self.config.can_user_export_to_library(staff_user))
+
+        # Non-staff users cannot export
+        regular_user = baker.make('auth.User', is_staff=False)
+        self.assertFalse(self.config.can_user_export_to_library(regular_user))
+
+        # Anonymous users cannot export
+        self.assertFalse(self.config.can_user_export_to_library(AnonymousUser))

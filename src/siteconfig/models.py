@@ -354,6 +354,29 @@ class SiteConfig(models.Model):
         social_app_clone.save()
         social_app_clone.sites.add(Site.objects.get_current())
 
+    def can_user_export_to_library(self, user):
+        """
+        Determine whether a given user can export quests or campaigns to the shared library.
+
+        Rules:
+            - Unauthenticated users cannot export.
+            - The deck owner can always export.
+            - Staff members can export only if `allow_staff_export` is True.
+
+        Args:
+            user (User): The user to check permissions for.
+
+        Returns:
+            bool: True if the user can export to the library, False otherwise.
+        """
+        if not user.is_authenticated:
+            return False
+
+        if user == self.deck_owner:
+            return True
+
+        return self.allow_staff_export and user.is_staff
+
     @classmethod
     def cache_key(cls):
         return f'{connection.schema_name}-siteconfig'
