@@ -1434,6 +1434,16 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(id=new_quest.id)
 
+        # now test deletion of an archived quest
+        archived_quest = Quest.objects.create(**self.minimal_valid_form_data, archived=True)
+        self.assertTrue(Quest.objects.all_including_archived().filter(id=archived_quest.id).exists())
+
+        # delete archived quest
+        response = self.client.post(reverse('quests:quest_delete', args=[archived_quest.id]))
+        self.assertRedirects(response, reverse('quests:quests'))
+        with self.assertRaises(Quest.DoesNotExist):
+            Quest.objects.get(id=archived_quest.id)
+
     def test_TA_can_create_draft_quests_and_delete_own(self):
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
         test_ta = User.objects.create_user('test_ta')
