@@ -13,6 +13,10 @@
     <div class="alert alert-danger">
       A campaign with the same import ID already exists in the shared library. Exporting again is not allowed.
     </div>
+  {% elif category_quest_count == 0 %}
+    <div class="alert alert-danger">
+      You cannot export a campaign with no published quests.
+    </div>
   {% else %}
     <p>Please read and agree to the following license before sharing this campaign:</p>
 
@@ -41,8 +45,11 @@
         </label>
       </div>
 
-      <button type="submit" class="btn btn-primary">Share Campaign to Library</button>
+      <button id="confirm-export-button" type="submit" class="btn btn-primary">
+        Share Campaign to Library
+      </button>
       <a href="{% url 'quests:categories' %}" class="btn btn-info">Cancel</a>
+
     </form>
     {% if library_quest_import_ids %}
         <div class="alert alert-danger panel-top">

@@ -25,7 +25,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
-from library.utils import from_library_schema_first, get_library_schema_name
+from library.utils import from_library_schema_first
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -89,8 +89,11 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     def get_context_data(self, *args, **kwargs):
         context_data = super().get_context_data(*args, **kwargs)
 
+        can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
+
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
+        context_data['can_export'] = can_export
 
         return context_data
 
@@ -112,16 +115,18 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         - Staff users will see a complete list of quests currently in the viewed campaign
         - Students or other non-staff users will only see active quests
 
-        Returns a dictionary containing default context info as well as a queryset that contains the
-        appropriate quests a user will see; "category_displayed_quests".
+        Returns:
+            dict: Context info containing the appropriate quests for the user to view,
+            including "category_displayed_quests" and "can_export".
         """
         if self.request.user.is_staff:
-            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
+            quests = Quest.objects.filter(campaign=self.object)
         else:
             # students shouldn't be able to see inactive quests when they access this view
-            # filtering before calling get_active, while likely less costly, changes the object
-            # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
-            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
+            quests = Quest.objects.get_active().filter(campaign=self.object)
+
+        kwargs['category_displayed_quests'] = quests
+        kwargs['can_export'] = SiteConfig.get().can_user_export_to_library(self.request.user)
 
         return super().get_context_data(**kwargs)
 
@@ -831,12 +836,7 @@ def ajax_quest_info(request, quest_id=None):
 
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
-            site_config = SiteConfig.get()
-            current_schema = getattr(request.tenant, "schema_name", None)
-            can_export = (
-                (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
-                and current_schema != get_library_schema_name()
-            )
+            can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
                 if request.user.is_staff:
@@ -943,12 +943,7 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
-    site_config = SiteConfig.get()
-    current_schema = getattr(request.tenant, "schema_name", None)
-    can_export = (
-        (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
-        and current_schema != get_library_schema_name()
-    )
+    can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
     context = {
         "heading": q.name,

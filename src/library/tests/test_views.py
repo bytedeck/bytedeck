@@ -833,6 +833,24 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 403)
 
+    def test_export_get__disables_button_if_no_quests(self):
+        """
+        The confirmation page should disable the export button if the campaign has no quests.
+        """
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        empty_campaign = Category.objects.create(title="Empty Campaign")
+
+        url = reverse('library:export_category', args=[empty_campaign.import_id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        # Look for UI safeguard: button should be disabled
+        self.assertContains(response, 'You cannot export a campaign with no published quests.')
+
     def test_export_post__successful_export_and_notifications(self):
         """
         Test that a successful campaign export via POST:
