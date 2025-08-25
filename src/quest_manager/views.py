@@ -844,7 +844,6 @@ def ajax_quest_info(request, quest_id=None):
                 else:
                     quest = get_object_or_404(Quest, pk=quest_id)
 
-                template = 'quest_manager/preview_content_quests_avail.html'
                 quest_info_html = render_to_string(template,
                                                    {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
                                                    request=request)
