@@ -33,7 +33,7 @@
     <!-- Messages -->
 
     {% if messages %}{% for message in messages %}
-    <div class="alert alert-warning alert-dismissible fade show text-center lead {% if message.tags %}{{ message.tags }}{% endif %}" role="alert"}>
+    <div class="alert alert-warning alert-dismissible fade show text-center lead {% if message.tags %}{{ message.tags }}{% endif %}" role="alert">
         <b>{{ message|safe }}</b>
         <button type="button" class="close" data-dismiss="alert" aria-label="Close">
           <span aria-hidden="true">&times;</span>
@@ -86,7 +86,7 @@
           </a>
         </li> -->
         <li class="nav-item">
-          <a class="nav-link" href="/pages/request-a-deck/">Try it</a>
+          <a class="nav-link" href="{% url 'decks:request_new_deck' %}">Try it</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="/pages/subscribe/">Pricing</a>
