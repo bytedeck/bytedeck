@@ -15,6 +15,7 @@ from django.conf import settings
 from django_tenants.utils import get_public_schema_name, schema_context
 from redis import exceptions as redis_exceptions
 
+from library.utils import get_library_schema_name
 from utilities.models import RestrictedFileField
 
 User = get_user_model()
@@ -354,13 +355,14 @@ class SiteConfig(models.Model):
         social_app_clone.save()
         social_app_clone.sites.add(Site.objects.get_current())
 
-    def can_user_export_to_library(self, user):
+    def can_user_export_to_library(self, user, current_schema=None):
         """
-        Determine whether a given user can export quests or campaigns to the shared library.
+        Determine whether a given user can export quests or campaigns to the Shared Library.
 
         Rules:
             - Unauthenticated users cannot export.
-            - The deck owner can always export.
+            - Exports are blocked when on the Library schema.
+            - The deck owner can export when not on the Library schema.
             - Staff members can export only if `allow_staff_export` is True.
 
         Args:
@@ -369,7 +371,13 @@ class SiteConfig(models.Model):
         Returns:
             bool: True if the user can export to the library, False otherwise.
         """
+        if not current_schema:
+            current_schema = connection.schema_name
+
         if not user.is_authenticated:
+            return False
+
+        if current_schema == get_library_schema_name():
             return False
 
         if user == self.deck_owner:

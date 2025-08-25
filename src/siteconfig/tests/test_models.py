@@ -14,6 +14,7 @@ from model_bakery import baker
 
 from siteconfig.models import SiteConfig, get_default_deck_owner
 
+from library.utils import get_library_schema_name
 
 User = get_user_model()
 
@@ -140,11 +141,17 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk
 
     def test_can_user_export_to_library(self):
-        """Verify can_user_export_to_library respects deck owner and staff settings."""
+        """Verify can_user_export_to_library respects deck owner, staff settings, and schema."""
+
+        current_schema = "test"
+        library_schema = get_library_schema_name()
 
         # Owner should always be able to export
         owner = self.config.deck_owner
-        self.assertTrue(self.config.can_user_export_to_library(owner))
+        self.assertTrue(self.config.can_user_export_to_library(owner, current_schema))
+
+        # Except on the library
+        self.assertFalse(self.config.can_user_export_to_library(owner, library_schema))
 
         # Create a staff user who is not the deck owner
         staff_user = baker.make('auth.User', is_staff=True)
@@ -153,17 +160,22 @@ class SiteConfigModelTest(TenantTestCase):
         self.config.allow_staff_export = False
         self.config.full_clean()
         self.config.save()
-        self.assertFalse(self.config.can_user_export_to_library(staff_user))
+        self.assertFalse(self.config.can_user_export_to_library(staff_user, current_schema))
 
         # If allow_staff_export is True, non-owner staff can export
         self.config.allow_staff_export = True
         self.config.full_clean()
         self.config.save()
-        self.assertTrue(self.config.can_user_export_to_library(staff_user))
+        self.assertTrue(self.config.can_user_export_to_library(staff_user, current_schema))
+
+        # Staff user cannot export in the library schema
+        self.assertFalse(self.config.can_user_export_to_library(staff_user, library_schema))
 
         # Non-staff users cannot export
         regular_user = baker.make('auth.User', is_staff=False)
-        self.assertFalse(self.config.can_user_export_to_library(regular_user))
+        self.assertFalse(self.config.can_user_export_to_library(regular_user, current_schema))
+        self.assertFalse(self.config.can_user_export_to_library(regular_user, library_schema))
 
         # Anonymous users cannot export
-        self.assertFalse(self.config.can_user_export_to_library(AnonymousUser))
+        self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), current_schema))
+        self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), library_schema))
