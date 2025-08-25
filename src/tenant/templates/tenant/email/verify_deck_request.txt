@@ -1,0 +1,11 @@
+Hello {{ first_name }},
+
+Thank you for requesting a new deck.
+
+Please verify your email by clicking this link:
+{{ verification_link }}
+
+If you did not request this deck, you can safely ignore this email.
+
+Thank you,
+Bytedeck Team

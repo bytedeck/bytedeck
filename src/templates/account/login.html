@@ -9,6 +9,12 @@
 {% block heading %}{% trans "Sign In" %}<i class="pull-right fa fa-sign-in"></i>{% endblock %}
 
 {% block content %}
+  {% if request.GET.created %}
+  <div class="alert alert-success">
+    Deck created! Check your email for login credentials.
+  </div>
+  {% endif %}
+
   {% comment %}
     Conditions are setup this way because checking socialaccount_providers returns a list of strings based on the INSTALLED_APPS
     If you look at the get_providers tag, it returns all social account providers whether it is configured or not

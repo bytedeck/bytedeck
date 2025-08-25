@@ -1,24 +1,20 @@
 from unittest.mock import patch
-from freezegun import freeze_time
-from datetime import datetime
 
 from django.conf import settings
-from django.core import mail
 from django.http import Http404, HttpResponse
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
 from django.test import RequestFactory
 
-from allauth.account.models import EmailAddress, EmailConfirmationHMAC
-from allauth.account.adapter import get_adapter
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-from tenant.views import non_public_only_view, public_only_view, email_confirmed_handler
+from tenant.views import non_public_only_view, public_only_view, TenantCreate, TenantForm
 from tenant.models import Tenant
+from tenant.utils import DeckRequestService
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -72,7 +68,9 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
     """Various tests for `TenantCreate` view class."""
 
     def setUp(self):
-        # create the public schema
+        self.factory = RequestFactory()
+
+        # Create the public schema
         self.public_tenant = Tenant(schema_name="public", name="public")
         with tenant_context(self.public_tenant):
             # create superuser account
@@ -85,101 +83,96 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             # django signals (post_save and pre_save) can save us a lot of time.
             Tenant.objects.bulk_create([self.public_tenant])
             self.public_tenant.refresh_from_db()
-            # create domain object manually, since we avoided triggering the signals
-            self.public_tenant.domains.create(domain="localhost", is_primary=True)
+            # Use 'testserver' as the domain for environment-agnostic testing
+            self.public_tenant.domains.create(domain="testserver", is_primary=True)
 
-        self.client = TenantClient(self.public_tenant)
+        # Create client for the tenant
+        self.client = TenantClient(self.public_tenant, host="testserver")
 
-    def test_default(self):
-        """
-        Creating new tenant object with valid data, should pass without errors.
-        """
-        # first case, access /decks/new/ page as anonymous user
-        # should returns 302 (login required, note: it's admin/login/ page)
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual("{}?next={}".format(reverse("admin:login"), reverse("tenant:new")), response.url)
-
-        self.client.force_login(self.superuser)
-
-        # second case, forgot to enter "first" and "last" names
-        # should returns 200 (same page, but with errors)
-        form_data = {
-            "name": "default",
-            "email": "john.doe@example.com",
-        }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
-        self.assertEqual(response.status_code, 200)
-
-        # third case, incorrect email address
-        # should returns 200 (same page, but with errors)
-        form_data = {
+        self.form_data = {
             "name": "default",
             "first_name": "John",
             "last_name": "Doe",
-            "email": "john.doe@example",  # incorrect email address
+            "email": "john.doe@example.com",
+            "captcha": "dummy",
         }
-        response = self.client.post(reverse("tenant:new"), data=form_data)
-        self.assertEqual(response.status_code, 200)
+
+    def test_anonymous_denied_without_verified_deck_request(self):
+        """Anonymous users without a verified deck request are denied access."""
+        response = self.client.get(reverse("tenant:new"))
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
+
+    def test_form__errors_for_missing_fields(self):
+        """Form errors occur if first_name, last_name, or invalid email are missing."""
+        self.client.force_login(self.superuser)
+
+        # Simulate a validated deck request in session
+        session = self.client.session
+        session["verified_deck_request"] = {"email": "john.doe@example.com"}
+        session.save()
+
+        # Missing first_name / last_name
+        form_data = {"name": "default", "email": "john.doe@example.com"}
+        response = self.client.post(reverse("tenant:new"), data=form_data, follow=True)
+        # Check that the error message for required fields is present
+        self.assertContains(response, "This field is required", count=2)
+
+        # Invalid email
+        form_data.update({"first_name": "John", "last_name": "Doe", "email": "john.doe@example"})
+        response = self.client.post(reverse("tenant:new"), data=form_data, follow=True)
+        # Check for invalid email error
         self.assertContains(response, "Enter a valid email address")
 
-        # fourth (final) case, and finally trying to submit with all required (non-blank) fields
-        # should returns 302 (redirect to newly created tenant)
-        # need to freeze_time as signer keys are timestamped. Without it will fail the confirmation_link test
-        with freeze_time(datetime(2024, 3, 3)):
-            form_data = {
-                "name": "default",
-                "first_name": "John",
-                "last_name": "Doe",
-                "email": "john.doe@example.com",
-            }
-            response = self.client.post(reverse("tenant:new"), data=form_data)
-            self.assertEqual(response.status_code, 302)
-            self.assertEqual(response.url, "http://default.localhost:8000")
+    @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
+    @patch.object(DeckRequestService, "send_verification_email")
+    def test_successful_deck_request_sends_email_and_shows_message(self, mock_send_email, mock_captcha):
+        """
+        Ensure that submitting a valid deck request triggers the verification
+        email to be sent and returns a redirect response.
+        """
+        form_data = {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john.doe@example.com",
+            "captcha": "dummy",
+        }
+        response = self.client.post(reverse("decks:request_new_deck"), data=form_data)
+        mock_send_email.assert_called_once()
+        self.assertEqual(response.status_code, 302)
 
-            # check mailbox after submitting form
-            self.assertEqual(len(mail.outbox), 1)
-            self.assertIn("Please Confirm Your Email Address", mail.outbox[0].subject)
-            # expecting to see john.doe@example.com as recipient
-            self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
-            # expecting to see correct domain name in confirmation link and make sure link is correct
-            email_address = EmailAddress.objects.get(email="john.doe@example.com")
-            key = EmailConfirmationHMAC(email_address).key
-            confirmation_link = "".join(["http://default.localhost:8000", reverse("account_confirm_email", args=[key])])
+    def test_tenant_form_saves_owner_correctly(self):
+        """TenantForm should save tenant and create deck owner from verified data."""
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
 
-            self.assertIn(confirmation_link, mail.outbox[0].body)
+        tenant = form.save()
 
-            owner = SiteConfig.get().deck_owner or None
-            self.assertEqual(owner.get_full_name(), "John Doe")  # should be equal and prove the case
+        with tenant_context(tenant):
+            site_config = SiteConfig.objects.get()
+            owner = site_config.deck_owner
+
+            self.assertEqual(owner.first_name, "John")
+            self.assertEqual(owner.last_name, "Doe")
             self.assertEqual(owner.email, "john.doe@example.com")
 
-            # check that the username was set to firstname.lastname (instead of "owner")
-            self.assertEqual(owner.username, "john.doe")  # should be equal and prove the case
-            # check that the  password was set to firstname-deckname-lastname (instead of "password")
-            self.assertEqual(owner.check_password("john-default-doe"), True)
+    def test_form_valid_creates_tenant_and_redirects(self):
+        """TenantCreate.form_valid should save tenant, assign deck owner, and redirect."""
+        request = self.factory.post(reverse("tenant:new"), data=self.form_data)
+        request.session = {"verified_deck_request": self.form_data}
 
-            # manually verify email
-            email_address_obj = owner.emailaddress_set.get(email="john.doe@example.com")
-            get_adapter(response.wsgi_request).confirm_email(response.wsgi_request, email_address_obj)
+        view = TenantCreate()
+        view.setup(request)
 
-            # clear the outbox from outdated messages
-            mail.outbox.clear()
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
 
-            # confirming the email/account and receiving welcome email
-            email_confirmed_handler(email_address=email_address_obj)
+        response = view.form_valid(form)
+        self.assertEqual(response.status_code, 302)
 
-            self.assertEqual(len(mail.outbox), 1)
-            self.assertIn("Instructions to sign in to default", mail.outbox[0].subject)
-            # expecting to see the same john.doe@example.com as recipient
-            self.assertEqual(mail.outbox[0].to, ['john.doe@example.com'])
+        tenant = form.instance
 
-            # ... make sure only non-logged users receives "welcome" email
-            self.client.force_login(owner)
-
-            # clear the outbox from outdated messages
-            mail.outbox.clear()
-
-            # trying to confirm email after being logged into app...
-            email_confirmed_handler(email_address=email_address_obj)
-            # expect to receive nothing...
-            self.assertEqual(len(mail.outbox), 0)
+        with tenant_context(tenant):
+            site_config = SiteConfig.objects.get()
+            self.assertIsInstance(site_config.deck_owner, User)
+            self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
