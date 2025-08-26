@@ -59,8 +59,11 @@ def export_quest_to_library(*, source_schema, quest_import_id):
 
 def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import_ids=None):
     """
-    Exports a campaign (Category) and all its quests from the given tenant schema
-    into the shared library schema.
+    Exports a campaign (Category) and its published quests from the given tenant
+    schema into the shared library schema. By default, all published quests in
+    the campaign are exported. If `skip_import_ids` is provided, any quests whose
+    `import_id` is in that set are excluded (e.g., when you plan to clone
+    conflicts separately).
 
     All exported quests and the campaign will be unpublished in the library by default.
     This ensures the shared library remains a neutral, reviewable repository.
@@ -68,20 +71,25 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
     Args:
         source_schema (str): The tenant schema where the campaign currently resides.
         campaign_import_id (UUID): The import ID of the campaign to export.
+        skip_import_ids (Iterable[UUID] | None): Optional set of quest import_ids
+            to exclude from the export. When provided, the export will proceed
+            even if all quests are skipped
 
     Returns:
         ImportResult: The result of the import operation into the library schema.
 
     Raises:
         Category.DoesNotExist: If the campaign is not found in the source schema.
-        ValidationError: If no published quests exist for the campaign.
+        ValidationError: If no published quests exist for the campaign and
+            `skip_import_ids` was not provided.
     """
     with schema_context(source_schema):
         category = Category.objects.get(import_id=campaign_import_id)
         quests = Quest.objects.filter(published=True, campaign=category)
 
         # filter out conflicts (they'll be cloned and exported later)
-        quests = quests.exclude(import_id__in=skip_import_ids)
+        if skip_import_ids:
+            quests = quests.exclude(import_id__in=skip_import_ids)
 
         if not quests.exists() and not skip_import_ids:
             raise ValidationError("Cannot export a campaign without any published quests.")
@@ -116,14 +124,31 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
 
 def export_campaign_and_copy_quests(source_schema, campaign_import_id):
     """
-    Exports a campaign and its quests to the library.
-    If any of the quests already exist in the library, copies are created
-    so the exported campaign has its own versions.
+    Export a campaign and its quests to the library, cloning conflicts.
+
+    Process:
+      - Detect quests in the target library that share an import_id with local quests.
+      - Export only the non-conflicting quests (unpublished) and the campaign.
+      - Ensure the campaign exists in the library.
+      - For each conflicting local quest, create a new unpublished copy in the
+        library campaign with a fresh import_id and a suffixed name to avoid
+        uniqueness issues.
+
+    Args:
+        source_schema (str): Tenant schema that contains the source campaign.
+        campaign_import_id (UUID): Import ID of the campaign to export.
+
+    Returns:
+        Category: The library campaign instance.
+
+    Raises:
+        Category.DoesNotExist: If the campaign is not found in the source schema.
     """
 
     # Step 1: get local campaign and quests first (in source schema)
-    local_campaign = Category.objects.get(import_id=campaign_import_id)
-    local_quests = list(local_campaign.current_quests())
+    with schema_context(source_schema):
+        local_campaign = Category.objects.get(import_id=campaign_import_id)
+        local_quests = list(local_campaign.current_quests())
 
     # detect which local quests already exist in the library before the export happens
     library_conflicting_ids = get_library_conflicting_quests(local_quests)
@@ -136,17 +161,19 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
 
     # Step 3: ensure the campaign exists in the library
     with library_schema_context():
-        library_campaign, _ = Category.objects.get_or_create(
-            import_id=campaign_import_id,
-            defaults={
-                'title': local_campaign.title,
-                'icon': local_campaign.icon,
-                'short_description': local_campaign.short_description,
-                'published': False,
-            }
-        )
-        library_campaign.full_clean()
-        library_campaign.save()
+        existing = Category.objects.filter(import_id=campaign_import_id).first()
+        if existing:
+            library_campaign = existing
+        else:
+            library_campaign = Category(
+                import_id=campaign_import_id,
+                title=local_campaign.title,
+                icon=local_campaign.icon,
+                short_description=local_campaign.short_description,
+                published=False,
+            )
+            library_campaign.full_clean()
+            library_campaign.save()
 
         # Step 4: clone only the conflicting quests
         for local_quest in local_quests:

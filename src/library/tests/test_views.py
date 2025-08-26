@@ -945,6 +945,16 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
                     )
                     self.assertEqual(non_conflicting_quest.name, local_quests[1].name)
                     self.assertFalse(non_conflicting_quest.published)
+                else:
+                    # When all quests are conflicts, both should be clones
+                    self.assertEqual(cloned_quests.count(), len(local_quests))
+                    self.assertEqual(
+                        exported_campaign.quest_set.filter(
+                            import_id__in=[q.import_id for q in local_quests]
+                        ).count(),
+                        0,
+                        "Expected no original import_ids when all quests conflict",
+                    )
 
         # Step 3: First export (mix of conflict + non-conflict)
         run_export_and_assert(expect_non_conflicting=True)
