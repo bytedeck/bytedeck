@@ -1,4 +1,5 @@
 import uuid
+from copy import deepcopy
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.db import connection
@@ -10,6 +11,7 @@ from django_tenants.utils import tenant_context
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
+from library.exporter import export_campaign_and_copy_quests
 from model_bakery import baker
 from notifications.models import Notification
 from quest_manager.models import Category, Quest
@@ -887,6 +889,80 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
                     ).exists(),
                     f"Notification not found for {user.username}"
                 )
+
+    def test_export__campaign_with_conflicting_quests_clones_correctly(self):
+        """
+        Ensure that exporting a campaign where some quests already exist in the library:
+        - Clones conflicting quests
+        - Assigns new import_ids
+        - Appends a unique suffix to the quest name
+        - Sets published=False on the clones
+        - Works correctly when exporting more than once:
+            * First run: mix of conflicting + non-conflicting quests
+            * Second run: all quests are conflicts, all get cloned
+        """
+        self.client.force_login(self.test_teacher)
+
+        # Step 1: create a local campaign with quests
+        local_campaign = baker.make(Category, title="Local Campaign")
+        local_quests = [
+            baker.make(Quest, campaign=local_campaign, published=True, name="Quest 1"),
+            baker.make(Quest, campaign=local_campaign, published=True, name="Quest 2"),
+        ]
+
+        # Step 2: simulate a conflict in the library (one of the quests already exists)
+        with library_schema_context():
+            conflicting_quest = deepcopy(local_quests[0])
+            conflicting_quest.pk = None
+            conflicting_quest.import_id = local_quests[0].import_id
+            conflicting_quest.campaign = None
+            conflicting_quest.full_clean()
+            conflicting_quest.save()
+
+        def run_export_and_assert(expect_non_conflicting: bool):
+            """Helper to run export and validate clone naming/suffixing."""
+            export_campaign_and_copy_quests(
+                source_schema=self.tenant.schema_name,
+                campaign_import_id=local_campaign.import_id,
+            )
+            with library_schema_context():
+                exported_campaign = Category.objects.get(import_id=local_campaign.import_id)
+                self.assertEqual(exported_campaign.quest_set.count(), 2)
+
+                # One or more cloned quests should exist
+                cloned_quests = exported_campaign.quest_set.exclude(
+                    import_id__in=[q.import_id for q in local_quests]
+                )
+                self.assertTrue(cloned_quests.exists())
+                for cq in cloned_quests:
+                    self.assertFalse(cq.published)
+                    self.assertIn("(Exported on", cq.name)
+
+                if expect_non_conflicting:
+                    # Verify the non-conflicting quest was exported normally
+                    non_conflicting_quest = exported_campaign.quest_set.get(
+                        import_id=local_quests[1].import_id
+                    )
+                    self.assertEqual(non_conflicting_quest.name, local_quests[1].name)
+                    self.assertFalse(non_conflicting_quest.published)
+                else:
+                    # When all quests are conflicts, both should be clones
+                    self.assertEqual(cloned_quests.count(), len(local_quests))
+                    self.assertEqual(
+                        exported_campaign.quest_set.filter(
+                            import_id__in=[q.import_id for q in local_quests]
+                        ).count(),
+                        0,
+                        "Expected no original import_ids when all quests conflict",
+                    )
+
+        # Step 3: First export (mix of conflict + non-conflict)
+        run_export_and_assert(expect_non_conflicting=True)
+
+        # Step 4: Delete campaign in library → re-run export (now all quests conflict)
+        with library_schema_context():
+            Category.objects.filter(import_id=local_campaign.import_id).delete()
+        run_export_and_assert(expect_non_conflicting=False)
 
 
 class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):

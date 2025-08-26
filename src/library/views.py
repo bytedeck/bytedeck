@@ -17,9 +17,9 @@ from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 
-from .exporter import export_quest_to_library, export_campaign_to_library
+from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .importer import import_campaign_to, import_quest_to
-from .utils import get_library_schema_name, library_schema_context
+from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
 
@@ -411,8 +411,6 @@ class ExportCampaignView(View, ExportPermissionMixin):
     """
     template_name = 'library/confirm_export_campaign.html'
 
-    # TODO: Make a helper function to create a copy of any quests that already exist on the library.
-
     def get(self, request, campaign_import_id):
         """
         Display the confirmation page for exporting a campaign and its quests to the shared library.
@@ -429,19 +427,11 @@ class ExportCampaignView(View, ExportPermissionMixin):
         campaign = get_object_or_404(Category, import_id=campaign_import_id)
         quests = list(campaign.current_quests())
 
-        # Gather import_ids of local quests to check against library
-        quest_import_ids = [q.import_id for q in quests]
-
         # Get existing campaign in library (if any)
         with library_schema_context():
             existing_campaign = Category.objects.filter(import_id=campaign.import_id).first()
 
-            # Gather library quest import IDs to show which quests already exist on the library
-            library_quest_import_ids = list(
-                Quest.objects.all_including_archived()
-                .filter(import_id__in=quest_import_ids)
-                .values_list('import_id', flat=True)
-            )
+        library_quest_import_ids = get_library_conflicting_quests(quests)
 
         context = {
             'campaign': campaign,
@@ -461,14 +451,8 @@ class ExportCampaignView(View, ExportPermissionMixin):
         """
         Handle the export of a campaign and its quests to the shared library.
 
-        Steps:
-            1. Validate user export permissions.
-            2. Retrieve the campaign from the current tenant schema by import_id.
-            3. Check that the campaign does not already exist in the shared library schema.
-            4. Export the campaign and all its quests to the shared library schema.
-            5. Send notifications to all active staff users about the export action.
-            6. Display a success message to the user.
-            7. Redirect the user to the quests categories list.
+        If any quests already exist in the library, copies will be created so
+        the exported campaign has its own versions. Local quests are not affected.
 
         Args:
             request (HttpRequest): The current request object.
@@ -493,7 +477,7 @@ class ExportCampaignView(View, ExportPermissionMixin):
                 )
 
         # Export campaign and quests
-        export_campaign_to_library(source_schema=source_schema, campaign_import_id=campaign.import_id)
+        exported_campaign = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
 
         with library_schema_context():
             exported_campaign = Category.objects.get(import_id=campaign.import_id)
