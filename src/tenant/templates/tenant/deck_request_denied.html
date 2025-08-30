@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block content_outer %}
+<h1>Deck Request Required</h1>
+<p>You need to submit a deck request and verify your email before creating a new deck.</p>
+<p><a href="{% url 'decks:request_new_deck' %}">Return to deck request form</a></p>
+{% endblock %}
