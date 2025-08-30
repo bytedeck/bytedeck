@@ -1,12 +1,13 @@
+from datetime import date
+from copy import deepcopy
+from uuid import uuid4
+
 from django_tenants.utils import schema_context
 from quest_manager.admin import QuestResource
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from datetime import date
-from copy import deepcopy
-from uuid import uuid4
 from .utils import library_schema_context, get_library_conflicting_quests
 
 
@@ -186,12 +187,19 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
 
                 # make sure name fits max length
                 max_len = Quest._meta.get_field("name").max_length or 50
-                suffix = f" (Exported on {date.today()})"
+                base_suffix = f" (Exported on {date.today()})"
                 counter = 1
-                while Quest.objects.filter(name=local_quest.name[:max_len - len(suffix)] + suffix).exists():
-                    suffix = f"{suffix} #{counter}"
+                base_name = local_quest.name
+
+                # Try the base suffix first
+                potential_name = base_name[:max_len - len(base_suffix)] + base_suffix
+                while Quest.objects.filter(name=potential_name).exists():
+                    counter_suffix = f" #{counter}"
+                    full_suffix = base_suffix + counter_suffix
+                    potential_name = base_name[:max_len - len(full_suffix)] + full_suffix
                     counter += 1
-                clone.name = local_quest.name[:max_len - len(suffix)] + suffix
+
+                clone.name = potential_name
 
                 clone.full_clean()
                 clone.save()

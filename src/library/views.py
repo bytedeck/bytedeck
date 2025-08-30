@@ -425,6 +425,7 @@ class ExportCampaignView(View, ExportPermissionMixin):
         self._require_export_permission(request)
 
         campaign = get_object_or_404(Category, import_id=campaign_import_id)
+        # evaluate the queryset to render the quests properly and give proper context to get_library_conflicting_quests
         quests = list(campaign.current_quests())
 
         # Get existing campaign in library (if any)
