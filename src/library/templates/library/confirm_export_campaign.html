@@ -53,10 +53,9 @@
     </form>
     {% if library_quest_import_ids %}
         <div class="alert alert-danger panel-top">
-          {% comment %} TODO: Update this message to the new method of dealing with conflicts. {% endcomment %}
-            <strong>Warning:</strong> One or more quests in this campaign already exist in the library;
-            they are indicated with this icon <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the quest list below.
-            Exporting this campaign will <strong>overwrite</strong> those existing quests with the local versions.
+          <strong>Warning:</strong> One or more quests in this campaign already exist in the library;
+          they are indicated with this icon <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the quest list below.
+          Exporting this campaign will <strong>create duplicate copies</strong> of those quests in the library, linked to the exported campaign.
         </div>
     {% endif %}
     <h3>{{ campaign.name }}</h3>
