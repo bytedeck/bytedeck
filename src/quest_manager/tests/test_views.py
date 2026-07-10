@@ -2038,7 +2038,7 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
             intended_order = displayed_order.order_by(*XPItem._meta.ordering)
 
             # assert ordered view is unchanged from displayed view
-            self.assertQuerysetEqual(displayed_order, intended_order)
+            self.assertQuerySetEqual(displayed_order, intended_order)
 
     def test_context_correct_tab_types(self):
         """ Checks each possible tab for student and teacher individually if it can be activated
@@ -2182,7 +2182,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Admin should be able to see every quest assigned to the viewed campaign
         displayed_quests = response.context["category_displayed_quests"]
         intended_quests = Quest.objects.filter(campaign=view_test_campaign)
-        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
+        self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
 
         # Students should be able to access view
         self.client.force_login(self.test_student1)
@@ -2192,7 +2192,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Students should only be able to see active quests assigned to the viewed campaign
         displayed_quests = response.context["category_displayed_quests"]
         intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
-        self.assertQuerysetEqual(displayed_quests, intended_quests, ordered=False)
+        self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
 
     def test_CategoryCreate_view(self):
         """ Admin should be able to create a course """

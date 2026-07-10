@@ -176,7 +176,7 @@ class BadgeAssertionManagerTest(TenantTestCase):
         # this should only return three, not the duplicate badge_assertion of badge1
         # and they should be sorted by badge.sort_order
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-        self.assertQuerysetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
+        self.assertQuerySetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
 
     def test_all_for_user_distinct__badge_type_order_correct(self):
         """
@@ -200,7 +200,7 @@ class BadgeAssertionManagerTest(TenantTestCase):
         badge_assertion3 = baker.make(BadgeAssertion, user=self.student, badge=badge3)
 
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-        self.assertQuerysetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
+        self.assertQuerySetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
 
 
 class BadgeAssertionTestModel(TenantTestCase):
@@ -264,7 +264,7 @@ class BadgeAssertionTestModel(TenantTestCase):
             values.append(badge_assertion)
 
         qs = badge_assertion.get_duplicate_assertions()
-        self.assertQuerysetEqual(list(qs), values, )
+        self.assertQuerySetEqual(list(qs), values, )
 
     def test_badge_assertion_manager_create_assertion(self):
 

@@ -175,11 +175,11 @@ class CommentModelTest(TenantTestCase):
         "Test that method returns a queryset including all children"
         parent = baker.make(Comment)
 
-        self.assertQuerysetEqual(parent.get_children(), [])
+        self.assertQuerySetEqual(parent.get_children(), [])
 
         child = baker.make(Comment, parent=parent)
         self.assertIsNone(child.get_children())
 
         child2 = baker.make(Comment, parent=parent)
         children = parent.get_children()
-        self.assertQuerysetEqual(children, [child, child2], ordered=False)
+        self.assertQuerySetEqual(children, [child, child2], ordered=False)

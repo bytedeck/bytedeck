@@ -1,6 +1,5 @@
 # from mock import patch
 
-from django.utils.six import text_type
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -202,7 +201,7 @@ class IsAPrereqMixinTest(TenantTestCase):
         """ All models implementing this Mixin, also implement this method if the default doesn't suffice """
         prereq_models = IsAPrereqMixin.all_registered_model_classes()
         for model in prereq_models:
-            assert all(isinstance(x, text_type) for x in model.gfk_search_fields())
+            assert all(isinstance(x, str) for x in model.gfk_search_fields())
 
     def test_static_content_type_is_registered(self):
         """A content_type representing a model that implements the IsAPrereqMixin returns True

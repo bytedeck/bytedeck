@@ -401,7 +401,7 @@ class QuestManagerTest(TenantTestCase):
         baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
         baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
-        self.assertQuerysetEqual(qs, ['Quest-available-without-course', 'Send your teacher a Message'], ordered=False)
+        self.assertQuerySetEqual(qs, ['Quest-available-without-course', 'Send your teacher a Message'], ordered=False)
 
     def test_quest_qs_editable(self):
         """
@@ -512,7 +512,7 @@ class QuestManagerTest(TenantTestCase):
         # complete the blocking quest to make others available
         blocking_sub.mark_completed()
         qs = Quest.objects.get_available(self.student)
-        self.assertQuerysetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
+        self.assertQuerySetEqual(list(qs.values_list('name', flat=True)), ['Quest-not-started', 'Welcome to ByteDeck!'], ordered=False)
 
         ########################################
         # 2. Quests that are not published to students or archived
@@ -543,7 +543,7 @@ class QuestManagerTest(TenantTestCase):
         # move 1 hour out and the cooldown quest should now appear:
         with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
             qs = Quest.objects.get_available(self.student)
-            self.assertQuerysetEqual(
+            self.assertQuerySetEqual(
                 list(qs.values_list('name', flat=True)),
                 ['Quest-1hr-cooldown', 'Quest-not-started', 'Welcome to ByteDeck!'],
                 ordered=False
@@ -559,7 +559,7 @@ class QuestManagerTest(TenantTestCase):
             # increment time another hour just be sure it doesn't appear (max repeats of 1 reached)
             with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
                 qs = Quest.objects.get_available(self.student)
-                self.assertQuerysetEqual(
+                self.assertQuerySetEqual(
                     list(qs.values_list('name', flat=True)),
                     ['Quest-not-started', 'Welcome to ByteDeck!'],
                     ordered=False
@@ -720,19 +720,19 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         qs = QuestSubmission.objects.all()
 
         # Currently contains the submission from setup.
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [self.sub])
+        self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub])
 
         # Add another submission from a different block, with a different teacher
         baker.make(QuestSubmission, quest=self.quest, semester=self.active_semester)
         # Should still only have the originally submission
         qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [self.sub])
+        self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub])
 
         # Add another submission from a different block, but this time the quest should notify the teacher
         sub2 = baker.make(QuestSubmission, semester=self.active_semester, quest__specific_teacher_to_notify=self.teacher)
         # print(qs.for_teacher_only(self.teacher))
         qs = QuestSubmission.objects.all()
-        self.assertQuerysetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
+        self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
 
     def test_for_teachers_only__with_deleted_quest(self):
         """for_teachers_only QuestSubmissions should be deleted for that quest if it is deleted"""
@@ -766,11 +766,11 @@ class QuestSubmissionManagerTest(TenantTestCase):
     def test_get_queryset_default(self):
         """QuestSubmissionManager.get_queryset by default should return all published, not archived quest submissions"""
         qs = QuestSubmission.objects.get_queryset()
-        self.assertQuerysetEqual(qs, [self.sub1, self.sub2], ordered=False)
+        self.assertQuerySetEqual(qs, [self.sub1, self.sub2], ordered=False)
 
     def test_get_queryset_for_active_semester(self):
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
-        self.assertQuerysetEqual(qs, [self.sub1])
+        self.assertQuerySetEqual(qs, [self.sub1])
 
     def test_get_queryset_for_all_quests(self):
         qs = QuestSubmission.objects.get_queryset(
@@ -785,7 +785,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         quest = self.sub1.quest
         first = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
         qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True)
-        self.assertQuerysetEqual(qs, [first])
+        self.assertQuerySetEqual(qs, [first])
 
     def make_test_submissions_stack(self):
         """Generate 7 submissions, 3 from one semester and 4 from a different semester, each with different settings

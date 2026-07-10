@@ -103,10 +103,10 @@ class ProfileTestModel(TenantTestCase):
         self.assertFalse(self.profile.current_courses().exists())
         # add one and test
         course_registration = self.create_active_course_registration()
-        self.assertQuerysetEqual(self.profile.current_courses(), [course_registration])
+        self.assertQuerySetEqual(self.profile.current_courses(), [course_registration])
         # add a second
         course_registration2 = self.create_active_course_registration()
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             self.profile.current_courses(),
             [course_registration, course_registration2]
         )
