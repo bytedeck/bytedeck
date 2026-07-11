@@ -229,6 +229,8 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
         if num_users is None:
             num_users = User.objects.filter(is_active=True).count()
             cache.set(cache_key, num_users, 60)
+        if not num_users:
+            return 0
         return num_assertions / num_users
 
     def percent_of_active_users_granted_this(self):
@@ -308,7 +310,8 @@ class BadgeAssertionManager(models.Manager):
         """
         # the secondary ordering by id makes DISTINCT ON deterministic: it always keeps
         # the earliest assertion of each badge (postgres returns the first row per group)
-        qs = self.get_queryset(False).prefetch_related('badge', 'badge__badge_type').get_user(user).order_by('badge_id', 'id').distinct('badge_id')
+        # (badge and badge_type are already joined by get_queryset's select_related)
+        qs = self.get_queryset(False).get_user(user).order_by('badge_id', 'id').distinct('badge_id')
 
         sorted_qs = sorted(qs, key=lambda x: [(x.badge.badge_type.sort_order or 0), (x.badge.sort_order or 0)])  # sort_order defaults to 0 if not set
 
