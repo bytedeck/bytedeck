@@ -19,7 +19,6 @@ django-summernote>=0.8,<0.9
 django-taggit>=2.1,<5.0
 django-tenants>=3.5,<3.6  # latest version that supports python 3.8 (but now using 3.10 so can update it?)
 django-url-or-relative-url-field>=0.2.0,<0.3.0
-django-utils-six==2.0  # only 2.0 exists. Previous version was removed back in Django 3.0
 tenant-schemas-celery>=2.2,<3.1
 
 # non django
@@ -34,4 +33,5 @@ pytz # required by django-redis which uses pickle, even though django-redis chan
 
 # subdependencies
 psycopg2-binary>=2.8.6,<2.10  # since our backend is PostgreSQL, Django and django-tenants use this to interact with the db
+redis>=4.0.2,<8  # pulled in via django-redis/celery; redis-py 8+ speaks RESP3 (HELLO) which the redis 5.0 server in docker-compose doesn't support
 pillow>=10.3,<11.0  # used implicitly by django_resized (does not exist as an extra package either)

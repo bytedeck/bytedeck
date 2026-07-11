@@ -138,7 +138,7 @@ class SemesterModelManagerTest(TenantTestCase):
 
     def test_get_current_as_queryset(self):
         """ Get's the current semester object in a quesryset  """
-        self.assertQuerysetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
+        self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
     def test_complete_active_semester(self):
         """ set current semester to closed and do lots of stuff..  """
@@ -352,7 +352,7 @@ class CourseStudentManagerTest(TenantTestCase):
 
         course_students = CourseStudent.objects.all_for_user_semester(self.student, semester_to_check)
         self.assertEqual(course_students.count(), 2)
-        self.assertQuerysetEqual(course_students, [sc1, sc2], ordered=False)
+        self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
     @patch('profile_manager.models.Profile.xp_per_course')
     def test_calc_semester_grades(self, xp_per_course):

@@ -334,7 +334,6 @@ SELECT2_THEME = 'bootstrap'  # This doesn't actually work, why?
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/Vancouver'
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
 
@@ -425,14 +424,20 @@ if USE_S3:
     # S3 Static Files
     STATICFILES_LOCATION = 'static'
     STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{STATICFILES_LOCATION}/'
-    STATICFILES_STORAGE = 'storage.custom_storages.StaticStorage'
 
     # Media Files
 
     # S3 public media files
     PUBLIC_MEDIAFILES_LOCATION = 'public_media'
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIAFILES_LOCATION}/'
-    DEFAULT_FILE_STORAGE = 'storage.custom_storages.PublicMediaStorage'
+
+    # STORAGES replaces the STATICFILES_STORAGE and DEFAULT_FILE_STORAGE settings,
+    # which are removed in Django 5.1. When STORAGES is not defined (the non-S3
+    # branch below), Django's defaults apply: FileSystemStorage + StaticFilesStorage.
+    STORAGES = {
+        "default": {"BACKEND": "storage.custom_storages.PublicMediaStorage"},
+        "staticfiles": {"BACKEND": "storage.custom_storages.StaticStorage"},
+    }
 
     # S3 private media files
     # For any implementation in future, Refer https://testdriven.io/blog/storing-django-static-and-media-files-on-amazon-s3/
