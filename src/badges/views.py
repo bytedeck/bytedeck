@@ -14,7 +14,7 @@ from django.views.generic import RedirectView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.views.generic.list import ListView
 from django.template.loader import render_to_string
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
@@ -39,7 +39,16 @@ class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, Redire
 @non_public_only_view
 @login_required
 def badge_list(request):
-    badge_types = BadgeType.objects.all()
+    # prefetch each type's badges with their tags and assertion counts, so the
+    # per-badge popovers don't trigger several queries per badge
+    badge_types = BadgeType.objects.prefetch_related(
+        Prefetch(
+            'badge_set',
+            queryset=Badge.objects.annotate(
+                num_assertions_annotated=Count('badgeassertion')
+            ).prefetch_related('tags')
+        )
+    )
     unpublished_badges = Badge.objects.all().filter(published=False)
 
     # http://stackoverflow.com/questions/32421214/django-queryset-all-model1-objects-where-a-model2-exists-with-a-model1-and-the

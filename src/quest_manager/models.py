@@ -764,22 +764,15 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         if teacher is None:
             return self
         else:
-            # Why doesn't this work?!? it only works for some teachers? with or without pk
-            # return self.filter(user__coursestudent__block__current_teacher=teacher).distinct()
-            # pk_sub_list = [
-            #     sub.pk for sub in self
-            #     if teacher.pk in sub.user.profile.teachers() or sub.quest.specific_teacher_to_notify == teacher
-            # ]
-
-            pk_sub_list = [
-                sub.pk for sub in self
-                if (
-                    teacher.pk in sub.user.profile.teachers() or
-                    (sub.quest.specific_teacher_to_notify == teacher if sub.quest else False)  # will error if quest has been deleted
-                )
-            ]
-
-            return self.filter(pk__in=pk_sub_list)
+            # The student's "current teachers" are the teachers of the blocks of their
+            # course registrations in the active semester (Profile.teachers()), so the
+            # block filter must be scoped to the active semester to match.
+            active_semester = SiteConfig.get().active_semester
+            return self.filter(
+                Q(user__coursestudent__semester=active_semester,
+                  user__coursestudent__block__current_teacher=teacher) |
+                Q(quest__specific_teacher_to_notify=teacher)
+            ).distinct()
 
     def exclude_archived_quests(self):
         return self.exclude(quest__archived=True)
@@ -805,7 +798,7 @@ class QuestSubmissionManager(models.Manager):
 
         # Add effiencies by getting additional related objects we'll almost always need
         if include_related:
-            qs = qs.select_related('quest', 'quest__campaign')
+            qs = qs.select_related('quest', 'quest__campaign', 'user__profile')
             qs = qs.prefetch_related('quest__tags')
 
         return qs
