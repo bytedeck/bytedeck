@@ -578,24 +578,29 @@ class RankCacheInvalidationTest(TenantTestCase):
     A stale cache would silently corrupt rank display everywhere."""
 
     def setUp(self):
+        """Start each test with a cold rank cache."""
         from django.core.cache import cache
         cache.delete(Rank.objects.ranks_cache_key())
 
     def assert_cache_matches_db(self):
+        """Assert the cached rank list matches the ranks table, comparing (pk, xp) in xp order."""
         cached = [(r.pk, r.xp) for r in Rank.objects.get_ranks_cached()]
         db = [(r.pk, r.xp) for r in Rank.objects.all().order_by('xp')]
         self.assertEqual(cached, db)
 
     def warm_cache(self):
+        """Populate the rank cache so the test's write can be shown to invalidate it."""
         Rank.objects.get_ranks_cached()
 
     def test_cached_rank_lookups_hit_no_queries(self):
+        """With a warm cache, get_rank() and get_next_rank() must not query the database."""
         self.warm_cache()
         with self.assertNumQueries(0):
             Rank.objects.get_rank(100)
             Rank.objects.get_next_rank(100)
 
     def test_save_invalidates_cache(self):
+        """Creating a Rank (via save) and re-saving it must invalidate the cache (post_save signal)."""
         self.warm_cache()
         rank = baker.make(Rank, xp=123456)
         self.assertEqual(Rank.objects.get_rank(123456).pk, rank.pk)
@@ -606,18 +611,21 @@ class RankCacheInvalidationTest(TenantTestCase):
         self.assert_cache_matches_db()
 
     def test_instance_delete_invalidates_cache(self):
+        """Deleting a Rank instance must invalidate the cache (post_delete signal)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         rank.delete()
         self.assert_cache_matches_db()
 
     def test_queryset_delete_invalidates_cache(self):
+        """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         Rank.objects.filter(pk=rank.pk).delete()
         self.assert_cache_matches_db()
 
     def test_queryset_update_invalidates_cache(self):
+        """Queryset .update() fires no signals; the RankQuerySet.update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         Rank.objects.filter(pk=rank.pk).update(xp=654321)
@@ -625,11 +633,13 @@ class RankCacheInvalidationTest(TenantTestCase):
         self.assert_cache_matches_db()
 
     def test_bulk_create_invalidates_cache(self):
+        """bulk_create() fires no signals; the RankQuerySet.bulk_create override must invalidate the cache."""
         self.warm_cache()
         Rank.objects.bulk_create([Rank(name='Bulk Rank', xp=123456)])
         self.assert_cache_matches_db()
 
     def test_bulk_update_invalidates_cache(self):
+        """bulk_update() fires no signals; the RankQuerySet.bulk_update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         rank.xp = 654321

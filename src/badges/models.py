@@ -33,16 +33,19 @@ def invalidate_badge_rarities_cache():
 class BadgeRarityQuerySet(models.query.QuerySet):
     # these write paths fire no signals, so they must invalidate the cache themselves
     def update(self, **kwargs):
+        """Same as QuerySet.update(), but invalidates the rarity cache (no signals fire)."""
         result = super().update(**kwargs)
         invalidate_badge_rarities_cache()
         return result
 
     def bulk_create(self, *args, **kwargs):
+        """Same as QuerySet.bulk_create(), but invalidates the rarity cache (no signals fire)."""
         result = super().bulk_create(*args, **kwargs)
         invalidate_badge_rarities_cache()
         return result
 
     def bulk_update(self, *args, **kwargs):
+        """Same as QuerySet.bulk_update(), but invalidates the rarity cache (no signals fire)."""
         result = super().bulk_update(*args, **kwargs)
         invalidate_badge_rarities_cache()
         return result

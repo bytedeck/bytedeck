@@ -89,16 +89,19 @@ class RankQuerySet(models.query.QuerySet):
 
     # these write paths fire no signals, so they must invalidate the cache themselves
     def update(self, **kwargs):
+        """Same as QuerySet.update(), but invalidates the rank cache (no signals fire)."""
         result = super().update(**kwargs)
         invalidate_ranks_cache()
         return result
 
     def bulk_create(self, *args, **kwargs):
+        """Same as QuerySet.bulk_create(), but invalidates the rank cache (no signals fire)."""
         result = super().bulk_create(*args, **kwargs)
         invalidate_ranks_cache()
         return result
 
     def bulk_update(self, *args, **kwargs):
+        """Same as QuerySet.bulk_update(), but invalidates the rank cache (no signals fire)."""
         result = super().bulk_update(*args, **kwargs)
         invalidate_ranks_cache()
         return result
