@@ -349,3 +349,52 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(notifications.count(), 4)
         self.assertEqual(notifications.filter(verb__contains='granted').count(), 3)
         self.assertEqual(notifications.filter(verb__contains='promoted').count(), 1)
+
+
+class BadgeRarityCacheInvalidationTest(TenantTestCase):
+    """get_rarity() reads from the cached rarity list, so every ORM write path
+    must invalidate it: save/create and deletes via the post_save/post_delete
+    signals, update()/bulk_create()/bulk_update() via the BadgeRarityQuerySet
+    overrides (those fire no signals)."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.delete(BadgeRarity.objects.rarities_cache_key())
+
+    def assert_cache_matches_db(self):
+        cached = [(r.pk, r.percentile) for r in BadgeRarity.objects.get_rarities_cached()]
+        db = [(r.pk, r.percentile) for r in BadgeRarity.objects.all().order_by('percentile')]
+        self.assertEqual(cached, db)
+
+    def warm_cache(self):
+        BadgeRarity.objects.get_rarities_cached()
+
+    def test_save_invalidates_cache(self):
+        self.warm_cache()
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.assertEqual(BadgeRarity.objects.get_rarity(0.1).pk, rarity.pk)
+        self.assert_cache_matches_db()
+
+    def test_queryset_delete_invalidates_cache(self):
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        BadgeRarity.objects.filter(pk=rarity.pk).delete()
+        self.assert_cache_matches_db()
+
+    def test_queryset_update_invalidates_cache(self):
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        BadgeRarity.objects.filter(pk=rarity.pk).update(percentile=0.456)
+        self.assert_cache_matches_db()
+
+    def test_bulk_create_invalidates_cache(self):
+        self.warm_cache()
+        BadgeRarity.objects.bulk_create([BadgeRarity(name='Bulk Rarity', percentile=0.123)])
+        self.assert_cache_matches_db()
+
+    def test_bulk_update_invalidates_cache(self):
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        rarity.percentile = 0.456
+        BadgeRarity.objects.bulk_update([rarity], ['percentile'])
+        self.assert_cache_matches_db()

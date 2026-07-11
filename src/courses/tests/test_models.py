@@ -568,3 +568,70 @@ class RankModelTest(TenantTestCase):
         self.rank.save()
 
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
+
+
+class RankCacheInvalidationTest(TenantTestCase):
+    """get_rank()/get_next_rank() read from the cached rank list, so every ORM
+    write path must invalidate it: save/create and deletes are covered by the
+    post_save/post_delete signals, while update()/bulk_create()/bulk_update()
+    (which fire no signals) are covered by the RankQuerySet overrides.
+    A stale cache would silently corrupt rank display everywhere."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.delete(Rank.objects.ranks_cache_key())
+
+    def assert_cache_matches_db(self):
+        cached = [(r.pk, r.xp) for r in Rank.objects.get_ranks_cached()]
+        db = [(r.pk, r.xp) for r in Rank.objects.all().order_by('xp')]
+        self.assertEqual(cached, db)
+
+    def warm_cache(self):
+        Rank.objects.get_ranks_cached()
+
+    def test_cached_rank_lookups_hit_no_queries(self):
+        self.warm_cache()
+        with self.assertNumQueries(0):
+            Rank.objects.get_rank(100)
+            Rank.objects.get_next_rank(100)
+
+    def test_save_invalidates_cache(self):
+        self.warm_cache()
+        rank = baker.make(Rank, xp=123456)
+        self.assertEqual(Rank.objects.get_rank(123456).pk, rank.pk)
+        self.assert_cache_matches_db()
+
+        rank.xp = 654321
+        rank.save()
+        self.assert_cache_matches_db()
+
+    def test_instance_delete_invalidates_cache(self):
+        rank = baker.make(Rank, xp=123456)
+        self.warm_cache()
+        rank.delete()
+        self.assert_cache_matches_db()
+
+    def test_queryset_delete_invalidates_cache(self):
+        rank = baker.make(Rank, xp=123456)
+        self.warm_cache()
+        Rank.objects.filter(pk=rank.pk).delete()
+        self.assert_cache_matches_db()
+
+    def test_queryset_update_invalidates_cache(self):
+        rank = baker.make(Rank, xp=123456)
+        self.warm_cache()
+        Rank.objects.filter(pk=rank.pk).update(xp=654321)
+        self.assertEqual(Rank.objects.get_rank(654321).pk, rank.pk)
+        self.assert_cache_matches_db()
+
+    def test_bulk_create_invalidates_cache(self):
+        self.warm_cache()
+        Rank.objects.bulk_create([Rank(name='Bulk Rank', xp=123456)])
+        self.assert_cache_matches_db()
+
+    def test_bulk_update_invalidates_cache(self):
+        rank = baker.make(Rank, xp=123456)
+        self.warm_cache()
+        rank.xp = 654321
+        Rank.objects.bulk_update([rank], ['xp'])
+        self.assert_cache_matches_db()

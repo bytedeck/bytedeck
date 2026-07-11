@@ -71,12 +71,37 @@ class MarkRange(models.Model):
         return self.name + " (" + str(self.minimum_mark) + "%)"
 
 
+def invalidate_ranks_cache():
+    """Remove the cached rank list (see RankManager.get_ranks_cached).
+    Wired to every ORM write path: post_save/post_delete signals cover save(),
+    create() and instance/queryset deletes; the RankQuerySet overrides below
+    cover update(), bulk_create() and bulk_update(), which fire no signals."""
+    from django.core.cache import cache
+    cache.delete(RankManager.ranks_cache_key())
+
+
 class RankQuerySet(models.query.QuerySet):
     def get_ranks_lte(self, xp):
         return self.filter(xp__lte=xp)
 
     def get_ranks_gt(self, xp):
         return self.filter(xp__gt=xp)
+
+    # these write paths fire no signals, so they must invalidate the cache themselves
+    def update(self, **kwargs):
+        result = super().update(**kwargs)
+        invalidate_ranks_cache()
+        return result
+
+    def bulk_create(self, *args, **kwargs):
+        result = super().bulk_create(*args, **kwargs)
+        invalidate_ranks_cache()
+        return result
+
+    def bulk_update(self, *args, **kwargs):
+        result = super().bulk_update(*args, **kwargs)
+        invalidate_ranks_cache()
+        return result
 
 
 class RankManager(models.Manager):
@@ -602,6 +627,6 @@ def coursestudent_post_save_callback(instance, **kwargs):
 @receiver(post_delete, sender=Rank)
 def rank_invalidate_cache_callback(instance, **kwargs):
     """Keep the cached rank list (RankManager.get_ranks_cached) in sync.
-    Signals (rather than model save/delete overrides) also cover queryset.delete()."""
-    from django.core.cache import cache
-    cache.delete(RankManager.ranks_cache_key())
+    Signals (rather than model save/delete overrides) also cover queryset.delete(),
+    because registering receivers disables the fast-delete path."""
+    invalidate_ranks_cache()

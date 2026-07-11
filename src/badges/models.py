@@ -21,12 +21,42 @@ from notifications.models import notify_rank_up
 
 # Create your models here.
 
+def invalidate_badge_rarities_cache():
+    """Remove the cached rarity list (see BadgeRarityManager.get_rarities_cached).
+    Wired to every ORM write path: post_save/post_delete signals cover save(),
+    create() and instance/queryset deletes; the BadgeRarityQuerySet overrides
+    cover update(), bulk_create() and bulk_update(), which fire no signals."""
+    from django.core.cache import cache
+    cache.delete(BadgeRarityManager.rarities_cache_key())
+
+
+class BadgeRarityQuerySet(models.query.QuerySet):
+    # these write paths fire no signals, so they must invalidate the cache themselves
+    def update(self, **kwargs):
+        result = super().update(**kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+    def bulk_create(self, *args, **kwargs):
+        result = super().bulk_create(*args, **kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+    def bulk_update(self, *args, **kwargs):
+        result = super().bulk_update(*args, **kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+
 class BadgeRarityManager(models.Manager):
 
     @staticmethod
     def rarities_cache_key():
         from django.db import connection
         return f'{connection.schema_name}-badge-rarities-all'
+
+    def get_queryset(self):
+        return BadgeRarityQuerySet(self.model, using=self._db)
 
     def get_rarities_cached(self):
         """The full list of BadgeRarity objects (ordered by percentile ascending), cached
@@ -483,6 +513,6 @@ def post_save_receiver(sender, **kwargs):
 @receiver(post_delete, sender=BadgeRarity)
 def badge_rarity_invalidate_cache_callback(instance, **kwargs):
     """Keep the cached rarity list (BadgeRarityManager.get_rarities_cached) in sync.
-    Signals (rather than model save/delete overrides) also cover queryset.delete()."""
-    from django.core.cache import cache
-    cache.delete(BadgeRarityManager.rarities_cache_key())
+    Signals (rather than model save/delete overrides) also cover queryset.delete(),
+    because registering receivers disables the fast-delete path."""
+    invalidate_badge_rarities_cache()
