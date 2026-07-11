@@ -251,10 +251,15 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
         from django.db import connection
 
         # views can provide this via .annotate(num_assertions_annotated=Count('badgeassertion'))
-        # to avoid one COUNT query per badge on list pages
+        # to avoid one COUNT query per badge on list pages; where no annotation is available
+        # (e.g. badge popovers on profile pages and ajax quest info), the count is cached briefly
         num_assertions = getattr(self, 'num_assertions_annotated', None)
         if num_assertions is None:
-            num_assertions = BadgeAssertion.objects.filter(badge=self).count()
+            count_cache_key = f'{connection.schema_name}-badge-assertion-count-{self.pk}'
+            num_assertions = cache.get(count_cache_key)
+            if num_assertions is None:
+                num_assertions = BadgeAssertion.objects.filter(badge=self).count()
+                cache.set(count_cache_key, num_assertions, 60)
 
         # the same count is needed for every badge on a page, so cache it briefly
         cache_key = f'{connection.schema_name}-active-user-count'
@@ -330,7 +335,8 @@ class BadgeAssertionManager(models.Manager):
             users = User.objects.filter(profile__in=Profile.objects.all_students())
 
         users = users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
-        return users.exclude(assertion_count=0).order_by('-assertion_count')
+        # the badge detail template reads user.profile per row
+        return users.exclude(assertion_count=0).select_related('profile').order_by('-assertion_count')
 
     def all_for_user(self, user):
         return self.get_queryset(True).get_user(user)

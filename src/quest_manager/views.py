@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db.models import F, ExpressionWrapper, fields, BooleanField, Exists, OuterRef
+from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -83,6 +83,15 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
             queryset = queryset.filter(published=False)
         else:
             queryset = queryset.filter(published=True)
+
+        # provide the per-campaign counts the template displays in a single query,
+        # instead of a COUNT/SUM per campaign (see Category.quest_count / xp_sum);
+        # the filter must match Category.current_quests(): published and not archived
+        current_quest_filter = Q(quest__published=True) & ~Q(quest__archived=True)
+        queryset = queryset.annotate(
+            quest_count_annotated=Count('quest', filter=current_quest_filter),
+            xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
+        )
 
         return queryset
 

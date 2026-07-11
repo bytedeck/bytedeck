@@ -190,6 +190,10 @@ class Rank(IsAPrereqMixin, models.Model):
         return user.profile.xp_cached >= self.xp
 
     def get_map(self):
+        """RankList pre-populates _map_cached for the whole page in a single
+        query; fall back to an individual lookup when it isn't set."""
+        if hasattr(self, '_map_cached'):
+            return self._map_cached
         from djcytoscape.models import CytoScape
         return CytoScape.objects.get_map_for_init(self)
 

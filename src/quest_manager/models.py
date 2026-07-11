@@ -101,12 +101,21 @@ class Category(IsAPrereqMixin, models.Model):
         return self.quest_set.all().published().not_archived()
 
     def quest_count(self):
-        """ Returns the total number of quests available in this campaign."""
+        """ Returns the total number of quests available in this campaign.
+        Views can provide quest_count_annotated (see CategoryList) to avoid a
+        COUNT query per campaign per template access."""
+        annotated = getattr(self, 'quest_count_annotated', None)
+        if annotated is not None:
+            return annotated
         return self.current_quests().count()
 
     def xp_sum(self):
         """ Returns the total XP available from completing all published quests in this campaign.
-        Repeating quests are only counted once."""
+        Repeating quests are only counted once.
+        Views can provide xp_sum_annotated (see CategoryList) to avoid an
+        aggregate query per campaign."""
+        if hasattr(self, 'xp_sum_annotated'):
+            return self.xp_sum_annotated
         return self.current_quests().aggregate(Sum('xp'))['xp__sum']
 
     def condition_met_as_prerequisite(self, user, num_required=1):
