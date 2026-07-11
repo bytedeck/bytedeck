@@ -99,3 +99,20 @@ class TestRegenerateMapSignals(TenantTestCase):
 
         prereq.save()
         self.assertEqual(task.call_count, 2)
+
+    def test_prereq_signal_handles_parent_with_non_id_pk(self, task):
+        """Saving a Prereq whose parent model uses a primary key not named 'id'
+        (e.g. Portfolio, whose pk is its user) must not raise FieldError.
+        Regression test for the signal looking the parent up with id= instead of pk=."""
+        from django.contrib.contenttypes.models import ContentType
+        from portfolios.models import Portfolio
+
+        portfolio = baker.make(Portfolio)
+        quest = baker.make(Quest)
+        baker.make(
+            Prereq,
+            parent_content_type=ContentType.objects.get_for_model(Portfolio),
+            parent_object_id=portfolio.pk,
+            prereq_content_type=ContentType.objects.get_for_model(Quest),
+            prereq_object_id=quest.pk,
+        )  # implicitly asserts no exception is raised by the post_save signal

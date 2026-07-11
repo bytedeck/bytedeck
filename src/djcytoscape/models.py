@@ -218,7 +218,7 @@ class CytoElement(models.Model):
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.id)
+        return str(type(obj).__name__) + ": " + str(obj.pk)  # pk, not id: not all models have an "id" field (e.g. Portfolio)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):

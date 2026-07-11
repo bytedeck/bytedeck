@@ -537,9 +537,9 @@ class Prereq(IsAPrereqMixin, models.Model):
             # parent_object=parent_object,
             # prereq_object=prereq_object
             parent_content_type=ContentType.objects.get_for_model(parent_object),
-            parent_object_id=parent_object.id,
+            parent_object_id=parent_object.pk,
             prereq_content_type=ContentType.objects.get_for_model(prereq_object),
-            prereq_object_id=prereq_object.id,
+            prereq_object_id=prereq_object.pk,
         )
         new_prereq.save()
         return new_prereq
