@@ -139,10 +139,15 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Rank
 
     def get_context_data(self, **kwargs):
+        """Add the map link for every rank on the page in a single query.
+
+        The template calls rank.get_map() for each row; without pre-population
+        that is one CytoScape query per rank. This fetches all rank maps at
+        once and stores each on its rank as `_map_cached`, which get_map()
+        reads. Returns the standard ListView context.
+        """
         context = super().get_context_data(**kwargs)
 
-        # pre-populate each rank's map link in one query instead of one per rank
-        # (the template calls rank.get_map for every row)
         from django.contrib.contenttypes.models import ContentType
         from djcytoscape.models import CytoScape
 
