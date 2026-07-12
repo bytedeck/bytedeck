@@ -163,6 +163,28 @@ class IsAPrereqMixinTest(TenantTestCase):
         reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=False)
         self.assertEqual(len(reliant_objects), 1)
 
+    def test_get_reliant_objects__exclude_NOT__inverted_or_prereq(self):
+        """An object that is only an inverted (NOT) alternate requirement of a
+        parent must not be reported as having reliant objects when
+        exclude_NOT=True. Regression test for issue #1900:
+        get_all_for_or_prereq_object discarded its exclude() result, so
+        exclude_NOT had no effect for the OR requirement slot."""
+        # from setUp: quest_or_prereq is the OR requirement of prereq_with_or,
+        # whose parent is quest_parent
+        reliant_objects = self.quest_or_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
+        # invert the OR requirement (NOT): the parent no longer relies on it
+        self.prereq_with_or.or_prereq_invert = True
+        self.prereq_with_or.save()
+
+        reliant_objects = self.quest_or_prereq.get_reliant_objects(exclude_NOT=True)
+        self.assertListEqual(list(reliant_objects), [])
+
+        # without exclude_NOT, the inverted OR relationship is still reported
+        reliant_objects = self.quest_or_prereq.get_reliant_objects(exclude_NOT=False)
+        self.assertListEqual(list(reliant_objects), [self.quest_parent])
+
     def test_get_reliant_objects__sort(self):
         """ Test that get_reliant_objects(sort=True) returns a list where the objects are sorted alphabetically by str() """
 

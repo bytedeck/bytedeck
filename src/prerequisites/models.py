@@ -267,11 +267,17 @@ class PrereqQuerySet(models.query.QuerySet):
         return qs
 
     def get_all_for_or_prereq_object(self, prereq_object, exclude_NOT=False):
+        """Return all Prereqs that have the given object as their alternate (OR) requirement.
+
+        :param prereq_object: the object to look for in the OR requirement slot
+        :param exclude_NOT: if True, omit Prereqs whose OR requirement is inverted (NOT)
+        :return: a queryset of matching Prereqs
+        """
         ct = ContentType.objects.get_for_model(prereq_object)
         qs = self.filter(or_prereq_content_type__pk=ct.id,
                          or_prereq_object_id=prereq_object.id)
         if exclude_NOT:
-            qs.exclude(or_prereq_invert=True)
+            qs = qs.exclude(or_prereq_invert=True)
         return qs
 
         # object matching sender, target or action object
