@@ -176,6 +176,7 @@ class IsAPrereqMixinTest(TenantTestCase):
 
         # invert the OR requirement (NOT): the parent no longer relies on it
         self.prereq_with_or.or_prereq_invert = True
+        self.prereq_with_or.full_clean()
         self.prereq_with_or.save()
 
         reliant_objects = self.quest_or_prereq.get_reliant_objects(exclude_NOT=True)
