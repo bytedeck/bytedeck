@@ -118,7 +118,7 @@ class CustomSignUpFormTest(TenantTestCase):
             successfully_signed_in_msg = mock_add_message.call_args_list[1][0][2]
 
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(confirmation_email_sent_msg, f'Confirmation e-mail sent to {form_data["email"]}.')
+        self.assertEqual(confirmation_email_sent_msg, f'Confirmation email sent to {form_data["email"]}.')
         self.assertEqual(successfully_signed_in_msg, f'Successfully signed in as {form_data["username"]}.')
 
         self.assertRedirects(response, reverse('quests:quests'))
