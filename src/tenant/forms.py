@@ -1,3 +1,6 @@
+from captcha.fields import ReCaptchaField
+from captcha.widgets import ReCaptchaV2Checkbox
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.forms import ModelForm
@@ -55,3 +58,91 @@ class TenantForm(TenantBaseForm):
 
     class Meta(TenantBaseForm.Meta):
         fields = TenantBaseForm.Meta.fields + ["first_name", "last_name", "email"]
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize the TenantForm.
+
+        If `verified_data` is provided in kwargs, pre-fill the form fields
+        from it and disable the email field so that it cannot be modified.
+
+        Args:
+            *args: Positional arguments passed to the parent form.
+            **kwargs: Keyword arguments passed to the parent form. Can include:
+                verified_data (dict, optional): Dictionary containing pre-verified
+                    user data with keys 'first_name', 'last_name', 'email'.
+
+        Returns:
+            None
+        """
+        # Pop verified data from kwargs (if any)
+        self.verified_data = kwargs.pop('verified_data', None)
+        super().__init__(*args, **kwargs)
+        if self.verified_data:
+            # Pre-fill fields from verified session
+            self.fields["first_name"].initial = self.verified_data.get("first_name", "")
+            self.fields["last_name"].initial = self.verified_data.get("last_name", "")
+            self.fields["email"].initial = self.verified_data.get("email", "")
+
+            # Email is already verified so make it immutable
+            self.fields["email"].disabled = True
+
+    def clean_email(self):
+        """
+        Ensure the email field has a valid value during form cleaning.
+
+        Returns the initial verified email if the field is disabled,
+        otherwise returns the cleaned data from user input.
+
+        Returns:
+            str: The email address for the tenant owner.
+        """
+        if self.fields["email"].disabled:
+            email = (self.verified_data or {}).get("email") or self.initial.get("email")
+            if not email:
+                raise forms.ValidationError("Verified e-mail address is required.")
+            return email
+        return self.cleaned_data.get("email")
+
+    def save(self, commit=True):
+        """
+        Save and return the Tenant.
+
+        The deck owner (names, email, password, verification) is set up by
+        TenantCreate.form_valid inside the new tenant's schema context. It is
+        deliberately not done here: this form runs in the public schema, where
+        SiteConfig.get() returns None, so any owner update here would either be
+        a no-op or touch the wrong schema.
+
+        Args:
+            commit (bool): When True (default), validate and persist the Tenant
+                to the database. When False, return the unsaved instance.
+
+        Returns:
+            Tenant: The Tenant instance (saved when ``commit`` is True).
+        """
+        tenant = super().save(commit=False)
+        if commit:
+            tenant.full_clean()
+            tenant.save()
+        return tenant
+
+
+class DeckRequestForm(forms.Form):
+    """Public form to request a new deck; protected by reCAPTCHA."""
+
+    first_name = forms.CharField(
+        max_length=150,
+        label="First Name",
+        widget=forms.TextInput(attrs={"placeholder": "Your first name"})
+    )
+    last_name = forms.CharField(
+        max_length=150,
+        label="Last Name",
+        widget=forms.TextInput(attrs={"placeholder": "Your last name"})
+    )
+    email = forms.EmailField(
+        label="Your Email",
+        widget=forms.EmailInput(attrs={"placeholder": "you@example.com"})
+    )
+    captcha = ReCaptchaField(widget=ReCaptchaV2Checkbox)

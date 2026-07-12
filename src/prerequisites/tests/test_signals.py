@@ -201,11 +201,16 @@ class PrerequisitesSignalsTest(TenantTestCase):
         # create prereq with rank as the first prereq
         # and check if new map is created
         first_rank = baker.make('courses.rank', name='first rank')
-        baker.make(
-            Prereq,
-            parent_object=baker.make('quest_manager.quest'),
-            prereq_object=first_rank,
-        )
+
+        # use captureOnCommitCallbacks to ensure the Rank is created before the signal to create the map is fired
+        # baker.make fakes a bunch of stuff and happens too fast, so this test can fail when the signal fires because the Rank isn't created yet
+        # https://docs.djangoproject.com/en/5.2/topics/testing/tools/#django.test.TestCase.captureOnCommitCallbacks
+        with self.captureOnCommitCallbacks(execute=True):
+            baker.make(
+                Prereq,
+                parent_object=baker.make('quest_manager.quest'),
+                prereq_object=first_rank,
+            )
 
         self.assertTrue(CytoScape.objects.filter(
             name=f'{first_rank.name} Map',

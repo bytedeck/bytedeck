@@ -17,9 +17,9 @@ from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
 
-from .exporter import export_quest_to_library
+from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .importer import import_campaign_to, import_quest_to
-from .utils import get_library_schema_name, library_schema_context
+from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
 
@@ -289,29 +289,34 @@ class ImportCampaignView(View):
         messages.success(request, f"Successfully imported '{link}' to your deck.")
 
         # The campaign will be deactivated by import_campaign_to()
-        return redirect('quest_manager:categories_inactive')
+        return redirect('quests:categories_inactive')
+
+
+class ExportPermissionMixin:
+    def _require_export_permission(self, request):
+        """
+        Ensure the requesting user has permission to perform an export.
+
+        A user is allowed to export if either:
+        - They are the configured deck owner, or
+        - `allow_staff_export` is enabled in the site configuration and the user is staff.
+
+        Raises:
+            PermissionDenied: If the requesting user does not have export permission.
+        """
+        config = SiteConfig.get()
+        if not (config.allow_staff_export or request.user == config.deck_owner):
+            raise PermissionDenied("Only the deck owner can export unless allow_staff_export is enabled.")
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')
-class ExportQuestView(View):
+class ExportQuestView(View, ExportPermissionMixin):
     """
     View for exporting a single quest from the current deck into the shared library.
 
     Only the deck owner may export unless `allow_staff_export` is set to True.
     """
     template_name = 'library/confirm_export_quest.html'
-
-    def _require_export_permission(self, request):
-        """
-        Check whether the requesting user has permission to export a quest.
-
-        Raises:
-            PermissionDenied: If the user is not the deck owner and `allow_staff_export` is False.
-        """
-        config = SiteConfig.get()
-
-        if not (config.allow_staff_export or request.user == config.deck_owner):
-            raise PermissionDenied("Only the deck owner can export quests unless allow_staff_export is enabled.")
 
     def get(self, request, quest_import_id):
         """
@@ -326,10 +331,10 @@ class ExportQuestView(View):
         """
         self._require_export_permission(request)
 
-        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+        quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
 
         with library_schema_context():
-            library_quest = Quest.objects.filter(import_id=quest.import_id).first()
+            library_quest = Quest.objects.all_including_archived().filter(import_id=quest.import_id).first()
 
         return render(request, self.template_name, {
             'quest': quest,
@@ -359,17 +364,18 @@ class ExportQuestView(View):
         """
         self._require_export_permission(request)
 
-        quest = get_object_or_404(Quest.objects.all_including_archived(), import_id=quest_import_id)
+        quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
 
         source_schema = connection.schema_name
 
         with library_schema_context():
-            if Quest.objects.filter(import_id=quest.import_id).exists():
+            if Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists():
                 raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
 
-            # Perform export
-            export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        # Perform export
+        export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
+        with library_schema_context():
             # Get the newly exported quest
             exported_quest = Quest.objects.get(import_id=quest.import_id)
 
@@ -393,6 +399,107 @@ class ExportQuestView(View):
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         messages.success(request, f"Successfully exported '{link}' to the shared library.")
         return redirect('quests:quests')
+
+
+@method_decorator([login_required, staff_member_required], name='dispatch')
+class ExportCampaignView(View, ExportPermissionMixin):
+    """
+    View for exporting a full campaign (category) and its quests
+    from the current deck into the shared library.
+
+    Only the deck owner may export unless `allow_staff_export` is True.
+    """
+    template_name = 'library/confirm_export_campaign.html'
+
+    def get(self, request, campaign_import_id):
+        """
+        Display the confirmation page for exporting a campaign and its quests to the shared library.
+
+        Args:
+            request (HttpRequest): The current HTTP request object.
+            campaign_import_id (UUID): The unique import ID of the campaign to be exported.
+
+        Returns:
+            HttpResponse: The rendered confirmation template with campaign and quest details.
+        """
+        self._require_export_permission(request)
+
+        campaign = get_object_or_404(Category, import_id=campaign_import_id)
+        # evaluate the queryset to render the quests properly and give proper context to get_library_conflicting_quests
+        quests = list(campaign.current_quests())
+
+        # Get existing campaign in library (if any)
+        with library_schema_context():
+            existing_campaign = Category.objects.filter(import_id=campaign.import_id).first()
+
+        library_quest_import_ids = get_library_conflicting_quests(quests)
+
+        context = {
+            'campaign': campaign,
+            'quests': quests,
+            'existing_campaign': existing_campaign,
+            'category_icon_url': campaign.get_icon_url(),
+            'category_id': campaign.id,
+            'category_quest_count': campaign.quest_count(),
+            'category_total_xp_available': campaign.xp_sum(),
+            'category_published': campaign.published,
+            'category_displayed_quests': quests,
+            'library_quest_import_ids': library_quest_import_ids,
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, campaign_import_id):
+        """
+        Handle the export of a campaign and its quests to the shared library.
+
+        If any quests already exist in the library, copies will be created so
+        the exported campaign has its own versions. Local quests are not affected.
+
+        Args:
+            request (HttpRequest): The current request object.
+            campaign_import_id (UUID): The import ID of the campaign to export.
+
+        Returns:
+            HttpResponseRedirect: Redirect to the quests categories list on success.
+
+        Raises:
+            PermissionDenied: If a campaign with the same import ID already exists in the shared library.
+        """
+        self._require_export_permission(request)
+
+        campaign = get_object_or_404(Category, import_id=campaign_import_id)
+        source_schema = connection.schema_name
+
+        with library_schema_context():
+            # Block if campaign already exists in library
+            if Category.objects.filter(import_id=campaign.import_id).exists():
+                raise PermissionDenied(
+                    f"A campaign with import_id {campaign.import_id} already exists in the shared library."
+                )
+
+        # Export campaign and quests
+        exported_campaign = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            exported_campaign = Category.objects.get(import_id=campaign.import_id)
+
+            config = SiteConfig.get()
+            sender = config.deck_ai
+            recipients = User.objects.filter(is_active=True, is_staff=True)
+
+            notify.send(
+                sender=sender,
+                recipient=None,
+                affected_users=list(recipients),
+                verb=f"{request.user} exported a campaign to the library from {source_schema}:",
+                action=campaign,
+                target=exported_campaign,
+                icon="<i class='fa fa-book'></i>",
+            )
+
+        link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
+        messages.success(request, f"Successfully exported '{link}' to the shared library.")
+        return redirect('quests:categories')
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')

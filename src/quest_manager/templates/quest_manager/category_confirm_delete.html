@@ -7,10 +7,17 @@
 <form action="{% url 'quests:category_delete' object.id %}" method="post">{% csrf_token %}
   <p>Are you sure you want to delete this campaign?</p>
   <div class="well">
-    <p>Campaign Name: {{object.title}}</p>
-    <p>Campaign ID: {{object.id}}</p>
+    <p>Campaign Name: {{ object.title }}</p>
+    <p>Campaign ID: {{ object.id }}</p>
   </div>
-  <a href="{% url 'quests:categories'%}" role="button" class="btn btn-info">Cancel</a>
+
+  {% if object.quest_count != 0 %}
+    <div class="alert alert-danger">
+      Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first.
+    </div>
+  {% endif %}
+
+  <a href="{% url 'quests:categories' %}" role="button" class="btn btn-info">Cancel</a>
   <input
     type="submit"
     value="Delete"

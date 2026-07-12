@@ -490,7 +490,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         testblock_queryset = response.context['object_list']
         self.assertEqual(testblock_queryset.count(), 2)
         # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        self.assertQuerysetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
+        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
 
     def test_profile_update_email(self):
         """

@@ -45,6 +45,22 @@
               <i class="fa fa-edit"></i>
             </a>
 
+            {% if can_export %}
+              <a class="btn btn-default" role="button"
+                {% if object.quest_count != 0 %}
+                  href="{% url 'library:export_category' object.import_id %}"
+                  title="Export this Campaign to the Library"
+                {% else %}
+                  title="Cannot export without any published quests"
+                  disabled
+                  tabindex="-1"
+                  aria-disabled="true"
+                {% endif %}
+              >
+                <i class="fa fa-fw fa-upload"></i>
+              </a>
+            {% endif %}
+
               <a class="btn btn-danger"
                 {% if object.quest_count != 0 %}
                   disabled

@@ -138,6 +138,31 @@ class MarkRangeDelete(NonPublicOnlyViewMixin, DeleteView):
 class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Rank
 
+    def get_context_data(self, **kwargs):
+        """Add the map link for every rank on the page in a single query.
+
+        The template calls rank.get_map() for each row; without pre-population
+        that is one CytoScape query per rank. This fetches all rank maps at
+        once and stores each on its rank as `_map_cached`, which get_map()
+        reads. Returns the standard ListView context.
+        """
+        context = super().get_context_data(**kwargs)
+
+        from django.contrib.contenttypes.models import ContentType
+        from djcytoscape.models import CytoScape
+
+        rank_ct = ContentType.objects.get_for_model(Rank)
+        maps_by_object_id = {
+            scape.initial_object_id: scape
+            for scape in CytoScape.objects.filter(initial_content_type=rank_ct)
+        }
+        # iterating the queryset caches its results, so the template's rows
+        # are these same mutated instances; the queryset API stays intact
+        for rank in context['object_list']:
+            rank._map_cached = maps_by_object_id.get(rank.pk)
+
+        return context
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class RankCreate(NonPublicOnlyViewMixin, CreateView):

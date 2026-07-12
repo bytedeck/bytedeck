@@ -8,7 +8,6 @@ from django.db.models import Q
 from django.core import signing
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
-from django.utils.six import text_type
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -62,7 +61,7 @@ class TestGFKSelect2Widget(TenantTestCase):
     def test_initial_data(self):
         group = self.groups[0]
         form = self.form.__class__(initial={'f': group})
-        assert text_type(group) in form.as_p()
+        assert str(group) in form.as_p()
 
     def test_label_from_instance_initial(self):
         group = self.groups[0]
@@ -122,7 +121,7 @@ class TestGFKSelect2Widget(TenantTestCase):
 
         widget.search_fields = {'auth': {'group': ['name__icontains']}}
         assert isinstance(widget.get_search_fields(Group), collections.abc.Iterable)
-        assert all(isinstance(x, text_type) for x in widget.get_search_fields(Group))
+        assert all(isinstance(x, str) for x in widget.get_search_fields(Group))
 
     def test_filter_queryset(self):
         widget = CustomGFKSelect2Widget()
@@ -181,12 +180,12 @@ class TestGFKSelect2Widget(TenantTestCase):
         assert dict(cached_widget['search_fields']) == widget.search_fields
         qs = widget.get_queryset()
         assert isinstance(cached_widget['queryset'][0][0], qs.get_querysets()[0].__class__)
-        assert text_type(cached_widget['queryset'][0][1]) == text_type(qs.get_querysets()[0].query)
+        assert str(cached_widget['queryset'][0][1]) == str(qs.get_querysets()[0].query)
 
     def test_get_url(self):
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
-        assert isinstance(widget.get_url(), text_type)
+        assert isinstance(widget.get_url(), str)
 
     def test_order(self):
         """ Tests if there isn't any unexpected ordering issues when getting the queryset. """
@@ -198,5 +197,5 @@ class TestGFKSelect2Widget(TenantTestCase):
             search_fields={'quest_manager': {'quest': ['name__icontains']}}
         )
 
-        self.assertQuerysetEqual(widget.get_queryset(), queryset_expected)
-        self.assertQuerysetEqual(widget.filter_queryset(None, ''), queryset_expected)
+        self.assertQuerySetEqual(widget.get_queryset(), queryset_expected)
+        self.assertQuerySetEqual(widget.filter_queryset(None, ''), queryset_expected)

@@ -1,5 +1,4 @@
 import names
-import namegenerator
 import random
 
 from django.contrib.auth import get_user_model
@@ -8,6 +7,23 @@ from quest_manager.models import Quest, Category
 from badges.models import Badge
 
 User = get_user_model()
+
+
+def random_name():
+    """ Generates a random adjective-noun-number name for fake quests/campaigns,
+    e.g. 'fuzzy-otter-42'. Replaces the `namegenerator` package, which was
+    deleted from PyPI. """
+    adjectives = [
+        'ancient', 'brave', 'clever', 'daring', 'eager', 'fuzzy', 'gentle', 'hidden',
+        'icy', 'jolly', 'keen', 'lucky', 'mighty', 'noble', 'proud', 'quick',
+        'rusty', 'silent', 'tiny', 'wild',
+    ]
+    nouns = [
+        'badger', 'comet', 'dragon', 'falcon', 'glacier', 'harbor', 'island', 'jungle',
+        'lantern', 'meadow', 'nebula', 'otter', 'prairie', 'quartz', 'river', 'summit',
+        'tundra', 'valley', 'willow', 'zephyr',
+    ]
+    return f"{random.choice(adjectives)}-{random.choice(nouns)}-{random.randint(0, 9999)}"
 
 
 def generate_students(num=100, quiet=False):
@@ -59,14 +75,14 @@ def generate_quests(num_quest_per_campaign=10, num_campaigns=5, quiet=False):
 
         # create campaign
         new_campaign = Category.objects.create(
-            title=f'Campaign-{namegenerator.gen()}',
+            title=f'Campaign-{random_name()}',
         )
         if not quiet:
             print(new_campaign)
 
         # create initial quest with a prerequisite
         initial_quest = Quest.objects.create(
-            name=namegenerator.gen(),
+            name=random_name(),
             xp=random.randint(0, 20),
             campaign=new_campaign
         )
@@ -79,7 +95,7 @@ def generate_quests(num_quest_per_campaign=10, num_campaigns=5, quiet=False):
         # create each subsequent quest using initial_quest as prereq
         for _j in range(num_quest_per_campaign - 1):
             quest = Quest.objects.create(
-                name=namegenerator.gen(),
+                name=random_name(),
                 xp=random.randint(0, 20),
                 campaign=new_campaign
             )

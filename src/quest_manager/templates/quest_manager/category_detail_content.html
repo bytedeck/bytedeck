@@ -78,8 +78,10 @@
               <small>{{ q.tags.all|join:", "|default:"-" }}</small>
             </td>
             <td id="status-icon-{{ q.id }}" class="col-xs-2 hidden-xs text-muted">
-              {% if q.import_id in local_quest_import_ids %}
-                <i title="This quest already exists in your deck and any local changes will be overwritten." class="icon-spacing fa fa-fw fa-exclamation-triangle">
+              {% if local_quest_import_ids and q.import_id in local_quest_import_ids %}
+                <i title="This quest already exists in your deck and any local changes will be overwritten." class="icon-spacing fa fa-fw fa-exclamation-triangle"></i>
+              {% elif library_quest_import_ids and q.import_id in library_quest_import_ids %}
+                <i title="This quest already exists in the library and will be copied as a new version during export." class="icon-spacing fa fa-fw fa-exclamation-triangle"></i>
               {% endif %}
             </td>
           </tr>
