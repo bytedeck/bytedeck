@@ -1977,6 +1977,34 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))
         self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')
 
+    def test_student_does_not_see_quick_reply_form(self):
+        """Regression for #1886 / #1759: the student quick reply form (which
+        404'd when resubmitting a returned quest) was removed. A returned
+        submission must still render on the quests page, but without the inline
+        quick reply form or its Re-Submit button — students resubmit via the
+        detailed view instead."""
+        self.client.force_login(self.test_student)
+
+        # a returned submission (completed once, then sent back by a teacher):
+        # is_completed is False but time_completed is set, so is_returned() is True
+        returned_sub = baker.make(
+            QuestSubmission,
+            user=self.test_student,
+            quest=self.quest1,
+            semester=SiteConfig.get().active_semester,
+            is_completed=False,
+            time_completed=timezone.now(),
+        )
+        self.assertTrue(returned_sub.is_returned())
+
+        response = self.client.get(reverse('quests:inprogress'))
+
+        # the returned submission is on the page ...
+        self.assertContains(response, f'id="heading-submission-{returned_sub.id}"')
+        # ... but the removed quick reply form and its button are not
+        self.assertNotContains(response, f'quick_reply{returned_sub.id}')
+        self.assertNotContains(response, 'Re-Submit Quest')
+
     def test_show_hidden(self):
         """ Test of:
         url(r'^available/all/$', views.quest_list, name='available_all'),

@@ -785,8 +785,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         else available_quests.count()
     )
 
-    quick_reply_form = SubmissionQuickReplyFormStudent(request.POST or None)
-
     if view_type == QuestListViewTabTypes.IN_PROGRESS:
         in_progress_submissions = paginate(in_progress_submissions, page)
         # available_quests = []
@@ -830,7 +828,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "active_q_id": active_quest_id,
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
-        "quick_reply_form": quick_reply_form,
         "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
     }
     return render(request, template, context)
