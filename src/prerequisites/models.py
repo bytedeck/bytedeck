@@ -321,6 +321,12 @@ class PrereqManager(models.Manager):
         if not parent_objects:
             return parent_objects
 
+        # all parents share one content type; a mixed list would silently drop
+        # the prereqs of every object whose model isn't the first one's
+        model = type(parent_objects[0])
+        if any(type(obj) is not model for obj in parent_objects):
+            raise ValueError("prefetch_for_parents requires all parent_objects to be the same model")
+
         ct = ContentType.objects.get_for_model(parent_objects[0])
         prereqs_by_parent = defaultdict(list)
         matching_prereqs = self.get_queryset().filter(

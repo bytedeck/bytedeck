@@ -357,6 +357,17 @@ class BadgeAssertionManager(models.Manager):
         return sorted_qs
 
     def badge_assertions_dict_items(self, user):
+        """Group a user's earned badges by badge type for the profile page.
+
+        Returns one assertion per earned badge (via all_for_user_distinct),
+        grouped into dict items keyed by BadgeType. Each returned assertion
+        has its duplicate assertions and its badge's prerequisites
+        pre-populated in one query each, so the per-badge popovers render
+        without issuing a query per badge.
+
+        :param user: the user whose earned badges are grouped
+        :return: dict_items of {BadgeType: [BadgeAssertion, ...]}
+        """
         earned_assertions = list(self.all_for_user_distinct(user))
 
         # Group all of the user's assertions by badge in one query, so each

@@ -434,3 +434,10 @@ class PrereqPrefetchTest(TenantTestCase):
         """Empty input is a no-op returning an empty list (no query)."""
         with self.assertNumQueries(0):
             self.assertEqual(Prereq.objects.prefetch_for_parents([]), [])
+
+    def test_prefetch_for_parents_rejects_mixed_models(self):
+        """Mixed-model input is rejected: all parents must share one content
+        type, or the query would silently drop some objects' prereqs."""
+        badge = baker.make('badges.Badge')
+        with self.assertRaises(ValueError):
+            Prereq.objects.prefetch_for_parents([self.parent1, badge])
