@@ -4,6 +4,33 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.28.0] 2026-07-12 Marcus III
+* New Features:
+ - Automated new-deck requests: a public, reCAPTCHA-protected "Request a Deck" form emails a verification link, then guides the requester through creating their deck [#1892] [#1903]
+ - Publish a campaign and all of its quests in a single action [#1843]
+ - Export a full campaign to the Library, with a confirmation page and quest-conflict detection [#1849] [#1850] [#1884]
+ - New "Student Statuses" view showing each student's submission status for a quest [#918]
+* Tweaks:
+ - Multi-keyword search now also matches group name, username, and submission status [#1875]
+ - Clearer "can't delete" alert wells and warning messages [#1861] [#1878]
+ - Improved notification / "already submitted" message wording [#1876]
+* Refactor/Optimizations:
+ - Django 5.2 preparation: removed APIs dropped between Django 4.2 and 5.2, and fixed two broken unpinned dependencies (namegenerator, redis-py) [#1897]
+ - Eliminated the worst N+1 query patterns across approvals, badge lists, profile pages, the campaigns list, badge detail, ranks list, and popover counts [#1898]
+ - Further N+1 reductions on the profile detail page and the notifications list [#1902]
+ - Hardened rank and rarity caches against signal-less ORM writes [#1898]
+ - New deck owners now receive a secure random initial password (generated once and emailed) instead of a guessable one, and verification links are opaque single-use nonces that keep personal data out of the URL [#1903]
+* Bugfixes:
+ - Fix `exclude_NOT` having no effect for inverted OR prerequisites [#1901]
+ - Deck-owner setup no longer runs in the wrong schema (previously a silent no-op in production), and verification / welcome emails are sent asynchronously so the request doesn't block on SMTP [#1903]
+ - Include archived quests when checking the Library for duplicate imports [#1877]
+ - Include archived quests in the quest delete view queryset [#1874]
+ - `can_user_export_to_library` now checks the current schema and returns false on the shared library deck [#1888]
+* Devops:
+ - Fixed randomly-flaky CI: deterministic Prereq content types in tests [#1899], plus a custom test runner that gives `baker.make(Prereq)` valid generic-foreign-key targets [#1903]
+ - Made a test transaction atomic to prevent a `baker.make` race condition
+
+
 ### [1.27.0] 2025-08-15 Marcus II
 * New Features:
  - New quest tab for Archived quests [#1800] and full rework of process for Archiving quests [#1846]
