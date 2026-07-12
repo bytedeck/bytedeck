@@ -33,6 +33,9 @@ def generate_default_owner_password():
     public information (all three parts are visible on the deck). A random
     password is generated once by the view, set on the owner, and emailed to
     them in the welcome message.
+
+    Returns:
+        str: A random 12-character alphanumeric initial password.
     """
     return get_random_string(12)
 

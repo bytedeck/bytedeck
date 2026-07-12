@@ -71,6 +71,9 @@ class TenantForm(TenantBaseForm):
             **kwargs: Keyword arguments passed to the parent form. Can include:
                 verified_data (dict, optional): Dictionary containing pre-verified
                     user data with keys 'first_name', 'last_name', 'email'.
+
+        Returns:
+            None
         """
         # Pop verified data from kwargs (if any)
         self.verified_data = kwargs.pop('verified_data', None)
@@ -110,6 +113,13 @@ class TenantForm(TenantBaseForm):
         deliberately not done here: this form runs in the public schema, where
         SiteConfig.get() returns None, so any owner update here would either be
         a no-op or touch the wrong schema.
+
+        Args:
+            commit (bool): When True (default), validate and persist the Tenant
+                to the database. When False, return the unsaved instance.
+
+        Returns:
+            Tenant: The Tenant instance (saved when ``commit`` is True).
         """
         tenant = super().save(commit=False)
         if commit:

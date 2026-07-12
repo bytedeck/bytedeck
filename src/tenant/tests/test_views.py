@@ -73,6 +73,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
     """Various tests for `TenantCreate` view class."""
 
     def setUp(self):
+        """Build a public schema, superuser, and TenantClient, and clear the
+        per-email throttle cache so each test starts from a clean slate."""
         self.factory = RequestFactory()
         # isolate the per-email request throttle between tests
         cache.clear()
@@ -258,6 +260,7 @@ class DeckRequestServiceTest(TestCase):
     """Unit tests for the signed-token helpers."""
 
     def test_generate_and_decode_token_roundtrip(self):
+        """A freshly generated token decodes back to the original payload."""
         token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
         self.assertEqual(
             DeckRequestService.decode_token(token),
@@ -265,10 +268,12 @@ class DeckRequestServiceTest(TestCase):
         )
 
     def test_decode_token_tampered_returns_none(self):
+        """A token whose signature no longer matches decodes to None."""
         token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
         self.assertIsNone(DeckRequestService.decode_token(token + "x"))
 
     def test_decode_token_expired_returns_none(self):
+        """A token older than TOKEN_MAX_AGE decodes to None."""
         with freeze_time("2024-01-01 00:00:00"):
             token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
         # more than TOKEN_MAX_AGE (1 hour) later
@@ -277,12 +282,17 @@ class DeckRequestServiceTest(TestCase):
 
 
 class DummyView(EmailVerificationRequiredMixin, View):
+    """Minimal view used to exercise EmailVerificationRequiredMixin.dispatch."""
+
     def get(self, request, *args, **kwargs):
+        """Return a trivial 200 response when access is granted by the mixin."""
         return HttpResponse("ok")
 
 
 class EmailVerificationRequiredMixinTest(TestCase):
     def setUp(self):
+        """Build a request factory, a stub user with a mocked profile, and the
+        DummyView callable used by the access-control assertions."""
         self.factory = RequestFactory()
         self.user = User(username="regular")
         self.fake_profile = Mock()
@@ -295,6 +305,8 @@ class EmailVerificationRequiredMixinTest(TestCase):
 
     @patch("tenant.views.render")  # patch render to avoid template DB queries
     def test_verified_at_allows_or_denies_access(self, mock_render):
+        """A recent verified_at timestamp grants access (200); a timestamp older
+        than TOKEN_MAX_AGE is denied (403)."""
         # make render() just return a dummy response
         mock_render.side_effect = lambda request, template_name, context=None, status=None: HttpResponse(status=status or 200)
 

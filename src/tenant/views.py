@@ -1,4 +1,5 @@
 import functools
+import hashlib
 
 from django.contrib.sites.models import Site
 from django.contrib import messages
@@ -70,6 +71,24 @@ class EmailVerificationRequiredMixin:
     """
 
     def dispatch(self, request, *args, **kwargs):
+        """
+        Gate the view on staff status or a recent verified deck request.
+
+        Access is granted (delegating to ``super().dispatch``) when the user is
+        authenticated staff, or when the session holds a ``verified_deck_request``
+        whose ``verified_at`` timestamp is within ``TOKEN_MAX_AGE``. A stale or
+        malformed verification is cleared from the session. Otherwise the request
+        is denied with the ``deck_request_denied.html`` template and HTTP 403.
+
+        Args:
+            request (HttpRequest): The current request.
+            *args: Positional arguments forwarded to the wrapped view.
+            **kwargs: Keyword arguments forwarded to the wrapped view.
+
+        Returns:
+            HttpResponse: The wrapped view's response when authorized, otherwise
+            a 403 response rendering the denial template.
+        """
         # staff always allowed
         if request.user.is_authenticated and request.user.is_staff:
             return super().dispatch(request, *args, **kwargs)
@@ -226,9 +245,12 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
         # Throttle verification emails per address so this public endpoint can't
         # be used to flood someone's inbox. Always show the same success message
         # regardless, so the response never reveals whether an email was sent.
-        throttle_key = f"deck-request-throttle-{email.lower()}"
-        if not cache.get(throttle_key):
-            cache.set(throttle_key, True, DeckRequestService.REQUEST_COOLDOWN)
+        # The email is hashed into the key so raw addresses aren't exposed in
+        # cache tooling, and cache.add() reserves the key atomically so two
+        # concurrent requests can't both slip past the check and send twice.
+        email_hash = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+        throttle_key = f"deck-request-throttle-{email_hash}"
+        if cache.add(throttle_key, True, DeckRequestService.REQUEST_COOLDOWN):
             token = DeckRequestService.generate_token(first_name, last_name, email)
             DeckRequestService.send_verification_email(first_name, email, token, request=self.request)
 

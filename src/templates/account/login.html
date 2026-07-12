@@ -11,7 +11,7 @@
 {% block content %}
   {% if request.GET.created %}
   <div class="alert alert-success" role="alert">
-    Deck created! Check your email for login credentials.
+    {% trans "Deck created! Check your email for login credentials." %}
   </div>
   {% endif %}
 
