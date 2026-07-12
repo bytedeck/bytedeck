@@ -27,9 +27,9 @@ from tags.models import Tag
 
 from django.contrib.auth.forms import SetPasswordForm
 
-from allauth.account.utils import send_email_confirmation
+from profile_manager.allauth_compat import send_email_confirmation
 from allauth.account.models import EmailAddress
-from allauth.socialaccount.helpers import _complete_social_login
+from allauth.socialaccount.helpers import complete_social_login
 
 User = get_user_model()
 
@@ -454,7 +454,7 @@ def oauth_merge_account(request):
             email_address.primary = True
             email_address.save()
 
-            return _complete_social_login(request, sociallogin)
+            return complete_social_login(request, sociallogin)
         else:
             # Remove the email from that user
             user.emailaddress_set.filter(email=user.email).delete()
