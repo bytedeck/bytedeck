@@ -149,8 +149,28 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
             form (TenantForm): The validated form instance.
 
         Returns:
-            HttpResponseRedirect: Redirect to the tenant's login page.
+            HttpResponseRedirect: Redirect to the tenant's login page, or back to
+            the request form if the verification nonce has already been used.
         """
+        # Single-use enforcement: consume the verification nonce before doing any
+        # work, so one verified request can create at most one deck. Re-opening
+        # the link after a deck was already created (or after the nonce expired)
+        # lands here with a stale nonce and is rejected. Staff are exempt — they
+        # reach this view without an email verification (see
+        # EmailVerificationRequiredMixin), so there is no nonce to consume.
+        user = getattr(self.request, "user", None)
+        is_staff = bool(getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False))
+        if not is_staff:
+            nonce = (self.request.session.get("verified_deck_request") or {}).get("nonce")
+            if not DeckRequestService.consume_request(nonce):
+                messages.error(
+                    self.request,
+                    "This deck request has already been used or has expired. "
+                    "Please request a new deck verification email."
+                )
+                self.request.session.pop("verified_deck_request", None)
+                return redirect("decks:request_new_deck")
+
         # Normalize: valid Postgres schema and subdomain
         name_slug = slugify(form.instance.name)
         schema = name_slug.replace("-", "_")[:63]
@@ -251,33 +271,35 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
         email_hash = hashlib.sha256(email.strip().lower().encode()).hexdigest()
         throttle_key = f"deck-request-throttle-{email_hash}"
         if cache.add(throttle_key, True, DeckRequestService.REQUEST_COOLDOWN):
-            token = DeckRequestService.generate_token(first_name, last_name, email)
-            DeckRequestService.send_verification_email(first_name, email, token, request=self.request)
+            nonce = DeckRequestService.create_request(first_name, last_name, email)
+            DeckRequestService.send_verification_email(first_name, email, nonce, request=self.request)
 
         messages.success(self.request, "Check your email to verify your request!")
         return super().form_valid(form)
 
 
 @public_only_view
-def verify_deck_request(request, token):
+def verify_deck_request(request, nonce):
     """
-    Verify a deck creation request via a signed token.
+    Verify a deck creation request via an opaque, single-use nonce.
 
-    Attempts to decode the provided verification token. If valid, the
-    decoded data is stored in the session under `verified_deck_request`
-    so it can be prefilled during deck creation.
-    If invalid or expired, an error message is shown and the user is
-    redirected back to the request form.
+    Looks up the requester data stored server-side against the nonce. If found,
+    the data (plus the nonce itself) is stashed in the session under
+    `verified_deck_request` so it can prefill the deck-creation form and be
+    consumed when a deck is actually created. The nonce is deliberately *not*
+    consumed here, so re-opening the link before creating a deck still works.
+    If the nonce is unknown or expired, an error message is shown and the user
+    is redirected back to the request form.
 
     Args:
         request (HttpRequest): The current request object.
-        token (str): The signed token received from the verification email.
+        nonce (str): The opaque nonce received from the verification email.
 
     Returns:
         HttpResponseRedirect: Redirects to either the deck request form if
         verification fails, or the deck creation form if verification succeeds.
     """
-    data = DeckRequestService.decode_token(token)
+    data = DeckRequestService.peek_request(nonce)
     if not data:
         messages.error(
             request,
@@ -286,11 +308,13 @@ def verify_deck_request(request, token):
         )
         return redirect("decks:request_new_deck")
 
-    # stash verification in session
+    # stash verification in session; the nonce is carried so it can be consumed
+    # (single-use) when the deck is actually created in TenantCreate.form_valid
     request.session["verified_deck_request"] = {
         "first_name": data.get("first_name", ""),
         "last_name": data.get("last_name", ""),
         "email": data.get("email", ""),
+        "nonce": nonce,
         "verified_at": timezone.now().timestamp(),
     }
 
