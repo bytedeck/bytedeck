@@ -782,6 +782,12 @@ TAGGIT_CASE_INSENSITIVE = True
 
 TESTING = 'test' in sys.argv
 if TESTING:
+    # Custom runner installs a model_bakery patch so baker.make(Prereq) builds
+    # valid GenericForeignKey targets instead of random dangling ones (which
+    # made the prerequisites signal tests intermittently crash). See
+    # hackerspace_online.test_runner.patch_baker_make_for_prereq.
+    TEST_RUNNER = 'hackerspace_online.test_runner.BytedeckTestRunner'
+
     # Use weaker password hasher for speeding up tests
     PASSWORD_HASHERS = [
         'django.contrib.auth.hashers.MD5PasswordHasher',
