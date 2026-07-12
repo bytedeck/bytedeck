@@ -2,6 +2,7 @@ import functools
 
 from django.contrib.sites.models import Site
 from django.contrib import messages
+from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
 from django.http import Http404, HttpResponseRedirect
@@ -155,8 +156,10 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
             # set the owner's username to firstname.lastname (instead of "owner")
             user_username(owner, f"{owner.first_name}.{owner.last_name}")
 
-            # set the owner's password to firstname-deckname-lastname
-            owner.set_password(generate_default_owner_password(owner, self.object))
+            # generate the initial password once, so the value set here is the
+            # same one emailed to the owner in the welcome message
+            password = generate_default_owner_password()
+            owner.set_password(password)
 
             # Email is immutable but assign for completeness
             owner.email = cleaned_data.get("email")
@@ -175,7 +178,7 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
                 email_address.full_clean()
                 email_address.save()
 
-            DeckRequestService.send_welcome_email(owner, self.object)
+            DeckRequestService.send_welcome_email(owner, self.object, password)
 
         login_url = f"{self.object.get_root_url().rstrip('/')}/accounts/login/?created=1"
         # clear the verified deck request so the next visit gets a clean form
@@ -220,13 +223,20 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
         last_name = form.cleaned_data["last_name"]
         email = form.cleaned_data["email"]
 
-        token = DeckRequestService.generate_token(first_name, last_name, email)
-        DeckRequestService.send_verification_email(first_name, email, token, request=self.request)
+        # Throttle verification emails per address so this public endpoint can't
+        # be used to flood someone's inbox. Always show the same success message
+        # regardless, so the response never reveals whether an email was sent.
+        throttle_key = f"deck-request-throttle-{email.lower()}"
+        if not cache.get(throttle_key):
+            cache.set(throttle_key, True, DeckRequestService.REQUEST_COOLDOWN)
+            token = DeckRequestService.generate_token(first_name, last_name, email)
+            DeckRequestService.send_verification_email(first_name, email, token, request=self.request)
 
         messages.success(self.request, "Check your email to verify your request!")
         return super().form_valid(form)
 
 
+@public_only_view
 def verify_deck_request(request, token):
     """
     Verify a deck creation request via a signed token.
@@ -256,7 +266,6 @@ def verify_deck_request(request, token):
 
     # stash verification in session
     request.session["verified_deck_request"] = {
-        "deck_name": data.get("deck_name", ""),
         "first_name": data.get("first_name", ""),
         "last_name": data.get("last_name", ""),
         "email": data.get("email", ""),

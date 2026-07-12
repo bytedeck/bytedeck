@@ -1,6 +1,7 @@
 from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
 from django.template.loader import get_template
+from django.utils.crypto import get_random_string
 
 from siteconfig.models import SiteConfig
 from .models import Tenant
@@ -25,17 +26,22 @@ def generate_schema_name(tenant_name):
     return tenant_name.replace('-', '_').lower()
 
 
-def generate_default_owner_password(user, tenant):
-    """Generate a default password for a new deck's owner to
-    firstname-deckname-lastname
+def generate_default_owner_password():
+    """Generate a random initial password for a new deck's owner.
+
+    Previously this was firstname-deckname-lastname, which is guessable from
+    public information (all three parts are visible on the deck). A random
+    password is generated once by the view, set on the owner, and emailed to
+    them in the welcome message.
     """
-    return "-".join([user.first_name, tenant.name, user.last_name]).lower()
+    return get_random_string(12)
 
 
 class DeckRequestService:
     """Handles deck request token generation, validation, and email sending."""
 
     TOKEN_MAX_AGE = 3600  # 1 hour
+    REQUEST_COOLDOWN = 300  # min seconds between verification emails to one address
 
     @staticmethod
     def generate_token(first_name, last_name, email):
@@ -117,36 +123,38 @@ class DeckRequestService:
         Returns:
             None
         """
-        from django.urls import reverse
-        if request:
-            verification_link = request.build_absolute_uri(
-                reverse("decks:verify_deck_request", args=[token])
-            )
+        if request is not None:
+            verification_link = DeckRequestService.build_verification_link(request, token)
         else:
-            verification_link = f"/decks/request-new-deck/verify/{token}/"
+            from django.urls import reverse
+            verification_link = reverse("decks:verify_deck_request", args=[token])
 
         message = get_template("tenant/email/verify_deck_request.txt").render({
             "first_name": first_name,
             "verification_link": verification_link,
         })
 
-        send_email_message(
-            subject="Verify your email to confirm your deck request",
-            message=message,
-            recipient_list=[email],
+        # send in the background so the request doesn't block on SMTP
+        send_email_message.apply_async(
+            args=["Verify your email to confirm your deck request", message, [email]],
+            queue="default",
         )
 
     @staticmethod
-    def send_welcome_email(user, tenant):
+    def send_welcome_email(user, tenant, password):
         """
         Send a welcome email to a newly created tenant owner.
 
-        The email contains information about the new tenant and the default
-        owner password. It is sent asynchronously via Celery.
+        The email contains information about the new tenant and the owner's
+        initial password. It is sent asynchronously via Celery. Must be called
+        from within the tenant's schema context (it reads that tenant's
+        SiteConfig).
 
         Args:
             user (User): The newly created deck owner.
             tenant (Tenant): The newly created tenant instance.
+            password (str): The owner's initial password, generated once by the
+                caller so the emailed value matches the password actually set.
 
         Returns:
             None
@@ -162,11 +170,11 @@ class DeckRequestService:
             "config": SiteConfig.get(),
             "tenant": tenant,
             "user": user,
-            "password": generate_default_owner_password(user, tenant),
+            "password": password,
         })
 
-        send_email_message(
-            subject=subject,
-            message=message,
-            recipient_list=[user.email],
+        # send in the background so the request doesn't block on SMTP
+        send_email_message.apply_async(
+            args=[subject, message, [user.email]],
+            queue="default",
         )

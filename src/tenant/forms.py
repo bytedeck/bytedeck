@@ -5,7 +5,6 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.forms import ModelForm
 
-from siteconfig.models import SiteConfig
 from .models import Tenant
 
 User = get_user_model()
@@ -71,7 +70,7 @@ class TenantForm(TenantBaseForm):
             *args: Positional arguments passed to the parent form.
             **kwargs: Keyword arguments passed to the parent form. Can include:
                 verified_data (dict, optional): Dictionary containing pre-verified
-                    user data with keys 'deck_name', 'first_name', 'last_name', 'email'.
+                    user data with keys 'first_name', 'last_name', 'email'.
         """
         # Pop verified data from kwargs (if any)
         self.verified_data = kwargs.pop('verified_data', None)
@@ -104,28 +103,18 @@ class TenantForm(TenantBaseForm):
 
     def save(self, commit=True):
         """
-        Save the Tenant and ensure the deck owner User has the correct email and names.
+        Save and return the Tenant.
+
+        The deck owner (names, email, password, verification) is set up by
+        TenantCreate.form_valid inside the new tenant's schema context. It is
+        deliberately not done here: this form runs in the public schema, where
+        SiteConfig.get() returns None, so any owner update here would either be
+        a no-op or touch the wrong schema.
         """
         tenant = super().save(commit=False)
-
-        email = self.cleaned_data.get("email") or self.initial.get("email")
-        first_name = self.cleaned_data.get("first_name")
-        last_name = self.cleaned_data.get("last_name")
-
         if commit:
             tenant.full_clean()
             tenant.save()
-
-            # Optionally update owner only when in a tenant schema (non-public)
-            config = SiteConfig.get()
-            if config:
-                owner = config.deck_owner
-                owner.email = email
-                owner.first_name = first_name
-                owner.last_name = last_name
-                owner.full_clean()
-                owner.save()
-
         return tenant
 
 

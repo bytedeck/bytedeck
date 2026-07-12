@@ -1,6 +1,9 @@
 from unittest.mock import PropertyMock, Mock, patch
 
+from freezegun import freeze_time
+
 from django.conf import settings
+from django.core.cache import cache
 from django.views import View
 from django.http import Http404, HttpResponse
 from django.contrib.auth import get_user_model
@@ -71,6 +74,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
+        # isolate the per-email request throttle between tests
+        cache.clear()
 
         # Create the public schema
         self.public_tenant = Tenant(schema_name="public", name="public")
@@ -139,21 +144,69 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         mock_captcha.assert_called()
         self.assertEqual(response.status_code, 302)
 
+    @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
+    @patch.object(DeckRequestService, "send_verification_email")
+    def test_deck_request_throttled_per_email(self, mock_send_email, mock_captcha):
+        """The request endpoint sends at most one verification email per address
+        within the cooldown, so it can't be used to flood an inbox."""
+        form_data = {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "throttle@example.com",
+            "captcha": "dummy",
+        }
+        self.client.post(reverse("decks:request_new_deck"), data=form_data)
+        self.client.post(reverse("decks:request_new_deck"), data=form_data)
+
+        # only the first submission actually sent an email
+        mock_send_email.assert_called_once()
+
     @patch("tenant.models.Tenant.full_clean")
-    def test_tenant_form_saves_owner_correctly(self, mock_full_clean):
-        """TenantForm should save tenant and create deck owner from verified data."""
+    def test_form_save_persists_tenant_without_touching_owner(self, mock_full_clean):
+        """TenantForm.save persists and returns the Tenant only. Owner setup is
+        the view's job (done in the tenant's own schema), so the form must not
+        touch the owner — it previously mutated SiteConfig.get().deck_owner in
+        whatever schema happened to be active."""
         form = TenantForm(data=self.form_data, verified_data=self.form_data)
         self.assertTrue(form.is_valid(), form.errors)
 
-        tenant = form.save()
+        # tenant creation must happen from the public schema
+        with tenant_context(self.public_tenant):
+            tenant = form.save()
+            self.assertEqual(tenant.name, "default")
+            self.assertTrue(Tenant.objects.filter(pk=tenant.pk).exists())
 
         with tenant_context(tenant):
-            site_config = SiteConfig.objects.get()
-            owner = site_config.deck_owner
+            owner = SiteConfig.objects.get().deck_owner
+            # the submitted names were NOT applied to the owner by the form
+            self.assertNotEqual(owner.first_name, "John")
 
-            self.assertEqual(owner.first_name, "John")
-            self.assertEqual(owner.last_name, "Doe")
-            self.assertEqual(owner.email, "john.doe@example.com")
+    @patch("tenant.models.Tenant.full_clean")
+    @patch("tenant.views.DeckRequestService.send_welcome_email")
+    @patch("tenant.views.generate_default_owner_password", return_value="known-secret-123")
+    def test_owner_password_generated_once_and_emailed(self, mock_pw, mock_welcome, mock_full_clean):
+        """The owner's password is generated once: the value set on the account
+        is the same one handed to the welcome email (a random password would
+        otherwise diverge between set and emailed values)."""
+        request = self.factory.post(reverse("tenant:new"), data=self.form_data)
+        request.session = {"verified_deck_request": self.form_data}
+
+        view = TenantCreate()
+        view.setup(request)
+
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        # tenant creation must happen from the public schema
+        with tenant_context(self.public_tenant):
+            view.form_valid(form)
+
+        with tenant_context(form.instance):
+            owner = SiteConfig.objects.get().deck_owner
+            self.assertTrue(owner.check_password("known-secret-123"))
+
+        # the same generated password was handed to the welcome email
+        self.assertIn("known-secret-123", mock_welcome.call_args.args)
 
     @patch("tenant.models.Tenant.full_clean")
     def test_form_valid_creates_tenant_and_redirects(self, mock_full_clean):
@@ -167,7 +220,9 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         form = TenantForm(data=self.form_data, verified_data=self.form_data)
         self.assertTrue(form.is_valid(), form.errors)
 
-        response = view.form_valid(form)
+        # tenant creation must happen from the public schema
+        with tenant_context(self.public_tenant):
+            response = view.form_valid(form)
         self.assertEqual(response.status_code, 302)
 
         tenant = form.instance
@@ -176,6 +231,49 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             site_config = SiteConfig.objects.get()
             self.assertIsInstance(site_config.deck_owner, User)
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
+
+    def test_verify_deck_request_valid_token_populates_session(self):
+        """A valid token stores the verified request in the session and
+        redirects to the deck creation form."""
+        token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
+        response = self.client.get(reverse("decks:verify_deck_request", args=[token]))
+
+        self.assertRedirects(response, reverse("decks:new"), fetch_redirect_response=False)
+        verified = self.client.session["verified_deck_request"]
+        self.assertEqual(verified["first_name"], "John")
+        self.assertEqual(verified["last_name"], "Doe")
+        self.assertEqual(verified["email"], "john.doe@example.com")
+        self.assertIn("verified_at", verified)
+
+    def test_verify_deck_request_invalid_token_denied(self):
+        """An invalid/expired token stores nothing and redirects back to the
+        request form."""
+        response = self.client.get(reverse("decks:verify_deck_request", args=["not-a-real-token"]))
+
+        self.assertRedirects(response, reverse("decks:request_new_deck"), fetch_redirect_response=False)
+        self.assertNotIn("verified_deck_request", self.client.session)
+
+
+class DeckRequestServiceTest(TestCase):
+    """Unit tests for the signed-token helpers."""
+
+    def test_generate_and_decode_token_roundtrip(self):
+        token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
+        self.assertEqual(
+            DeckRequestService.decode_token(token),
+            {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"},
+        )
+
+    def test_decode_token_tampered_returns_none(self):
+        token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
+        self.assertIsNone(DeckRequestService.decode_token(token + "x"))
+
+    def test_decode_token_expired_returns_none(self):
+        with freeze_time("2024-01-01 00:00:00"):
+            token = DeckRequestService.generate_token("John", "Doe", "john.doe@example.com")
+        # more than TOKEN_MAX_AGE (1 hour) later
+        with freeze_time("2024-01-01 02:00:00"):
+            self.assertIsNone(DeckRequestService.decode_token(token))
 
 
 class DummyView(EmailVerificationRequiredMixin, View):
