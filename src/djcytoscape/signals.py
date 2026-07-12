@@ -44,8 +44,7 @@ def prereq_regenerate_related_maps(sender, instance, **kwargs):
     model_class = instance.parent_content_type.model_class()
 
     try:
-        # pk, not id: some prereq parent models use a primary key not named 'id' (e.g. Portfolio)
-        object_ = model_class.objects.get(pk=instance.parent_object_id)
+        object_ = model_class.objects.get(id=instance.parent_object_id)
 
     # means this signal was called when object_ was deleted
     except model_class.DoesNotExist:

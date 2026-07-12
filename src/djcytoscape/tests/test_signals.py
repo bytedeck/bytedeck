@@ -100,19 +100,24 @@ class TestRegenerateMapSignals(TenantTestCase):
         prereq.save()
         self.assertEqual(task.call_count, 2)
 
-    def test_prereq_signal_handles_parent_with_non_id_pk(self, task):
-        """Saving a Prereq whose parent model uses a primary key not named 'id'
-        (e.g. Portfolio, whose pk is its user) must not raise FieldError.
-        Regression test for the signal looking the parent up with id= instead of pk=."""
+    def test_prereq_signal_handles_all_registered_parent_models(self, task):
+        """Saving a Prereq must not crash the map-regeneration signal for any
+        registered prereq model as the parent. Loops through every model that
+        implements IsAPrereqMixin — the only models that are supposed to be
+        used in a Prereq's generic foreign keys."""
         from django.contrib.contenttypes.models import ContentType
-        from portfolios.models import Portfolio
+        from prerequisites.models import IsAPrereqMixin
 
-        portfolio = baker.make(Portfolio)
         quest = baker.make(Quest)
-        baker.make(
-            Prereq,
-            parent_content_type=ContentType.objects.get_for_model(Portfolio),
-            parent_object_id=portfolio.pk,
-            prereq_content_type=ContentType.objects.get_for_model(Quest),
-            prereq_object_id=quest.pk,
-        )  # implicitly asserts no exception is raised by the post_save signal
+        quest_ct = ContentType.objects.get_for_model(Quest)
+
+        for ct in IsAPrereqMixin.all_registered_content_types():
+            with self.subTest(parent_model=f'{ct.app_label}.{ct.model}'):
+                # A parent id that exists for no object also exercises the
+                # signal's DoesNotExist early-return (parent deleted case).
+                Prereq.objects.create(
+                    parent_content_type=ct,
+                    parent_object_id=2147480000,
+                    prereq_content_type=quest_ct,
+                    prereq_object_id=quest.pk,
+                )  # implicitly asserts the post_save signals raise nothing

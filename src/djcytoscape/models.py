@@ -213,16 +213,12 @@ class CytoElement(models.Model):
     @staticmethod
     def generate_selector_id(obj):
         """
-        Unique id in the form of 'model: #' where the model = Quest (etc) and # = the object's primary key.
+        unique id in the form of 'model: #' where the model = Quest (etc) and # = object id.
         Examples: Quest: 21 or Badge: 5
-
-        :param obj: a model instance; its primary key may not be named 'id' (e.g. Portfolio)
-        :return: a string in the form 'ModelName: pk'
-
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
-        # Just save the model name and the pk seperately?
+        # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.pk)  # pk, not id: not all models have an "id" field (e.g. Portfolio)
+        return str(type(obj).__name__) + ": " + str(obj.id)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):
