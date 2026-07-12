@@ -188,8 +188,20 @@ class IsAPrereqMixinTest(TenantTestCase):
     def test_condition_met_as_prerequisite__is_implemented(self):
         """ All models that inherit from this mixin should implement the condition_met_as_prerequisite() method """
         for ct in IsAPrereqMixin.all_registered_content_types():
+            model_class = ct.model_class()
+            if model_class is Prereq:
+                # baker.make(Prereq) fills the generic foreign keys with a random
+                # content type — any installed model, even ones that can't be
+                # prereqs, like Portfolio (whose primary key isn't named 'id',
+                # crashing the map-regeneration signal on save). This made CI
+                # randomly flaky. Build a deterministic Prereq instead.
+                instance = Prereq.objects.create(
+                    parent_object=baker.make('quest_manager.Quest'),
+                    prereq_object=baker.make('quest_manager.Quest'),
+                )
+            else:
+                instance = baker.make(model_class)
             # If the method is not implemented, then NotImplementedError is thrown
-            instance = baker.make(ct.model_class())
             try:
                 instance.condition_met_as_prerequisite(user=baker.make(User), num_required=1)
             except UndefinedTable:
@@ -333,3 +345,31 @@ class PrereqAllConditionsMetModelTest(TenantTestCase):
         self.prereq_cache.remove_id(6)
         self.assertNotIn(6, self.prereq_cache.get_ids())
         self.assertEqual(len(self.prereq_cache.get_ids()), len(ids))
+
+
+class AddSimplePrereqAllRegisteredModelsTest(TenantTestCase):
+    """Prereq.add_simple_prereq must work for every registered prereq model —
+    the models that implement IsAPrereqMixin, which are the only models that
+    are supposed to be used in a Prereq's generic foreign keys."""
+
+    def test_add_simple_prereq_for_every_registered_model(self):
+        """Loops through all registered prereq models, using each as the
+        requirement of a new Prereq, and checks the stored generic ids."""
+        parent = baker.make('quest_manager.Quest')
+        for model_class in IsAPrereqMixin.all_registered_model_classes():
+            with self.subTest(prereq_model=model_class.__name__):
+                if model_class is Prereq:
+                    # baker.make(Prereq) would pick random content types;
+                    # build a deterministic one instead
+                    prereq_object = Prereq.add_simple_prereq(
+                        baker.make('quest_manager.Quest'), baker.make('quest_manager.Quest'))
+                elif model_class.__name__ == 'Rank':
+                    # a Rank prereq triggers map generation (see
+                    # prerequisites.signals), which requires a non-blank name
+                    prereq_object = baker.make(model_class, name='Test Rank')
+                else:
+                    prereq_object = baker.make(model_class)
+                new_prereq = Prereq.add_simple_prereq(parent, prereq_object)
+                self.assertEqual(new_prereq.parent_object_id, parent.pk)
+                self.assertEqual(new_prereq.prereq_object_id, prereq_object.pk)
+                self.assertEqual(new_prereq.get_prereq(), prereq_object)
