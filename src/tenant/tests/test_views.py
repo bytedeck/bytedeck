@@ -257,7 +257,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
             request.user = AnonymousUser()
             request.session = {"verified_deck_request": {**data, "nonce": nonce}}
             # message storage so form_valid's reject path can add a message
-            setattr(request, "_messages", FallbackStorage(request))
+            request._messages = FallbackStorage(request)
             return request, data
 
         # First creation succeeds and consumes the nonce.

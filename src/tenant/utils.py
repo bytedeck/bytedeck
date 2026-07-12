@@ -2,6 +2,7 @@ import secrets
 
 from django.core.cache import cache
 from django.template.loader import get_template
+from django.urls import reverse
 from django.utils.crypto import get_random_string
 
 from siteconfig.models import SiteConfig
@@ -151,7 +152,6 @@ class DeckRequestService:
         Returns:
             str: A fully-qualified URL that the user can visit to verify their deck request.
         """
-        from django.urls import reverse
         path = reverse("decks:verify_deck_request", args=[nonce])
         return request.build_absolute_uri(path)
 
@@ -175,7 +175,6 @@ class DeckRequestService:
         if request is not None:
             verification_link = DeckRequestService.build_verification_link(request, nonce)
         else:
-            from django.urls import reverse
             verification_link = reverse("decks:verify_deck_request", args=[nonce])
 
         message = get_template("tenant/email/verify_deck_request.txt").render({
