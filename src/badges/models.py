@@ -357,9 +357,22 @@ class BadgeAssertionManager(models.Manager):
         return sorted_qs
 
     def badge_assertions_dict_items(self, user):
-        earned_assertions = self.all_for_user_distinct(user)
+        earned_assertions = list(self.all_for_user_distinct(user))
+
+        # Group all of the user's assertions by badge in one query, so each
+        # badge's get_duplicate_assertions() (rendered in every popover) is
+        # served from memory instead of a query per badge.
+        duplicates_by_badge = defaultdict(list)
+        for assertion in self.get_queryset(False).get_user(user):
+            duplicates_by_badge[assertion.badge_id].append(assertion)
+
+        # Prefetch every displayed badge's prerequisites in one query (the
+        # popover lists them) instead of a query per badge.
+        Prereq.objects.prefetch_for_parents([a.badge for a in earned_assertions])
+
         assertion_dict = defaultdict(list)
         for assertion in earned_assertions:
+            assertion._duplicate_assertions_cache = duplicates_by_badge[assertion.badge_id]
             assertion_dict[assertion.badge.badge_type].append(assertion)
 
         return assertion_dict.items()
@@ -475,7 +488,12 @@ class BadgeAssertion(models.Model):
         return count
 
     def get_duplicate_assertions(self):
-        """A qs of all assertions of this badge for this user"""
+        """A qs (or a pre-populated list) of all assertions of this badge for this user.
+
+        badge_assertions_dict_items() can populate _duplicate_assertions_cache so
+        the profile page serves this from memory instead of a query per badge."""
+        if hasattr(self, '_duplicate_assertions_cache'):
+            return self._duplicate_assertions_cache
         return BadgeAssertion.objects.all_for_user_badge(self.user, self.badge, False)
 
 

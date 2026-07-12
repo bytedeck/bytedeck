@@ -17,7 +17,12 @@ from .models import Notification
 @non_public_only_view
 @login_required
 def list(request):
-    notifications_list = Notification.objects.all_for_user(request.user)
+    # each rendered notification reads its sender/target/action generic FK
+    # objects; prefetch them so the page issues a few grouped queries instead
+    # of several per notification
+    notifications_list = Notification.objects.all_for_user(request.user).prefetch_related(
+        'sender_object', 'target_object', 'action_object',
+    )
 
     paginator = Paginator(notifications_list, 15)
     page = request.GET.get('page', 1)
