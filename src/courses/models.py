@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import models
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
@@ -71,6 +71,15 @@ class MarkRange(models.Model):
         return self.name + " (" + str(self.minimum_mark) + "%)"
 
 
+def invalidate_ranks_cache():
+    """Remove the cached rank list (see RankManager.get_ranks_cached).
+    Wired to every ORM write path: post_save/post_delete signals cover save(),
+    create() and instance/queryset deletes; the RankQuerySet overrides below
+    cover update(), bulk_create() and bulk_update(), which fire no signals."""
+    from django.core.cache import cache
+    cache.delete(RankManager.ranks_cache_key())
+
+
 class RankQuerySet(models.query.QuerySet):
     def get_ranks_lte(self, xp):
         return self.filter(xp__lte=xp)
@@ -78,10 +87,47 @@ class RankQuerySet(models.query.QuerySet):
     def get_ranks_gt(self, xp):
         return self.filter(xp__gt=xp)
 
+    # these write paths fire no signals, so they must invalidate the cache themselves
+    def update(self, **kwargs):
+        """Same as QuerySet.update(), but invalidates the rank cache (no signals fire)."""
+        result = super().update(**kwargs)
+        invalidate_ranks_cache()
+        return result
+
+    def bulk_create(self, *args, **kwargs):
+        """Same as QuerySet.bulk_create(), but invalidates the rank cache (no signals fire)."""
+        result = super().bulk_create(*args, **kwargs)
+        invalidate_ranks_cache()
+        return result
+
+    def bulk_update(self, *args, **kwargs):
+        """Same as QuerySet.bulk_update(), but invalidates the rank cache (no signals fire)."""
+        result = super().bulk_update(*args, **kwargs)
+        invalidate_ranks_cache()
+        return result
+
 
 class RankManager(models.Manager):
+
+    @staticmethod
+    def ranks_cache_key():
+        from django.db import connection
+        return f'{connection.schema_name}-ranks-all'
+
     def get_queryset(self):
         return RankQuerySet(self.model, using=self._db).order_by('xp')
+
+    def get_ranks_cached(self):
+        """The full list of Ranks (ordered by xp), cached to avoid a query per rank lookup.
+        Rank lookups happen several times per page on profile/quest/map views, but the table
+        is tiny and rarely changes.  The cache is invalidated by Rank.save() and Rank.delete().
+        Key is schema-prefixed following the SiteConfig.cache_key() convention."""
+        from django.core.cache import cache
+        ranks = cache.get(self.ranks_cache_key())
+        if ranks is None:
+            ranks = list(self.get_queryset())
+            cache.set(self.ranks_cache_key(), ranks, 60 * 60 * 24)
+        return ranks
 
     def get_rank(self, user_xp=0):
         """Return the next closest Rank with an XP value <= user_xp
@@ -90,14 +136,22 @@ class RankManager(models.Manager):
         if user_xp < 0:
             user_xp = 0
 
-        rank = self.get_queryset().get_ranks_lte(user_xp).last()
+        rank = None
+        for r in self.get_ranks_cached():  # ordered by xp ascending
+            if r.xp <= user_xp:
+                rank = r
+            else:
+                break
         if not rank:
             rank = self.create_zero_rank()
         return rank
 
     def get_next_rank(self, user_xp=0):
         """Return the next closest Rank with an XP value > user_xp"""
-        return self.get_queryset().get_ranks_gt(user_xp).first()
+        for r in self.get_ranks_cached():  # ordered by xp ascending
+            if r.xp > user_xp:
+                return r
+        return None
 
     def create_zero_rank(self):
         zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
@@ -136,6 +190,10 @@ class Rank(IsAPrereqMixin, models.Model):
         return user.profile.xp_cached >= self.xp
 
     def get_map(self):
+        """RankList pre-populates _map_cached for the whole page in a single
+        query; fall back to an individual lookup when it isn't set."""
+        if hasattr(self, '_map_cached'):
+            return self._map_cached
         from djcytoscape.models import CytoScape
         return CytoScape.objects.get_map_for_init(self)
 
@@ -570,3 +628,12 @@ def coursestudent_post_save_callback(instance, **kwargs):
     If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
     """
     instance.user.profile.xp_invalidate_cache()
+
+
+@receiver(post_save, sender=Rank)
+@receiver(post_delete, sender=Rank)
+def rank_invalidate_cache_callback(instance, **kwargs):
+    """Keep the cached rank list (RankManager.get_ranks_cached) in sync.
+    Signals (rather than model save/delete overrides) also cover queryset.delete(),
+    because registering receivers disables the fast-delete path."""
+    invalidate_ranks_cache()

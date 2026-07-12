@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from django.dispatch import receiver
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 
 from siteconfig.models import SiteConfig
 from notifications.signals import notify
@@ -21,14 +21,67 @@ from notifications.models import notify_rank_up
 
 # Create your models here.
 
+def invalidate_badge_rarities_cache():
+    """Remove the cached rarity list (see BadgeRarityManager.get_rarities_cached).
+    Wired to every ORM write path: post_save/post_delete signals cover save(),
+    create() and instance/queryset deletes; the BadgeRarityQuerySet overrides
+    cover update(), bulk_create() and bulk_update(), which fire no signals."""
+    from django.core.cache import cache
+    cache.delete(BadgeRarityManager.rarities_cache_key())
+
+
+class BadgeRarityQuerySet(models.query.QuerySet):
+    # these write paths fire no signals, so they must invalidate the cache themselves
+    def update(self, **kwargs):
+        """Same as QuerySet.update(), but invalidates the rarity cache (no signals fire)."""
+        result = super().update(**kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+    def bulk_create(self, *args, **kwargs):
+        """Same as QuerySet.bulk_create(), but invalidates the rarity cache (no signals fire)."""
+        result = super().bulk_create(*args, **kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+    def bulk_update(self, *args, **kwargs):
+        """Same as QuerySet.bulk_update(), but invalidates the rarity cache (no signals fire)."""
+        result = super().bulk_update(*args, **kwargs)
+        invalidate_badge_rarities_cache()
+        return result
+
+
 class BadgeRarityManager(models.Manager):
+
+    @staticmethod
+    def rarities_cache_key():
+        from django.db import connection
+        return f'{connection.schema_name}-badge-rarities-all'
+
+    def get_queryset(self):
+        return BadgeRarityQuerySet(self.model, using=self._db)
+
+    def get_rarities_cached(self):
+        """The full list of BadgeRarity objects (ordered by percentile ascending), cached
+        to avoid one query per badge when rendering badge popovers/lists.  The table is
+        tiny and rarely changes.  Invalidated by BadgeRarity.save() and .delete().
+        Key is schema-prefixed following the SiteConfig.cache_key() convention."""
+        from django.core.cache import cache
+        rarities = cache.get(self.rarities_cache_key())
+        if rarities is None:
+            rarities = list(self.get_queryset().order_by('percentile'))
+            cache.set(self.rarities_cache_key(), rarities, 60 * 60 * 24)
+        return rarities
+
     def get_rarity(self, percentile):
         """Because this model is sorted by rarity, with the rarist on top,
         the first item in the returned list will be the rarest category of the item"""
         if percentile > 100.0:
             percentile = 100
-        rarities = self.get_queryset().filter(percentile__gte=percentile)
-        return rarities.first()
+        for rarity in self.get_rarities_cached():  # ordered by percentile ascending
+            if rarity.percentile >= percentile:
+                return rarity
+        return None
 
 
 class BadgeRarity(models.Model):
@@ -194,8 +247,29 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
 
     # @cached_property
     def fraction_of_active_users_granted_this(self):
-        num_assertions = BadgeAssertion.objects.filter(badge=self).count()
-        return num_assertions / User.objects.filter(is_active=True).count()
+        from django.core.cache import cache
+        from django.db import connection
+
+        # views can provide this via .annotate(num_assertions_annotated=Count('badgeassertion'))
+        # to avoid one COUNT query per badge on list pages; where no annotation is available
+        # (e.g. badge popovers on profile pages and ajax quest info), the count is cached briefly
+        num_assertions = getattr(self, 'num_assertions_annotated', None)
+        if num_assertions is None:
+            count_cache_key = f'{connection.schema_name}-badge-assertion-count-{self.pk}'
+            num_assertions = cache.get(count_cache_key)
+            if num_assertions is None:
+                num_assertions = BadgeAssertion.objects.filter(badge=self).count()
+                cache.set(count_cache_key, num_assertions, 60)
+
+        # the same count is needed for every badge on a page, so cache it briefly
+        cache_key = f'{connection.schema_name}-active-user-count'
+        num_users = cache.get(cache_key)
+        if num_users is None:
+            num_users = User.objects.filter(is_active=True).count()
+            cache.set(cache_key, num_users, 60)
+        if not num_users:
+            return 0
+        return num_assertions / num_users
 
     def percent_of_active_users_granted_this(self):
         return self.fraction_of_active_users_granted_this() * 100
@@ -239,7 +313,8 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
 
 class BadgeAssertionManager(models.Manager):
     def get_queryset(self, active_semester_only=False):
-        qs = BadgeAssertionQuerySet(self.model, using=self._db)
+        # badge/badge_type are needed almost everywhere assertions are rendered
+        qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
             return qs.get_semester(SiteConfig.get().active_semester)
         else:
@@ -260,7 +335,8 @@ class BadgeAssertionManager(models.Manager):
             users = User.objects.filter(profile__in=Profile.objects.all_students())
 
         users = users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
-        return users.exclude(assertion_count=0).order_by('-assertion_count')
+        # the badge detail template reads user.profile per row
+        return users.exclude(assertion_count=0).select_related('profile').order_by('-assertion_count')
 
     def all_for_user(self, user):
         return self.get_queryset(True).get_user(user)
@@ -271,7 +347,10 @@ class BadgeAssertionManager(models.Manager):
         This only works in a postgresql database, but the app is designed around postgres
         https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
         """
-        qs = self.get_queryset(False).prefetch_related('badge', 'badge__badge_type').get_user(user).order_by('badge_id').distinct('badge_id')
+        # the secondary ordering by id makes DISTINCT ON deterministic: it always keeps
+        # the earliest assertion of each badge (postgres returns the first row per group)
+        # (badge and badge_type are already joined by get_queryset's select_related)
+        qs = self.get_queryset(False).get_user(user).order_by('badge_id', 'id').distinct('badge_id')
 
         sorted_qs = sorted(qs, key=lambda x: [(x.badge.badge_type.sort_order or 0), (x.badge.sort_order or 0)])  # sort_order defaults to 0 if not set
 
@@ -437,3 +516,12 @@ def post_save_receiver(sender, **kwargs):
                 # since post-save signal. this is before user.profile.xp_invalidate_cache()
                 assertion.user.profile.xp_cached + assertion.badge.xp,
             )
+
+
+@receiver(post_save, sender=BadgeRarity)
+@receiver(post_delete, sender=BadgeRarity)
+def badge_rarity_invalidate_cache_callback(instance, **kwargs):
+    """Keep the cached rarity list (BadgeRarityManager.get_rarities_cached) in sync.
+    Signals (rather than model save/delete overrides) also cover queryset.delete(),
+    because registering receivers disables the fast-delete path."""
+    invalidate_badge_rarities_cache()
