@@ -396,3 +396,48 @@ class AddSimplePrereqAllRegisteredModelsTest(TenantTestCase):
                 self.assertEqual(new_prereq.parent_object_id, parent.pk)
                 self.assertEqual(new_prereq.prereq_object_id, prereq_object.pk)
                 self.assertEqual(new_prereq.get_prereq(), prereq_object)
+
+
+class PrereqPrefetchTest(TenantTestCase):
+    """PrereqManager.prefetch_for_parents batches prereqs() for many same-model
+    objects into a single query (used by the profile page's badge popovers)."""
+
+    def setUp(self):
+        self.parent1 = baker.make('quest_manager.Quest')
+        self.parent2 = baker.make('quest_manager.Quest')
+        self.requirement = baker.make('quest_manager.Quest')
+        Prereq.add_simple_prereq(self.parent1, self.requirement)
+        Prereq.add_simple_prereq(self.parent2, self.requirement)
+
+    def test_prereqs_without_prefetch_returns_queryset(self):
+        """Objects that were not prefetched keep the normal queryset API."""
+        from quest_manager.models import Quest
+        quest = Quest.objects.get(pk=self.parent1.pk)
+        self.assertEqual(quest.prereqs().count(), 1)
+        self.assertTrue(quest.prereqs().exists())
+
+    def test_prefetch_for_parents_serves_prereqs_without_per_object_queries(self):
+        """After prefetch_for_parents, each object's prereqs() is served from
+        its cache with no further per-object query."""
+        from quest_manager.models import Quest
+        quests = list(Quest.objects.filter(pk__in=[self.parent1.pk, self.parent2.pk]))
+
+        Prereq.objects.prefetch_for_parents(quests)
+
+        with self.assertNumQueries(0):
+            for quest in quests:
+                prereqs = quest.prereqs()
+                self.assertEqual(len(list(prereqs)), 1)
+                self.assertEqual(prereqs[0].parent_object_id, quest.pk)
+
+    def test_prefetch_for_parents_empty_input(self):
+        """Empty input is a no-op returning an empty list (no query)."""
+        with self.assertNumQueries(0):
+            self.assertEqual(Prereq.objects.prefetch_for_parents([]), [])
+
+    def test_prefetch_for_parents_rejects_mixed_models(self):
+        """Mixed-model input is rejected: all parents must share one content
+        type, or the query would silently drop some objects' prereqs."""
+        badge = baker.make('badges.Badge')
+        with self.assertRaises(ValueError):
+            Prereq.objects.prefetch_for_parents([self.parent1, badge])

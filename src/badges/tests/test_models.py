@@ -266,6 +266,27 @@ class BadgeAssertionTestModel(TenantTestCase):
         qs = badge_assertion.get_duplicate_assertions()
         self.assertQuerySetEqual(list(qs), values, )
 
+    def test_badge_assertions_dict_items_prefetches_duplicates(self):
+        """badge_assertions_dict_items pre-populates each distinct badge's
+        duplicate assertions, so get_duplicate_assertions() serves them from
+        memory with no query per badge (the profile page renders one popover
+        per badge)."""
+        badge_a = Recipe(Badge, name='Badge A').make()
+        badge_b = Recipe(Badge, name='Badge B').make()
+        baker.make(BadgeAssertion, user=self.student, badge=badge_a, _quantity=2)
+        baker.make(BadgeAssertion, user=self.student, badge=badge_b, _quantity=3)
+
+        items = BadgeAssertion.objects.badge_assertions_dict_items(self.student)
+        distinct_assertions = [a for _badge_type, assertions in items for a in assertions]
+
+        duplicate_counts = {}
+        with self.assertNumQueries(0):
+            for assertion in distinct_assertions:
+                duplicate_counts[assertion.badge_id] = len(list(assertion.get_duplicate_assertions()))
+
+        self.assertEqual(duplicate_counts[badge_a.id], 2)
+        self.assertEqual(duplicate_counts[badge_b.id], 3)
+
     def test_badge_assertion_manager_create_assertion(self):
 
         # no semester
