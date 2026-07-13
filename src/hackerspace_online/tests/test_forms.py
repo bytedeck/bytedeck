@@ -134,11 +134,12 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
     def setUp(self):
         pass
 
-    def get_social_login(self):
+    def get_social_login(self, provider=None):
         extra_data = {
             "email": "user@example.com",
         }
         return SocialLogin(
+            provider=provider,  # required by serialize() since django-allauth 65
             user=User(email="user@example.com", first_name="firsttest", last_name="lasttest"),
             account=SocialAccount(provider="google", extra_data=extra_data),
             email_addresses=[
@@ -221,8 +222,11 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         }
 
         # Fake the session object to have the `socialaccount_sociallogin` since that's what it looks for
-        # when a user chooses a google account to sign up
-        sociallogin = self.get_social_login()
+        # when a user chooses a google account to sign up. serialize() needs a real
+        # provider instance (backed by a SocialApp) since django-allauth 65.
+        self.setup_social_app()
+        app = SocialApp.objects.get(provider='google')
+        sociallogin = self.get_social_login(provider=app.get_provider(request=None))
         session["socialaccount_sociallogin"] = sociallogin.serialize()
         session.save()
 
@@ -242,10 +246,10 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
-    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    @patch('allauth.socialaccount.internal.statekit.unstash_state')
     def test_signin_via_post_connect_existing_account_automatically(
         self,
-        mock_verify_and_unstash_state,
+        mock_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
@@ -280,7 +284,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'id_token': 'test_id_token'
         }
         mock_complete_login.return_value = social_login
-        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+        mock_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
 
         # Simulate a student clicking the Google Sign in button
         url = reverse('google_login')
@@ -309,10 +313,10 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
-    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    @patch('allauth.socialaccount.internal.statekit.unstash_state')
     def test_signin_via_post_connect_existing_account_manually__merge_yes(
         self,
-        mock_verify_and_unstash_state,
+        mock_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
@@ -343,7 +347,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'id_token': 'test_id_token'
         }
         mock_complete_login.return_value = social_login
-        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+        mock_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
 
         # Simulate a student clicking the Google Sign in button
         url = reverse('google_login')
@@ -388,10 +392,10 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
-    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    @patch('allauth.socialaccount.internal.statekit.unstash_state')
     def test_signin_via_post_connect_existing_account_manually__merge_no(
         self,
-        mock_verify_and_unstash_state,
+        mock_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
@@ -423,7 +427,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'id_token': 'test_id_token'
         }
         mock_complete_login.return_value = social_login
-        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+        mock_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
 
         # Simulate a student clicking the Google Sign in button
         url = reverse('google_login')
@@ -480,10 +484,10 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
-    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    @patch('allauth.socialaccount.internal.statekit.unstash_state')
     def test_signin_via_post_google_signin_redirects_to_signup_page_on_new_account(
         self,
-        mock_verify_and_unstash_state,
+        mock_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
@@ -508,7 +512,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'id_token': 'test_id_token'
         }
         mock_complete_login.return_value = social_login
-        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+        mock_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
 
         # Simulate a student clicking the Google Sign in button
         url = reverse('google_login')
@@ -531,10 +535,10 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
 
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
-    @patch('allauth.socialaccount.models.SocialLogin.verify_and_unstash_state')
+    @patch('allauth.socialaccount.internal.statekit.unstash_state')
     def test_signup_via_post_google_signin_change_email_and_revert_back_to_google_email(
         self,
-        mock_verify_and_unstash_state,
+        mock_unstash_state,
         mock_complete_login,
         mock_get_access_token
     ):
@@ -566,7 +570,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
             'id_token': 'test_id_token'
         }
         mock_complete_login.return_value = social_login
-        mock_verify_and_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
+        mock_unstash_state.return_value = {'process': 'login', 'scope': '', 'auth_params': ''}
 
         # Simulate a student clicking the Google Sign in button
         url = reverse('google_login')
