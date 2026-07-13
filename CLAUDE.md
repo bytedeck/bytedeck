@@ -21,7 +21,9 @@ python src/manage.py runserver # or: docker compose up web
 pre-commit install
 ```
 
-The site only works via `http://localhost:8000` (not `0.0.0.0`) because the multi-tenant architecture requires a domain name. Admin login is `admin` / `password` (from `.env`). Create tenants at `http://localhost:8000/decks/new/`. Full stack: `docker compose up` (web, db, redis, celery, celery-beat).
+The bare `python` / `pre-commit` commands above assume the local venv; with docker-only setups wrap them instead (e.g. `docker compose run web bash -c "python src/manage.py initdb"`).
+
+The site only works via `http://localhost:8000` (not `0.0.0.0`) because the multi-tenant architecture requires a domain name. `localhost:8000` is the public tenant; each deck is served from its own subdomain (e.g. `http://hackerspace.localhost:8000`). Admin login is `admin` / `password` (from `.env`). Create tenants at `http://localhost:8000/decks/new/`. Full stack: `docker compose up` (web, db, redis, celery, celery-beat).
 
 ### Tests and Linting
 
@@ -34,8 +36,8 @@ python src/manage.py test src --parallel --failfast
 
 # Single app / class / test
 python src/manage.py test src/announcements
-python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests
-python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button
+python src/manage.py test announcements.tests.test_views.AnnouncementViewTests
+python src/manage.py test announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button
 
 # Coverage (open htmlcov/index.html afterwards)
 coverage run --source=src ./src/manage.py test src/notifications
