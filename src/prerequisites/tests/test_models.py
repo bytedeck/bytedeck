@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.db.utils import IntegrityError
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -333,6 +334,17 @@ class PrereqAllConditionsMetModelTest(TenantTestCase):
         self.assertIsInstance(self.prereq_cache, PrereqAllConditionsMet)
         self.assertEqual(self.prereq_cache.user, self.student)
         self.assertEqual(self.prereq_cache.ids, '[]')
+
+    def test_duplicate_user_and_model_name__not_allowed(self):
+        """Only one cache object can exist per user per model. Duplicate cache
+        objects caused `get()` and `update_or_create()` in the celery tasks to
+        raise MultipleObjectsReturned. Regression test for issue #520.
+        """
+        with self.assertRaises(IntegrityError):
+            PrereqAllConditionsMet.objects.create(
+                user=self.student,
+                model_name='fake_model_name'
+            )
 
     def test_get_ids_when_empty(self):
         self.assertEqual([], self.prereq_cache.get_ids())
