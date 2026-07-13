@@ -153,11 +153,14 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         """ https://django-import-export.readthedocs.io/en/latest/api_resources.html#import_export.resources.Resource.after_import
 
         django-import-export 4.x passes using_transactions/dry_run via kwargs.
+        Skip prereq generation during the dry-run/preview step, mirroring
+        QuestResource.after_import.
         """
-        for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
-            parent_badge = Badge.objects.get(import_id=import_id)
-            self.generate_simple_prereqs(parent_badge, data_dict)
+        if not kwargs.get("dry_run", False):
+            for data_dict in dataset.dict:
+                import_id = data_dict["import_id"]
+                parent_badge = Badge.objects.get(import_id=import_id)
+                self.generate_simple_prereqs(parent_badge, data_dict)
 
 
 class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):

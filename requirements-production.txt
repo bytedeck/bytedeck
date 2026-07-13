@@ -7,7 +7,7 @@ django-bootstrap-datepicker-plus>=5.0.5,<6.0
 django-celery-beat>=2.8,<3.0
 django-colorful>=1.4,<2.0
 django-crispy-forms>=2.4,<2.6  # 2.6+ requires Django >= 5.2
-crispy-bootstrap3>=2024.1  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
+crispy-bootstrap3>=2024.1,<2025  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 django-decorator-include>=3.3,<4.0
 django-embed-video>=1.4.10,<1.5
 django-environ>=0.12,<0.15

@@ -563,7 +563,7 @@ LOGIN_URL = 'account_login'
 ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
 ACCOUNT_LOGIN_METHODS = {"username"}  # ({"username"} | {"email"} | {"username", "email"})
-# Specifies the login method to use – whether the user logs in by entering their username,
+# Specifies the login method to use - whether the user logs in by entering their username,
 # e-mail address, or either one of both. Renamed from ACCOUNT_AUTHENTICATION_METHOD in django-allauth 65.0.
 ACCOUNT_SIGNUP_FIELDS = ["username*", "email", "password1*", "password2*"]
 # Which fields are presented on the signup form ("*" = required). Replaces the removed
