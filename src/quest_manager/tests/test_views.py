@@ -10,6 +10,8 @@ or they could be moved into a `test_urls.py` module.
 
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -168,6 +170,21 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_sidebar_approvals_link__points_to_default_submitted_tab(self):
+        """The sidebar 'Quest Approvals' menu button links to the default approvals view
+        (the Submitted tab), not the In Progress tab. Regression test for issue #1895.
+        """
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        response = self.client.get(reverse('quests:quests'))
+        content = response.content.decode()
+
+        # grab the href of the anchor inside the sidebar's approvals menu
+        match = re.search(r'id="lg-menu-approvals".*?href="([^"]+)"', content, re.DOTALL)
+        self.assertIsNotNone(match, "Sidebar approvals menu not found in the rendered page")
+        self.assertEqual(match.group(1), reverse('quests:approvals'))
 
     def test_start(self):
         # log in a student from setUp
